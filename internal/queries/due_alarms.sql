@@ -1,0 +1,14 @@
+SELECT
+  id,
+  origin_contact_id,
+  origin_conversation_id,
+  goal,
+  recurrence,
+  next_fire_at,
+  last_fired_at,
+  created_at
+FROM alarm
+WHERE next_fire_at IS NOT NULL
+  AND next_fire_at <= ?1
+  AND cancelled_at IS NULL
+ORDER BY next_fire_at ASC

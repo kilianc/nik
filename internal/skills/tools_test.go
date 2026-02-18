@@ -1,0 +1,248 @@
+package skills
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestParseFrontmatter(t *testing.T) {
+	dir := t.TempDir()
+	skillDir := filepath.Join(dir, "test_skill")
+	os.MkdirAll(skillDir, 0o755)
+
+	content := `---
+name: test_skill
+summary: >
+  Load this skill to test frontmatter parsing.
+tools: [tool_a, tool_b]
+---
+
+# Test Skill
+
+Some content here.
+`
+	path := filepath.Join(skillDir, "SKILL.md")
+	os.WriteFile(path, []byte(content), 0o644)
+
+	s, err := parseFrontmatter(path)
+	if err != nil {
+		t.Fatalf("parseFrontmatter: %v", err)
+	}
+
+	if s.Name != "test_skill" {
+		t.Errorf("name = %q, want %q", s.Name, "test_skill")
+	}
+
+	if s.Summary != "Load this skill to test frontmatter parsing." {
+		t.Errorf("summary = %q, want %q", s.Summary, "Load this skill to test frontmatter parsing.")
+	}
+
+	if len(s.Tools) != 2 || s.Tools[0] != "tool_a" || s.Tools[1] != "tool_b" {
+		t.Errorf("tools = %v, want [tool_a tool_b]", s.Tools)
+	}
+}
+
+func TestParseFrontmatterBlockTools(t *testing.T) {
+	dir := t.TempDir()
+	skillDir := filepath.Join(dir, "block")
+	os.MkdirAll(skillDir, 0o755)
+
+	content := `---
+name: block
+summary: block test
+tools:
+  - alpha
+  - beta
+  - gamma
+---
+
+# Block
+`
+	path := filepath.Join(skillDir, "SKILL.md")
+	os.WriteFile(path, []byte(content), 0o644)
+
+	s, err := parseFrontmatter(path)
+	if err != nil {
+		t.Fatalf("parseFrontmatter: %v", err)
+	}
+
+	if len(s.Tools) != 3 {
+		t.Fatalf("tools len = %d, want 3", len(s.Tools))
+	}
+
+	want := []string{"alpha", "beta", "gamma"}
+	for i, w := range want {
+		if s.Tools[i] != w {
+			t.Errorf("tools[%d] = %q, want %q", i, s.Tools[i], w)
+		}
+	}
+}
+
+func TestListSkills(t *testing.T) {
+	dir := t.TempDir()
+
+	for _, name := range []string{"skill_a", "skill_b"} {
+		skillDir := filepath.Join(dir, name)
+		os.MkdirAll(skillDir, 0o755)
+		content := "---\nname: " + name + "\nsummary: desc for " + name + "\ntools: [t1]\n---\n"
+		os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(content), 0o644)
+	}
+
+	summaries, err := ListSkills(dir)
+	if err != nil {
+		t.Fatalf("ListSkills: %v", err)
+	}
+
+	if len(summaries) != 2 {
+		t.Fatalf("got %d summaries, want 2", len(summaries))
+	}
+}
+
+func TestParseFrontmatterPreload(t *testing.T) {
+	dir := t.TempDir()
+	skillDir := filepath.Join(dir, "preloaded")
+	os.MkdirAll(skillDir, 0o755)
+
+	content := `---
+name: preloaded
+preload: true
+summary: a preloaded skill
+tools: [tool_x]
+---
+
+# Preloaded
+
+Body content.
+`
+	path := filepath.Join(skillDir, "SKILL.md")
+	os.WriteFile(path, []byte(content), 0o644)
+
+	s, err := parseFrontmatter(path)
+	if err != nil {
+		t.Fatalf("parseFrontmatter: %v", err)
+	}
+
+	if !s.Preload {
+		t.Error("preload = false, want true")
+	}
+
+	if s.Name != "preloaded" {
+		t.Errorf("name = %q, want %q", s.Name, "preloaded")
+	}
+}
+
+func TestParseFrontmatterPreloadDefaultFalse(t *testing.T) {
+	dir := t.TempDir()
+	skillDir := filepath.Join(dir, "normal")
+	os.MkdirAll(skillDir, 0o755)
+
+	content := `---
+name: normal
+summary: no preload field
+tools: [t1]
+---
+
+# Normal
+`
+	path := filepath.Join(skillDir, "SKILL.md")
+	os.WriteFile(path, []byte(content), 0o644)
+
+	s, err := parseFrontmatter(path)
+	if err != nil {
+		t.Fatalf("parseFrontmatter: %v", err)
+	}
+
+	if s.Preload {
+		t.Error("preload = true, want false (default)")
+	}
+}
+
+func TestPreloadedSkills(t *testing.T) {
+	dir := t.TempDir()
+
+	// preloaded skill
+	preDir := filepath.Join(dir, "pre")
+	os.MkdirAll(preDir, 0o755)
+	os.WriteFile(filepath.Join(preDir, "SKILL.md"), []byte(`---
+name: pre
+preload: true
+summary: preloaded
+tools: [t1]
+---
+
+# Pre
+
+Preloaded body.
+`), 0o644)
+
+	// non-preloaded skill
+	normalDir := filepath.Join(dir, "normal")
+	os.MkdirAll(normalDir, 0o755)
+	os.WriteFile(filepath.Join(normalDir, "SKILL.md"), []byte(`---
+name: normal
+summary: not preloaded
+tools: [t2]
+---
+
+# Normal
+
+Normal body.
+`), 0o644)
+
+	result, err := PreloadedSkills(dir)
+	if err != nil {
+		t.Fatalf("PreloadedSkills: %v", err)
+	}
+
+	if len(result) != 1 {
+		t.Fatalf("got %d preloaded skills, want 1", len(result))
+	}
+
+	if result[0].Name != "pre" {
+		t.Errorf("name = %q, want %q", result[0].Name, "pre")
+	}
+
+	if !strings.Contains(result[0].Content, "Preloaded body.") {
+		t.Errorf("content missing body, got: %q", result[0].Content)
+	}
+
+	if strings.Contains(result[0].Content, "---") {
+		t.Errorf("content should not contain frontmatter delimiters, got: %q", result[0].Content)
+	}
+}
+
+func TestStripFrontmatter(t *testing.T) {
+	input := "---\nname: test\n---\n\n# Body\n\nContent.\n"
+	got := stripFrontmatter(input)
+	want := "# Body\n\nContent.\n"
+
+	if got != want {
+		t.Errorf("stripFrontmatter = %q, want %q", got, want)
+	}
+}
+
+func TestParseFlowSequence(t *testing.T) {
+	tests := []struct {
+		input string
+		want  []string
+	}{
+		{"[a, b, c]", []string{"a", "b", "c"}},
+		{"[single]", []string{"single"}},
+		{"[]", nil},
+	}
+
+	for _, tt := range tests {
+		got := parseFlowSequence(tt.input)
+		if len(got) != len(tt.want) {
+			t.Errorf("parseFlowSequence(%q) = %v, want %v", tt.input, got, tt.want)
+			continue
+		}
+		for i := range got {
+			if got[i] != tt.want[i] {
+				t.Errorf("parseFlowSequence(%q)[%d] = %q, want %q", tt.input, i, got[i], tt.want[i])
+			}
+		}
+	}
+}

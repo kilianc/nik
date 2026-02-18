@@ -1,0 +1,28 @@
+# Ignore everything by default
+*
+
+# Unignore directories (required for nested file matching)
+!*/
+
+# Track Go source and dependencies
+!*.go
+!go.mod
+!go.sum
+
+# Track SQL and sqlc config
+!internal/db/schema.sql
+!internal/queries/*.sql
+
+# Track build
+!Makefile
+
+# Track docs
+!AGENTS.md
+!*.md
+!.gitignore
+!.config.example.yaml
+
+# Always ignore
+.cursor/
+TODO.md
+workspace/

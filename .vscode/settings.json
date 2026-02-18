@@ -1,0 +1,17 @@
+{
+  "cSpell.words": [
+    "duckdb",
+    "jids",
+    "kciuffolo",
+    "mattn",
+    "pjid",
+    "qrterminal",
+    "respawn",
+    "sqlstore",
+    "Wapp",
+    "whatsmeow"
+  ],
+  "workbench.editorAssociations": {
+    "{**/workspace/debug/**/*.md}": "vscode.markdown.preview.editor"
+  }
+}

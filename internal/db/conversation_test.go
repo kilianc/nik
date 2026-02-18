@@ -1,0 +1,279 @@
+package db
+
+import (
+	"context"
+	"testing"
+	"time"
+)
+
+func TestConversationGroupMetadataRoundTrip(t *testing.T) {
+	ctx := context.Background()
+
+	conn, err := OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	now := time.Now()
+	err = UpsertConversation(ctx, conn, UpsertConversationParams{
+		Platform:               "whatsapp",
+		ExternalConversationID: "12345-67890@g.us",
+		Kind:                   "group",
+		LastMessageAt:          &now,
+	})
+	if err != nil {
+		t.Fatalf("upsert conversation: %v", err)
+	}
+
+	title := "Family"
+	topic := "dinner plans"
+	isAnnounce := true
+	isLocked := true
+	owner := "11111@s.whatsapp.net"
+	participants := []string{"11111@s.whatsapp.net", "22222@s.whatsapp.net"}
+
+	err = UpsertConversation(ctx, conn, UpsertConversationParams{
+		Platform:               "whatsapp",
+		ExternalConversationID: "12345-67890@g.us",
+		Kind:                   "group",
+		Title:                  title,
+		Topic:                  &topic,
+		IsAnnounce:             &isAnnounce,
+		IsLocked:               &isLocked,
+		OwnerExternalID:        &owner,
+		ParticipantExternalIDs: participants,
+		LastMessageAt:          &now,
+	})
+	if err != nil {
+		t.Fatalf("upsert conversation group metadata: %v", err)
+	}
+
+	conv, err := GetConversation(ctx, conn, GetConversationParams{
+		Platform:               "whatsapp",
+		ExternalConversationID: "12345-67890@g.us",
+	})
+	if err != nil {
+		t.Fatalf("get conversation by external: %v", err)
+	}
+
+	if !conv.Topic.Valid || conv.Topic.String != topic {
+		t.Fatalf("expected topic %q, got %+v", topic, conv.Topic)
+	}
+	if !conv.OwnerExternalID.Valid || conv.OwnerExternalID.String != owner {
+		t.Fatalf("expected owner %q, got %+v", owner, conv.OwnerExternalID)
+	}
+	if !conv.IsAnnounce {
+		t.Fatalf("expected is_announce=true")
+	}
+	if !conv.IsLocked {
+		t.Fatalf("expected is_locked=true")
+	}
+	if len(conv.ParticipantExternalIDs) != 2 {
+		t.Fatalf("expected 2 participant ids, got %d", len(conv.ParticipantExternalIDs))
+	}
+}
+
+func TestGetConversationParticipantsIncludesContactProfile(t *testing.T) {
+	ctx := context.Background()
+
+	conn, err := OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	contact, err := UpsertContact(ctx, conn, UpsertContactParams{
+		Platform:      "whatsapp",
+		ExternalID:    "alice@s.whatsapp.net",
+		Name:          "Alice",
+		Phone:         "alice",
+		LastMessageAt: time.Now(),
+	})
+	if err != nil {
+		t.Fatalf("upsert contact: %v", err)
+	}
+
+	now := time.Now()
+	err = UpsertConversation(ctx, conn, UpsertConversationParams{
+		Platform:               "whatsapp",
+		ExternalConversationID: "alice@s.whatsapp.net",
+		Kind:                   "dm",
+		LastMessageAt:          &now,
+	})
+	if err != nil {
+		t.Fatalf("upsert conversation: %v", err)
+	}
+
+	conversation, err := GetConversation(ctx, conn, GetConversationParams{
+		Platform:               "whatsapp",
+		ExternalConversationID: "alice@s.whatsapp.net",
+	})
+	if err != nil {
+		t.Fatalf("get conversation: %v", err)
+	}
+	conversationID := conversation.ID
+
+	displayName := "Ali"
+	err = UpsertConversationParticipant(ctx, conn, conversationID, contact.ID, &displayName)
+	if err != nil {
+		t.Fatalf("upsert conversation participant: %v", err)
+	}
+
+	participants, err := GetConversationParticipants(ctx, conn, conversationID)
+	if err != nil {
+		t.Fatalf("get conversation participants: %v", err)
+	}
+
+	if len(participants) != 1 {
+		t.Fatalf("expected 1 participant, got %d", len(participants))
+	}
+
+	if !participants[0].ContactName.Valid || participants[0].ContactName.String != "Alice" {
+		t.Fatalf("expected contact name Alice, got %+v", participants[0].ContactName)
+	}
+	if participants[0].ContactID != contact.ID {
+		t.Fatalf("expected contact id %s, got %s", contact.ID, participants[0].ContactID)
+	}
+}
+
+func TestUpsertConversationParticipantDeduplicatesByContactID(t *testing.T) {
+	ctx := context.Background()
+
+	conn, err := OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	contact, err := UpsertContact(ctx, conn, UpsertContactParams{
+		Platform:      "whatsapp",
+		ExternalID:    "alice@s.whatsapp.net",
+		Name:          "Alice",
+		Phone:         "alice",
+		LastMessageAt: time.Now(),
+	})
+	if err != nil {
+		t.Fatalf("upsert contact: %v", err)
+	}
+
+	conversationID := seedConversation(t, ctx, conn, "whatsapp", "group@g.us", "group")
+
+	err = UpsertConversationParticipant(ctx, conn, conversationID, contact.ID, nil)
+	if err != nil {
+		t.Fatalf("upsert participant first: %v", err)
+	}
+
+	err = UpsertConversationParticipant(ctx, conn, conversationID, contact.ID, nil)
+	if err != nil {
+		t.Fatalf("upsert participant second: %v", err)
+	}
+
+	participants, err := GetConversationParticipants(ctx, conn, conversationID)
+	if err != nil {
+		t.Fatalf("get participants: %v", err)
+	}
+
+	if len(participants) != 1 {
+		t.Fatalf("expected 1 participant (dedup by contact_id), got %d", len(participants))
+	}
+
+	if participants[0].ContactID != contact.ID {
+		t.Fatalf("expected contact id %s, got %s", contact.ID, participants[0].ContactID)
+	}
+}
+
+func TestPollUnreadConversationsIgnoresOutboundAfterRead(t *testing.T) {
+	ctx := context.Background()
+
+	conn, err := OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	contact, err := UpsertContact(ctx, conn, UpsertContactParams{
+		Platform:      "whatsapp",
+		ExternalID:    "alice@s.whatsapp.net",
+		Name:          "Alice",
+		Phone:         "alice",
+		LastMessageAt: time.Now(),
+	})
+	if err != nil {
+		t.Fatalf("upsert contact: %v", err)
+	}
+
+	inboundAt := time.Now().Add(-2 * time.Minute).UTC().Truncate(time.Second)
+	outboundAt := inboundAt.Add(30 * time.Second)
+
+	err = UpsertConversation(ctx, conn, UpsertConversationParams{
+		Platform:               "whatsapp",
+		ExternalConversationID: "alice@s.whatsapp.net",
+		Kind:                   "dm",
+		LastMessageAt:          &inboundAt,
+	})
+	if err != nil {
+		t.Fatalf("upsert conversation: %v", err)
+	}
+
+	conv, err := GetConversation(ctx, conn, GetConversationParams{
+		Platform:               "whatsapp",
+		ExternalConversationID: "alice@s.whatsapp.net",
+	})
+	if err != nil {
+		t.Fatalf("get conversation by external: %v", err)
+	}
+
+	insertTestMessage(t, ctx, conn, insertTestMessageParams{
+		ConversationID:         conv.ID,
+		ContactID:              contact.ID,
+		Platform:               "whatsapp",
+		ExternalConversationID: "alice@s.whatsapp.net",
+		ExternalMessageID:      "inbound-msg-1",
+		ExternalSenderID:       "alice@s.whatsapp.net",
+		SentAt:                 inboundAt,
+		IsFromMe:               false,
+		Kind:                   "text",
+		Body:                   "hey",
+	})
+
+	err = MarkConversationsRead(ctx, conn, MarkConversationsReadParams{
+		ConversationID: conv.ID,
+		ReadAt:         inboundAt,
+	})
+	if err != nil {
+		t.Fatalf("mark conversation read: %v", err)
+	}
+
+	insertTestMessage(t, ctx, conn, insertTestMessageParams{
+		ConversationID:         conv.ID,
+		ContactID:              contact.ID,
+		Platform:               "whatsapp",
+		ExternalConversationID: "alice@s.whatsapp.net",
+		ExternalMessageID:      "outbound-msg-1",
+		ExternalSenderID:       "nik@s.whatsapp.net",
+		SentAt:                 outboundAt,
+		IsFromMe:               true,
+		Kind:                   "text",
+		Body:                   "yo",
+	})
+
+	err = UpsertConversation(ctx, conn, UpsertConversationParams{
+		Platform:               "whatsapp",
+		ExternalConversationID: "alice@s.whatsapp.net",
+		Kind:                   "dm",
+		LastMessageAt:          &outboundAt,
+	})
+	if err != nil {
+		t.Fatalf("update conversation last message time: %v", err)
+	}
+
+	unreadIDs, err := PollUnreadConversations(ctx, conn, []string{conv.ID})
+	if err != nil {
+		t.Fatalf("poll unread conversations: %v", err)
+	}
+
+	if len(unreadIDs) != 0 {
+		t.Fatalf("expected no unread conversations after outbound-only activity, got %+v", unreadIDs)
+	}
+}

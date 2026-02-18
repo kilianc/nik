@@ -1,0 +1,12 @@
+openai_key: sk-proj-...
+model: gpt-5.2-codex
+debug_dir: debug
+media_dir: media
+prompts_dir: ../prompts
+skills_dir: ../skills
+owner_conversation_id: ...
+allow_conversation_ids:
+  - ...
+max_history: 100
+timezone: America/New_York
+location: New York, NY
