@@ -18,17 +18,18 @@ const defaultBaseURL = "https://api.exa.ai"
 
 var webSearchToolDef = llm.ToolDef{
 	Name:        "web_search",
-	Description: "Search the web for current information. Returns titles, URLs, and text highlights from the top results.",
+	Description: "Search the web for current information. Accepts multiple queries at once to reduce round-trips. Returns titles, URLs, and text highlights keyed by query.",
 	Parameters: map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"query": map[string]any{
-				"type":        "string",
-				"description": "The search query. Can be a question, topic, or descriptive phrase.",
+			"queries": map[string]any{
+				"type":        "array",
+				"items":       map[string]any{"type": "string"},
+				"description": "One or more search queries. Can be questions, topics, or descriptive phrases.",
 			},
 			"num_results": map[string]any{
 				"type":        "integer",
-				"description": "Number of results to return (1-20). Default 5.",
+				"description": "Number of results per query (1-20). Default 5.",
 			},
 			"category": map[string]any{
 				"type":        "string",
@@ -36,15 +37,15 @@ var webSearchToolDef = llm.ToolDef{
 				"description": "Optional category to focus on.",
 			},
 		},
-		"required":             []string{"query", "num_results", "category"},
+		"required":             []string{"queries", "num_results", "category"},
 		"additionalProperties": false,
 	},
 }
 
 type searchArgs struct {
-	Query      string `json:"query"`
-	NumResults int    `json:"num_results"`
-	Category   string `json:"category"`
+	Queries    []string `json:"queries"`
+	NumResults int      `json:"num_results"`
+	Category   string   `json:"category"`
 }
 
 type exaRequest struct {
@@ -107,8 +108,8 @@ func webSearchHandler(apiKey string) llm.ToolExecutor {
 			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
 		}
 
-		if args.Query == "" {
-			return `{"error":"empty query"}`, nil
+		if len(args.Queries) == 0 {
+			return `{"error":"empty queries"}`, nil
 		}
 
 		numResults := args.NumResults
@@ -119,12 +120,22 @@ func webSearchHandler(apiKey string) llm.ToolExecutor {
 			numResults = 20
 		}
 
-		result, err := DoSearch(ctx, client, apiKey, args.Query, numResults, args.Category)
-		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+		results := map[string]any{}
+
+		for _, q := range args.Queries {
+			result, err := DoSearch(ctx, client, apiKey, q, numResults, args.Category)
+			if err != nil {
+				results[q] = map[string]any{"error": err.Error()}
+				continue
+			}
+
+			var parsed any
+			_ = json.Unmarshal([]byte(result), &parsed)
+			results[q] = parsed
 		}
 
-		return result, nil
+		b, _ := json.Marshal(map[string]any{"results": results})
+		return string(b), nil
 	}
 }
 
