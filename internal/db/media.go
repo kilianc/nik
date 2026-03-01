@@ -51,4 +51,3 @@ func UpsertMessageMedia(ctx context.Context, db DBTX, messageID, mediaID string)
 
 	return nil
 }
-

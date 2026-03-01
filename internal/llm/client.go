@@ -123,7 +123,7 @@ type ToolCallRecord struct {
 	Error  bool
 }
 
-func (c *Client) Think(ctx context.Context, instructions, input string, tools []ToolDef, executor ToolExecutor) (string, Usage, []ToolCallRecord, error) {
+func (c *Client) Complete(ctx context.Context, instructions, input string, tools []ToolDef, executor ToolExecutor) (string, Usage, []ToolCallRecord, error) {
 	total := Usage{}
 
 	client := c.apiClient

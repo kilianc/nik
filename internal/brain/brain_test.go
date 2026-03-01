@@ -18,7 +18,7 @@ func TestNewInitializesInternalState(t *testing.T) {
 	if b.toolExec == nil || b.privileged == nil {
 		t.Fatalf("expected maps to be initialized")
 	}
-	if b.active == nil || b.runs == nil {
+	if b.activeConversations == nil || b.activations == nil {
 		t.Fatalf("expected sync sets to be initialized")
 	}
 	if len(b.toolDefs) != 0 || len(b.dataSources) != 0 {

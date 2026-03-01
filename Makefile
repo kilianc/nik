@@ -4,6 +4,7 @@ NIK_HOME ?= workspace
 
 .PHONY: lint
 lint:
+	gofmt -w .
 	go vet ./...
 
 .PHONY: test

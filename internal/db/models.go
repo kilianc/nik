@@ -105,9 +105,9 @@ type Alarm struct {
 }
 
 type AlarmOccurrence struct {
-	ID             string
-	AlarmID        string
-	Note           sql.NullString
-	NextFireAtSet  sql.NullTime
-	FiredAt        time.Time
+	ID            string
+	AlarmID       string
+	Note          sql.NullString
+	NextFireAtSet sql.NullTime
+	FiredAt       time.Time
 }

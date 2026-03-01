@@ -138,9 +138,9 @@ func handleRun(ctx context.Context, args shellArgs) (string, error) {
 		Description:    args.Description,
 		ConversationID: ctxMeta["conversation_id"],
 		MessageID:      ctxMeta["message_id"],
-		RunID:          ctxMeta["run_id"],
-		NextCheckAt: nextCheckAt.UTC(),
-		StartedAt:   now,
+		ActivationID:   ctxMeta["activation_id"],
+		NextCheckAt:    nextCheckAt.UTC(),
+		StartedAt:      now,
 	}
 
 	err = saveMeta(id, meta)

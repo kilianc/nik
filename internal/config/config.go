@@ -14,10 +14,10 @@ import (
 type Config struct {
 	Home string `yaml:"-"`
 
-	OpenAIKey   string `yaml:"openai_key"`
-	UseCodex    bool   `yaml:"use_codex"`
-	ExaAPIKey   string `yaml:"exa_api_key"`
-	Model       string `yaml:"model"`
+	OpenAIKey       string `yaml:"openai_key"`
+	UseCodex        bool   `yaml:"use_codex"`
+	ExaAPIKey       string `yaml:"exa_api_key"`
+	Model           string `yaml:"model"`
 	DebugDirValue   string `yaml:"debug_dir"`
 	MediaDirValue   string `yaml:"media_dir"`
 	PromptsDirValue string `yaml:"prompts_dir"`
@@ -26,9 +26,9 @@ type Config struct {
 	AllowConversationIDs []string `yaml:"allow_conversation_ids"`
 	OwnerConversationID  string   `yaml:"owner_conversation_id"`
 
-	MaxHistory  int    `yaml:"max_history"`
-	Timezone    string `yaml:"timezone"`
-	Location    string `yaml:"location"`
+	MaxHistory   int    `yaml:"max_history"`
+	Timezone     string `yaml:"timezone"`
+	Location     string `yaml:"location"`
 	JournalTime  string `yaml:"journal_time"`
 	DreamStart   string `yaml:"dream_start"`
 	BriefingTime string `yaml:"briefing_time"`

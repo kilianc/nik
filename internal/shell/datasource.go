@@ -12,14 +12,14 @@ import (
 )
 
 type DataSource struct {
-	msgsSvc    *messaging.Service
-	isThinking func(string) bool
+	msgsSvc      *messaging.Service
+	isActivating func(string) bool
 }
 
-func NewDataSource(msgsSvc *messaging.Service, isThinking func(string) bool) *DataSource {
+func NewDataSource(msgsSvc *messaging.Service, isActivating func(string) bool) *DataSource {
 	return &DataSource{
-		msgsSvc:    msgsSvc,
-		isThinking: isThinking,
+		msgsSvc:      msgsSvc,
+		isActivating: isActivating,
 	}
 }
 
@@ -39,7 +39,7 @@ func (d *DataSource) Check(ctx context.Context) ([]brain.DataSourceOutput, error
 			continue
 		}
 
-		if d.isThinking(meta.RunID) {
+		if d.isActivating(meta.ActivationID) {
 			continue
 		}
 
@@ -86,7 +86,7 @@ func (d *DataSource) Check(ctx context.Context) ([]brain.DataSourceOutput, error
 				if err != nil {
 					return err
 				}
-				m.RunID = ctxMeta["run_id"]
+				m.ActivationID = ctxMeta["activation_id"]
 				m.NextCheckAt = time.Now().Add(defaultCheckIn).UTC()
 				return saveMeta(sessionID, m)
 			},

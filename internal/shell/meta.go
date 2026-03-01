@@ -11,7 +11,7 @@ type SessionMeta struct {
 	Description    string    `json:"description"`
 	ConversationID string    `json:"conversation_id,omitempty"`
 	MessageID      string    `json:"message_id,omitempty"`
-	RunID          string    `json:"run_id"`
+	ActivationID   string    `json:"activation_id"`
 	NextCheckAt    time.Time `json:"next_check_at"`
 	StartedAt      time.Time `json:"started_at"`
 }
@@ -42,8 +42,8 @@ func saveMeta(id string, m SessionMeta) error {
 	if m.Command == "" {
 		return fmt.Errorf("save meta %s: empty command", id)
 	}
-	if m.RunID == "" {
-		return fmt.Errorf("save meta %s: empty run_id", id)
+	if m.ActivationID == "" {
+		return fmt.Errorf("save meta %s: empty activation_id", id)
 	}
 	if m.StartedAt.IsZero() {
 		return fmt.Errorf("save meta %s: zero started_at", id)

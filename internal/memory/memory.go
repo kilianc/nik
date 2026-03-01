@@ -12,7 +12,7 @@ type Memory struct {
 	Content   string
 	Metadata  map[string]any
 	Source    string
-	SourceID string
+	SourceID  string
 	CreatedAt time.Time
 	Score     float64
 }

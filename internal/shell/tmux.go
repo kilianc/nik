@@ -20,7 +20,7 @@ const (
 var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
 
 type SessionInfo struct {
-	ID    string
+	ID      string
 	isAlive bool
 }
 
@@ -183,7 +183,7 @@ func listSessions() ([]SessionInfo, error) {
 		id := strings.TrimPrefix(line, sessionPrefix)
 
 		sessions = append(sessions, SessionInfo{
-			ID:    id,
+			ID:      id,
 			isAlive: isAlive(id),
 		})
 	}

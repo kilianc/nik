@@ -34,11 +34,11 @@ func TestDeadSessionRetrigger(t *testing.T) {
 
 	now := time.Now().UTC()
 	err = saveMeta(id, SessionMeta{
-		Command:     "echo done",
-		Description: "test",
-		RunID:       "finished-run",
-		NextCheckAt: now.Add(5 * time.Minute),
-		StartedAt:   now,
+		Command:      "echo done",
+		Description:  "test",
+		ActivationID: "finished-run",
+		NextCheckAt:  now.Add(5 * time.Minute),
+		StartedAt:    now,
 	})
 	if err != nil {
 		t.Fatalf("saveMeta: %v", err)

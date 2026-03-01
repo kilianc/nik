@@ -8,6 +8,8 @@ type tokenPricing struct {
 
 var modelPricing = map[string]tokenPricing{
 	// GPT-5.x family (cached: 90% off input)
+	"gpt-5.3":            {input: 1.75e-6, output: 14.0e-6, cached: 0.175e-6},
+	"gpt-5.3-codex":      {input: 1.75e-6, output: 14.0e-6, cached: 0.175e-6},
 	"gpt-5.2":            {input: 1.75e-6, output: 14.0e-6, cached: 0.175e-6},
 	"gpt-5.2-codex":      {input: 1.75e-6, output: 14.0e-6, cached: 0.175e-6},
 	"gpt-5.1":            {input: 1.25e-6, output: 10.0e-6, cached: 0.125e-6},
