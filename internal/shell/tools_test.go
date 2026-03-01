@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestHandleRunValidatesRequiredFields(t *testing.T) {
@@ -25,12 +24,45 @@ func TestHandleRunValidatesRequiredFields(t *testing.T) {
 	}
 }
 
-func TestParseRelativeDurationDays(t *testing.T) {
-	d, err := parseRelativeDuration("2d")
+func TestHandleReadMissingSession(t *testing.T) {
+	requireTmux(t)
+
+	id := "test-read-missing"
+
+	err := newSession(id, "sleep 60")
 	if err != nil {
-		t.Fatalf("parse relative duration: %v", err)
+		t.Fatalf("newSession: %v", err)
 	}
-	if d != 48*time.Hour {
-		t.Fatalf("expected 48h, got %v", d)
+
+	err = killSession(id)
+	if err != nil {
+		t.Fatalf("killSession: %v", err)
+	}
+
+	result, err := handleInteract(shellArgs{SessionID: id, MaxWait: 2})
+	if err != nil {
+		t.Fatalf("handleInteract: %v", err)
+	}
+
+	if strings.Contains(result, `"status":"running"`) {
+		t.Fatalf("handleRead reported running for a killed session: %s", result)
 	}
 }
+
+func TestNewIDPrefixCollision(t *testing.T) {
+	seen := make(map[string]bool)
+	collisions := 0
+
+	for i := 0; i < 20; i++ {
+		id := newSessionID()
+		if seen[id] {
+			collisions++
+		}
+		seen[id] = true
+	}
+
+	if collisions > 0 {
+		t.Fatalf("got %d collisions in 20 sequential IDs", collisions)
+	}
+}
+

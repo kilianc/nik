@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+	"time"
 )
 
 var sessionPrefix = "nik-"
@@ -20,7 +21,7 @@ var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
 
 type SessionInfo struct {
 	ID    string
-	Alive bool
+	isAlive bool
 }
 
 func sessionName(id string) string {
@@ -42,7 +43,7 @@ func ensureTmux() error {
 func newSession(id, command string) error {
 	name := sessionName(id)
 
-	err := tmuxCmd(
+	_, err := tmux(
 		"new-session", "-d",
 		"-s", name,
 		"-x", fmt.Sprintf("%d", windowWidth),
@@ -52,18 +53,18 @@ func newSession(id, command string) error {
 		return fmt.Errorf("create session %s: %w", id, err)
 	}
 
-	err = tmuxCmd("set-option", "-t", name, "remain-on-exit", "on")
+	_, err = tmux("set-option", "-t", name, "remain-on-exit", "on")
 	if err != nil {
 		return fmt.Errorf("set remain-on-exit %s: %w", id, err)
 	}
 
-	err = tmuxCmd("set-option", "-t", name, "history-limit", fmt.Sprintf("%d", historyLimit))
+	_, err = tmux("set-option", "-t", name, "history-limit", fmt.Sprintf("%d", historyLimit))
 	if err != nil {
 		return fmt.Errorf("set history-limit %s: %w", id, err)
 	}
 
 	if command != "" {
-		err = tmuxCmd("respawn-pane", "-k", "-t", name, "sh", "-c", command)
+		_, err = tmux("respawn-pane", "-k", "-t", name, "sh", "-c", command)
 		if err != nil {
 			return fmt.Errorf("respawn pane %s: %w", id, err)
 		}
@@ -73,7 +74,7 @@ func newSession(id, command string) error {
 }
 
 func setEnv(id, key, value string) error {
-	err := tmuxCmd("set-environment", "-t", sessionName(id), key, value)
+	_, err := tmux("set-environment", "-t", sessionName(id), key, value)
 	if err != nil {
 		return fmt.Errorf("set env %s %s: %w", id, key, err)
 	}
@@ -82,9 +83,9 @@ func setEnv(id, key, value string) error {
 }
 
 func getEnv(id, key string) (string, error) {
-	out, err := tmuxOutput("show-environment", "-t", sessionName(id), key)
+	out, err := tmux("show-environment", "-t", sessionName(id), key)
 	if err != nil {
-		return "", nil
+		return "", fmt.Errorf("get env %s %s: %w", id, key, err)
 	}
 
 	parts := strings.SplitN(strings.TrimSpace(out), "=", 2)
@@ -95,34 +96,11 @@ func getEnv(id, key string) (string, error) {
 	return parts[1], nil
 }
 
-func getAllEnv(id string) (map[string]string, error) {
-	out, err := tmuxOutput("show-environment", "-t", sessionName(id))
-	if err != nil {
-		return nil, nil
-	}
-
-	env := make(map[string]string)
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
-		if strings.HasPrefix(line, "-") {
-			continue
-		}
-
-		parts := strings.SplitN(line, "=", 2)
-		if len(parts) != 2 {
-			continue
-		}
-
-		env[parts[0]] = parts[1]
-	}
-
-	return env, nil
-}
-
 func sendKeys(id string, keys ...string) error {
 	args := []string{"send-keys", "-t", sessionName(id)}
 	args = append(args, keys...)
 
-	err := tmuxCmd(args...)
+	_, err := tmux(args...)
 	if err != nil {
 		return fmt.Errorf("send keys %s: %w", id, err)
 	}
@@ -130,8 +108,8 @@ func sendKeys(id string, keys ...string) error {
 	return nil
 }
 
-func captureOutput(id string) (string, error) {
-	out, err := tmuxOutput("capture-pane", "-t", sessionName(id), "-p", "-S", "-")
+func capturePane(id string) (string, error) {
+	out, err := tmux("capture-pane", "-t", sessionName(id), "-p", "-S", "-")
 	if err != nil {
 		return "", fmt.Errorf("capture output %s: %w", id, err)
 	}
@@ -146,20 +124,20 @@ func captureOutput(id string) (string, error) {
 	return out, nil
 }
 
-func isAlive(id string) (bool, error) {
-	out, err := tmuxOutput(
+func isAlive(id string) bool {
+	out, err := tmux(
 		"display-message", "-t", sessionName(id),
 		"-p", "#{pane_dead}",
 	)
 	if err != nil {
-		return false, fmt.Errorf("check alive %s: %w", id, err)
+		return false
 	}
 
-	return strings.TrimSpace(out) == "0", nil
+	return strings.TrimSpace(out) == "0"
 }
 
-func exitCode(id string) (int, error) {
-	out, err := tmuxOutput(
+func getExitCode(id string) (int, error) {
+	out, err := tmux(
 		"display-message", "-t", sessionName(id),
 		"-p", "#{pane_dead_status}",
 	)
@@ -177,7 +155,7 @@ func exitCode(id string) (int, error) {
 }
 
 func killSession(id string) error {
-	err := tmuxCmd("kill-session", "-t", sessionName(id))
+	_, err := tmux("kill-session", "-t", sessionName(id))
 	if err != nil {
 		return fmt.Errorf("kill session %s: %w", id, err)
 	}
@@ -186,7 +164,7 @@ func killSession(id string) error {
 }
 
 func listSessions() ([]SessionInfo, error) {
-	out, err := tmuxOutput("list-sessions", "-F", "#{session_name}")
+	out, err := tmux("list-sessions", "-F", "#{session_name}")
 	if err != nil {
 		// no server running = no sessions
 		if strings.Contains(err.Error(), "no server") || strings.Contains(err.Error(), "no current") {
@@ -204,31 +182,35 @@ func listSessions() ([]SessionInfo, error) {
 
 		id := strings.TrimPrefix(line, sessionPrefix)
 
-		alive, err := isAlive(id)
-		if err != nil {
-			alive = false
-		}
-
 		sessions = append(sessions, SessionInfo{
 			ID:    id,
-			Alive: alive,
+			isAlive: isAlive(id),
 		})
 	}
 
 	return sessions, nil
 }
 
-func tmuxCmd(args ...string) error {
-	cmd := exec.Command("tmux", args...)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("tmux %s: %s: %w", args[0], strings.TrimSpace(string(out)), err)
-	}
+func stare(id string, maxWait int) (output string, alive bool, exitCode int) {
+	deadline := time.Now().Add(time.Duration(maxWait) * time.Second)
 
-	return nil
+	for {
+		if !isAlive(id) {
+			out, _ := capturePane(id)
+			c, _ := getExitCode(id)
+			return out, false, c
+		}
+
+		if time.Now().After(deadline) {
+			out, _ := capturePane(id)
+			return out, true, 0
+		}
+
+		time.Sleep(500 * time.Millisecond)
+	}
 }
 
-func tmuxOutput(args ...string) (string, error) {
+func tmux(args ...string) (string, error) {
 	cmd := exec.Command("tmux", args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
