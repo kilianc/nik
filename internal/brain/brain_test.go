@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/kciuffolo/nik/internal/config"
-	"github.com/kciuffolo/nik/internal/llm"
 )
 
 func TestNewInitializesInternalState(t *testing.T) {
@@ -23,21 +22,5 @@ func TestNewInitializesInternalState(t *testing.T) {
 	}
 	if len(b.toolDefs) != 0 || len(b.dataSources) != 0 {
 		t.Fatalf("expected no tools or data sources on startup")
-	}
-}
-
-func TestEnsureToolCallsRejectsEmpty(t *testing.T) {
-	err := ensureToolCalls(nil)
-	if err == nil {
-		t.Fatalf("expected error for empty tool calls")
-	}
-}
-
-func TestEnsureToolCallsAcceptsNonEmpty(t *testing.T) {
-	err := ensureToolCalls([]llm.ToolCallRecord{
-		{Name: "message_noop"},
-	})
-	if err != nil {
-		t.Fatalf("expected non-empty tool calls to pass, got %v", err)
 	}
 }

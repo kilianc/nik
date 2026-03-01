@@ -134,6 +134,8 @@ func (b *Brain) activate(ctx context.Context, output DataSourceOutput) {
 	}
 }
 
+const maxThinkAttempts = 2
+
 func (b *Brain) think(ctx context.Context, input []string) (string, llm.Usage, error) {
 	now := b.now
 	if now == nil {
@@ -152,27 +154,32 @@ func (b *Brain) think(ctx context.Context, input []string) (string, llm.Usage, e
 	defer cancel()
 
 	meta, _ := ctx.Value("meta").(map[string]string)
-
 	tools := b.toolsForContext(ctx)
-	output, usage, toolCalls, processErr := b.llm.Complete(thinkCtx, instructions, userInput, tools, b.toolExecutor())
-	b.writeDebugRecord(meta, instructions, userInput, output, tools, toolCalls, usage, processErr)
+	executor := b.toolExecutor()
 
-	if processErr != nil {
-		return "", usage, processErr
+	var totalUsage llm.Usage
+
+	for attempt := range maxThinkAttempts {
+		output, usage, toolCalls, processErr := b.llm.Complete(thinkCtx, instructions, userInput, tools, executor)
+		b.writeDebugRecord(meta, instructions, userInput, output, tools, toolCalls, usage, processErr)
+
+		totalUsage.InputTokens += usage.InputTokens
+		totalUsage.OutputTokens += usage.OutputTokens
+		totalUsage.TotalTokens += usage.TotalTokens
+		totalUsage.CachedTokens += usage.CachedTokens
+
+		if processErr != nil {
+			return "", totalUsage, processErr
+		}
+
+		if len(toolCalls) > 0 {
+			return output, totalUsage, nil
+		}
+
+		if attempt < maxThinkAttempts-1 {
+			slog.Warn("no tool calls produced, retrying", "pkg", "brain", "attempt", attempt+1)
+		}
 	}
 
-	err = ensureToolCalls(toolCalls)
-	if err != nil {
-		return "", usage, err
-	}
-
-	return output, usage, nil
-}
-
-func ensureToolCalls(calls []llm.ToolCallRecord) error {
-	if len(calls) == 0 {
-		return errors.New("no tool calls produced")
-	}
-
-	return nil
+	return "", totalUsage, errors.New("no tool calls produced after retries")
 }
