@@ -7,11 +7,11 @@ import (
 	"time"
 )
 
-func skipIfNoTmux(t *testing.T) {
+func requireTmux(t *testing.T) {
 	t.Helper()
 	_, err := exec.LookPath("tmux")
 	if err != nil {
-		t.Skip("tmux not available")
+		t.Fatal("tmux not available")
 	}
 	sessionPrefix = "__nik_test__"
 }
@@ -22,7 +22,7 @@ func cleanup(t *testing.T, id string) {
 }
 
 func TestNewSessionAndKill(t *testing.T) {
-	skipIfNoTmux(t)
+	requireTmux(t)
 
 	id := "test-new-kill"
 	defer cleanup(t, id)
@@ -32,11 +32,7 @@ func TestNewSessionAndKill(t *testing.T) {
 		t.Fatalf("newSession: %v", err)
 	}
 
-	alive, err := isAlive(id)
-	if err != nil {
-		t.Fatalf("isAlive: %v", err)
-	}
-	if !alive {
+	if !isAlive(id) {
 		t.Fatal("expected session to be alive")
 	}
 
@@ -47,7 +43,7 @@ func TestNewSessionAndKill(t *testing.T) {
 }
 
 func TestEnvVars(t *testing.T) {
-	skipIfNoTmux(t)
+	requireTmux(t)
 
 	id := "test-env"
 	defer cleanup(t, id)
@@ -69,18 +65,10 @@ func TestEnvVars(t *testing.T) {
 	if val != "hello world" {
 		t.Fatalf("expected %q, got %q", "hello world", val)
 	}
-
-	env, err := getAllEnv(id)
-	if err != nil {
-		t.Fatalf("getAllEnv: %v", err)
-	}
-	if env["NIK_TEST_KEY"] != "hello world" {
-		t.Fatalf("getAllEnv: expected %q, got %q", "hello world", env["NIK_TEST_KEY"])
-	}
 }
 
 func TestFastCommand(t *testing.T) {
-	skipIfNoTmux(t)
+	requireTmux(t)
 
 	id := "test-fast"
 	defer cleanup(t, id)
@@ -103,8 +91,8 @@ func TestFastCommand(t *testing.T) {
 	}
 }
 
-func TestStareAutoBackground(t *testing.T) {
-	skipIfNoTmux(t)
+func TestStare(t *testing.T) {
+	requireTmux(t)
 
 	id := "test-bg"
 	defer cleanup(t, id)
@@ -127,7 +115,7 @@ func TestStareAutoBackground(t *testing.T) {
 }
 
 func TestSendInput(t *testing.T) {
-	skipIfNoTmux(t)
+	requireTmux(t)
 
 	id := "test-send"
 	defer cleanup(t, id)
@@ -146,7 +134,7 @@ func TestSendInput(t *testing.T) {
 
 	time.Sleep(500 * time.Millisecond)
 
-	output, err := captureOutput(id)
+	output, err := capturePane(id)
 	if err != nil {
 		t.Fatalf("captureOutput: %v", err)
 	}
@@ -156,7 +144,7 @@ func TestSendInput(t *testing.T) {
 }
 
 func TestListSessions(t *testing.T) {
-	skipIfNoTmux(t)
+	requireTmux(t)
 
 	id := "test-list"
 	defer cleanup(t, id)
@@ -175,7 +163,7 @@ func TestListSessions(t *testing.T) {
 	for _, s := range sessions {
 		if s.ID == id {
 			found = true
-			if !s.Alive {
+			if !s.isAlive {
 				t.Fatal("expected session to be alive")
 			}
 		}
@@ -187,7 +175,7 @@ func TestListSessions(t *testing.T) {
 }
 
 func TestOutputTruncation(t *testing.T) {
-	skipIfNoTmux(t)
+	requireTmux(t)
 
 	id := "test-trunc"
 	defer cleanup(t, id)
@@ -199,7 +187,7 @@ func TestOutputTruncation(t *testing.T) {
 
 	stare(id, 5)
 
-	output, err := captureOutput(id)
+	output, err := capturePane(id)
 	if err != nil {
 		t.Fatalf("captureOutput: %v", err)
 	}
@@ -210,7 +198,7 @@ func TestOutputTruncation(t *testing.T) {
 }
 
 func TestExitCode(t *testing.T) {
-	skipIfNoTmux(t)
+	requireTmux(t)
 
 	id := "test-exit"
 	defer cleanup(t, id)
@@ -230,51 +218,32 @@ func TestExitCode(t *testing.T) {
 	}
 }
 
-func TestParseNextCheckAt(t *testing.T) {
-	now := time.Now()
+func TestStareMissingSession(t *testing.T) {
+	requireTmux(t)
 
-	t.Run("relative seconds", func(t *testing.T) {
-		result, err := parseNextCheckAt("+30s")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		diff := result.Sub(now)
-		if diff < 29*time.Second || diff > 31*time.Second {
-			t.Fatalf("expected ~30s from now, got %v", diff)
-		}
-	})
+	id := "test-stare-missing"
 
-	t.Run("relative minutes", func(t *testing.T) {
-		result, err := parseNextCheckAt("+5m")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		diff := result.Sub(now)
-		if diff < 4*time.Minute || diff > 6*time.Minute {
-			t.Fatalf("expected ~5m from now, got %v", diff)
-		}
-	})
+	err := newSession(id, "sleep 60")
+	if err != nil {
+		t.Fatalf("newSession: %v", err)
+	}
 
-	t.Run("relative days", func(t *testing.T) {
-		result, err := parseNextCheckAt("+1d")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		diff := result.Sub(now)
-		if diff < 23*time.Hour || diff > 25*time.Hour {
-			t.Fatalf("expected ~24h from now, got %v", diff)
-		}
-	})
+	err = killSession(id)
+	if err != nil {
+		t.Fatalf("killSession: %v", err)
+	}
 
-	t.Run("RFC3339", func(t *testing.T) {
-		ts := "2026-03-01T15:00:00Z"
-		result, err := parseNextCheckAt(ts)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		expected, _ := time.Parse(time.RFC3339, ts)
-		if !result.Equal(expected) {
-			t.Fatalf("expected %v, got %v", expected, result)
-		}
-	})
+	_, alive, _ := stare(id, 2)
+	if alive {
+		t.Fatal("stare reported alive for a killed session")
+	}
+}
+
+func TestGetEnvNonexistentSession(t *testing.T) {
+	requireTmux(t)
+
+	_, err := getEnv("does-not-exist", "SOME_KEY")
+	if err == nil {
+		t.Fatal("expected error from getEnv on nonexistent session, got nil")
+	}
 }

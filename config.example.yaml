@@ -1,7 +1,7 @@
 # LLM
 openai_key: sk-proj-...  # optional when use_codex is true
 use_codex: false         # use ChatGPT subscription (OAuth) instead of API key for Think
-model: gpt-5.2-codex
+model: gpt-5.3-codex
 
 # search
 exa_api_key: ""          # Exa web search API key
