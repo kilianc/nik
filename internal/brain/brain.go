@@ -2,14 +2,13 @@ package brain
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/kciuffolo/nik/internal/config"
+	"github.com/kciuffolo/nik/internal/id"
 	"github.com/kciuffolo/nik/internal/llm"
 )
 
@@ -106,9 +105,7 @@ func (b *Brain) activate(ctx context.Context, output DataSourceOutput) {
 		defer b.activeConversations.Delete(conversationID)
 	}
 
-	var buf [8]byte
-	_, _ = rand.Read(buf[:])
-	activationID := hex.EncodeToString(buf[:])
+	activationID := id.Short(8)
 
 	b.activations.Set(activationID)
 	defer b.activations.Delete(activationID)

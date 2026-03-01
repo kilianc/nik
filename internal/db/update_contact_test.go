@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/kciuffolo/nik/internal/id"
 )
 
 func TestUpdateContactFieldUpdatesAllowedFields(t *testing.T) {
@@ -59,7 +61,7 @@ func TestUpdateContactFieldRejectsUnknownField(t *testing.T) {
 	}
 	defer conn.Close()
 
-	err = UpdateContactField(ctx, conn, NewID(), "bad_field", "value", nil)
+	err = UpdateContactField(ctx, conn, id.V7(), "bad_field", "value", nil)
 	if err == nil {
 		t.Fatalf("expected error for unknown field")
 	}

@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"testing"
 	"time"
+
+	"github.com/kciuffolo/nik/internal/id"
 )
 
 func TestJournalHasPageReturnsFalseWhenEmpty(t *testing.T) {
@@ -189,8 +191,8 @@ func TestJournalMemoriesTodayReturnsNewMemories(t *testing.T) {
 	}
 	defer conn.Close()
 
-	id := NewID()
-	_, err = conn.ExecContext(ctx, "INSERT INTO memory (id, content) VALUES (?1, ?2)", id, "test memory")
+	memID := id.V7()
+	_, err = conn.ExecContext(ctx, "INSERT INTO memory (id, content) VALUES (?1, ?2)", memID, "test memory")
 	if err != nil {
 		t.Fatalf("insert memory: %v", err)
 	}

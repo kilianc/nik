@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/kciuffolo/nik/internal/id"
 	"github.com/kciuffolo/nik/internal/queries"
 )
 
@@ -115,7 +116,7 @@ func UpsertConversation(ctx context.Context, db DBTX, p UpsertConversationParams
 	_, err := db.ExecContext(
 		ctx,
 		queries.ConversationUpsert,
-		NewID(),
+		id.V7(),
 		p.Platform,
 		p.ExternalConversationID,
 		p.Kind,

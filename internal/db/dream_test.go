@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/kciuffolo/nik/internal/id"
 )
 
 func TestDreamHasPassReturnsFalseWhenEmpty(t *testing.T) {
@@ -217,18 +219,18 @@ func TestMemoryRandomReturnsOlderMemories(t *testing.T) {
 	}
 	defer conn.Close()
 
-	id := NewID()
+	memID := id.V7()
 	_, err = conn.ExecContext(ctx,
 		"INSERT INTO memory (id, content, created_at) VALUES (?1, ?2, datetime('now', '-30 days'))",
-		id, "old memory")
+		memID, "old memory")
 	if err != nil {
 		t.Fatalf("insert old memory: %v", err)
 	}
 
-	id2 := NewID()
+	memID2 := id.V7()
 	_, err = conn.ExecContext(ctx,
 		"INSERT INTO memory (id, content) VALUES (?1, ?2)",
-		id2, "new memory")
+		memID2, "new memory")
 	if err != nil {
 		t.Fatalf("insert new memory: %v", err)
 	}

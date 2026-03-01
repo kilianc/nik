@@ -7,9 +7,7 @@ import (
 	"log/slog"
 	"time"
 
-	"crypto/rand"
-	"encoding/hex"
-
+	"github.com/kciuffolo/nik/internal/id"
 	"github.com/kciuffolo/nik/internal/llm"
 )
 
@@ -104,12 +102,6 @@ func shellHandler() llm.ToolExecutor {
 	}
 }
 
-func newSessionID() string {
-	var buf [4]byte
-	_, _ = rand.Read(buf[:])
-	return hex.EncodeToString(buf[:])
-}
-
 func handleRun(ctx context.Context, args shellArgs) (string, error) {
 	if args.Command == "" {
 		return `{"error":"empty command"}`, nil
@@ -123,9 +115,9 @@ func handleRun(ctx context.Context, args shellArgs) (string, error) {
 		return fmt.Sprintf(`{"error":"parse next_check_at %q: %s"}`, args.NextCheckAt, err), nil
 	}
 
-	id := newSessionID()
+	sid := id.Short(4)
 
-	err = newSession(id, args.Command)
+	err = newSession(sid, args.Command)
 	if err != nil {
 		return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
 	}
@@ -143,13 +135,13 @@ func handleRun(ctx context.Context, args shellArgs) (string, error) {
 		StartedAt:      now,
 	}
 
-	err = saveMeta(id, meta)
+	err = saveMeta(sid, meta)
 	if err != nil {
-		killSession(id)
+		killSession(sid)
 		return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
 	}
 
-	slog.Info("shell run", "pkg", "shell", "id", id,
+	slog.Info("shell run", "pkg", "shell", "id", sid,
 		"command", args.Command,
 		"description", args.Description,
 		"conversation_id", meta.ConversationID,
@@ -162,15 +154,15 @@ func handleRun(ctx context.Context, args shellArgs) (string, error) {
 		maxWait = 10
 	}
 
-	output, alive, code := stare(id, maxWait)
+	output, alive, code := stare(sid, maxWait)
 
 	if !alive {
-		killSession(id)
+		killSession(sid)
 		return fmt.Sprintf(`{"status":"exited","exit_code":%d,"output":%q}`, code, output), nil
 	}
 
 	nca := meta.NextCheckAt.Format(time.RFC3339)
-	return fmt.Sprintf(`{"status":"running","session_id":%q,"next_check_at":%q,"output":%q}`, id, nca, output), nil
+	return fmt.Sprintf(`{"status":"running","session_id":%q,"next_check_at":%q,"output":%q}`, sid, nca, output), nil
 }
 
 func handleInteract(args shellArgs) (string, error) {

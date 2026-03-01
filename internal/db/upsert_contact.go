@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/kciuffolo/nik/internal/id"
 	"github.com/kciuffolo/nik/internal/queries"
 )
 
@@ -33,10 +34,10 @@ func UpsertContact(ctx context.Context, db *sql.DB, p UpsertContactParams) (Cont
 }
 
 func upsertContactWhatsApp(ctx context.Context, db *sql.DB, p UpsertContactParams) (Contact, error) {
-	id := NewID()
+	newID := id.V7()
 
 	_, err := db.ExecContext(ctx, queries.ContactUpsertWhatsAppInsert,
-		id, p.Name, p.ExternalID, p.Phone, p.LastMessageAt,
+		newID, p.Name, p.ExternalID, p.Phone, p.LastMessageAt,
 	)
 	if err != nil {
 		return Contact{}, fmt.Errorf("insert: %w", err)

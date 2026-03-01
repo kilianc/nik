@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/kciuffolo/nik/internal/id"
 )
 
 func TestUpsertContactWhatsAppInsertThenUpdate(t *testing.T) {
@@ -80,12 +82,12 @@ func TestUpsertContactSelfWhatsApp(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	id := NewID()
+	selfID := id.V7()
 	first, err := UpsertContact(ctx, conn, UpsertContactParams{
 		Platform:      "whatsapp",
 		ExternalID:    "self@s.whatsapp.net",
 		IsSelf:        true,
-		SelfID:        id,
+		SelfID:        selfID,
 		LastMessageAt: time.Now().Add(-time.Minute),
 	})
 	if err != nil {
@@ -96,7 +98,7 @@ func TestUpsertContactSelfWhatsApp(t *testing.T) {
 		Platform:      "whatsapp",
 		ExternalID:    "self2@s.whatsapp.net",
 		IsSelf:        true,
-		SelfID:        id,
+		SelfID:        selfID,
 		LastMessageAt: time.Now(),
 	})
 	if err != nil {
@@ -126,20 +128,20 @@ func TestUpsertContactSelfWhatsAppPreservesRenamedName(t *testing.T) {
 	}
 	defer conn.Close()
 
-	id := NewID()
+	selfID := id.V7()
 
 	_, err = UpsertContact(ctx, conn, UpsertContactParams{
 		Platform:      "whatsapp",
 		ExternalID:    "self@s.whatsapp.net",
 		IsSelf:        true,
-		SelfID:        id,
+		SelfID:        selfID,
 		LastMessageAt: time.Now().Add(-time.Minute),
 	})
 	if err != nil {
 		t.Fatalf("initial self upsert: %v", err)
 	}
 
-	err = UpdateContactField(ctx, conn, id, "name", "Nikolai", nil)
+	err = UpdateContactField(ctx, conn, selfID, "name", "Nikolai", nil)
 	if err != nil {
 		t.Fatalf("rename self contact: %v", err)
 	}
@@ -148,7 +150,7 @@ func TestUpsertContactSelfWhatsAppPreservesRenamedName(t *testing.T) {
 		Platform:      "whatsapp",
 		ExternalID:    "self@s.whatsapp.net",
 		IsSelf:        true,
-		SelfID:        id,
+		SelfID:        selfID,
 		LastMessageAt: time.Now(),
 	})
 	if err != nil {

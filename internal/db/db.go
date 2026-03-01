@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 
 	sqlite_vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
-	"github.com/google/uuid"
 	"github.com/mattn/go-sqlite3"
 )
 
@@ -29,10 +28,6 @@ func init() {
 			return conn.RegisterFunc("jaro_winkler_similarity", jaroWinklerSimilarity, true)
 		},
 	})
-}
-
-func NewID() string {
-	return uuid.New().String()
 }
 
 func Open(dbPath string) (*sql.DB, error) {

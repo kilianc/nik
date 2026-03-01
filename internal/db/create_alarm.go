@@ -5,11 +5,12 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/kciuffolo/nik/internal/id"
 	"github.com/kciuffolo/nik/internal/queries"
 )
 
 func CreateAlarm(ctx context.Context, db *sql.DB, originContactID, originConversationID, goal, recurrence string, nextFireAt time.Time) (Alarm, error) {
-	id := NewID()
+	newID := id.V7()
 	now := time.Now()
 
 	contactID := any(nil)
@@ -27,13 +28,13 @@ func CreateAlarm(ctx context.Context, db *sql.DB, originContactID, originConvers
 		rec = recurrence
 	}
 
-	_, err := db.ExecContext(ctx, queries.CreateAlarm, id, contactID, conversationID, goal, rec, nextFireAt, now)
+	_, err := db.ExecContext(ctx, queries.CreateAlarm, newID, contactID, conversationID, goal, rec, nextFireAt, now)
 	if err != nil {
 		return Alarm{}, err
 	}
 
 	return Alarm{
-		ID:                   id,
+		ID:                   newID,
 		OriginContactID:      sql.NullString{String: originContactID, Valid: originContactID != ""},
 		OriginConversationID: sql.NullString{String: originConversationID, Valid: originConversationID != ""},
 		Goal:                 goal,
