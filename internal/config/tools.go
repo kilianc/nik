@@ -80,14 +80,14 @@ func updateConfigHandler(cfg *Config, conn *sql.DB) llm.ToolExecutor {
 
 func configGet(cfg *Config) (string, error) {
 	out := map[string]any{
-		"model":                  cfg.Model,
-		"debug_dir":              cfg.DebugDirValue,
-		"media_dir":              cfg.MediaDirValue,
-		"max_history":            cfg.MaxHistory,
-		"timezone":               cfg.Timezone,
-		"location":               cfg.Location,
-		"allow_conversation_ids": cfg.AllowConversationIDs,
-		"owner_conversation_id":  cfg.OwnerConversationID,
+		"model":                       cfg.Model,
+		"debug_dir":                   cfg.DebugDirValue,
+		"media_dir":                   cfg.MediaDirValue,
+		"max_history":                 cfg.MaxHistory,
+		"timezone":                    cfg.Timezone,
+		"location":                    cfg.Location,
+		"allow_conversation_ids":      cfg.AllowConversationIDs,
+		"privileged_conversation_ids": cfg.PrivilegedConversationIDs,
 	}
 
 	data, err := json.Marshal(out)
@@ -99,8 +99,8 @@ func configGet(cfg *Config) (string, error) {
 }
 
 var readOnlyFields = map[string]bool{
-	"owner_conversation_id": true,
-	"openai_key":            true,
+	"privileged_conversation_ids": true,
+	"openai_key":                  true,
 }
 
 func configSet(cfg *Config, field, value string) (string, error) {
@@ -192,8 +192,8 @@ func allowlistRemove(cfg *Config, conversationID string) (string, error) {
 		return `{"error":"cannot remove last allow list entry"}`, nil
 	}
 
-	if conversationID == cfg.OwnerConversationID {
-		return `{"error":"cannot remove admin channel from allow list"}`, nil
+	if slices.Contains(cfg.PrivilegedConversationIDs, conversationID) {
+		return `{"error":"cannot remove privileged channel from allow list"}`, nil
 	}
 
 	idx := slices.Index(cfg.AllowConversationIDs, conversationID)

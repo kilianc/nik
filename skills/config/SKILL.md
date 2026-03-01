@@ -31,14 +31,14 @@ Read or change nik's runtime configuration.
 
 ### Read-only fields
 
-`owner_conversation_id` and `openai_key` cannot be changed via this
-tool.
+`privileged_conversation_ids` and `openai_key` cannot be changed via
+this tool.
 
 ### Allow list
 
-The allow list controls which conversations nik listens to. Only the
-owner can modify it. The owner's conversation is always in the list and
-cannot be removed.
+The allow list controls which conversations nik listens to. Only
+privileged conversations can modify it. Privileged conversations are
+always in the list and cannot be removed.
 
 ## Notes
 

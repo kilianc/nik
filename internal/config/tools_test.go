@@ -27,8 +27,8 @@ func TestConfigSetRejectsReadOnlyAndUnknownFields(t *testing.T) {
 
 func TestAllowlistRemoveGuardsLastEntry(t *testing.T) {
 	cfg := &Config{
-		AllowConversationIDs: []string{"owner-conv"},
-		OwnerConversationID:  "owner-conv",
+		AllowConversationIDs:      []string{"owner-conv"},
+		PrivilegedConversationIDs: []string{"owner-conv"},
 	}
 
 	out, err := allowlistRemove(cfg, "owner-conv")
