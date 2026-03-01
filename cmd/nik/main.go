@@ -14,6 +14,7 @@ import (
 	"github.com/kciuffolo/nik/internal/alarms"
 	"github.com/kciuffolo/nik/internal/brain"
 	"github.com/kciuffolo/nik/internal/briefing"
+	"github.com/kciuffolo/nik/internal/codex"
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/contacts"
 	"github.com/kciuffolo/nik/internal/db"
@@ -110,7 +111,21 @@ func main() {
 		return
 	}
 
-	llmClient := llm.NewClient(cfg.OpenAIKey, cfg.Model)
+	var llmOpts []llm.ClientOption
+	if cfg.OpenAIKey != "" {
+		llmOpts = append(llmOpts, llm.WithAPIKey(cfg.OpenAIKey))
+	}
+	if cfg.UseCodex {
+		auth, err := codex.LoadOrLogin("")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "codex auth error: %v\n", err)
+			os.Exit(1)
+		}
+		llmOpts = append(llmOpts, llm.WithCodex(auth))
+		slog.Info("codex auth ready", "account_id", auth.AccountID)
+	}
+	llmClient := llm.NewClient(cfg.Model, llmOpts...)
+
 	alarmSvc := alarms.New(conn)
 	searchSvc := search.NewService(conn)
 	memorySvc := memory.NewService(conn, llmClient)
