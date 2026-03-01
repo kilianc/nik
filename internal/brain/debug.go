@@ -46,6 +46,7 @@ type debugUsage struct {
 	InputTokens  int64
 	OutputTokens int64
 	TotalTokens  int64
+	CachedTokens int64
 	CostUSD      float64
 }
 
@@ -95,7 +96,8 @@ func (b *Brain) writeDebugRecord(instructions, userInput, rawOutput string, tool
 			InputTokens:  usage.InputTokens,
 			OutputTokens: usage.OutputTokens,
 			TotalTokens:  usage.TotalTokens,
-			CostUSD:      llm.ComputeCost(b.llm.Model(), usage.InputTokens, usage.OutputTokens),
+			CachedTokens: usage.CachedTokens,
+			CostUSD:      llm.ComputeCost(b.llm.Model(), usage.InputTokens, usage.OutputTokens, usage.CachedTokens),
 		},
 	}
 
@@ -153,9 +155,9 @@ func writeDebugMarkdown(path string, rec debugRecord) error {
 	var w strings.Builder
 
 	fmt.Fprintf(&w, "# Session: %s\n\n", rec.Timestamp)
-	fmt.Fprintf(&w, "**Model:** %s | **Tokens:** %d in / %d out / %d total | **Cost:** $%.2f\n\n",
-		rec.Model, rec.Usage.InputTokens, rec.Usage.OutputTokens, rec.Usage.TotalTokens, rec.Usage.CostUSD)
-	w.WriteString("---\n\n")
+	fmt.Fprintf(&w, "**Model:** %s\n\n", rec.Model)
+	writeCostTable(&w, rec.Model, rec.Usage)
+	w.WriteString("\n---\n\n")
 
 	w.WriteString("<details><summary>Instructions (system prompt)</summary>\n\n")
 	w.WriteString(preserveNewlines(rec.Input.Instructions))
@@ -238,6 +240,36 @@ func writeOutputSection(w *strings.Builder, out debugOutput) {
 		w.WriteString(out.ProcessErr)
 		w.WriteString("\n\n")
 	}
+}
+
+func writeCostTable(w *strings.Builder, model string, u debugUsage) {
+	rates, ok := llm.ModelRates(model)
+
+	w.WriteString("| | Tokens | Rate | Cost |\n")
+	w.WriteString("|---|---|---|---|\n")
+
+	uncached := u.InputTokens - u.CachedTokens
+
+	if ok {
+		inputCost := float64(uncached) * rates.Input / 1e6
+		fmt.Fprintf(w, "| Input | %d | $%.2f/M | $%.4f |\n", uncached, rates.Input, inputCost)
+
+		if u.CachedTokens > 0 {
+			cachedCost := float64(u.CachedTokens) * rates.Cached / 1e6
+			fmt.Fprintf(w, "| Cached | %d | $%.2f/M | $%.4f |\n", u.CachedTokens, rates.Cached, cachedCost)
+		}
+
+		outputCost := float64(u.OutputTokens) * rates.Output / 1e6
+		fmt.Fprintf(w, "| Output | %d | $%.2f/M | $%.4f |\n", u.OutputTokens, rates.Output, outputCost)
+	} else {
+		fmt.Fprintf(w, "| Input | %d | - | - |\n", uncached)
+		if u.CachedTokens > 0 {
+			fmt.Fprintf(w, "| Cached | %d | - | - |\n", u.CachedTokens)
+		}
+		fmt.Fprintf(w, "| Output | %d | - | - |\n", u.OutputTokens)
+	}
+
+	fmt.Fprintf(w, "| **Total** | **%d** | | **$%.4f** |\n", u.TotalTokens, u.CostUSD)
 }
 
 func writeFencedBlock(w *strings.Builder, s string) {

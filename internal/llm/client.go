@@ -55,6 +55,7 @@ type Usage struct {
 	InputTokens  int64
 	OutputTokens int64
 	TotalTokens  int64
+	CachedTokens int64
 }
 
 type ToolCallRecord struct {
@@ -95,6 +96,7 @@ func (c *Client) Think(ctx context.Context, instructions, input string, tools []
 		total.InputTokens += resp.Usage.InputTokens
 		total.OutputTokens += resp.Usage.OutputTokens
 		total.TotalTokens += resp.Usage.TotalTokens
+		total.CachedTokens += resp.Usage.InputTokensDetails.CachedTokens
 
 		var calls []ToolCall
 		for _, item := range resp.Output {

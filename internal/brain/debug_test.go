@@ -23,7 +23,7 @@ func TestWriteDebugMarkdownProducesExpectedSections(t *testing.T) {
 
 	rec := debugRecord{
 		Timestamp: time.Date(2026, 2, 28, 10, 25, 58, 0, time.UTC).Format(time.RFC3339),
-		Model:     "test-model",
+		Model:     "gpt-5.2-codex",
 		Input: debugInput{
 			Instructions: "You are nik.",
 			UserInput:    "hello nik",
@@ -51,6 +51,7 @@ func TestWriteDebugMarkdownProducesExpectedSections(t *testing.T) {
 			InputTokens:  1000,
 			OutputTokens: 200,
 			TotalTokens:  1200,
+			CachedTokens: 600,
 			CostUSD:      0.05,
 		},
 	}
@@ -71,9 +72,12 @@ func TestWriteDebugMarkdownProducesExpectedSections(t *testing.T) {
 		want  string
 	}{
 		{"header", "# Session: 2026-02-28T10:25:58Z"},
-		{"model", "**Model:** test-model"},
-		{"tokens", "1000 in / 200 out / 1200 total"},
-		{"cost", "$0.05"},
+		{"model", "**Model:** gpt-5.2-codex"},
+		{"cost table header", "| | Tokens | Rate | Cost |"},
+		{"input row", "| Input | 400 |"},
+		{"cached row", "| Cached | 600 |"},
+		{"output row", "| Output | 200 |"},
+		{"total row", "| **Total** | **1200** |"},
 		{"instructions collapsed", "<details><summary>Instructions (system prompt)</summary>"},
 		{"instructions body", "You are nik."},
 		{"user input header", "## User Input"},
@@ -107,7 +111,12 @@ func TestWriteDebugMarkdownRawOutputFallback(t *testing.T) {
 			Raw:      "some raw text",
 			ParseErr: "invalid json",
 		},
-		Usage: debugUsage{CostUSD: 0.01},
+		Usage: debugUsage{
+			InputTokens:  100,
+			OutputTokens: 50,
+			TotalTokens:  150,
+			CostUSD:      0.01,
+		},
 	}
 
 	err := writeDebugMarkdown(path, rec)
