@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/kciuffolo/nik/internal/id"
 )
 
 func TestHandleRunValidatesRequiredFields(t *testing.T) {
@@ -49,16 +51,16 @@ func TestHandleReadMissingSession(t *testing.T) {
 	}
 }
 
-func TestNewIDPrefixCollision(t *testing.T) {
+func TestShortIDCollision(t *testing.T) {
 	seen := make(map[string]bool)
 	collisions := 0
 
 	for i := 0; i < 20; i++ {
-		id := newSessionID()
-		if seen[id] {
+		sid := id.Short(4)
+		if seen[sid] {
 			collisions++
 		}
-		seen[id] = true
+		seen[sid] = true
 	}
 
 	if collisions > 0 {

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/kciuffolo/nik/internal/id"
 	"github.com/kciuffolo/nik/internal/queries"
 )
 
@@ -31,15 +32,15 @@ func SoulCurrent(ctx context.Context, db *sql.DB) (Soul, error) {
 }
 
 func SoulInsert(ctx context.Context, db *sql.DB, content, dreamDate string) (int, error) {
-	id := NewID()
+	newID := id.V7()
 
-	_, err := db.ExecContext(ctx, queries.SoulInsert, id, content, dreamDate)
+	_, err := db.ExecContext(ctx, queries.SoulInsert, newID, content, dreamDate)
 	if err != nil {
 		return 0, fmt.Errorf("insert soul: %w", err)
 	}
 
 	var version int
-	err = db.QueryRowContext(ctx, "SELECT version FROM soul WHERE id = ?1", id).Scan(&version)
+	err = db.QueryRowContext(ctx, "SELECT version FROM soul WHERE id = ?1", newID).Scan(&version)
 	if err != nil {
 		return 0, fmt.Errorf("read soul version: %w", err)
 	}

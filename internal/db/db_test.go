@@ -8,18 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/kciuffolo/nik/internal/id"
 	"github.com/kciuffolo/nik/internal/queries"
 )
-
-func TestNewIDReturnsUUID(t *testing.T) {
-	id := NewID()
-
-	_, err := uuid.Parse(id)
-	if err != nil {
-		t.Fatalf("parse uuid: %v", err)
-	}
-}
 
 func TestOpenInMemoryAppliesSchema(t *testing.T) {
 	ctx := context.Background()
@@ -64,11 +55,11 @@ func insertTestMessage(t *testing.T, ctx context.Context, conn *sql.DB, p insert
 		p.SentAt = time.Now()
 	}
 
-	id := NewID()
+	msgID := id.V7()
 	_, err := conn.ExecContext(
 		ctx,
 		queries.MessageInsert,
-		id,
+		msgID,
 		p.ConversationID,
 		p.ContactID,
 		p.Platform,

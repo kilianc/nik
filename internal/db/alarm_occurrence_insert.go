@@ -5,19 +5,20 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/kciuffolo/nik/internal/id"
 	"github.com/kciuffolo/nik/internal/queries"
 )
 
 func AlarmOccurrenceInsert(ctx context.Context, db *sql.DB, alarmID string, firedAt time.Time) (AlarmOccurrence, error) {
-	id := NewID()
+	newID := id.V7()
 
-	_, err := db.ExecContext(ctx, queries.AlarmOccurrenceInsert, id, alarmID, firedAt)
+	_, err := db.ExecContext(ctx, queries.AlarmOccurrenceInsert, newID, alarmID, firedAt)
 	if err != nil {
 		return AlarmOccurrence{}, err
 	}
 
 	return AlarmOccurrence{
-		ID:      id,
+		ID:      newID,
 		AlarmID: alarmID,
 		FiredAt: firedAt,
 	}, nil

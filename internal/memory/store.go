@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	sqlite_vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
-	"github.com/kciuffolo/nik/internal/db"
+	"github.com/kciuffolo/nik/internal/id"
 	"github.com/kciuffolo/nik/internal/queries"
 )
 
@@ -27,7 +27,7 @@ func (s *Service) Add(ctx context.Context, content string, metadata map[string]a
 		return nil, fmt.Errorf("serialize embedding: %w", err)
 	}
 
-	id := db.NewID()
+	memID := id.V7()
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -43,12 +43,12 @@ func (s *Service) Add(ctx context.Context, content string, metadata map[string]a
 		srcIDPtr = &sourceID
 	}
 
-	_, err = tx.ExecContext(ctx, queries.MemoryInsert, id, content, string(metaJSON), srcPtr, srcIDPtr)
+	_, err = tx.ExecContext(ctx, queries.MemoryInsert, memID, content, string(metaJSON), srcPtr, srcIDPtr)
 	if err != nil {
 		return nil, fmt.Errorf("insert memory: %w", err)
 	}
 
-	_, err = tx.ExecContext(ctx, queries.MemoryVecInsert, id, embedding)
+	_, err = tx.ExecContext(ctx, queries.MemoryVecInsert, memID, embedding)
 	if err != nil {
 		return nil, fmt.Errorf("insert vec_memory: %w", err)
 	}
@@ -59,7 +59,7 @@ func (s *Service) Add(ctx context.Context, content string, metadata map[string]a
 	}
 
 	return &Memory{
-		ID:       id,
+		ID:       memID,
 		Content:  content,
 		Metadata: metadata,
 		Source:   source,

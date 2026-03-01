@@ -8,6 +8,7 @@ import (
 
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/db"
+	"github.com/kciuffolo/nik/internal/id"
 )
 
 type Service struct {
@@ -40,14 +41,14 @@ func (s *Service) ListTopics(ctx context.Context) ([]db.BriefingTopic, error) {
 }
 
 func (s *Service) AddTopic(ctx context.Context, query, reason string, contactID sql.NullString) (string, error) {
-	id := db.NewID()
+	topicID := id.V7()
 
-	err := db.BriefingTopicInsert(ctx, s.db, id, query, reason, contactID)
+	err := db.BriefingTopicInsert(ctx, s.db, topicID, query, reason, contactID)
 	if err != nil {
 		return "", fmt.Errorf("add briefing topic: %w", err)
 	}
 
-	return id, nil
+	return topicID, nil
 }
 
 func (s *Service) RemoveTopic(ctx context.Context, id string) error {

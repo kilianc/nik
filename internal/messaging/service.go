@@ -12,6 +12,7 @@ import (
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/contacts"
 	"github.com/kciuffolo/nik/internal/db"
+	"github.com/kciuffolo/nik/internal/id"
 	"github.com/kciuffolo/nik/internal/queries"
 )
 
@@ -132,7 +133,7 @@ func (s *Service) ReceiveMessage(ctx context.Context, msg InboundMessage) error 
 		kind = "text"
 	}
 
-	msgID := db.NewID()
+	msgID := id.V7()
 
 	logAttrs := []any{
 		"pkg", "messaging",

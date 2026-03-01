@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kciuffolo/nik/internal/db"
+	"github.com/kciuffolo/nik/internal/id"
 )
 
 func TestBuildDayContextEmptyDB(t *testing.T) {
@@ -38,8 +39,8 @@ func TestBuildDayContextIncludesMemories(t *testing.T) {
 	}
 	defer conn.Close()
 
-	id := db.NewID()
-	_, err = conn.ExecContext(ctx, "INSERT INTO memory (id, content) VALUES (?1, ?2)", id, "nik likes dogs")
+	memID := id.V7()
+	_, err = conn.ExecContext(ctx, "INSERT INTO memory (id, content) VALUES (?1, ?2)", memID, "nik likes dogs")
 	if err != nil {
 		t.Fatalf("insert memory: %v", err)
 	}

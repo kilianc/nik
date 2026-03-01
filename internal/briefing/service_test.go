@@ -8,6 +8,7 @@ import (
 
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/db"
+	"github.com/kciuffolo/nik/internal/id"
 )
 
 func TestHasBriefingReturnsFalseWhenNoEntry(t *testing.T) {
@@ -76,7 +77,7 @@ func TestAddAndListTopics(t *testing.T) {
 	ctx := context.Background()
 	svc := testService(t)
 
-	contactID := db.NewID()
+	contactID := id.V7()
 	_, err := svc.db.ExecContext(ctx, "INSERT INTO contact (id, name) VALUES (?, ?)", contactID, "CT")
 	if err != nil {
 		t.Fatalf("insert contact: %v", err)

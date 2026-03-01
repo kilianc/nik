@@ -7,6 +7,7 @@ import (
 
 	sqlite_vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
 	"github.com/kciuffolo/nik/internal/db"
+	"github.com/kciuffolo/nik/internal/id"
 	"github.com/kciuffolo/nik/internal/queries"
 )
 
@@ -29,7 +30,7 @@ func insertTestMemory(t *testing.T, ctx context.Context, svc *Service, content s
 func insertTestMemoryWithSource(t *testing.T, ctx context.Context, svc *Service, content string, seed float64, source, sourceID string) string {
 	t.Helper()
 
-	id := db.NewID()
+	memID := id.V7()
 
 	var srcPtr, srcIDPtr *string
 	if source != "" {
@@ -39,17 +40,17 @@ func insertTestMemoryWithSource(t *testing.T, ctx context.Context, svc *Service,
 		srcIDPtr = &sourceID
 	}
 
-	_, err := svc.db.ExecContext(ctx, queries.MemoryInsert, id, content, "{}", srcPtr, srcIDPtr)
+	_, err := svc.db.ExecContext(ctx, queries.MemoryInsert, memID, content, "{}", srcPtr, srcIDPtr)
 	if err != nil {
 		t.Fatalf("insert test memory: %v", err)
 	}
 
-	_, err = svc.db.ExecContext(ctx, queries.MemoryVecInsert, id, fakeEmbedding(seed))
+	_, err = svc.db.ExecContext(ctx, queries.MemoryVecInsert, memID, fakeEmbedding(seed))
 	if err != nil {
 		t.Fatalf("insert test vec_memory: %v", err)
 	}
 
-	return id
+	return memID
 }
 
 func TestListMemories(t *testing.T) {
