@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/kciuffolo/nik/internal/codex"
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/packages/param"
@@ -18,13 +20,69 @@ import (
 )
 
 type Client struct {
-	client *openai.Client
-	model  shared.ResponsesModel
+	codexClient *openai.Client
+	apiClient   *openai.Client
+	model       shared.ResponsesModel
 }
 
-func NewClient(apiKey, model string) *Client {
-	client := openai.NewClient(option.WithAPIKey(apiKey))
-	return &Client{client: &client, model: model}
+type clientConfig struct {
+	apiKey    string
+	codexAuth *codex.Auth
+}
+
+type ClientOption func(*clientConfig)
+
+func WithAPIKey(key string) ClientOption {
+	return func(c *clientConfig) {
+		c.apiKey = key
+	}
+}
+
+func WithCodex(auth *codex.Auth) ClientOption {
+	return func(c *clientConfig) {
+		c.codexAuth = auth
+	}
+}
+
+func NewClient(model string, opts ...ClientOption) *Client {
+	var cfg clientConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
+	c := &Client{model: model}
+
+	if cfg.apiKey != "" {
+		apiClient := openai.NewClient(option.WithAPIKey(cfg.apiKey))
+		c.apiClient = &apiClient
+	}
+
+	if cfg.codexAuth != nil {
+		auth := cfg.codexAuth
+		mw := func(req *http.Request, next option.MiddlewareNext) (*http.Response, error) {
+			token, err := auth.Token()
+			if err != nil {
+				return nil, fmt.Errorf("codex token refresh: %w", err)
+			}
+
+			req.Header.Set("Authorization", "Bearer "+token)
+			if auth.AccountID != "" {
+				req.Header.Set("Chatgpt-Account-Id", auth.AccountID)
+			}
+
+			return next(req)
+		}
+
+		codexClient := openai.NewClient(
+			option.WithAPIKey("codex-oauth"),
+			option.WithBaseURL("https://chatgpt.com/backend-api/codex"),
+			option.WithMiddleware(mw),
+			option.WithHeader("originator", "codex_cli_rs"),
+		)
+		c.codexClient = &codexClient
+	}
+
+	return c
 }
 
 func (c *Client) Model() string {
@@ -68,6 +126,15 @@ type ToolCallRecord struct {
 func (c *Client) Think(ctx context.Context, instructions, input string, tools []ToolDef, executor ToolExecutor) (string, Usage, []ToolCallRecord, error) {
 	total := Usage{}
 
+	client := c.apiClient
+	if c.codexClient != nil {
+		client = c.codexClient
+	}
+
+	if client == nil {
+		return "", total, nil, fmt.Errorf("no client configured (need api key or codex auth)")
+	}
+
 	var history []ToolCallRecord
 
 	items := responses.ResponseInputParam{
@@ -85,12 +152,29 @@ func (c *Client) Think(ctx context.Context, instructions, input string, tools []
 		},
 	}
 
+	if c.codexClient != nil {
+		params.Store = openai.Bool(false)
+	}
+
+	useStreaming := c.codexClient != nil
+
 	for round := 0; ; round++ {
 		params.Input = responses.ResponseNewParamsInputUnion{OfInputItemList: items}
 
-		resp, err := c.client.Responses.New(ctx, params)
-		if err != nil {
-			return "", total, history, fmt.Errorf("complete round %d: %w", round, err)
+		var resp *responses.Response
+
+		if useStreaming {
+			r, err := completeStreaming(ctx, client, params)
+			if err != nil {
+				return "", total, history, fmt.Errorf("complete round %d: %w", round, err)
+			}
+			resp = r
+		} else {
+			r, err := client.Responses.New(ctx, params)
+			if err != nil {
+				return "", total, history, fmt.Errorf("complete round %d: %w", round, err)
+			}
+			resp = r
 		}
 
 		total.InputTokens += resp.Usage.InputTokens
@@ -141,8 +225,38 @@ func (c *Client) Think(ctx context.Context, instructions, input string, tools []
 
 }
 
+// completeStreaming uses the streaming API and collects the final completed
+// response. the codex backend requires stream=true on all requests.
+func completeStreaming(ctx context.Context, client *openai.Client, params responses.ResponseNewParams) (*responses.Response, error) {
+	stream := client.Responses.NewStreaming(ctx, params)
+	defer stream.Close()
+
+	var final *responses.Response
+	for stream.Next() {
+		evt := stream.Current()
+		completed := evt.AsResponseCompleted()
+		if completed.Type == "response.completed" {
+			final = &completed.Response
+		}
+	}
+
+	if stream.Err() != nil {
+		return nil, stream.Err()
+	}
+
+	if final == nil {
+		return nil, fmt.Errorf("stream ended without response.completed event")
+	}
+
+	return final, nil
+}
+
 func (c *Client) Embed(ctx context.Context, text string) ([]float64, error) {
-	resp, err := c.client.Embeddings.New(ctx, openai.EmbeddingNewParams{
+	if c.apiClient == nil {
+		return nil, fmt.Errorf("embed text: requires api key")
+	}
+
+	resp, err := c.apiClient.Embeddings.New(ctx, openai.EmbeddingNewParams{
 		Model: openai.EmbeddingModelTextEmbedding3Small,
 		Input: openai.EmbeddingNewParamsInputUnion{
 			OfString: openai.String(text),
@@ -160,13 +274,17 @@ func (c *Client) Embed(ctx context.Context, text string) ([]float64, error) {
 }
 
 func (c *Client) Transcribe(ctx context.Context, filePath string) (string, error) {
+	if c.apiClient == nil {
+		return "", fmt.Errorf("transcribe %s: requires api key", filePath)
+	}
+
 	f, err := os.Open(filePath)
 	if err != nil {
 		return "", fmt.Errorf("open audio file %s: %w", filePath, err)
 	}
 	defer f.Close()
 
-	resp, err := c.client.Audio.Transcriptions.New(ctx, openai.AudioTranscriptionNewParams{
+	resp, err := c.apiClient.Audio.Transcriptions.New(ctx, openai.AudioTranscriptionNewParams{
 		File:  f,
 		Model: openai.AudioModelWhisper1,
 	})
@@ -178,6 +296,10 @@ func (c *Client) Transcribe(ctx context.Context, filePath string) (string, error
 }
 
 func (c *Client) Describe(ctx context.Context, filePath, mimeType, question string) (string, error) {
+	if c.apiClient == nil {
+		return "", fmt.Errorf("describe %s: requires api key", filePath)
+	}
+
 	if question == "" {
 		question = "Describe this content concisely."
 	}
@@ -210,7 +332,7 @@ func (c *Client) Describe(ctx context.Context, filePath, mimeType, question stri
 		responses.ResponseInputItemParamOfMessage(content, responses.EasyInputMessageRoleUser),
 	}
 
-	resp, err := c.client.Responses.New(ctx, responses.ResponseNewParams{
+	resp, err := c.apiClient.Responses.New(ctx, responses.ResponseNewParams{
 		Model: shared.ChatModelGPT4oMini,
 		Input: responses.ResponseNewParamsInputUnion{OfInputItemList: items},
 	})

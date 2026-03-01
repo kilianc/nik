@@ -15,6 +15,7 @@ type Config struct {
 	Home string `yaml:"-"`
 
 	OpenAIKey   string `yaml:"openai_key"`
+	UseCodex    bool   `yaml:"use_codex"`
 	ExaAPIKey   string `yaml:"exa_api_key"`
 	Model       string `yaml:"model"`
 	DebugDirValue   string `yaml:"debug_dir"`
@@ -222,8 +223,8 @@ func Load(home string) (*Config, error) {
 		cfg.AllowConversationIDs = append(cfg.AllowConversationIDs, cfg.OwnerConversationID)
 	}
 
-	if strings.TrimSpace(cfg.OpenAIKey) == "" {
-		return nil, fmt.Errorf("missing required config key openai_key")
+	if strings.TrimSpace(cfg.OpenAIKey) == "" && !cfg.UseCodex {
+		return nil, fmt.Errorf("missing required config key openai_key (or set use_codex: true)")
 	}
 
 	return &cfg, nil

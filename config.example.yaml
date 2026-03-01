@@ -1,12 +1,28 @@
-openai_key: sk-proj-...
+# LLM
+openai_key: sk-proj-...  # optional when use_codex is true
+use_codex: false         # use ChatGPT subscription (OAuth) instead of API key for Think
 model: gpt-5.2-codex
+
+# search
+exa_api_key: ""          # Exa web search API key
+
+# paths (relative to home dir)
 debug_dir: debug
 media_dir: media
 prompts_dir: ../prompts
 skills_dir: ../skills
-owner_conversation_id: ...
-allow_conversation_ids:
+
+# conversations
+owner_conversation_id: ...   # nik's owner — always allowed
+allow_conversation_ids:      # other conversations nik can respond to
   - ...
-max_history: 100
+
+# context
+max_history: 100             # max messages loaded per conversation
 timezone: America/New_York
 location: New York, NY
+
+# scheduled routines (HH:MM in configured timezone)
+journal_time: "00:00"        # nightly journal pass
+dream_start: "02:00"         # first dream pass (4 hourly passes follow)
+briefing_time: "08:00"       # morning briefing
