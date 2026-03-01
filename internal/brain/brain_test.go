@@ -15,8 +15,11 @@ func TestNewInitializesInternalState(t *testing.T) {
 	if b.now == nil {
 		t.Fatalf("expected now function to be initialized")
 	}
-	if b.toolExec == nil || b.privileged == nil || b.active == nil {
+	if b.toolExec == nil || b.privileged == nil {
 		t.Fatalf("expected maps to be initialized")
+	}
+	if b.active == nil || b.runs == nil {
+		t.Fatalf("expected sync sets to be initialized")
 	}
 	if len(b.toolDefs) != 0 || len(b.dataSources) != 0 {
 		t.Fatalf("expected no tools or data sources on startup")

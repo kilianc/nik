@@ -2,10 +2,11 @@ package brain
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"log/slog"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/kciuffolo/nik/internal/config"
@@ -22,8 +23,13 @@ type Brain struct {
 	soulReader  func(ctx context.Context) (string, error)
 	now         func() time.Time
 
-	mu     sync.Mutex
-	active map[string]bool
+	active *SyncSet
+	runs   *SyncSet
+}
+
+// IsThinking reports whether a run (Think loop) with the given ID is still alive.
+func (b *Brain) IsThinking(runID string) bool {
+	return b.runs.Has(runID)
 }
 
 func New(cfg *config.Config, llmClient *llm.Client) *Brain {
@@ -33,7 +39,8 @@ func New(cfg *config.Config, llmClient *llm.Client) *Brain {
 		toolExec:   make(map[string]llm.ToolExecutor),
 		privileged: make(map[string]bool),
 		now:        time.Now,
-		active:     make(map[string]bool),
+		active:     NewSyncSet(),
+		runs:       NewSyncSet(),
 	}
 }
 
@@ -81,14 +88,8 @@ func (b *Brain) tick(ctx context.Context) {
 	for _, output := range outputs {
 		conversationID := output.Meta["conversation_id"]
 
-		if conversationID != "" {
-			b.mu.Lock()
-			if b.active[conversationID] {
-				b.mu.Unlock()
-				continue
-			}
-			b.active[conversationID] = true
-			b.mu.Unlock()
+		if conversationID != "" && !b.active.TrySet(conversationID) {
+			continue
 		}
 
 		go b.handleOutput(ctx, output)
@@ -96,14 +97,23 @@ func (b *Brain) tick(ctx context.Context) {
 }
 
 func (b *Brain) handleOutput(ctx context.Context, output DataSourceOutput) {
+	if output.Meta == nil {
+		output.Meta = make(map[string]string)
+	}
+
 	conversationID := output.Meta["conversation_id"]
 	if conversationID != "" {
-		defer func() {
-			b.mu.Lock()
-			delete(b.active, conversationID)
-			b.mu.Unlock()
-		}()
+		defer b.active.Delete(conversationID)
 	}
+
+	var buf [8]byte
+	_, _ = rand.Read(buf[:])
+	runID := hex.EncodeToString(buf[:])
+
+	b.runs.Set(runID)
+	defer b.runs.Delete(runID)
+
+	output.Meta["run_id"] = runID
 
 	ctx = context.WithValue(ctx, "meta", output.Meta)
 
@@ -144,9 +154,11 @@ func (b *Brain) process(ctx context.Context, input []string) (string, llm.Usage,
 	thinkCtx, cancel := context.WithTimeout(ctx, thinkTimeout)
 	defer cancel()
 
+	meta, _ := ctx.Value("meta").(map[string]string)
+
 	tools := b.toolsForContext(ctx)
 	output, usage, toolCalls, processErr := b.llm.Think(thinkCtx, instructions, userInput, tools, b.toolExecutor())
-	b.writeDebugRecord(instructions, userInput, output, tools, toolCalls, usage, processErr)
+	b.writeDebugRecord(meta, instructions, userInput, output, tools, toolCalls, usage, processErr)
 
 	if processErr != nil {
 		return "", usage, processErr

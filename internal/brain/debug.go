@@ -16,6 +16,7 @@ import (
 type debugRecord struct {
 	Timestamp string
 	Model     string
+	Trigger   map[string]string
 	Input     debugInput
 	Tools     []string
 	ToolCalls []debugToolCall
@@ -52,7 +53,7 @@ type debugUsage struct {
 
 var nonAlphaNum = regexp.MustCompile(`[^a-zA-Z0-9]+`)
 
-func (b *Brain) writeDebugRecord(instructions, userInput, rawOutput string, tools []llm.ToolDef, toolCalls []llm.ToolCallRecord, usage llm.Usage, processErr error) {
+func (b *Brain) writeDebugRecord(meta map[string]string, instructions, userInput, rawOutput string, tools []llm.ToolDef, toolCalls []llm.ToolCallRecord, usage llm.Usage, processErr error) {
 	if b.cfg.DebugPath() == "" {
 		return
 	}
@@ -83,6 +84,7 @@ func (b *Brain) writeDebugRecord(instructions, userInput, rawOutput string, tool
 	record := debugRecord{
 		Timestamp: timestamp.Format(time.RFC3339),
 		Model:     b.llm.Model(),
+		Trigger:   meta,
 		Input: debugInput{
 			Instructions: instructions,
 			UserInput:    userInput,
@@ -156,6 +158,16 @@ func writeDebugMarkdown(path string, rec debugRecord) error {
 
 	fmt.Fprintf(&w, "# Session: %s\n\n", rec.Timestamp)
 	fmt.Fprintf(&w, "**Model:** %s\n\n", rec.Model)
+
+	if source := rec.Trigger["source"]; source != "" {
+		detail := rec.Trigger["source_id"]
+		if detail != "" {
+			fmt.Fprintf(&w, "**Trigger:** %s (`%s`)\n\n", source, detail)
+		} else {
+			fmt.Fprintf(&w, "**Trigger:** %s\n\n", source)
+		}
+	}
+
 	writeCostTable(&w, rec.Model, rec.Usage)
 	w.WriteString("\n---\n\n")
 

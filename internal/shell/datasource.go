@@ -12,11 +12,15 @@ import (
 )
 
 type DataSource struct {
-	msgsSvc *messaging.Service
+	msgsSvc    *messaging.Service
+	isThinking func(string) bool
 }
 
-func NewDataSource(msgsSvc *messaging.Service) *DataSource {
-	return &DataSource{msgsSvc: msgsSvc}
+func NewDataSource(msgsSvc *messaging.Service, isThinking func(string) bool) *DataSource {
+	return &DataSource{
+		msgsSvc:    msgsSvc,
+		isThinking: isThinking,
+	}
 }
 
 func (d *DataSource) Check(ctx context.Context) ([]brain.DataSourceOutput, error) {
@@ -29,46 +33,64 @@ func (d *DataSource) Check(ctx context.Context) ([]brain.DataSourceOutput, error
 	var outputs []brain.DataSourceOutput
 
 	for _, s := range sessions {
-		env, _ := getAllEnv(s.ID)
-
-		if !s.Alive {
-			output, _ := captureOutput(s.ID)
-			code, _ := exitCode(s.ID)
-			conversationID, msgs := d.conversationContext(ctx, env["NIK_CONVERSATION_ID"])
-			senderLabels := d.msgsSvc.SenderLabels(ctx, msgs)
-
-			slog.Info("shell completed", "pkg", "shell", "id", s.ID, "exit_code", code)
-
-			killSession(s.ID)
-			outputs = append(outputs, d.completionOutput(s, env, conversationID, output, code, msgs, senderLabels))
-			continue
-		}
-
-		raw, ok := env["NIK_NEXT_CHECK_AT"]
-		if !ok || raw == "" {
-			continue
-		}
-
-		checkAt, err := time.Parse(time.RFC3339, raw)
+		meta, err := loadMeta(s.ID)
 		if err != nil {
+			slog.Warn("shell check: load meta", "pkg", "shell", "id", s.ID, "error", err)
 			continue
 		}
 
-		if now.Before(checkAt) {
+		if d.isThinking(meta.RunID) {
 			continue
 		}
 
-		// reset to default +5m; model overrides via read/send
-		resetTime := now.Add(defaultCheckIn).UTC().Format(time.RFC3339)
-		setEnv(s.ID, "NIK_NEXT_CHECK_AT", resetTime)
+		// dead sessions trigger immediately, alive sessions wait for next_check_at
+		if s.isAlive && now.Before(meta.NextCheckAt) {
+			continue
+		}
 
-		output, _ := captureOutput(s.ID)
-		conversationID, msgs := d.conversationContext(ctx, env["NIK_CONVERSATION_ID"])
+		status := "running"
+		if !s.isAlive {
+			status = "exited"
+		}
+
+		slog.Info("shell nudge", "pkg", "shell", "id", s.ID, "status", status)
+
+		sessionID := s.ID
+		conversationID, msgs := d.conversationContext(ctx, meta.ConversationID)
 		senderLabels := d.msgsSvc.SenderLabels(ctx, msgs)
 
-		slog.Info("shell check-in", "pkg", "shell", "id", s.ID)
+		lines := []string{
+			fmt.Sprintf("[Shell session %s needs attention]", status),
+			fmt.Sprintf("Session: %s", sessionID),
+			fmt.Sprintf("Command: %s", meta.Command),
+			fmt.Sprintf("Description: %s", meta.Description),
+			fmt.Sprintf("Conversation ID: %s", conversationID),
+			fmt.Sprintf("Duration: %s", time.Since(meta.StartedAt).Truncate(time.Second)),
+			"",
+			"Use shell read to check on this session.",
+		}
 
-		outputs = append(outputs, d.checkInOutput(s, env, conversationID, output, msgs, senderLabels))
+		lines = append(lines, formatConversationContext(msgs, senderLabels)...)
+
+		outputs = append(outputs, brain.DataSourceOutput{
+			Lines: lines,
+			Meta: map[string]string{
+				"conversation_id": meta.ConversationID,
+				"message_id":      meta.MessageID,
+				"source":          "shell",
+				"source_id":       sessionID,
+			},
+			Processing: func(ctx context.Context) error {
+				ctxMeta, _ := ctx.Value("meta").(map[string]string)
+				m, err := loadMeta(sessionID)
+				if err != nil {
+					return err
+				}
+				m.RunID = ctxMeta["run_id"]
+				m.NextCheckAt = time.Now().Add(defaultCheckIn).UTC()
+				return saveMeta(sessionID, m)
+			},
+		})
 	}
 
 	return outputs, nil
@@ -88,69 +110,6 @@ func (d *DataSource) conversationContext(ctx context.Context, conversationID str
 	return conv.ID, msgs
 }
 
-func (d *DataSource) completionOutput(s SessionInfo, env map[string]string, conversationID string, output string, code int, msgs []db.Message, senderLabels map[string]string) brain.DataSourceOutput {
-	duration := formatDuration(env["NIK_STARTED_AT"])
-
-	lines := []string{
-		"[Shell completed]",
-		fmt.Sprintf("Session: %s", s.ID),
-		fmt.Sprintf("Command: %s", env["NIK_COMMAND"]),
-		fmt.Sprintf("Description: %s", env["NIK_DESCRIPTION"]),
-		fmt.Sprintf("Conversation ID: %s", conversationID),
-		fmt.Sprintf("Exit code: %d", code),
-		fmt.Sprintf("Duration: %s", duration),
-		"",
-		"Output (last 16KB):",
-		output,
-	}
-
-	lines = append(lines, formatConversationContext(msgs, senderLabels)...)
-
-	meta := map[string]string{
-		"conversation_id": env["NIK_CONVERSATION_ID"],
-		"message_id":      env["NIK_MESSAGE_ID"],
-		"source":          "shell",
-		"source_id":       s.ID,
-	}
-
-	return brain.DataSourceOutput{
-		Lines: lines,
-		Meta:  meta,
-	}
-}
-
-func (d *DataSource) checkInOutput(s SessionInfo, env map[string]string, conversationID string, output string, msgs []db.Message, senderLabels map[string]string) brain.DataSourceOutput {
-	duration := formatDuration(env["NIK_STARTED_AT"])
-
-	lines := []string{
-		"[Shell check-in]",
-		fmt.Sprintf("Session: %s", s.ID),
-		fmt.Sprintf("Command: %s", env["NIK_COMMAND"]),
-		fmt.Sprintf("Description: %s", env["NIK_DESCRIPTION"]),
-		fmt.Sprintf("Conversation ID: %s", conversationID),
-		"Status: running",
-		fmt.Sprintf("Duration: %s", duration),
-		"",
-		"Current output (last 16KB):",
-		output,
-	}
-
-	lines = append(lines, formatConversationContext(msgs, senderLabels)...)
-	lines = append(lines, "", "Decide: send (type input), kill (stop), or reply to user and yield (next check-in in 5m). Read once to reschedule next_check_at.")
-
-	meta := map[string]string{
-		"conversation_id": env["NIK_CONVERSATION_ID"],
-		"message_id":      env["NIK_MESSAGE_ID"],
-		"source":          "shell",
-		"source_id":       s.ID,
-	}
-
-	return brain.DataSourceOutput{
-		Lines: lines,
-		Meta:  meta,
-	}
-}
-
 func formatConversationContext(msgs []db.Message, senderLabels map[string]string) []string {
 	if len(msgs) == 0 {
 		return nil
@@ -165,17 +124,4 @@ func formatConversationContext(msgs []db.Message, senderLabels map[string]string
 	}
 
 	return lines
-}
-
-func formatDuration(startedAtStr string) string {
-	if startedAtStr == "" {
-		return "unknown"
-	}
-
-	started, err := time.Parse(time.RFC3339, startedAtStr)
-	if err != nil {
-		return "unknown"
-	}
-
-	return time.Since(started).Truncate(time.Second).String()
 }

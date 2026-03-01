@@ -52,3 +52,18 @@ findmsg:
 .PHONY: call
 call:
 	@cd $(NIK_HOME) && go run ../tools/call $(ARGS)
+
+.PHONY: sessions
+sessions:
+	@tmux list-sessions -F '#{session_name} (#{?pane_dead,dead,alive})' 2>/dev/null \
+		| grep '^nik-' || echo "no nik sessions"
+
+.PHONY: watch
+watch:
+	@if [ -z "$(S)" ]; then \
+		s=$$(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep '^nik-' | head -1); \
+		[ -z "$$s" ] && echo "no nik sessions" && exit 1; \
+	else \
+		s="nik-$(S)"; \
+	fi; \
+	tmux attach -t "$$s" -r
