@@ -13,7 +13,8 @@ prompts_dir: ../prompts
 skills_dir: ../skills
 
 # conversations
-owner_conversation_id: ...   # nik's owner — always allowed
+privileged_conversation_ids: # conversations with owner-level access — always allowed
+  - ...
 allow_conversation_ids:      # other conversations nik can respond to
   - ...
 

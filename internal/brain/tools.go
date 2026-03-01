@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 
 	"github.com/kciuffolo/nik/internal/llm"
 )
@@ -48,7 +49,7 @@ func (b *Brain) toolsForContext(ctx context.Context) []llm.ToolDef {
 	slog.Debug("tools for context",
 		"pkg", "brain",
 		"conversation_id", meta["conversation_id"],
-		"owner_conversation_id", b.cfg.OwnerConversationID,
+		"privileged_conversation_ids", b.cfg.PrivilegedConversationIDs,
 		"is_privileged", isPrivileged,
 		"total_registered", len(b.toolDefs),
 		"privileged_registered", len(b.privileged),
@@ -59,11 +60,11 @@ func (b *Brain) toolsForContext(ctx context.Context) []llm.ToolDef {
 }
 
 func (b *Brain) isPrivilegedContext(meta map[string]string) bool {
-	if b.cfg.OwnerConversationID == "" {
+	if len(b.cfg.PrivilegedConversationIDs) == 0 {
 		return false
 	}
 
-	return meta["conversation_id"] == b.cfg.OwnerConversationID
+	return slices.Contains(b.cfg.PrivilegedConversationIDs, meta["conversation_id"])
 }
 
 func (b *Brain) toolExecutor() llm.ToolExecutor {

@@ -23,8 +23,8 @@ type Config struct {
 	PromptsDirValue string `yaml:"prompts_dir"`
 	SkillsDirValue  string `yaml:"skills_dir"`
 
-	AllowConversationIDs []string `yaml:"allow_conversation_ids"`
-	OwnerConversationID  string   `yaml:"owner_conversation_id"`
+	AllowConversationIDs      []string `yaml:"allow_conversation_ids"`
+	PrivilegedConversationIDs []string `yaml:"privileged_conversation_ids"`
 
 	MaxHistory   int    `yaml:"max_history"`
 	Timezone     string `yaml:"timezone"`
@@ -219,8 +219,10 @@ func Load(home string) (*Config, error) {
 
 	cfg.Home = home
 
-	if cfg.OwnerConversationID != "" && !slices.Contains(cfg.AllowConversationIDs, cfg.OwnerConversationID) {
-		cfg.AllowConversationIDs = append(cfg.AllowConversationIDs, cfg.OwnerConversationID)
+	for _, pid := range cfg.PrivilegedConversationIDs {
+		if !slices.Contains(cfg.AllowConversationIDs, pid) {
+			cfg.AllowConversationIDs = append(cfg.AllowConversationIDs, pid)
+		}
 	}
 
 	if strings.TrimSpace(cfg.OpenAIKey) == "" && !cfg.UseCodex {
