@@ -65,4 +65,3 @@ func TestNewIDPrefixCollision(t *testing.T) {
 		t.Fatalf("got %d collisions in 20 sequential IDs", collisions)
 	}
 }
-

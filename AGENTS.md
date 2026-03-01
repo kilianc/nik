@@ -95,7 +95,7 @@ Entry point: `cmd/nik/main.go`
 | `internal/db/` | SQLite open/schema, models, one Go file per query function |
 | `internal/queries/` | embedded `.sql` files for canonical entities (`conversation_*`, `message_*`, `media_*`, etc.) |
 | `internal/brain/` | main loop, data source + tool registration, prompt loading, debug output |
-| `internal/llm/` | OpenAI client wrapper — `Think`, `Transcribe`, `Describe`; generic brain tools |
+| `internal/llm/` | OpenAI client wrapper — `Complete`, `Transcribe`, `Describe`; generic brain tools |
 | `internal/messaging/` | canonical messaging service, datasource, and tool handlers |
 | `internal/whatsapp/` | WhatsApp platform adapter implementing messaging platform interface |
 | `internal/contacts/` | contact resolution/upsert orchestration + contact update tools |
@@ -110,6 +110,18 @@ Entry point: `cmd/nik/main.go`
 | `prompts/` | system prompt templates loaded at runtime |
 | `skills/` | user-defined skill definitions (SKILL.md files) |
 | `workspace/` | user-facing workspace — runtime artifacts (db, logs, media, debug, config) |
+
+### Brain activation model
+
+The brain uses cognitive metaphors; the LLM client uses transport/mechanical ones.
+
+```
+Brain.Awake()        -- wake up, start the loop
+  Brain.perceive()   -- scan senses (data sources) for new stimuli
+    Brain.activate() -- one stimulus triggers one activation
+      Brain.think()  -- form thoughts (calls llm.Complete under the hood)
+        llm.Complete() -- send request, get completion (transport)
+```
 
 ### Scripts and Tools
 

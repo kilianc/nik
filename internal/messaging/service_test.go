@@ -635,4 +635,3 @@ func sendInboundMessageForReadTest(
 		t.Fatalf("receive inbound message %s: %v", externalMessageID, err)
 	}
 }
-
