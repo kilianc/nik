@@ -31,36 +31,38 @@ var storeMemoryToolDef = llm.ToolDef{
 
 var searchMemoryToolDef = llm.ToolDef{
 	Name:        "search_memory",
-	Description: "Search the memory store for relevant memories. Returns the top matches by semantic similarity.",
+	Description: "Search the memory store for relevant memories by semantic similarity. Accepts multiple queries at once to reduce round-trips.",
 	Parameters: map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"query": map[string]any{
-				"type":        "string",
-				"description": "The search query to find relevant memories.",
+			"queries": map[string]any{
+				"type":        "array",
+				"items":       map[string]any{"type": "string"},
+				"description": "One or more search queries. Results are deduplicated across queries.",
 			},
 			"limit": map[string]any{
 				"type":        "integer",
-				"description": "Max results to return. Default 10.",
+				"description": "Max results per query. Default 10.",
 			},
 		},
-		"required":             []string{"query", "limit"},
+		"required":             []string{"queries", "limit"},
 		"additionalProperties": false,
 	},
 }
 
 var deleteMemoryToolDef = llm.ToolDef{
 	Name:        "delete_memory",
-	Description: "Delete a memory by ID. Use after search_memory to remove outdated or incorrect memories.",
+	Description: "Delete one or more memories by ID. Use after search_memory to remove outdated or incorrect memories.",
 	Parameters: map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"id": map[string]any{
-				"type":        "string",
-				"description": "The ID of the memory to delete (from search_memory results).",
+			"ids": map[string]any{
+				"type":        "array",
+				"items":       map[string]any{"type": "string"},
+				"description": "IDs of memories to delete (from search_memory results).",
 			},
 		},
-		"required":             []string{"id"},
+		"required":             []string{"ids"},
 		"additionalProperties": false,
 	},
 }
@@ -146,8 +148,8 @@ func storeMemoryHandler(svc *Service) llm.ToolExecutor {
 func searchMemoryHandler(svc *Service) llm.ToolExecutor {
 	return func(ctx context.Context, call llm.ToolCall) (string, error) {
 		var args struct {
-			Query string `json:"query"`
-			Limit int    `json:"limit"`
+			Queries []string `json:"queries"`
+			Limit   int      `json:"limit"`
 		}
 
 		err := json.Unmarshal([]byte(call.Arguments), &args)
@@ -155,11 +157,15 @@ func searchMemoryHandler(svc *Service) llm.ToolExecutor {
 			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
 		}
 
+		if len(args.Queries) == 0 {
+			return `{"error":"empty queries"}`, nil
+		}
+
 		if args.Limit <= 0 {
 			args.Limit = 10
 		}
 
-		results, err := svc.Search(ctx, args.Query, args.Limit)
+		results, err := svc.SearchMulti(ctx, args.Queries, args.Limit)
 		if err != nil {
 			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
 		}
@@ -183,7 +189,7 @@ func searchMemoryHandler(svc *Service) llm.ToolExecutor {
 func deleteMemoryHandler(svc *Service) llm.ToolExecutor {
 	return func(ctx context.Context, call llm.ToolCall) (string, error) {
 		var args struct {
-			ID string `json:"id"`
+			IDs []string `json:"ids"`
 		}
 
 		err := json.Unmarshal([]byte(call.Arguments), &args)
@@ -191,13 +197,27 @@ func deleteMemoryHandler(svc *Service) llm.ToolExecutor {
 			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
 		}
 
-		err = svc.Delete(ctx, args.ID)
-		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+		if len(args.IDs) == 0 {
+			return `{"error":"empty ids"}`, nil
 		}
 
-		slog.Info("delete_memory", "pkg", "memory", "id", args.ID)
-		return fmt.Sprintf(`{"deleted":true,"id":%q}`, args.ID), nil
+		var deleted []string
+		errors := map[string]string{}
+
+		for _, memID := range args.IDs {
+			err := svc.Delete(ctx, memID)
+			if err != nil {
+				errors[memID] = err.Error()
+				continue
+			}
+
+			deleted = append(deleted, memID)
+		}
+
+		slog.Info("delete_memory", "pkg", "memory", "deleted", len(deleted), "errors", len(errors))
+
+		b, _ := json.Marshal(map[string]any{"deleted": deleted, "errors": errors})
+		return string(b), nil
 	}
 }
 

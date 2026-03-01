@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"sort"
 
 	sqlite_vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
 	"github.com/kciuffolo/nik/internal/id"
@@ -68,27 +69,61 @@ func (s *Service) Add(ctx context.Context, content string, metadata map[string]a
 }
 
 func (s *Service) Search(ctx context.Context, query string, limit int) ([]Memory, error) {
+	return s.SearchMulti(ctx, []string{query}, limit)
+}
+
+func (s *Service) SearchMulti(ctx context.Context, queries_ []string, limit int) ([]Memory, error) {
 	if limit <= 0 {
 		limit = 5
 	}
 
-	vec, err := s.llm.Embed(ctx, query)
-	if err != nil {
-		return nil, fmt.Errorf("embed query: %w", err)
+	if len(queries_) == 0 {
+		return nil, nil
 	}
 
-	embedding, err := serializeEmbedding(vec)
+	vecs, err := s.llm.EmbedBatch(ctx, queries_)
 	if err != nil {
-		return nil, fmt.Errorf("serialize embedding: %w", err)
+		return nil, fmt.Errorf("embed queries: %w", err)
 	}
 
-	rows, err := s.db.QueryContext(ctx, queries.MemorySearch, embedding, limit)
-	if err != nil {
-		return nil, fmt.Errorf("search memories: %w", err)
-	}
-	defer rows.Close()
+	seen := map[string]int{}
+	var merged []Memory
 
-	return scanMemories(rows, true)
+	for _, vec := range vecs {
+		embedding, err := serializeEmbedding(vec)
+		if err != nil {
+			return nil, fmt.Errorf("serialize embedding: %w", err)
+		}
+
+		rows, err := s.db.QueryContext(ctx, queries.MemorySearch, embedding, limit)
+		if err != nil {
+			return nil, fmt.Errorf("search memories: %w", err)
+		}
+
+		batch, err := scanMemories(rows, true)
+		rows.Close()
+		if err != nil {
+			return nil, err
+		}
+
+		for _, m := range batch {
+			if idx, ok := seen[m.ID]; ok {
+				if m.Score > merged[idx].Score {
+					merged[idx].Score = m.Score
+				}
+				continue
+			}
+
+			seen[m.ID] = len(merged)
+			merged = append(merged, m)
+		}
+	}
+
+	sort.Slice(merged, func(i, j int) bool {
+		return merged[i].Score > merged[j].Score
+	})
+
+	return merged, nil
 }
 
 func (s *Service) Delete(ctx context.Context, id string) error {

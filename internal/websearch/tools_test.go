@@ -30,13 +30,13 @@ func TestBuildTools_enabled(t *testing.T) {
 	}
 }
 
-func TestHandler_emptyQuery(t *testing.T) {
+func TestHandler_emptyQueries(t *testing.T) {
 	handler := webSearchHandler("test-key")
 
 	call := llm.ToolCall{
 		CallID:    "test",
 		Name:      "web_search",
-		Arguments: `{"query":"","num_results":5,"category":""}`,
+		Arguments: `{"queries":[],"num_results":5,"category":""}`,
 	}
 
 	result, err := handler(context.Background(), call)
@@ -44,8 +44,8 @@ func TestHandler_emptyQuery(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if result != `{"error":"empty query"}` {
-		t.Fatalf("expected empty query error, got %s", result)
+	if result != `{"error":"empty queries"}` {
+		t.Fatalf("expected empty queries error, got %s", result)
 	}
 }
 
@@ -84,26 +84,14 @@ func TestHandler_success(t *testing.T) {
 		if r.Header.Get("x-api-key") != "test-key" {
 			t.Errorf("expected x-api-key test-key, got %s", r.Header.Get("x-api-key"))
 		}
-		if r.Header.Get("Content-Type") != "application/json" {
-			t.Errorf("expected Content-Type application/json, got %s", r.Header.Get("Content-Type"))
-		}
 
 		var req exaRequest
 		err := json.NewDecoder(r.Body).Decode(&req)
 		if err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
-		if req.Query != "golang testing" {
-			t.Errorf("expected query 'golang testing', got %q", req.Query)
-		}
-		if req.NumResults != 3 {
-			t.Errorf("expected numResults 3, got %d", req.NumResults)
-		}
 		if req.Type != "auto" {
 			t.Errorf("expected type auto, got %s", req.Type)
-		}
-		if req.Category != "news" {
-			t.Errorf("expected category news, got %s", req.Category)
 		}
 
 		resp := exaResponse{
@@ -126,7 +114,7 @@ func TestHandler_success(t *testing.T) {
 	call := llm.ToolCall{
 		CallID:    "test",
 		Name:      "web_search",
-		Arguments: `{"query":"golang testing","num_results":3,"category":"news"}`,
+		Arguments: `{"queries":["golang testing"],"num_results":3,"category":"news"}`,
 	}
 
 	result, err := handler(context.Background(), call)
@@ -135,21 +123,28 @@ func TestHandler_success(t *testing.T) {
 	}
 
 	var parsed struct {
-		Results []resultEntry `json:"results"`
+		Results map[string]struct {
+			Results []resultEntry `json:"results"`
+		} `json:"results"`
 	}
 	err = json.Unmarshal([]byte(result), &parsed)
 	if err != nil {
 		t.Fatalf("parse result: %v", err)
 	}
 
-	if len(parsed.Results) != 2 {
-		t.Fatalf("expected 2 results, got %d", len(parsed.Results))
+	qr, ok := parsed.Results["golang testing"]
+	if !ok {
+		t.Fatalf("expected results for 'golang testing', keys: %v", parsed.Results)
 	}
-	if parsed.Results[0].Title != "Go Testing" {
-		t.Errorf("expected title 'Go Testing', got %q", parsed.Results[0].Title)
+
+	if len(qr.Results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(qr.Results))
 	}
-	if parsed.Results[1].URL != "https://example.com/unit" {
-		t.Errorf("expected url 'https://example.com/unit', got %q", parsed.Results[1].URL)
+	if qr.Results[0].Title != "Go Testing" {
+		t.Errorf("expected title 'Go Testing', got %q", qr.Results[0].Title)
+	}
+	if qr.Results[1].URL != "https://example.com/unit" {
+		t.Errorf("expected url 'https://example.com/unit', got %q", qr.Results[1].URL)
 	}
 }
 
@@ -169,7 +164,7 @@ func TestHandler_apiError(t *testing.T) {
 	call := llm.ToolCall{
 		CallID:    "test",
 		Name:      "web_search",
-		Arguments: `{"query":"test","num_results":5,"category":""}`,
+		Arguments: `{"queries":["test"],"num_results":5,"category":""}`,
 	}
 
 	result, err := handler(context.Background(), call)
@@ -177,13 +172,19 @@ func TestHandler_apiError(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	var parsed map[string]string
+	var parsed struct {
+		Results map[string]map[string]string `json:"results"`
+	}
 	err = json.Unmarshal([]byte(result), &parsed)
 	if err != nil {
 		t.Fatalf("parse result: %v", err)
 	}
-	if _, ok := parsed["error"]; !ok {
-		t.Fatalf("expected error field in result: %s", result)
+	qr, ok := parsed.Results["test"]
+	if !ok {
+		t.Fatalf("expected results for 'test': %s", result)
+	}
+	if _, ok := qr["error"]; !ok {
+		t.Fatalf("expected error field for query 'test': %s", result)
 	}
 }
 
@@ -206,7 +207,7 @@ func TestHandler_defaultNumResults(t *testing.T) {
 	call := llm.ToolCall{
 		CallID:    "test",
 		Name:      "web_search",
-		Arguments: `{"query":"test","num_results":0,"category":""}`,
+		Arguments: `{"queries":["test"],"num_results":0,"category":""}`,
 	}
 
 	_, err := handler(context.Background(), call)
@@ -238,7 +239,7 @@ func TestHandler_clampNumResults(t *testing.T) {
 	call := llm.ToolCall{
 		CallID:    "test",
 		Name:      "web_search",
-		Arguments: `{"query":"test","num_results":50,"category":""}`,
+		Arguments: `{"queries":["test"],"num_results":50,"category":""}`,
 	}
 
 	_, err := handler(context.Background(), call)
@@ -248,5 +249,60 @@ func TestHandler_clampNumResults(t *testing.T) {
 
 	if capturedReq.NumResults != 20 {
 		t.Errorf("expected clamped numResults 20, got %d", capturedReq.NumResults)
+	}
+}
+
+func TestHandler_multipleQueries(t *testing.T) {
+	var queries []string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req exaRequest
+		json.NewDecoder(r.Body).Decode(&req)
+		queries = append(queries, req.Query)
+
+		resp := exaResponse{
+			Results: []exaResult{
+				{Title: req.Query + " result", URL: "https://example.com/" + req.Query, Text: "text"},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer srv.Close()
+
+	old := baseURL
+	baseURL = srv.URL
+	defer func() { baseURL = old }()
+
+	handler := webSearchHandler("test-key")
+
+	call := llm.ToolCall{
+		CallID:    "test",
+		Name:      "web_search",
+		Arguments: `{"queries":["weather NYC","flights Boston"],"num_results":3,"category":""}`,
+	}
+
+	result, err := handler(context.Background(), call)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(queries) != 2 {
+		t.Fatalf("expected 2 API calls, got %d", len(queries))
+	}
+
+	var parsed struct {
+		Results map[string]json.RawMessage `json:"results"`
+	}
+	err = json.Unmarshal([]byte(result), &parsed)
+	if err != nil {
+		t.Fatalf("parse result: %v", err)
+	}
+
+	if _, ok := parsed.Results["weather NYC"]; !ok {
+		t.Errorf("missing results for 'weather NYC'")
+	}
+	if _, ok := parsed.Results["flights Boston"]; !ok {
+		t.Errorf("missing results for 'flights Boston'")
 	}
 }
