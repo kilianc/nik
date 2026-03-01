@@ -252,25 +252,43 @@ func completeStreaming(ctx context.Context, client *openai.Client, params respon
 }
 
 func (c *Client) Embed(ctx context.Context, text string) ([]float64, error) {
+	vecs, err := c.EmbedBatch(ctx, []string{text})
+	if err != nil {
+		return nil, err
+	}
+
+	return vecs[0], nil
+}
+
+func (c *Client) EmbedBatch(ctx context.Context, texts []string) ([][]float64, error) {
 	if c.apiClient == nil {
-		return nil, fmt.Errorf("embed text: requires api key")
+		return nil, fmt.Errorf("embed batch: requires api key")
+	}
+
+	if len(texts) == 0 {
+		return nil, nil
 	}
 
 	resp, err := c.apiClient.Embeddings.New(ctx, openai.EmbeddingNewParams{
 		Model: openai.EmbeddingModelTextEmbedding3Small,
 		Input: openai.EmbeddingNewParamsInputUnion{
-			OfString: openai.String(text),
+			OfArrayOfStrings: texts,
 		},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("embed text: %w", err)
+		return nil, fmt.Errorf("embed batch: %w", err)
 	}
 
-	if len(resp.Data) == 0 {
-		return nil, fmt.Errorf("embed text: no embedding returned")
+	if len(resp.Data) != len(texts) {
+		return nil, fmt.Errorf("embed batch: expected %d embeddings, got %d", len(texts), len(resp.Data))
 	}
 
-	return resp.Data[0].Embedding, nil
+	vecs := make([][]float64, len(texts))
+	for i, d := range resp.Data {
+		vecs[i] = d.Embedding
+	}
+
+	return vecs, nil
 }
 
 func (c *Client) Transcribe(ctx context.Context, filePath string) (string, error) {
