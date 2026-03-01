@@ -61,4 +61,3 @@ func (s *Service) UpdateOccurrenceNote(ctx context.Context, occurrenceID, note s
 func (s *Service) OccurrenceSummary(ctx context.Context, alarmID string, limit int) ([]AlarmOccurrence, error) {
 	return db.AlarmOccurrenceSummary(ctx, s.db, alarmID, limit)
 }
-

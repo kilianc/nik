@@ -22,7 +22,7 @@ func TestSaveAndLoadMeta(t *testing.T) {
 		Description:    "test command",
 		ConversationID: "conv-123",
 		MessageID:      "msg-456",
-		RunID:          "run-789",
+		ActivationID:   "run-789",
 		NextCheckAt:    now.Add(5 * time.Minute),
 		StartedAt:      now,
 	}
@@ -49,8 +49,8 @@ func TestSaveAndLoadMeta(t *testing.T) {
 	if got.MessageID != want.MessageID {
 		t.Fatalf("message_id: got %q, want %q", got.MessageID, want.MessageID)
 	}
-	if got.RunID != want.RunID {
-		t.Fatalf("run_id: got %q, want %q", got.RunID, want.RunID)
+	if got.ActivationID != want.ActivationID {
+		t.Fatalf("activation_id: got %q, want %q", got.ActivationID, want.ActivationID)
 	}
 	if !got.NextCheckAt.Equal(want.NextCheckAt) {
 		t.Fatalf("next_check_at: got %v, want %v", got.NextCheckAt, want.NextCheckAt)
@@ -73,10 +73,10 @@ func TestSaveMetaValidation(t *testing.T) {
 
 	now := time.Now().UTC()
 	valid := SessionMeta{
-		Command:     "sleep 60",
-		RunID:       "run-1",
-		StartedAt:   now,
-		NextCheckAt: now.Add(5 * time.Minute),
+		Command:      "sleep 60",
+		ActivationID: "run-1",
+		StartedAt:    now,
+		NextCheckAt:  now.Add(5 * time.Minute),
 	}
 
 	missing := func(fn func(m *SessionMeta)) SessionMeta {
@@ -90,7 +90,7 @@ func TestSaveMetaValidation(t *testing.T) {
 		meta SessionMeta
 	}{
 		{"empty command", missing(func(m *SessionMeta) { m.Command = "" })},
-		{"empty run_id", missing(func(m *SessionMeta) { m.RunID = "" })},
+		{"empty activation_id", missing(func(m *SessionMeta) { m.ActivationID = "" })},
 		{"zero started_at", missing(func(m *SessionMeta) { m.StartedAt = time.Time{} })},
 		{"zero next_check_at", missing(func(m *SessionMeta) { m.NextCheckAt = time.Time{} })},
 	}

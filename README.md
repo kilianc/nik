@@ -15,24 +15,24 @@ The brain is the core of the system. It's a polling loop that checks for things 
 ```
 Awake(ctx, 2s)
 │
-├─ tick
+├─ perceive
 │   ├─ for each DataSource → Check(ctx)
 │   │   └─ returns []DataSourceOutput (lines of context + metadata)
 │   │
 │   └─ for each output
 │       ├─ skip if conversation already active (dedup)
-│       └─ go handleOutput(ctx, output)
+│       └─ go activate(ctx, output)
 │           ├─ Processing callback (e.g. mark read)
-│           ├─ process
+│           ├─ think
 │           │   ├─ loadInstructions (prompt + skills + soul + time)
 │           │   ├─ join input lines
-│           │   └─ llm.Think (loop: completion → tool calls → execute → repeat)
+│           │   └─ llm.Complete (loop: completion → tool calls → execute → repeat)
 │           └─ Processed callback (e.g. mark alarm fired)
 │
 └─ (repeat every 2s until ctx cancelled)
 ```
 
-Every 2 seconds the brain calls `Check()` on each registered data source. Each source returns zero or more outputs -- chunks of context with metadata like `conversation_id`. For each output, the brain spawns a goroutine: it loads the system prompt (personality + preloaded skills + soul), concatenates the input, and calls the LLM. The LLM can make tool calls (reply, search memory, set alarms, run shell commands), and each result feeds back into the conversation until the model is done.
+Every 2 seconds the brain calls `Check()` on each registered data source. Each source returns zero or more outputs -- chunks of context with metadata like `conversation_id`. For each output, the brain spawns a goroutine (an activation): it loads the system prompt (personality + preloaded skills + soul), concatenates the input, and thinks -- which under the hood means calling `llm.Complete`. The LLM can make tool calls (reply, search memory, set alarms, run shell commands), and each result feeds back into the completion loop until the model is done.
 
 One activation = one shot. There are no follow-up turns. When the model returns, it's over. This constraint forces the model to do all its work -- searching, thinking, replying -- in a single burst.
 
@@ -40,22 +40,22 @@ One activation = one shot. There are no follow-up turns. When the model returns,
 flowchart TD
     Awake["Awake (polling loop)"] --> Tick
 
-    subgraph tick [Tick]
+    subgraph perceiveStep [Perceive]
         CheckSources["Check each DataSource"] --> Outputs["Collect DataSourceOutputs"]
         Outputs --> Dedup{"Already\nactive?"}
         Dedup -- yes --> Skip[Skip]
-        Dedup -- no --> Spawn["Spawn goroutine"]
+        Dedup -- no --> Activate["Activate"]
     end
 
-    Spawn --> Processing["Processing callback"]
+    Activate --> Processing["Processing callback"]
     Processing --> LoadPrompt["Load instructions\n(prompt + skills + soul)"]
-    LoadPrompt --> Think["llm.Think"]
+    LoadPrompt --> ThinkStep["think"]
 
-    subgraph thinkLoop [LLM Think Loop]
-        Think --> LLM["LLM completion"]
+    subgraph completeLoop [LLM Complete Loop]
+        ThinkStep --> LLM["LLM completion"]
         LLM --> ToolCalls{"Tool calls?"}
         ToolCalls -- yes --> Exec["Execute tools"]
-        Exec --> Think
+        Exec --> ThinkStep
         ToolCalls -- no --> Done["Return output"]
     end
 
@@ -131,20 +131,20 @@ flowchart LR
     end
 
     subgraph brainBox [Brain]
-        BrainLoop["Brain loop\n(process activation)"]
+        BrainLoop["activate → think"]
     end
 
     subgraph llmBox [LLM]
-        LLM_Think["Think + tool calls"]
+        LLM_Complete["Complete + tool calls"]
     end
 
     WA_In --> Normalize --> Receive --> Tables
-    Tables --> Poll --> BrainLoop --> LLM_Think
-    LLM_Think -- "message_reply" --> Reply --> Execute --> WA_Out
+    Tables --> Poll --> BrainLoop --> LLM_Complete
+    LLM_Complete -- "message_reply" --> Reply --> Execute --> WA_Out
     Execute --> Receive
 ```
 
-When a message arrives: the WhatsApp adapter normalizes it and calls `ReceiveMessage`, which upserts the conversation, resolves/creates the contact, and inserts the message. On the next brain tick, the messaging data source polls for unread conversations, builds the context (history + session info + participant profiles), and hands it to the brain. The LLM processes it and calls tools -- most commonly `message_reply`, which goes back through the service to the adapter and out to WhatsApp. The outbound message is also fed back through `ReceiveMessage` so it appears in the canonical history.
+When a message arrives: the WhatsApp adapter normalizes it and calls `ReceiveMessage`, which upserts the conversation, resolves/creates the contact, and inserts the message. On the next perceive cycle, the messaging data source polls for unread conversations, builds the context (history + session info + participant profiles), and hands it to the brain. The brain activates, thinks, and calls tools -- most commonly `message_reply`, which goes back through the service to the adapter and out to WhatsApp. The outbound message is also fed back through `ReceiveMessage` so it appears in the canonical history.
 
 ## Tools
 

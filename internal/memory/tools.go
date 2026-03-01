@@ -204,7 +204,7 @@ func deleteMemoryHandler(svc *Service) llm.ToolExecutor {
 func mergeMemories(ctx context.Context, llmClient *llm.Client, existing, incoming string) (string, error) {
 	input := fmt.Sprintf("Merge the following two memories into one. Respond in json.\n\nExisting: %s\n\nNew: %s", existing, incoming)
 
-	raw, _, _, err := llmClient.Think(ctx, mergePrompt, input, nil, nil)
+	raw, _, _, err := llmClient.Complete(ctx, mergePrompt, input, nil, nil)
 	if err != nil {
 		return "", fmt.Errorf("merge completion: %w", err)
 	}

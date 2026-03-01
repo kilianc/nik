@@ -23,24 +23,24 @@ type Brain struct {
 	soulReader  func(ctx context.Context) (string, error)
 	now         func() time.Time
 
-	active *SyncSet
-	runs   *SyncSet
+	activeConversations *SyncSet
+	activations         *SyncSet
 }
 
-// IsThinking reports whether a run (Think loop) with the given ID is still alive.
-func (b *Brain) IsThinking(runID string) bool {
-	return b.runs.Has(runID)
+// IsActive reports whether an activation with the given run ID is still alive.
+func (b *Brain) IsActive(activationID string) bool {
+	return b.activations.Has(activationID)
 }
 
 func New(cfg *config.Config, llmClient *llm.Client) *Brain {
 	return &Brain{
-		cfg:        cfg,
-		llm:        llmClient,
-		toolExec:   make(map[string]llm.ToolExecutor),
-		privileged: make(map[string]bool),
-		now:        time.Now,
-		active:     NewSyncSet(),
-		runs:       NewSyncSet(),
+		cfg:                 cfg,
+		llm:                 llmClient,
+		toolExec:            make(map[string]llm.ToolExecutor),
+		privileged:          make(map[string]bool),
+		now:                 time.Now,
+		activeConversations: NewSyncSet(),
+		activations:         NewSyncSet(),
 	}
 }
 
@@ -48,10 +48,10 @@ func (b *Brain) SetSoulReader(fn func(ctx context.Context) (string, error)) {
 	b.soulReader = fn
 }
 
-const thinkTimeout = 5 * time.Minute
+const activationTimeout = 5 * time.Minute
 
-// Awake starts the main loop. Brain wakes up on each tick, checks
-// notifications, and processes anything new. Blocks until ctx is cancelled.
+// Awake starts the main loop. Brain wakes up on each tick, perceives
+// stimuli, and activates on anything new. Blocks until ctx is cancelled.
 func (b *Brain) Awake(ctx context.Context, pollInterval time.Duration) {
 	if pollInterval == 0 {
 		pollInterval = 2 * time.Second
@@ -68,12 +68,12 @@ func (b *Brain) Awake(ctx context.Context, pollInterval time.Duration) {
 			slog.Info("brain sleeping", "pkg", "brain")
 			return
 		case <-ticker.C:
-			b.tick(ctx)
+			b.perceive(ctx)
 		}
 	}
 }
 
-func (b *Brain) tick(ctx context.Context) {
+func (b *Brain) perceive(ctx context.Context) {
 	var outputs []DataSourceOutput
 
 	for _, source := range b.dataSources {
@@ -88,32 +88,32 @@ func (b *Brain) tick(ctx context.Context) {
 	for _, output := range outputs {
 		conversationID := output.Meta["conversation_id"]
 
-		if conversationID != "" && !b.active.TrySet(conversationID) {
+		if conversationID != "" && !b.activeConversations.TrySet(conversationID) {
 			continue
 		}
 
-		go b.handleOutput(ctx, output)
+		go b.activate(ctx, output)
 	}
 }
 
-func (b *Brain) handleOutput(ctx context.Context, output DataSourceOutput) {
+func (b *Brain) activate(ctx context.Context, output DataSourceOutput) {
 	if output.Meta == nil {
 		output.Meta = make(map[string]string)
 	}
 
 	conversationID := output.Meta["conversation_id"]
 	if conversationID != "" {
-		defer b.active.Delete(conversationID)
+		defer b.activeConversations.Delete(conversationID)
 	}
 
 	var buf [8]byte
 	_, _ = rand.Read(buf[:])
-	runID := hex.EncodeToString(buf[:])
+	activationID := hex.EncodeToString(buf[:])
 
-	b.runs.Set(runID)
-	defer b.runs.Delete(runID)
+	b.activations.Set(activationID)
+	defer b.activations.Delete(activationID)
 
-	output.Meta["run_id"] = runID
+	output.Meta["activation_id"] = activationID
 
 	ctx = context.WithValue(ctx, "meta", output.Meta)
 
@@ -124,9 +124,9 @@ func (b *Brain) handleOutput(ctx context.Context, output DataSourceOutput) {
 		}
 	}
 
-	_, _, err := b.process(ctx, output.Lines)
+	_, _, err := b.think(ctx, output.Lines)
 	if err != nil {
-		slog.Error("process failed", "pkg", "brain", "error", err)
+		slog.Error("think failed", "pkg", "brain", "error", err)
 	}
 
 	if output.Processed != nil {
@@ -137,7 +137,7 @@ func (b *Brain) handleOutput(ctx context.Context, output DataSourceOutput) {
 	}
 }
 
-func (b *Brain) process(ctx context.Context, input []string) (string, llm.Usage, error) {
+func (b *Brain) think(ctx context.Context, input []string) (string, llm.Usage, error) {
 	now := b.now
 	if now == nil {
 		now = time.Now
@@ -151,13 +151,13 @@ func (b *Brain) process(ctx context.Context, input []string) (string, llm.Usage,
 	userInput := strings.Join(input, "\n")
 	userInput += "\n\n---\n\nRemember to obey the json output contract."
 
-	thinkCtx, cancel := context.WithTimeout(ctx, thinkTimeout)
+	thinkCtx, cancel := context.WithTimeout(ctx, activationTimeout)
 	defer cancel()
 
 	meta, _ := ctx.Value("meta").(map[string]string)
 
 	tools := b.toolsForContext(ctx)
-	output, usage, toolCalls, processErr := b.llm.Think(thinkCtx, instructions, userInput, tools, b.toolExecutor())
+	output, usage, toolCalls, processErr := b.llm.Complete(thinkCtx, instructions, userInput, tools, b.toolExecutor())
 	b.writeDebugRecord(meta, instructions, userInput, output, tools, toolCalls, usage, processErr)
 
 	if processErr != nil {
