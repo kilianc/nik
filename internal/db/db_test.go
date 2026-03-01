@@ -12,16 +12,12 @@ import (
 	"github.com/kciuffolo/nik/internal/queries"
 )
 
-func TestNewIDReturnsUUIDv7(t *testing.T) {
+func TestNewIDReturnsUUID(t *testing.T) {
 	id := NewID()
 
-	parsed, err := uuid.Parse(id)
+	_, err := uuid.Parse(id)
 	if err != nil {
 		t.Fatalf("parse uuid: %v", err)
-	}
-
-	if parsed.Version() != 7 {
-		t.Fatalf("expected uuid v7, got v%d", parsed.Version())
 	}
 }
 

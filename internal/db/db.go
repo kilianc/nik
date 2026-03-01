@@ -32,7 +32,7 @@ func init() {
 }
 
 func NewID() string {
-	return uuid.Must(uuid.NewV7()).String()
+	return uuid.New().String()
 }
 
 func Open(dbPath string) (*sql.DB, error) {

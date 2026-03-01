@@ -166,14 +166,9 @@ All queries live in `internal/queries/*.sql` files with exact executable SQL (po
 - `ON CONFLICT ... DO UPDATE` for upserts
 - `sqlite-vec` extension for vector similarity search
 
-### UUIDv7
+### UUIDs
 
-All primary keys are **UUIDv7** (time-sortable), generated in Go via `db.NewID()` (`github.com/google/uuid`).
-
-UUIDv7 enables:
-- Time-ordered polling cursors (`WHERE id > $cursor ORDER BY id`)
-- No sequences needed
-- Globally unique across tables
+All primary keys are **UUIDv4**, generated in Go via `db.NewID()` (`github.com/google/uuid`). Stored as plain `TEXT` in SQLite. No sequences needed, globally unique across tables.
 
 ### SQLite Go Driver Conventions
 
