@@ -62,19 +62,21 @@ func loadSkillHandler(cfg *config.Config) llm.ToolExecutor {
 			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
 		}
 
+		dirs := []string{cfg.SkillsPath(), cfg.WorkspaceSkillsPath()}
+
 		switch args.Action {
 		case "list":
-			return handleList(cfg.SkillsPath())
+			return handleList(dirs)
 		case "load":
-			return handleLoad(cfg.SkillsPath(), args.Name)
+			return handleLoad(dirs, args.Name)
 		default:
 			return fmt.Sprintf(`{"error":"unknown action %q"}`, args.Action), nil
 		}
 	}
 }
 
-func handleList(dir string) (string, error) {
-	summaries, err := ListSkills(dir)
+func handleList(dirs []string) (string, error) {
+	summaries, err := ListSkills(dirs...)
 	if err != nil {
 		return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
 	}
@@ -87,42 +89,60 @@ func handleList(dir string) (string, error) {
 	return string(data), nil
 }
 
-func handleLoad(dir, name string) (string, error) {
+func handleLoad(dirs []string, name string) (string, error) {
 	if name == "" {
 		return `{"error":"empty name"}`, nil
 	}
 
-	path := filepath.Join(dir, name, "SKILL.md")
+	// search directories in reverse so workspace skills (last) take priority
+	for i := len(dirs) - 1; i >= 0; i-- {
+		path := filepath.Join(dirs[i], name, "SKILL.md")
 
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
-	}
-
-	return string(data), nil
-}
-
-// ListSkills reads all skill directories and parses frontmatter summaries.
-func ListSkills(dir string) ([]skillSummary, error) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, fmt.Errorf("read skills dir %s: %w", dir, err)
-	}
-
-	var summaries []skillSummary
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-
-		path := filepath.Join(dir, entry.Name(), "SKILL.md")
-
-		s, err := parseFrontmatter(path)
+		data, err := os.ReadFile(path)
 		if err != nil {
 			continue
 		}
 
-		summaries = append(summaries, s)
+		return string(data), nil
+	}
+
+	return fmt.Sprintf(`{"error":"skill %q not found"}`, name), nil
+}
+
+// ListSkills reads skill directories and parses frontmatter summaries.
+// later directories override earlier ones when skills share a name.
+func ListSkills(dirs ...string) ([]skillSummary, error) {
+	seen := map[string]int{}
+	var summaries []skillSummary
+
+	for _, dir := range dirs {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, fmt.Errorf("read skills dir %s: %w", dir, err)
+		}
+
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+
+			path := filepath.Join(dir, entry.Name(), "SKILL.md")
+
+			s, err := parseFrontmatter(path)
+			if err != nil {
+				continue
+			}
+
+			if idx, ok := seen[s.Name]; ok {
+				summaries[idx] = s
+			} else {
+				seen[s.Name] = len(summaries)
+				summaries = append(summaries, s)
+			}
+		}
 	}
 
 	return summaries, nil
@@ -239,38 +259,51 @@ type PreloadedSkill struct {
 }
 
 // PreloadedSkills returns the full SKILL.md body (after frontmatter) for all
-// skills with preload: true in their frontmatter.
-func PreloadedSkills(dir string) ([]PreloadedSkill, error) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, fmt.Errorf("read skills dir %s: %w", dir, err)
-	}
-
+// skills with preload: true. later directories override earlier ones by name.
+func PreloadedSkills(dirs ...string) ([]PreloadedSkill, error) {
+	seen := map[string]int{}
 	var result []PreloadedSkill
 
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-
-		path := filepath.Join(dir, entry.Name(), "SKILL.md")
-
-		s, err := parseFrontmatter(path)
-		if err != nil || !s.Preload {
-			continue
-		}
-
-		data, err := os.ReadFile(path)
+	for _, dir := range dirs {
+		entries, err := os.ReadDir(dir)
 		if err != nil {
-			continue
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, fmt.Errorf("read skills dir %s: %w", dir, err)
 		}
 
-		body := stripFrontmatter(string(data))
-		if body == "" {
-			continue
-		}
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
 
-		result = append(result, PreloadedSkill{Name: s.Name, Content: body})
+			path := filepath.Join(dir, entry.Name(), "SKILL.md")
+
+			s, err := parseFrontmatter(path)
+			if err != nil || !s.Preload {
+				continue
+			}
+
+			data, err := os.ReadFile(path)
+			if err != nil {
+				continue
+			}
+
+			body := stripFrontmatter(string(data))
+			if body == "" {
+				continue
+			}
+
+			ps := PreloadedSkill{Name: s.Name, Content: body}
+
+			if idx, ok := seen[s.Name]; ok {
+				result[idx] = ps
+			} else {
+				seen[s.Name] = len(result)
+				result = append(result, ps)
+			}
+		}
 	}
 
 	return result, nil

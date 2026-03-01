@@ -246,3 +246,137 @@ func TestParseFlowSequence(t *testing.T) {
 		}
 	}
 }
+
+func TestListSkillsMultipleDirs(t *testing.T) {
+	builtinDir := t.TempDir()
+	workspaceDir := t.TempDir()
+
+	writeSkill(t, builtinDir, "alarm", "alarm", "manage alarms", "[create_alarm]")
+	writeSkill(t, builtinDir, "search", "search", "search things", "[db_query]")
+	writeSkill(t, workspaceDir, "custom", "custom", "nik-authored skill", "[shell]")
+
+	summaries, err := ListSkills(builtinDir, workspaceDir)
+	if err != nil {
+		t.Fatalf("ListSkills: %v", err)
+	}
+
+	if len(summaries) != 3 {
+		t.Fatalf("got %d summaries, want 3", len(summaries))
+	}
+
+	names := map[string]bool{}
+	for _, s := range summaries {
+		names[s.Name] = true
+	}
+
+	for _, want := range []string{"alarm", "search", "custom"} {
+		if !names[want] {
+			t.Errorf("missing skill %q", want)
+		}
+	}
+}
+
+func TestListSkillsWorkspaceOverridesBuiltin(t *testing.T) {
+	builtinDir := t.TempDir()
+	workspaceDir := t.TempDir()
+
+	writeSkill(t, builtinDir, "alarm", "alarm", "builtin alarms", "[create_alarm]")
+	writeSkill(t, workspaceDir, "alarm", "alarm", "custom alarms", "[create_alarm, delete_alarm]")
+
+	summaries, err := ListSkills(builtinDir, workspaceDir)
+	if err != nil {
+		t.Fatalf("ListSkills: %v", err)
+	}
+
+	if len(summaries) != 1 {
+		t.Fatalf("got %d summaries, want 1 (deduped)", len(summaries))
+	}
+
+	if summaries[0].Summary != "custom alarms" {
+		t.Errorf("summary = %q, want workspace override %q", summaries[0].Summary, "custom alarms")
+	}
+}
+
+func TestListSkillsMissingDirTolerated(t *testing.T) {
+	builtinDir := t.TempDir()
+	writeSkill(t, builtinDir, "alarm", "alarm", "manage alarms", "[create_alarm]")
+
+	missingDir := filepath.Join(t.TempDir(), "does_not_exist")
+
+	summaries, err := ListSkills(builtinDir, missingDir)
+	if err != nil {
+		t.Fatalf("ListSkills with missing dir: %v", err)
+	}
+
+	if len(summaries) != 1 {
+		t.Fatalf("got %d summaries, want 1", len(summaries))
+	}
+}
+
+func TestPreloadedSkillsMultipleDirs(t *testing.T) {
+	builtinDir := t.TempDir()
+	workspaceDir := t.TempDir()
+
+	writePreloadSkill(t, builtinDir, "messaging", "Builtin messaging body.")
+	writeSkill(t, workspaceDir, "custom", "custom", "not preloaded", "[shell]")
+	writePreloadSkill(t, workspaceDir, "ws_pre", "Workspace preloaded body.")
+
+	result, err := PreloadedSkills(builtinDir, workspaceDir)
+	if err != nil {
+		t.Fatalf("PreloadedSkills: %v", err)
+	}
+
+	if len(result) != 2 {
+		t.Fatalf("got %d preloaded skills, want 2", len(result))
+	}
+
+	names := map[string]string{}
+	for _, p := range result {
+		names[p.Name] = p.Content
+	}
+
+	if !strings.Contains(names["messaging"], "Builtin messaging body.") {
+		t.Error("missing builtin preloaded skill")
+	}
+
+	if !strings.Contains(names["ws_pre"], "Workspace preloaded body.") {
+		t.Error("missing workspace preloaded skill")
+	}
+}
+
+func TestPreloadedSkillsWorkspaceOverride(t *testing.T) {
+	builtinDir := t.TempDir()
+	workspaceDir := t.TempDir()
+
+	writePreloadSkill(t, builtinDir, "messaging", "Builtin version.")
+	writePreloadSkill(t, workspaceDir, "messaging", "Workspace override.")
+
+	result, err := PreloadedSkills(builtinDir, workspaceDir)
+	if err != nil {
+		t.Fatalf("PreloadedSkills: %v", err)
+	}
+
+	if len(result) != 1 {
+		t.Fatalf("got %d preloaded skills, want 1 (deduped)", len(result))
+	}
+
+	if !strings.Contains(result[0].Content, "Workspace override.") {
+		t.Errorf("content = %q, want workspace override", result[0].Content)
+	}
+}
+
+func writeSkill(t *testing.T, dir, folder, name, summary, tools string) {
+	t.Helper()
+	skillDir := filepath.Join(dir, folder)
+	os.MkdirAll(skillDir, 0o755)
+	content := "---\nname: " + name + "\nsummary: " + summary + "\ntools: " + tools + "\n---\n"
+	os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(content), 0o644)
+}
+
+func writePreloadSkill(t *testing.T, dir, name, body string) {
+	t.Helper()
+	skillDir := filepath.Join(dir, name)
+	os.MkdirAll(skillDir, 0o755)
+	content := "---\nname: " + name + "\npreload: true\nsummary: preloaded\ntools: [t1]\n---\n\n" + body + "\n"
+	os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(content), 0o644)
+}

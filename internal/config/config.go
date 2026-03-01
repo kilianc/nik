@@ -76,6 +76,10 @@ func (c Config) SkillsPath() string {
 	return filepath.Join(c.Home, dir)
 }
 
+func (c Config) WorkspaceSkillsPath() string {
+	return filepath.Join(c.Home, "skills")
+}
+
 func (c Config) MediaDir() string {
 	if c.MediaDirValue == "" {
 		return "media"

@@ -52,9 +52,9 @@ func (b *Brain) loadInstructions(now time.Time) (string, error) {
 }
 
 func (b *Brain) formatSkillSections() string {
-	dir := b.cfg.SkillsPath()
+	dirs := []string{b.cfg.SkillsPath(), b.cfg.WorkspaceSkillsPath()}
 
-	summaries, err := skills.ListSkills(dir)
+	summaries, err := skills.ListSkills(dirs...)
 	if err != nil {
 		slog.Warn("load skill index", "pkg", "brain", "error", err)
 		return ""
@@ -66,7 +66,7 @@ func (b *Brain) formatSkillSections() string {
 
 	var sections []string
 
-	preloaded, err := skills.PreloadedSkills(dir)
+	preloaded, err := skills.PreloadedSkills(dirs...)
 	if err != nil {
 		slog.Warn("load preloaded skills", "pkg", "brain", "error", err)
 	}
