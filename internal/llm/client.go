@@ -437,11 +437,7 @@ func toolCallAttrs(name string, round int, raw string) []any {
 	}
 
 	for k, v := range parsed {
-		s := fmt.Sprintf("%v", v)
-		if len(s) > 20 {
-			s = s[:20] + "…"
-		}
-		attrs = append(attrs, k, s)
+		attrs = append(attrs, k, fmt.Sprintf("%v", v))
 	}
 
 	return attrs
