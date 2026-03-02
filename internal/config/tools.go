@@ -25,7 +25,7 @@ var updateConfigDef = llm.ToolDef{
 			},
 			"field": map[string]any{
 				"type":        "string",
-				"description": "Config field name for 'set'. Writable fields: timezone, location, model, debug_dir, media_dir, max_history.",
+				"description": "Config field name for 'set'. Writable fields: timezone, location, model, reasoning_effort, debug_dir, media_dir, max_history.",
 			},
 			"value": map[string]any{
 				"type":        "string",
@@ -80,6 +80,7 @@ func updateConfigHandler(cfg *Config, conn *sql.DB) llm.ToolExecutor {
 func configGet(cfg *Config) (string, error) {
 	out := map[string]any{
 		"model":                       cfg.Model,
+		"reasoning_effort":            cfg.ReasoningEffort,
 		"debug_dir":                   cfg.DebugDirValue,
 		"media_dir":                   cfg.MediaDirValue,
 		"max_history":                 cfg.MaxHistory,
@@ -118,6 +119,15 @@ func configSet(cfg *Config, field, value string) (string, error) {
 		cfg.Location = value
 	case "model":
 		cfg.Model = value
+	case "reasoning_effort":
+		valid := map[string]bool{
+			"": true, "none": true, "minimal": true,
+			"low": true, "medium": true, "high": true, "xhigh": true,
+		}
+		if !valid[value] {
+			return llm.ToolErrorf("invalid reasoning_effort %q (none, minimal, low, medium, high, xhigh, or empty)", value), nil
+		}
+		cfg.ReasoningEffort = value
 	case "debug_dir":
 		cfg.DebugDirValue = value
 	case "media_dir":

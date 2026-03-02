@@ -166,13 +166,14 @@ func (b *Brain) think(ctx context.Context, input []string) (string, llm.Usage, e
 			return "", totalUsage, err
 		}
 
-		output, usage, toolCalls, processErr := b.llm.Complete(thinkCtx, instructions, userInput, tools, executor)
-		b.writeDebugRecord(meta, instructions, userInput, output, tools, toolCalls, usage, processErr)
+		output, usage, toolCalls, extra, processErr := b.llm.Complete(thinkCtx, instructions, userInput, tools, executor)
+		b.writeDebugRecord(meta, instructions, userInput, output, tools, toolCalls, extra, usage, processErr)
 
 		totalUsage.InputTokens += usage.InputTokens
 		totalUsage.OutputTokens += usage.OutputTokens
 		totalUsage.TotalTokens += usage.TotalTokens
 		totalUsage.CachedTokens += usage.CachedTokens
+		totalUsage.ReasoningTokens += usage.ReasoningTokens
 
 		if processErr != nil {
 			return "", totalUsage, processErr
