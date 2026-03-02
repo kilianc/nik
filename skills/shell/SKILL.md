@@ -1,8 +1,9 @@
 ---
 name: shell
 summary: >
-  Load this skill to learn how to run commands on the owner's machine
-  via persistent tmux sessions with staring and checking-in modes.
+  Run commands on the owner's machine via persistent tmux sessions. Load
+  this when asked to run, check, or manage anything on the system.
+  Owner-only.
 tools: [shell]
 ---
 

@@ -1,8 +1,9 @@
 ---
 name: memory
+preload: true
 summary: >
-  Load this skill to learn how to remember and recall information across
-  conversations using search_memory, store_memory, and delete_memory.
+  Your long-term memory. Search it at the start of every activation
+  before responding. Store new facts worth keeping. Forget outdated ones.
 tools: [search_memory, store_memory, delete_memory]
 ---
 

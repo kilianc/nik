@@ -1,9 +1,9 @@
 ---
 name: alarm
 summary: >
-  Load this skill to learn how to set alarms -- one-shot or recurring --
-  that wake you up at a specific time to act on reminders, follow-ups,
-  routines, and delayed actions.
+  Your time control. Load this when someone asks to be reminded, you need
+  to schedule a follow-up, or you want to set up a routine. One-shot or
+  recurring.
 tools: [alarm, update_alarm, cancel_alarm]
 ---
 

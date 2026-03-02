@@ -1,8 +1,7 @@
 ---
 name: config
 summary: >
-  Load this skill to learn how to read or update nik's runtime
-  configuration and manage the conversation allow list.
+  Nik's runtime config and the conversation allow list. Owner-only.
 tools: [update_config]
 ---
 
