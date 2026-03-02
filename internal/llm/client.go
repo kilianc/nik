@@ -177,6 +177,12 @@ func (c *Client) Complete(ctx context.Context, instructions, input string, tools
 		total.TotalTokens += resp.Usage.TotalTokens
 		total.CachedTokens += resp.Usage.InputTokensDetails.CachedTokens
 
+		if resp.Status == responses.ResponseStatusIncomplete {
+			reason := resp.IncompleteDetails.Reason
+			slog.Warn("response incomplete", "pkg", "llm", "reason", reason, "round", round)
+			return "", total, history, fmt.Errorf("response incomplete: %s", reason)
+		}
+
 		var calls []ToolCall
 		for _, item := range resp.Output {
 			if item.Type != "function_call" {
