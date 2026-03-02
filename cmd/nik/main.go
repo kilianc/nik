@@ -149,7 +149,7 @@ func main() {
 	b.RegisterTools(messaging.BuildTools(messagingSvc)...)
 	b.RegisterTools(alarms.BuildTools(alarmSvc)...)
 	b.RegisterTools(search.BuildTools(conn, searchSvc)...)
-	b.RegisterTools(shell.BuildTools()...)
+	b.RegisterTools(shell.BuildTools(cfg)...)
 	b.RegisterTools(websearch.BuildTools(cfg)...)
 	b.RegisterTools(skills.BuildTools(cfg)...)
 	b.RegisterTools(journal.BuildTools(journalSvc)...)

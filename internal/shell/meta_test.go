@@ -11,7 +11,7 @@ func TestSaveAndLoadMeta(t *testing.T) {
 	id := "test-meta"
 	defer cleanup(t, id)
 
-	err := newSession(id, "sleep 60")
+	err := newSession(id, "sleep 60", "")
 	if err != nil {
 		t.Fatalf("newSession: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestSaveMetaValidation(t *testing.T) {
 	id := "test-meta-validation"
 	defer cleanup(t, id)
 
-	err := newSession(id, "sleep 60")
+	err := newSession(id, "sleep 60", "")
 	if err != nil {
 		t.Fatalf("newSession: %v", err)
 	}

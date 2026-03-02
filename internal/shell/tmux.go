@@ -40,15 +40,20 @@ func ensureTmux() error {
 // newSession creates a tmux session with remain-on-exit on, then replaces the
 // pane process with sh -c command. Options are set before the command runs so
 // fast-exiting commands still have pane_dead captured.
-func newSession(id, command string) error {
+func newSession(id, command, cwd string) error {
 	name := sessionName(id)
 
-	_, err := tmux(
+	args := []string{
 		"new-session", "-d",
 		"-s", name,
 		"-x", fmt.Sprintf("%d", windowWidth),
 		"-y", fmt.Sprintf("%d", windowHeight),
-	)
+	}
+	if cwd != "" {
+		args = append(args, "-c", cwd)
+	}
+
+	_, err := tmux(args...)
 	if err != nil {
 		return fmt.Errorf("create session %s: %w", id, err)
 	}

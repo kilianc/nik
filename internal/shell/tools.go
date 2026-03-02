@@ -63,7 +63,7 @@ type shellArgs struct {
 	NextCheckAt string `json:"next_check_at"`
 }
 
-func BuildTools() []llm.Tool {
+func BuildTools(cfg *config.Config) []llm.Tool {
 	err := ensureTmux()
 	if err != nil {
 		slog.Warn("shell tool disabled", "pkg", "shell", "error", err)
@@ -73,13 +73,13 @@ func BuildTools() []llm.Tool {
 	return []llm.Tool{
 		{
 			Def:        shellToolDef,
-			Handler:    shellHandler(),
+			Handler:    shellHandler(cfg.Home),
 			Privileged: true,
 		},
 	}
 }
 
-func shellHandler() llm.ToolExecutor {
+func shellHandler(home string) llm.ToolExecutor {
 	return func(ctx context.Context, call llm.ToolCall) (string, error) {
 		var args shellArgs
 
@@ -90,7 +90,7 @@ func shellHandler() llm.ToolExecutor {
 
 		switch args.Action {
 		case "run":
-			return handleRun(ctx, args)
+			return handleRun(ctx, args, home)
 		case "read", "send":
 			return handleInteract(args)
 		case "kill":
@@ -101,7 +101,7 @@ func shellHandler() llm.ToolExecutor {
 	}
 }
 
-func handleRun(ctx context.Context, args shellArgs) (string, error) {
+func handleRun(ctx context.Context, args shellArgs, home string) (string, error) {
 	if args.Command == "" {
 		return `{"error":"empty command"}`, nil
 	}
@@ -116,7 +116,7 @@ func handleRun(ctx context.Context, args shellArgs) (string, error) {
 
 	sid := id.Short(4)
 
-	err = newSession(sid, args.Command)
+	err = newSession(sid, args.Command, home)
 	if err != nil {
 		return llm.ToolError(err), nil
 	}
