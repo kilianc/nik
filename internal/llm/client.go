@@ -20,14 +20,16 @@ import (
 )
 
 type Client struct {
-	codexClient *openai.Client
-	apiClient   *openai.Client
-	model       shared.ResponsesModel
+	codexClient     *openai.Client
+	apiClient       *openai.Client
+	model           shared.ResponsesModel
+	reasoningEffort *string
 }
 
 type clientConfig struct {
-	apiKey    string
-	codexAuth *codex.Auth
+	apiKey          string
+	codexAuth       *codex.Auth
+	reasoningEffort *string
 }
 
 type ClientOption func(*clientConfig)
@@ -44,13 +46,22 @@ func WithCodex(auth *codex.Auth) ClientOption {
 	}
 }
 
+// WithReasoningEffort sets the pointer to the reasoning effort string.
+// The Client reads through this pointer on each call, so the caller
+// can update the value at runtime (e.g. from config).
+func WithReasoningEffort(effort *string) ClientOption {
+	return func(c *clientConfig) {
+		c.reasoningEffort = effort
+	}
+}
+
 func NewClient(model string, opts ...ClientOption) *Client {
 	var cfg clientConfig
 	for _, opt := range opts {
 		opt(&cfg)
 	}
 
-	c := &Client{model: model}
+	c := &Client{model: model, reasoningEffort: cfg.reasoningEffort}
 
 	if cfg.apiKey != "" {
 		apiClient := openai.NewClient(option.WithAPIKey(cfg.apiKey))
@@ -110,10 +121,18 @@ type Tool struct {
 }
 
 type Usage struct {
-	InputTokens  int64
-	OutputTokens int64
-	TotalTokens  int64
-	CachedTokens int64
+	InputTokens     int64
+	OutputTokens    int64
+	TotalTokens     int64
+	CachedTokens    int64
+	ReasoningTokens int64
+}
+
+// CompletionExtra holds debug-only data from a Complete call.
+type CompletionExtra struct {
+	RawResponses       []string
+	ReasoningSummaries []string
+	ReasoningEffort    string
 }
 
 type ToolCallRecord struct {
@@ -123,8 +142,9 @@ type ToolCallRecord struct {
 	Error  bool
 }
 
-func (c *Client) Complete(ctx context.Context, instructions, input string, tools []ToolDef, executor ToolExecutor) (string, Usage, []ToolCallRecord, error) {
+func (c *Client) Complete(ctx context.Context, instructions, input string, tools []ToolDef, executor ToolExecutor) (string, Usage, []ToolCallRecord, CompletionExtra, error) {
 	total := Usage{}
+	extra := CompletionExtra{}
 
 	client := c.apiClient
 	if c.codexClient != nil {
@@ -132,7 +152,7 @@ func (c *Client) Complete(ctx context.Context, instructions, input string, tools
 	}
 
 	if client == nil {
-		return "", total, nil, fmt.Errorf("no client configured (need api key or codex auth)")
+		return "", total, nil, extra, fmt.Errorf("no client configured (need api key or codex auth)")
 	}
 
 	var history []ToolCallRecord
@@ -145,6 +165,13 @@ func (c *Client) Complete(ctx context.Context, instructions, input string, tools
 		Model:        c.model,
 		Instructions: openai.String(instructions),
 		Tools:        buildToolParams(tools),
+		Reasoning: shared.ReasoningParam{
+			Summary: shared.ReasoningSummaryDetailed,
+		},
+	}
+
+	if c.reasoningEffort != nil && *c.reasoningEffort != "" {
+		params.Reasoning.Effort = shared.ReasoningEffort(*c.reasoningEffort)
 	}
 
 	if c.codexClient != nil {
@@ -161,26 +188,44 @@ func (c *Client) Complete(ctx context.Context, instructions, input string, tools
 		if useStreaming {
 			r, err := completeStreaming(ctx, client, params)
 			if err != nil {
-				return "", total, history, fmt.Errorf("complete round %d: %w", round, err)
+				return "", total, history, extra, fmt.Errorf("complete round %d: %w", round, err)
 			}
 			resp = r
 		} else {
 			r, err := client.Responses.New(ctx, params)
 			if err != nil {
-				return "", total, history, fmt.Errorf("complete round %d: %w", round, err)
+				return "", total, history, extra, fmt.Errorf("complete round %d: %w", round, err)
 			}
 			resp = r
+		}
+
+		extra.RawResponses = append(extra.RawResponses, resp.RawJSON())
+
+		if effort := string(resp.Reasoning.Effort); effort != "" {
+			extra.ReasoningEffort = effort
 		}
 
 		total.InputTokens += resp.Usage.InputTokens
 		total.OutputTokens += resp.Usage.OutputTokens
 		total.TotalTokens += resp.Usage.TotalTokens
 		total.CachedTokens += resp.Usage.InputTokensDetails.CachedTokens
+		total.ReasoningTokens += resp.Usage.OutputTokensDetails.ReasoningTokens
+
+		for _, item := range resp.Output {
+			if item.Type != "reasoning" {
+				continue
+			}
+			for _, s := range item.AsReasoning().Summary {
+				if s.Text != "" {
+					extra.ReasoningSummaries = append(extra.ReasoningSummaries, s.Text)
+				}
+			}
+		}
 
 		if resp.Status == responses.ResponseStatusIncomplete {
 			reason := resp.IncompleteDetails.Reason
 			slog.Warn("response incomplete", "pkg", "llm", "reason", reason, "round", round)
-			return "", total, history, fmt.Errorf("response incomplete: %s", reason)
+			return "", total, history, extra, fmt.Errorf("response incomplete: %s", reason)
 		}
 
 		var calls []ToolCall
@@ -198,7 +243,7 @@ func (c *Client) Complete(ctx context.Context, instructions, input string, tools
 		}
 
 		if len(calls) == 0 {
-			return resp.OutputText(), total, history, nil
+			return resp.OutputText(), total, history, extra, nil
 		}
 
 		for _, call := range calls {
@@ -223,7 +268,6 @@ func (c *Client) Complete(ctx context.Context, instructions, input string, tools
 			items = append(items, responses.ResponseInputItemParamOfFunctionCallOutput(call.CallID, result))
 		}
 	}
-
 }
 
 // completeStreaming uses the streaming API and collects the final completed

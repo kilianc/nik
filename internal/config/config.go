@@ -18,6 +18,7 @@ type Config struct {
 	UseCodex        bool   `yaml:"use_codex"`
 	ExaAPIKey       string `yaml:"exa_api_key"`
 	Model           string `yaml:"model"`
+	ReasoningEffort string `yaml:"reasoning_effort"`
 	DebugDirValue   string `yaml:"debug_dir"`
 	MediaDirValue   string `yaml:"media_dir"`
 	PromptsDirValue string `yaml:"prompts_dir"`

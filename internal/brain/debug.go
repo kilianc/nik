@@ -14,14 +14,17 @@ import (
 )
 
 type debugRecord struct {
-	Timestamp string
-	Model     string
-	Trigger   map[string]string
-	Input     debugInput
-	Tools     []string
-	ToolCalls []debugToolCall
-	Output    debugOutput
-	Usage     debugUsage
+	Timestamp          string
+	Model              string
+	ReasoningEffort    string
+	Trigger            map[string]string
+	Input              debugInput
+	Tools              []string
+	ToolCalls          []debugToolCall
+	ReasoningSummaries []string
+	RawResponses       []string
+	Output             debugOutput
+	Usage              debugUsage
 }
 
 type debugToolCall struct {
@@ -42,16 +45,17 @@ type debugOutput struct {
 }
 
 type debugUsage struct {
-	InputTokens  int64
-	OutputTokens int64
-	TotalTokens  int64
-	CachedTokens int64
-	CostUSD      float64
+	InputTokens     int64
+	OutputTokens    int64
+	TotalTokens     int64
+	CachedTokens    int64
+	ReasoningTokens int64
+	CostUSD         float64
 }
 
 var nonAlphaNum = regexp.MustCompile(`[^a-zA-Z0-9]+`)
 
-func (b *Brain) writeDebugRecord(meta map[string]string, instructions, userInput, rawOutput string, tools []llm.ToolDef, toolCalls []llm.ToolCallRecord, usage llm.Usage, processErr error) {
+func (b *Brain) writeDebugRecord(meta map[string]string, instructions, userInput, rawOutput string, tools []llm.ToolDef, toolCalls []llm.ToolCallRecord, extra llm.CompletionExtra, usage llm.Usage, processErr error) {
 	if b.cfg.DebugPath() == "" {
 		return
 	}
@@ -74,22 +78,26 @@ func (b *Brain) writeDebugRecord(meta map[string]string, instructions, userInput
 	}
 
 	record := debugRecord{
-		Timestamp: timestamp.Format(time.RFC3339),
-		Model:     b.llm.Model(),
-		Trigger:   meta,
+		Timestamp:       timestamp.Format(time.RFC3339),
+		Model:           b.llm.Model(),
+		ReasoningEffort: extra.ReasoningEffort,
+		Trigger:         meta,
 		Input: debugInput{
 			Instructions: instructions,
 			UserInput:    userInput,
 		},
-		Tools:     toolNames,
-		ToolCalls: buildDebugToolCalls(toolCalls),
-		Output:    debugOutput{Raw: rawOutput},
+		Tools:              toolNames,
+		ToolCalls:          buildDebugToolCalls(toolCalls),
+		ReasoningSummaries: extra.ReasoningSummaries,
+		RawResponses:       extra.RawResponses,
+		Output:             debugOutput{Raw: rawOutput},
 		Usage: debugUsage{
-			InputTokens:  usage.InputTokens,
-			OutputTokens: usage.OutputTokens,
-			TotalTokens:  usage.TotalTokens,
-			CachedTokens: usage.CachedTokens,
-			CostUSD:      llm.ComputeCost(b.llm.Model(), usage.InputTokens, usage.OutputTokens, usage.CachedTokens),
+			InputTokens:     usage.InputTokens,
+			OutputTokens:    usage.OutputTokens,
+			TotalTokens:     usage.TotalTokens,
+			CachedTokens:    usage.CachedTokens,
+			ReasoningTokens: usage.ReasoningTokens,
+			CostUSD:         llm.ComputeCost(b.llm.Model(), usage.InputTokens, usage.OutputTokens, usage.CachedTokens),
 		},
 	}
 
@@ -141,7 +149,12 @@ func writeDebugMarkdown(path string, rec debugRecord) error {
 	var w strings.Builder
 
 	fmt.Fprintf(&w, "# Session: %s\n\n", rec.Timestamp)
-	fmt.Fprintf(&w, "**Model:** %s\n\n", rec.Model)
+
+	if rec.ReasoningEffort != "" {
+		fmt.Fprintf(&w, "**Model:** %s | **Reasoning:** %s\n\n", rec.Model, rec.ReasoningEffort)
+	} else {
+		fmt.Fprintf(&w, "**Model:** %s\n\n", rec.Model)
+	}
 
 	if source := rec.Trigger["source"]; source != "" {
 		detail := rec.Trigger["source_id"]
@@ -175,7 +188,7 @@ func writeDebugMarkdown(path string, rec debugRecord) error {
 	}
 
 	if len(rec.ToolCalls) > 0 {
-		w.WriteString("<details open><summary>Tool Calls</summary>\n\n")
+		w.WriteString("<details><summary>Tool Calls</summary>\n\n")
 		for i, tc := range rec.ToolCalls {
 			label := tc.Name
 			if tc.Error {
@@ -192,9 +205,28 @@ func writeDebugMarkdown(path string, rec debugRecord) error {
 		w.WriteString("</details>\n\n---\n\n")
 	}
 
-	w.WriteString("<details open><summary>Output</summary>\n\n")
+	if len(rec.ReasoningSummaries) > 0 {
+		w.WriteString("<details><summary>Reasoning</summary>\n\n")
+		for _, s := range rec.ReasoningSummaries {
+			w.WriteString(s)
+			w.WriteString("\n\n")
+		}
+		w.WriteString("</details>\n\n---\n\n")
+	}
+
+	w.WriteString("<details><summary>Output</summary>\n\n")
 	writeOutputSection(&w, rec.Output)
 	w.WriteString("</details>\n")
+
+	if len(rec.RawResponses) > 0 {
+		w.WriteString("\n---\n\n")
+		w.WriteString("<details><summary>Raw API Responses</summary>\n\n")
+		for i, raw := range rec.RawResponses {
+			fmt.Fprintf(&w, "### Round %d\n\n", i)
+			writeFencedBlock(&w, raw)
+		}
+		w.WriteString("</details>\n")
+	}
 
 	err := os.WriteFile(path, []byte(w.String()), 0o644)
 	if err != nil {
@@ -237,15 +269,29 @@ func writeCostTable(w *strings.Builder, model string, u debugUsage) {
 
 		outputCost := float64(u.OutputTokens) * rates.Output / 1e6
 		fmt.Fprintf(w, "| Output | %d | $%.2f/M | $%.4f |\n", u.OutputTokens, rates.Output, outputCost)
+
+		if u.ReasoningTokens > 0 {
+			fmt.Fprintf(w, "| ↳ Reasoning | %d | | |\n", u.ReasoningTokens)
+		}
 	} else {
 		fmt.Fprintf(w, "| Input | %d | - | - |\n", uncached)
 		if u.CachedTokens > 0 {
 			fmt.Fprintf(w, "| Cached | %d | - | - |\n", u.CachedTokens)
 		}
 		fmt.Fprintf(w, "| Output | %d | - | - |\n", u.OutputTokens)
+
+		if u.ReasoningTokens > 0 {
+			fmt.Fprintf(w, "| ↳ Reasoning | %d | | |\n", u.ReasoningTokens)
+		}
 	}
 
 	fmt.Fprintf(w, "| **Total** | **%d** | | **$%.4f** |\n", u.TotalTokens, u.CostUSD)
+
+	ctxWindow, ctxOk := llm.ModelContextWindow(model)
+	if ctxOk && u.InputTokens > 0 {
+		pct := float64(u.InputTokens) / float64(ctxWindow) * 100
+		fmt.Fprintf(w, "\n**Context:** %d / %d tokens (%.1f%%)\n", u.InputTokens, ctxWindow, pct)
+	}
 }
 
 func writeFencedBlock(w *strings.Builder, s string) {

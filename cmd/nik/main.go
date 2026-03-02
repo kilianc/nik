@@ -124,6 +124,7 @@ func main() {
 		llmOpts = append(llmOpts, llm.WithCodex(auth))
 		slog.Info("codex auth ready", "account_id", auth.AccountID)
 	}
+	llmOpts = append(llmOpts, llm.WithReasoningEffort(&cfg.ReasoningEffort))
 	llmClient := llm.NewClient(cfg.Model, llmOpts...)
 
 	alarmSvc := alarms.New(conn)
