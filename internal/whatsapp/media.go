@@ -8,9 +8,15 @@ import (
 	"mime"
 	"os"
 	"path/filepath"
+	"time"
 
 	"go.mau.fi/whatsmeow"
 	waProto "go.mau.fi/whatsmeow/proto/waE2E"
+)
+
+const (
+	mediaDownloadMaxAttempts = 3
+	mediaDownloadRetryDelay  = 2 * time.Second
 )
 
 type mediaResult struct {
@@ -36,9 +42,27 @@ func (c *Client) downloadMedia(ctx context.Context, msg *waProto.Message, messag
 
 	mimeType := normalizeMime(rawMime)
 
-	data, err := c.wm.Download(ctx, downloadable)
+	var data []byte
+	var err error
+	for attempt := range mediaDownloadMaxAttempts {
+		data, err = c.wm.Download(ctx, downloadable)
+		if err == nil {
+			break
+		}
+		if attempt < mediaDownloadMaxAttempts-1 {
+			slog.Warn("download media attempt failed",
+				"pkg", "whatsapp", "msg_id", messageID, "kind", kind,
+				"attempt", attempt+1, "error", err)
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-time.After(mediaDownloadRetryDelay):
+			}
+		}
+	}
 	if err != nil {
-		slog.Warn("download media failed", "pkg", "whatsapp", "msg_id", messageID, "kind", kind, "error", err)
+		slog.Warn("download media failed",
+			"pkg", "whatsapp", "msg_id", messageID, "kind", kind, "error", err)
 		return nil
 	}
 

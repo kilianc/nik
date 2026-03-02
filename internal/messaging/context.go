@@ -86,6 +86,15 @@ func FormatMessageLine(msg db.Message, sender string) string {
 		extras = append(extras, "media_transcript="+msg.MediaTranscriptText.String)
 	}
 
+	if isMediaKind(msg.Kind) {
+		hasPath := msg.MediaLocalPath.Valid && msg.MediaLocalPath.String != ""
+		hasDesc := (msg.MediaDescribeText.Valid && msg.MediaDescribeText.String != "") ||
+			(msg.MediaTranscriptText.Valid && msg.MediaTranscriptText.String != "")
+		if !hasPath && !hasDesc {
+			extras = append(extras, "media_unavailable")
+		}
+	}
+
 	if len(extras) > 0 {
 		text = text + " | " + strings.Join(extras, " | ")
 	}
@@ -105,6 +114,14 @@ func senderLabel(msg db.Message, labels map[string]string) string {
 	}
 
 	return "[missing-contact]"
+}
+
+func isMediaKind(kind string) bool {
+	switch kind {
+	case "audio", "image", "video", "ptv", "document", "sticker":
+		return true
+	}
+	return false
 }
 
 func splitAtReadBoundary(msgs []db.Message, lastReadAt sql.NullTime) (contextMsgs, unreadMsgs []db.Message) {

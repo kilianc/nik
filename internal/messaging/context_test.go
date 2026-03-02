@@ -145,6 +145,70 @@ func TestFormatMessageLineIncludesMediaAndEditContext(t *testing.T) {
 	}
 }
 
+func TestFormatMessageLineMediaUnavailable(t *testing.T) {
+	msg := db.Message{
+		ID:     "msg-audio",
+		Kind:   "audio",
+		Body:   "",
+		SentAt: time.Now(),
+	}
+
+	line := FormatMessageLine(msg, "Alice")
+	if !strings.Contains(line, "media_unavailable") {
+		t.Fatalf("expected media_unavailable for audio with no path, got %q", line)
+	}
+	if !strings.Contains(line, "(audio)") {
+		t.Fatalf("expected (audio) kind marker, got %q", line)
+	}
+}
+
+func TestFormatMessageLineMediaUnavailableNotShownWithPath(t *testing.T) {
+	msg := db.Message{
+		ID:             "msg-audio",
+		Kind:           "audio",
+		Body:           "",
+		MediaLocalPath: sql.NullString{Valid: true, String: "media/abc.ogg"},
+		SentAt:         time.Now(),
+	}
+
+	line := FormatMessageLine(msg, "Alice")
+	if strings.Contains(line, "media_unavailable") {
+		t.Fatalf("should not show media_unavailable when path exists, got %q", line)
+	}
+	if !strings.Contains(line, "media=media/abc.ogg") {
+		t.Fatalf("expected media path, got %q", line)
+	}
+}
+
+func TestFormatMessageLineMediaUnavailableNotShownWithDescription(t *testing.T) {
+	msg := db.Message{
+		ID:                "msg-audio",
+		Kind:              "audio",
+		Body:              "",
+		MediaDescribeText: sql.NullString{Valid: true, String: "a voice note saying hello"},
+		SentAt:            time.Now(),
+	}
+
+	line := FormatMessageLine(msg, "Alice")
+	if strings.Contains(line, "media_unavailable") {
+		t.Fatalf("should not show media_unavailable when description exists, got %q", line)
+	}
+}
+
+func TestFormatMessageLineMediaUnavailableNotShownForText(t *testing.T) {
+	msg := db.Message{
+		ID:     "msg-text",
+		Kind:   "text",
+		Body:   "hello",
+		SentAt: time.Now(),
+	}
+
+	line := FormatMessageLine(msg, "Alice")
+	if strings.Contains(line, "media_unavailable") {
+		t.Fatalf("text messages should not have media_unavailable, got %q", line)
+	}
+}
+
 func TestFormatMessageLineSecondPrecision(t *testing.T) {
 	msg := db.Message{
 		ID:     "msg-1",
