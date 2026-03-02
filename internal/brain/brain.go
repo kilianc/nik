@@ -47,7 +47,7 @@ func (b *Brain) SetSoulReader(fn func(ctx context.Context) (string, error)) {
 	b.soulReader = fn
 }
 
-const activationTimeout = 5 * time.Minute
+const activationTimeout = 20 * time.Minute
 
 // Awake starts the main loop. Brain wakes up on each tick, perceives
 // stimuli, and activates on anything new. Blocks until ctx is cancelled.
