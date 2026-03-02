@@ -47,9 +47,7 @@ func TestWriteDebugMarkdownProducesExpectedSections(t *testing.T) {
 			},
 		},
 		Output: debugOutput{
-			Parsed: map[string]any{
-				"waves": []any{"wave 1: thinking", "wave 2: acting"},
-			},
+			Raw: "wave 1: thinking\nwave 2: acting",
 		},
 		Usage: debugUsage{
 			InputTokens:  1000,
@@ -93,9 +91,9 @@ func TestWriteDebugMarkdownProducesExpectedSections(t *testing.T) {
 		{"tool call args json", `"message": "hey"`},
 		{"tool call result json", `"sent": true`},
 		{"tool call plain result", "file.txt\ndir/"},
-		{"waves header", "### Waves"},
-		{"wave 1", "1. wave 1: thinking"},
-		{"wave 2", "2. wave 2: acting"},
+		{"thinking header", "### Thinking"},
+		{"thinking wave 1", "wave 1: thinking"},
+		{"thinking wave 2", "wave 2: acting"},
 	}
 
 	for _, c := range checks {
@@ -113,8 +111,7 @@ func TestWriteDebugMarkdownRawOutputFallback(t *testing.T) {
 		Timestamp: "2026-01-01T00:00:00Z",
 		Model:     "m",
 		Output: debugOutput{
-			Raw:      "some raw text",
-			ParseErr: "invalid json",
+			Raw: "some raw text",
 		},
 		Usage: debugUsage{
 			InputTokens:  100,
@@ -138,11 +135,8 @@ func TestWriteDebugMarkdownRawOutputFallback(t *testing.T) {
 	if !strings.Contains(md, "some raw text") {
 		t.Error("expected raw output in markdown")
 	}
-	if !strings.Contains(md, "### Parse Error") {
-		t.Error("expected parse error section")
-	}
-	if !strings.Contains(md, "invalid json") {
-		t.Error("expected parse error message")
+	if !strings.Contains(md, "### Thinking") {
+		t.Error("expected thinking section header")
 	}
 }
 

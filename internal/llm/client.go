@@ -145,11 +145,6 @@ func (c *Client) Complete(ctx context.Context, instructions, input string, tools
 		Model:        c.model,
 		Instructions: openai.String(instructions),
 		Tools:        buildToolParams(tools),
-		Text: responses.ResponseTextConfigParam{
-			Format: responses.ResponseFormatTextConfigUnionParam{
-				OfJSONObject: &shared.ResponseFormatJSONObjectParam{},
-			},
-		},
 	}
 
 	if c.codexClient != nil {

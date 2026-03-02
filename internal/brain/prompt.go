@@ -14,7 +14,7 @@ import (
 
 const skillInsertMarker = "## How your brain works"
 
-func (b *Brain) loadInstructions(now time.Time) (string, error) {
+func (b *Brain) loadInstructions(now time.Time, retry bool) (string, error) {
 	path := filepath.Join(b.cfg.PromptsPath(), "00-unified.md")
 
 	data, err := os.ReadFile(path)
@@ -47,6 +47,15 @@ func (b *Brain) loadInstructions(now time.Time) (string, error) {
 	}
 
 	parts = append(parts, prompt)
+
+	if retry {
+		nudge, nudgeErr := os.ReadFile(filepath.Join(b.cfg.PromptsPath(), "05-retry.md"))
+		if nudgeErr != nil {
+			slog.Warn("load retry nudge", "pkg", "brain", "error", nudgeErr)
+		} else {
+			parts = append(parts, string(nudge))
+		}
+	}
 
 	return strings.Join(parts, "\n\n"), nil
 }
