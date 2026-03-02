@@ -79,7 +79,7 @@ When working in plan mode, always put details, before/after examples, and ration
 ## Configuration
 
 - Home directory is set via `--home` flag (defaults to current working directory). During development, `make run` passes `--home workspace`.
-- `config.yaml` in Home: all app config (API keys, model, owner, poll intervals, etc.). Loaded at startup by `config.Load(home)`.
+- `config.yaml` in Home: all app config (API keys, model, reasoning effort, directory overrides, conversation ACLs, schedule times, etc.). Loaded at startup by `config.Load(home)`.
 - The database lives at `nik.db` in Home.
 - The `workspace/` folder in the repo is the user-facing workspace. All runtime artifacts (db, logs, media, debug) are written here. When nik is installed, this is the only folder exposed to users. Prompts and skills currently live at the repo root; `prompts_dir` and `skills_dir` in config.yaml point nik at them (relative to Home).
 - **Workspace skills** (`Home/skills`, i.e. `workspace/skills/`): nik writes his own skills here at runtime. These are loaded from disk on every brain activation alongside built-in skills. When a workspace skill shares a name with a built-in skill, the workspace version wins. Not git-tracked (`workspace/` is gitignored).
@@ -96,7 +96,12 @@ Entry point: `cmd/nik/main.go`
 | `internal/db/` | SQLite open/schema, models, one Go file per query function |
 | `internal/queries/` | embedded `.sql` files for canonical entities (`conversation_*`, `message_*`, `media_*`, etc.) |
 | `internal/brain/` | main loop, data source + tool registration, prompt loading, debug output |
-| `internal/llm/` | OpenAI client wrapper — `Complete`, `Transcribe`, `Describe`; generic brain tools |
+| `internal/briefing/` | morning briefing service, tools, and data source |
+| `internal/codex/` | Codex auth for LLM client (login, token management) |
+| `internal/dream/` | nightly dream passes for soul evolution, tools, and data source |
+| `internal/id/` | UUID generation — `V4()`, `V7()`, `Short(n)` |
+| `internal/journal/` | daily journal synthesis service, tools, and data source |
+| `internal/llm/` | LLM client — `Complete`, `Embed`, `Transcribe`, `Describe`; supports OpenAI and Codex auth |
 | `internal/messaging/` | canonical messaging service, datasource, and tool handlers |
 | `internal/whatsapp/` | WhatsApp platform adapter implementing messaging platform interface |
 | `internal/contacts/` | contact resolution/upsert orchestration + contact update tools |
@@ -104,9 +109,8 @@ Entry point: `cmd/nik/main.go`
 | `internal/shell/` | tmux-backed persistent shell tool + data source |
 | `internal/alarms/` | alarm/reminder scheduling service, tools, and data source |
 | `internal/memory/` | long-term memory store with vector search (sqlite-vec) |
-| `internal/websearch/` | web search tool via Brave Search API |
+| `internal/websearch/` | web search tool via Exa API |
 | `internal/skills/` | skill loader — reads SKILL.md files and registers tools dynamically |
-| `migrations/` | legacy folder (not used in scratch-first development workflow) |
 | `tools/` | codegen/build/debug tools invoked by `make` — no runtime code; each tool has its own README |
 | `prompts/` | system prompt templates loaded at runtime |
 | `skills/` | built-in skill definitions (SKILL.md files), git-tracked |
@@ -124,6 +128,14 @@ Brain.Awake()        -- wake up, start the loop
       Brain.think()  -- form thoughts (calls llm.Complete under the hood)
         llm.Complete() -- send request, get completion (transport)
 ```
+
+### Autonomous systems
+
+These run on schedule via data sources — the brain activates them like any other stimulus.
+
+- **Journal**: daily synthesis at `cfg.JournalAt()`. Summarizes the day's conversations, contacts, and memories into a `journal` table entry. Uses `journal.md` prompt template.
+- **Dream**: nightly multi-pass process at `cfg.DreamAt()`. Five passes (Drift, Weave, Depths, Crystallize, Wake) that process the journal and memories, writing to the `dream` table. The final pass evolves nik's **soul** — a living identity document stored in the `soul` table and loaded into the system prompt on every activation via `dreamSvc.CurrentSoul`.
+- **Briefing**: morning briefing at `cfg.BriefingAt()`. Fetches news and topics via Exa API based on managed `briefing_topic` entries, writes to the `briefing` table.
 
 ### Scripts and Tools
 
@@ -146,11 +158,11 @@ Brain.Awake()        -- wake up, start the loop
 
 - each platform implements `MessagingPlatform` in `internal/messaging` contracts
 - adapters emit canonical `Conversation`/`Message` via `ReceiveConversation` + `ReceiveMessage`
-- adapters expose outbound methods with matching names: `Reply`, `React`, `StartTyping`, `StopTyping`, `SetPresence`, `MarkRead`
+- adapters expose outbound methods with matching names: `Reply`, `SendImage`, `React`, `StartTyping`, `StopTyping`, `SetPresence`, `MarkRead`
 
 ### CRM core: `contact` table
 
-Platform-agnostic. Stores identifiers from all platforms in JSON array columns (`whatsapp_ids`, etc.). Fields like `nicknames`, `emails`, `phone_numbers` are also JSON arrays stored as TEXT. `one_liner` and `notes` provide free-text context for nik. See `docs/schema.md` for full column listing.
+Platform-agnostic. Stores identifiers from all platforms in JSON array columns (`whatsapp_ids`, `telegram_ids`, `slack_ids`, etc.). Fields like `nicknames`, `emails`, `phone_numbers` are also JSON arrays stored as TEXT. `timezone`, `location`, `one_liner`, and `notes` provide free-text context for nik. See `internal/db/schema.sql` for full column listing.
 
 ## Database
 
@@ -170,7 +182,7 @@ All queries live in `internal/queries/*.sql` files with exact executable SQL (po
 
 ### UUIDs
 
-All primary keys are **UUIDv4**, generated in Go via `db.NewID()` (`github.com/google/uuid`). Stored as plain `TEXT` in SQLite. No sequences needed, globally unique across tables.
+All primary keys are **UUIDv7** (time-ordered), generated in Go via `id.V7()` from `internal/id/` (`github.com/google/uuid`). `id.V4()` for random UUIDs, `id.Short(n)` for short hex IDs (e.g. shell session names). Stored as plain `TEXT` in SQLite.
 
 ### SQLite Go Driver Conventions
 
@@ -188,9 +200,9 @@ Good — `GetContact` already does this (`get_contact.sql` uses `WHERE id = ?1 O
 
 ### Naming Conventions
 
-- All table names are **singular**: `contact`, `conversation`, `message`, `media`, `message_media`, `alarm`
-- Canonical query files use canonical prefixes: `conversation_*`, `message_*`, `media_*`, `message_media_*`, `contact_*`, `alarm_*`
-- Tool names for messaging actions are canonical and prefixed: `message_reply`, `message_react`, `message_start_typing`, `message_stop_typing`, `message_set_presence`, `message_update_media_description`
+- All table names are **singular**: `contact`, `conversation`, `conversation_participant`, `message`, `media`, `message_media`, `alarm`, `alarm_occurrence`, `memory`, `vec_memory`, `journal`, `dream`, `soul`, `briefing`, `briefing_topic`
+- Canonical query files use canonical prefixes: `conversation_*`, `message_*`, `media_*`, `message_media_*`, `contact_*`, `alarm_*`, `memory_*`, `journal_*`, `dream_*`, `briefing_*`, `soul_*`
+- Tool names use canonical prefixes by domain (see "Where tools live" table for the full list)
 - Metadata keys use canonical ids: `conversation_id`, `message_id` (platform ids are never exposed to LLM context)
 
 ### Nik's Identity
@@ -211,30 +223,36 @@ Tools are defined in their domain package, not in `brain/`:
 
 | Package | Tools | Why |
 |---------|-------|-----|
-| `internal/messaging/` | `message_reply`, `message_react`, `message_start_typing`, etc. | canonical messaging actions routed by platform |
+| `internal/messaging/` | `message_reply`, `message_noop`, `message_react`, `message_start_typing`, `message_stop_typing`, `message_set_presence`, `message_update_media_description` | canonical messaging actions routed by platform |
 | `internal/contacts/` | `update_contact` | contact profile management |
 | `internal/search/` | `db_query`, `search_contacts` | read/search tooling |
 | `internal/llm/` | `describe_media` | generic AI capability, wraps LLM methods |
 | `internal/shell/` | `shell` | persistent tmux terminal (run/read/send/kill/list) |
-| `internal/alarms/` | `create_alarm` | alarm/reminder scheduling |
-| `internal/memory/` | `remember`, `recall`, `forget` | long-term memory with vector search |
-| `internal/websearch/` | `web_search` | web search via Brave API |
+| `internal/alarms/` | `alarm`, `update_alarm`, `cancel_alarm` | alarm/reminder scheduling |
+| `internal/memory/` | `store_memory`, `search_memory`, `delete_memory` | long-term memory with vector search |
+| `internal/websearch/` | `web_search` | web search via Exa API |
 | `internal/skills/` | `load_skill` | load skill definitions from SKILL.md files |
-| `internal/config/` | `get_config` | read config values |
+| `internal/config/` | `update_config` | read and update config values |
+| `internal/journal/` | `journal_write` | daily journal synthesis |
+| `internal/dream/` | `dream_write`, `soul_evolve` | nightly dream passes and soul evolution |
+| `internal/briefing/` | `briefing_write`, `briefing_topics` | morning briefing and topic management |
 
 Each package exposes a `BuildTools() []llm.Tool` function that returns tool definitions + handlers. `main.go` calls `b.RegisterTools(pkg.BuildTools()...)`.
 
 ### Where data sources live
 
-Data sources follow the same pattern. Each domain package that produces context for the brain exposes a `NewDataSource()` function. Currently registered: `messaging` (conversations), `alarms` (due alarms), `shell` (active sessions).
+Data sources follow the same pattern. Each domain package that produces context for the brain exposes a `NewDataSource()` function. Currently registered: `messaging` (unread conversations), `alarms` (due alarms), `shell` (active sessions), `journal` (daily journal), `dream` (nightly dream passes), `briefing` (morning briefing).
 
 ### Registration flow (`main.go`)
 
-1. Create the brain: `b := brain.New(cfg, llmClient)`
-2. Create messaging service and register platform adapters (`whatsapp.NewAdapter(...)`)
-3. Start adapters with messaging receiver callbacks (`adapter.Start(ctx, messagingSvc)`)
-4. Register data sources: `messaging`, `alarms`, `shell`
-5. Register tools by domain (`messaging`, `config`, `contacts`, `search`, `alarms`, `shell`, `llm`, `memory`, `websearch`, `skills`)
+1. Load config, open DB, create WhatsApp client and adapter
+2. Register adapter with messaging service, start adapter
+3. Build LLM client (OpenAI key or Codex auth)
+4. Create domain services: `alarms`, `search`, `memory`, `journal`, `dream`, `briefing`
+5. Create brain: `b := brain.New(cfg, llmClient)`, set soul reader via `dreamSvc.CurrentSoul`
+6. Register data sources: `messaging`, `alarms`, `shell`, `journal`, `dream`, `briefing`
+7. Register tools from all domain packages (13 total — see tools table above)
+8. `b.Awake(ctx, pollInterval)` starts the main loop
 
 ### Adding a new tool
 
@@ -262,7 +280,7 @@ Before applying any migration to the live DB:
 
 ## Git Strategy
 
-`.gitignore` uses ignore-all approach: `*` ignores everything, then specific patterns are un-ignored (`!*.go`, `!*.sql`, `!*.yaml`, `!*.md`). `workspace/config.yaml` is explicitly re-ignored (contains secrets). Use `git add -f` if a new file type needs tracking.
+`.gitignore` uses ignore-all approach: `*` ignores everything, then specific patterns are un-ignored (`!*.go`, `!go.mod`, `!go.sum`, `!*.sql`, `!*.yaml`, `!*.md`, `!Makefile`, `!.gitignore`, `!.config.example.yaml`). `workspace/` is blanket-ignored (contains runtime artifacts and secrets). Use `git add -f` if a new file type needs tracking.
 
 ## Style
 
