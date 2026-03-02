@@ -3,7 +3,6 @@ package shell
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"time"
 
@@ -86,7 +85,7 @@ func shellHandler() llm.ToolExecutor {
 
 		err := json.Unmarshal([]byte(call.Arguments), &args)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		switch args.Action {
@@ -97,7 +96,7 @@ func shellHandler() llm.ToolExecutor {
 		case "kill":
 			return handleKill(args)
 		default:
-			return fmt.Sprintf(`{"error":"unknown action %q"}`, args.Action), nil
+			return llm.ToolErrorf("unknown action %q", args.Action), nil
 		}
 	}
 }
@@ -112,14 +111,14 @@ func handleRun(ctx context.Context, args shellArgs) (string, error) {
 
 	nextCheckAt, err := time.Parse(time.RFC3339, args.NextCheckAt)
 	if err != nil {
-		return fmt.Sprintf(`{"error":"parse next_check_at %q: %s"}`, args.NextCheckAt, err), nil
+		return llm.ToolErrorf("parse next_check_at %q: %s", args.NextCheckAt, err), nil
 	}
 
 	sid := id.Short(4)
 
 	err = newSession(sid, args.Command)
 	if err != nil {
-		return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+		return llm.ToolError(err), nil
 	}
 
 	ctxMeta, _ := ctx.Value("meta").(map[string]string)
@@ -138,7 +137,7 @@ func handleRun(ctx context.Context, args shellArgs) (string, error) {
 	err = saveMeta(sid, meta)
 	if err != nil {
 		killSession(sid)
-		return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+		return llm.ToolError(err), nil
 	}
 
 	slog.Info("shell run", "pkg", "shell", "id", sid,
@@ -158,11 +157,11 @@ func handleRun(ctx context.Context, args shellArgs) (string, error) {
 
 	if !alive {
 		killSession(sid)
-		return fmt.Sprintf(`{"status":"exited","exit_code":%d,"output":%q}`, code, output), nil
+		return llm.ToolResult(map[string]any{"status": "exited", "exit_code": code, "output": output}), nil
 	}
 
 	nca := meta.NextCheckAt.Format(time.RFC3339)
-	return fmt.Sprintf(`{"status":"running","session_id":%q,"next_check_at":%q,"output":%q}`, sid, nca, output), nil
+	return llm.ToolResult(map[string]any{"status": "running", "session_id": sid, "next_check_at": nca, "output": output}), nil
 }
 
 func handleInteract(args shellArgs) (string, error) {
@@ -173,7 +172,7 @@ func handleInteract(args shellArgs) (string, error) {
 	if args.Input != "" {
 		err := sendKeys(args.SessionID, args.Input, "Enter")
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 	}
 
@@ -181,7 +180,7 @@ func handleInteract(args shellArgs) (string, error) {
 
 	if !alive {
 		killSession(args.SessionID)
-		return fmt.Sprintf(`{"status":"exited","exit_code":%d,"output":%q}`, code, output), nil
+		return llm.ToolResult(map[string]any{"status": "exited", "exit_code": code, "output": output}), nil
 	}
 
 	meta, _ := loadMeta(args.SessionID)
@@ -195,7 +194,7 @@ func handleInteract(args shellArgs) (string, error) {
 	}
 
 	nca := meta.NextCheckAt.Format(time.RFC3339)
-	return fmt.Sprintf(`{"status":"running","next_check_at":%q,"output":%q}`, nca, output), nil
+	return llm.ToolResult(map[string]any{"status": "running", "next_check_at": nca, "output": output}), nil
 }
 
 func handleKill(args shellArgs) (string, error) {
@@ -205,7 +204,7 @@ func handleKill(args shellArgs) (string, error) {
 
 	err := killSession(args.SessionID)
 	if err != nil {
-		return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+		return llm.ToolError(err), nil
 	}
 
 	return `{"ok":true}`, nil

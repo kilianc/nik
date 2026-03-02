@@ -3,7 +3,6 @@ package llm
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"mime"
 	"path/filepath"
 	"strings"
@@ -52,7 +51,7 @@ func describeMedia(ctx context.Context, call ToolCall, client *Client, home stri
 
 	err := json.Unmarshal([]byte(call.Arguments), &args)
 	if err != nil {
-		return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+		return ToolError(err), nil
 	}
 	if args.FilePath == "" {
 		return `{"error":"empty file_path"}`, nil
@@ -68,9 +67,9 @@ func describeMedia(ctx context.Context, call ToolCall, client *Client, home stri
 	if isAudioExt(ext) {
 		text, err := client.Transcribe(ctx, args.FilePath)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return ToolError(err), nil
 		}
-		return fmt.Sprintf(`{"type":"transcript","text":%q}`, text), nil
+		return ToolResult(map[string]any{"type": "transcript", "text": text}), nil
 	}
 
 	if mimeType == "" {
@@ -88,10 +87,10 @@ func describeMedia(ctx context.Context, call ToolCall, client *Client, home stri
 
 	text, err := client.Describe(ctx, args.FilePath, mimeType, question)
 	if err != nil {
-		return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+		return ToolError(err), nil
 	}
 
-	return fmt.Sprintf(`{"type":"description","text":%q}`, text), nil
+	return ToolResult(map[string]any{"type": "description", "text": text}), nil
 }
 
 func isAudioExt(ext string) bool {

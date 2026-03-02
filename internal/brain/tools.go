@@ -71,7 +71,7 @@ func (b *Brain) toolExecutor() llm.ToolExecutor {
 	return func(ctx context.Context, call llm.ToolCall) (string, error) {
 		handler, ok := b.toolExec[call.Name]
 		if !ok {
-			return fmt.Sprintf(`{"error":"unknown tool %q"}`, call.Name), nil
+			return llm.ToolErrorf("unknown tool %q", call.Name), nil
 		}
 
 		return handler(ctx, call)

@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 
 	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/llm"
@@ -54,7 +53,7 @@ func updateContactHandler(conn *sql.DB) llm.ToolExecutor {
 
 		err := json.Unmarshal([]byte(call.Arguments), &args)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		var arrayValue []string
@@ -62,13 +61,13 @@ func updateContactHandler(conn *sql.DB) llm.ToolExecutor {
 		case "nicknames", "emails", "phone_numbers":
 			err = json.Unmarshal([]byte(args.Value), &arrayValue)
 			if err != nil {
-				return fmt.Sprintf(`{"error":%q}`, fmt.Sprintf("parse %s: %v", args.Field, err)), nil
+				return llm.ToolErrorf("parse %s: %v", args.Field, err), nil
 			}
 		}
 
 		err = db.UpdateContactField(ctx, conn, args.ContactID, args.Field, args.Value, arrayValue)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		return `{"ok":true}`, nil

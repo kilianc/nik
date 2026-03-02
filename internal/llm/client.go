@@ -213,7 +213,7 @@ func (c *Client) Complete(ctx context.Context, instructions, input string, tools
 			}
 
 			if err != nil {
-				result = fmt.Sprintf(`{"error":%q}`, err.Error())
+				result = ToolError(err)
 				rec.Error = true
 			}
 

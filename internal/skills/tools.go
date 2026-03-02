@@ -59,7 +59,7 @@ func loadSkillHandler(cfg *config.Config) llm.ToolExecutor {
 
 		err := json.Unmarshal([]byte(call.Arguments), &args)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		dirs := []string{cfg.SkillsPath(), cfg.WorkspaceSkillsPath()}
@@ -70,7 +70,7 @@ func loadSkillHandler(cfg *config.Config) llm.ToolExecutor {
 		case "load":
 			return handleLoad(dirs, args.Name)
 		default:
-			return fmt.Sprintf(`{"error":"unknown action %q"}`, args.Action), nil
+			return llm.ToolErrorf("unknown action %q", args.Action), nil
 		}
 	}
 }
@@ -78,12 +78,12 @@ func loadSkillHandler(cfg *config.Config) llm.ToolExecutor {
 func handleList(dirs []string) (string, error) {
 	summaries, err := ListSkills(dirs...)
 	if err != nil {
-		return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+		return llm.ToolError(err), nil
 	}
 
 	data, err := json.Marshal(map[string]any{"skills": summaries})
 	if err != nil {
-		return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+		return llm.ToolError(err), nil
 	}
 
 	return string(data), nil
@@ -106,7 +106,7 @@ func handleLoad(dirs []string, name string) (string, error) {
 		return string(data), nil
 	}
 
-	return fmt.Sprintf(`{"error":"skill %q not found"}`, name), nil
+	return llm.ToolErrorf("skill %q not found", name), nil
 }
 
 // ListSkills reads skill directories and parses frontmatter summaries.

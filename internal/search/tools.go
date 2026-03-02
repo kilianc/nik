@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	"github.com/kciuffolo/nik/internal/llm"
@@ -77,7 +76,7 @@ func contactSearchHandler(svc *Service) llm.ToolExecutor {
 
 		err := json.Unmarshal([]byte(call.Arguments), &args)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		if len(args.Queries) == 0 {
@@ -112,7 +111,7 @@ func contactSearchHandler(svc *Service) llm.ToolExecutor {
 			"thresh":  args.Threshold,
 		})
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		return string(data), nil
@@ -127,7 +126,7 @@ func queryHandler(conn *sql.DB) llm.ToolExecutor {
 
 		err := json.Unmarshal([]byte(call.Arguments), &args)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 		if args.Query == "" {
 			return `{"error":"empty query"}`, nil
@@ -139,13 +138,13 @@ func queryHandler(conn *sql.DB) llm.ToolExecutor {
 
 		rows, err := conn.QueryContext(ctx, args.Query)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 		defer rows.Close()
 
 		cols, err := rows.Columns()
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		var results []map[string]any
@@ -165,7 +164,7 @@ func queryHandler(conn *sql.DB) llm.ToolExecutor {
 
 			err = rows.Scan(ptrs...)
 			if err != nil {
-				return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+				return llm.ToolError(err), nil
 			}
 
 			row := make(map[string]any, len(cols))
@@ -178,7 +177,7 @@ func queryHandler(conn *sql.DB) llm.ToolExecutor {
 
 		err = rows.Err()
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		out := map[string]any{
@@ -191,7 +190,7 @@ func queryHandler(conn *sql.DB) llm.ToolExecutor {
 
 		data, err := json.Marshal(out)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		return string(data), nil

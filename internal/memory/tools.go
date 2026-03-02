@@ -83,7 +83,7 @@ func storeMemoryHandler(svc *Service) llm.ToolExecutor {
 
 		err := json.Unmarshal([]byte(call.Arguments), &args)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		metadata := map[string]any{"source": "brain"}
@@ -100,10 +100,10 @@ func storeMemoryHandler(svc *Service) llm.ToolExecutor {
 
 			m, err := svc.Add(ctx, args.Content, metadata, source, sourceID)
 			if err != nil {
-				return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+				return llm.ToolError(err), nil
 			}
 
-			return fmt.Sprintf(`{"stored":true,"id":%q}`, m.ID), nil
+			return llm.ToolResult(map[string]any{"stored": true, "id": m.ID}), nil
 		}
 
 		if len(similar) > 0 && similar[0].Score >= dedupeThreshold {
@@ -119,29 +119,29 @@ func storeMemoryHandler(svc *Service) llm.ToolExecutor {
 
 				m, err := svc.Add(ctx, args.Content, metadata, source, sourceID)
 				if err != nil {
-					return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+					return llm.ToolError(err), nil
 				}
 
-				return fmt.Sprintf(`{"stored":true,"id":%q}`, m.ID), nil
+				return llm.ToolResult(map[string]any{"stored": true, "id": m.ID}), nil
 			}
 
 			_ = svc.Delete(ctx, existing.ID)
 
 			m, err := svc.Add(ctx, merged, metadata, source, sourceID)
 			if err != nil {
-				return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+				return llm.ToolError(err), nil
 			}
 
 			slog.Info("store_memory merged", "pkg", "memory", "old_id", existing.ID, "new_id", m.ID)
-			return fmt.Sprintf(`{"merged":true,"old_id":%q,"new_id":%q}`, existing.ID, m.ID), nil
+			return llm.ToolResult(map[string]any{"merged": true, "old_id": existing.ID, "new_id": m.ID}), nil
 		}
 
 		m, err := svc.Add(ctx, args.Content, metadata, source, sourceID)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
-		return fmt.Sprintf(`{"stored":true,"id":%q}`, m.ID), nil
+		return llm.ToolResult(map[string]any{"stored": true, "id": m.ID}), nil
 	}
 }
 
@@ -154,7 +154,7 @@ func searchMemoryHandler(svc *Service) llm.ToolExecutor {
 
 		err := json.Unmarshal([]byte(call.Arguments), &args)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		if len(args.Queries) == 0 {
@@ -167,7 +167,7 @@ func searchMemoryHandler(svc *Service) llm.ToolExecutor {
 
 		results, err := svc.SearchMulti(ctx, args.Queries, args.Limit)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		type memOut struct {
@@ -194,7 +194,7 @@ func deleteMemoryHandler(svc *Service) llm.ToolExecutor {
 
 		err := json.Unmarshal([]byte(call.Arguments), &args)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		if len(args.IDs) == 0 {
