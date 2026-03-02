@@ -124,9 +124,6 @@ var MemorySearch string
 //go:embed memory_delete.sql
 var MemoryDelete string
 
-//go:embed memory_vec_delete.sql
-var MemoryVecDelete string
-
 //go:embed memory_list.sql
 var MemoryList string
 

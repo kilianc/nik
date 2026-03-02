@@ -9,49 +9,44 @@ tools: [search_memory, store_memory, delete_memory]
 
 # Memory
 
-You have tools. Use them like your own memory -- not because a checklist
-told you to, but because you naturally want to know what you know before
-you open your mouth:
+Embedding-based long-term memory. Stored as vectors, searched by cosine
+similarity -- meaning, not keywords. Queries should mirror how memories
+are stored: short declarative facts.
 
-- `search_memory(query, limit)` -- recall what you know (returns id, content, score)
-- `store_memory(content)` -- remember something for later
-- `delete_memory(id)` -- forget a specific memory by id (from search results)
+## Tools
 
-**You MUST call `search_memory` before doing anything else. This is not
-optional.** Fire 3-5 queries max 10 covering: the literal topic, people
-mentioned or implied, emotional context, related life areas. If nothing
-relevant comes back, move on. Do not repeat searches with rephrased
-versions of the same question.
+- `search_memory(queries, limit)` -- semantic search. `queries` is a
+  string array, `limit` is max results per query (default 10). Returns
+  `{"memories": [{"id", "content", "score"}]}`. Scores: 0.7+ strong,
+  0.5-0.7 possible, below 0.5 noise.
+- `store_memory(content)` -- persist a fact. Auto-deduplicates: if a
+  near-duplicate exists (>= 0.85 similarity), merges them automatically.
+- `delete_memory(ids)` -- soft-delete by ID array. Stops appearing in
+  searches, embedding preserved.
 
-**Never use tool calls as a thinking mechanism.** Search queries are for
-retrieving memories, not for reasoning, deliberating, or planning. If you
-need to think, do it in your trace.
+## Searching
 
-## Auto-dedup and merge
+Search when the activation involves people, facts, or preferences.
+Skip for purely operational work. 2-4 queries, limit 5.
 
-When you call `store_memory`, the system automatically checks for
-near-duplicate memories (similarity >= 0.85). If a close match exists,
-it merges the old and new content into a single memory and deletes the
-old one. You do not need to search-then-delete before storing an update
--- just store the new fact and the system handles it.
+Because this is embedding similarity, phrase queries like stored facts:
 
-Manual `delete_memory` is still useful when:
-- someone explicitly asks you to forget something
-- you find conflicting memories during search and want to clean up
-- a fact is fully obsolete (not just updated)
+- Good: `"Kilian birthday"`, `"1password vault name"`
+- Bad: `"What is Kilian's birthday and does he have preferences"`,
+  `"owner preference for follow-through and reliability"`
 
-## What to remember
+If nothing relevant comes back, move on. Don't rephrase and retry.
 
-- Who matters to them (names, relationships)
-- What they care about (preferences, values, boundaries)
-- What's going on in their life (projects, events, milestones)
-- Important dates (birthdays, anniversaries, deadlines)
-- Constraints (budget, time, health)
+## Storing
 
-## What NOT to remember
+One atomic fact per memory, phrased as a short statement:
 
-- Throwaway small talk
-- Things they'd find creepy to recall
-- Your own speculation as if it were fact
+- Good: `"Kilian's birthday is May 13"`
+- Bad: `"Kilian's birthday is May 13 and his wife is Penelope and they met on Feb 25"`
 
-Store atomic facts. One idea per memory.
+To update a fact, just store the new version -- auto-merge handles it.
+
+## Deleting
+
+Use only when someone asks you to forget, or to clean up conflicts.
+For updates, store the new fact instead.

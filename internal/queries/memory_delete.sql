@@ -1,1 +1,1 @@
-DELETE FROM memory WHERE id = ?1
+UPDATE memory SET deleted_at = datetime('now') WHERE id = ?1
