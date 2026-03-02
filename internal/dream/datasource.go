@@ -151,9 +151,9 @@ func (d *DataSource) buildContext(ctx context.Context, now time.Time, pass int) 
 }
 
 func (d *DataSource) loadPrompt(pass int) ([]string, error) {
-	name := "02-dream.md"
+	name := "dream.md"
 	if pass == totalPasses {
-		name = "03-wake.md"
+		name = "wake.md"
 	}
 
 	path := d.cfg.PromptsPath() + "/" + name

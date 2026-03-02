@@ -179,7 +179,7 @@ func (d *DataSource) fetchNews(ctx context.Context, topics []db.BriefingTopic) [
 }
 
 func (d *DataSource) loadPrompt() ([]string, error) {
-	path := d.cfg.PromptsPath() + "/04-briefing.md"
+	path := d.cfg.PromptsPath() + "/briefing.md"
 
 	data, err := os.ReadFile(path)
 	if err != nil {
