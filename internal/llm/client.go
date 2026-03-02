@@ -204,7 +204,7 @@ func (c *Client) Complete(ctx context.Context, instructions, input string, tools
 		for _, call := range calls {
 			items = append(items, responses.ResponseInputItemParamOfFunctionCall(call.Arguments, call.CallID, call.Name))
 
-			slog.Info("tool call", "pkg", "llm", "tool", call.Name, "round", round, "args", parseToolCallArgs(call.Arguments))
+			slog.Info("tool call", toolCallAttrs(call.Name, round, call.Arguments)...)
 			result, err := executor(ctx, call)
 
 			rec := ToolCallRecord{
@@ -383,12 +383,18 @@ func buildToolParams(tools []ToolDef) []responses.ToolUnionParam {
 	return params
 }
 
-func parseToolCallArgs(raw string) any {
-	var parsed any
+func toolCallAttrs(name string, round int, raw string) []any {
+	attrs := []any{"pkg", "llm", "tool", name, "round", round}
+
+	var parsed map[string]any
 	err := json.Unmarshal([]byte(raw), &parsed)
 	if err != nil {
-		return raw
+		return append(attrs, "args", raw)
 	}
 
-	return parsed
+	for k, v := range parsed {
+		attrs = append(attrs, k, v)
+	}
+
+	return attrs
 }
