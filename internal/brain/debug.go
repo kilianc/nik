@@ -159,41 +159,42 @@ func writeDebugMarkdown(path string, rec debugRecord) error {
 	w.WriteString(preserveNewlines(rec.Input.Instructions))
 	w.WriteString("\n\n</details>\n\n---\n\n")
 
-	w.WriteString("## User Input\n\n")
+	w.WriteString("<details><summary>User Input</summary>\n\n")
 	w.WriteString(preserveNewlines(rec.Input.UserInput))
-	w.WriteString("\n\n---\n\n")
+	w.WriteString("\n\n</details>\n\n---\n\n")
 
 	if len(rec.Tools) > 0 {
-		w.WriteString("## Tools\n\n")
+		w.WriteString("<details><summary>Tools</summary>\n\n")
 		for i, t := range rec.Tools {
 			if i > 0 {
 				w.WriteString(", ")
 			}
 			fmt.Fprintf(&w, "`%s`", t)
 		}
-		w.WriteString("\n\n---\n\n")
+		w.WriteString("\n\n</details>\n\n---\n\n")
 	}
 
 	if len(rec.ToolCalls) > 0 {
-		w.WriteString("## Tool Calls\n\n")
+		w.WriteString("<details open><summary>Tool Calls</summary>\n\n")
 		for i, tc := range rec.ToolCalls {
 			label := tc.Name
 			if tc.Error {
 				label += " (error)"
 			}
-			fmt.Fprintf(&w, "### %d. %s\n\n", i+1, label)
 
+			fmt.Fprintf(&w, "<details><summary>%d. %s</summary>\n\n", i+1, label)
 			w.WriteString("**Args:**\n\n")
 			writeFencedBlock(&w, tc.Args)
-
 			w.WriteString("**Result:**\n\n")
 			writeFencedBlock(&w, tc.Result)
+			w.WriteString("</details>\n\n")
 		}
-		w.WriteString("---\n\n")
+		w.WriteString("</details>\n\n---\n\n")
 	}
 
-	w.WriteString("## Output\n\n")
+	w.WriteString("<details open><summary>Output</summary>\n\n")
 	writeOutputSection(&w, rec.Output)
+	w.WriteString("</details>\n")
 
 	err := os.WriteFile(path, []byte(w.String()), 0o644)
 	if err != nil {

@@ -181,12 +181,12 @@ func testDataSource(t *testing.T, now time.Time) *DataSource {
 		t.Fatalf("create prompts dir: %v", err)
 	}
 
-	err = os.WriteFile(filepath.Join(promptPath, "02-dream.md"), []byte("you are dreaming"), 0o644)
+	err = os.WriteFile(filepath.Join(promptPath, "dream.md"), []byte("you are dreaming"), 0o644)
 	if err != nil {
 		t.Fatalf("write dream prompt: %v", err)
 	}
 
-	err = os.WriteFile(filepath.Join(promptPath, "03-wake.md"), []byte("you are waking up"), 0o644)
+	err = os.WriteFile(filepath.Join(promptPath, "wake.md"), []byte("you are waking up"), 0o644)
 	if err != nil {
 		t.Fatalf("write wake prompt: %v", err)
 	}

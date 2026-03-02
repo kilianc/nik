@@ -110,7 +110,7 @@ func testDataSource(t *testing.T, now time.Time) *DataSource {
 		t.Fatalf("create prompts dir: %v", err)
 	}
 
-	err = os.WriteFile(filepath.Join(promptPath, "01-journal.md"), []byte("reflect on your day"), 0o644)
+	err = os.WriteFile(filepath.Join(promptPath, "journal.md"), []byte("reflect on your day"), 0o644)
 	if err != nil {
 		t.Fatalf("write prompt: %v", err)
 	}

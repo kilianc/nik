@@ -114,7 +114,7 @@ func dayBounds(now time.Time, cfg *config.Config) (time.Time, time.Time) {
 }
 
 func (d *DataSource) loadPrompt() ([]string, error) {
-	path := d.cfg.PromptsPath() + "/01-journal.md"
+	path := d.cfg.PromptsPath() + "/journal.md"
 
 	data, err := os.ReadFile(path)
 	if err != nil {
