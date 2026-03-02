@@ -95,7 +95,9 @@ func (s *Service) SearchMulti(ctx context.Context, queries_ []string, limit int)
 			return nil, fmt.Errorf("serialize embedding: %w", err)
 		}
 
-		rows, err := s.db.QueryContext(ctx, queries.MemorySearch, embedding, limit)
+		// over-fetch from the vector index because the deleted_at filter
+		// runs after KNN retrieval and may discard some of the k results
+		rows, err := s.db.QueryContext(ctx, queries.MemorySearch, embedding, limit*2)
 		if err != nil {
 			return nil, fmt.Errorf("search memories: %w", err)
 		}
@@ -127,23 +129,12 @@ func (s *Service) SearchMulti(ctx context.Context, queries_ []string, limit int)
 }
 
 func (s *Service) Delete(ctx context.Context, id string) error {
-	tx, err := s.db.BeginTx(ctx, nil)
+	_, err := s.db.ExecContext(ctx, queries.MemoryDelete, id)
 	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
-	}
-	defer tx.Rollback()
-
-	_, err = tx.ExecContext(ctx, queries.MemoryVecDelete, id)
-	if err != nil {
-		return fmt.Errorf("delete vec_memory %s: %w", id, err)
+		return fmt.Errorf("soft-delete memory %s: %w", id, err)
 	}
 
-	_, err = tx.ExecContext(ctx, queries.MemoryDelete, id)
-	if err != nil {
-		return fmt.Errorf("delete memory %s: %w", id, err)
-	}
-
-	return tx.Commit()
+	return nil
 }
 
 func (s *Service) List(ctx context.Context, limit int) ([]Memory, error) {

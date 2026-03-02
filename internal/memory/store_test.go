@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"testing"
 
@@ -77,7 +78,7 @@ func TestListMemories(t *testing.T) {
 	}
 }
 
-func TestDeleteMemory(t *testing.T) {
+func TestDeleteMemorySoftDeletes(t *testing.T) {
 	ctx := context.Background()
 
 	conn, err := db.OpenInMemory()
@@ -88,9 +89,9 @@ func TestDeleteMemory(t *testing.T) {
 
 	svc := &Service{db: conn}
 
-	id := insertTestMemory(t, ctx, svc, "temporary fact", 0.3)
+	memID := insertTestMemory(t, ctx, svc, "temporary fact", 0.3)
 
-	err = svc.Delete(ctx, id)
+	err = svc.Delete(ctx, memID)
 	if err != nil {
 		t.Fatalf("delete memory: %v", err)
 	}
@@ -101,7 +102,29 @@ func TestDeleteMemory(t *testing.T) {
 	}
 
 	if len(memories) != 0 {
-		t.Fatalf("expected 0 memories after delete, got %d", len(memories))
+		t.Fatalf("expected 0 memories in list after soft delete, got %d", len(memories))
+	}
+
+	var deletedAt sql.NullString
+
+	err = conn.QueryRowContext(ctx, "SELECT deleted_at FROM memory WHERE id = ?1", memID).Scan(&deletedAt)
+	if err != nil {
+		t.Fatalf("query deleted memory row: %v", err)
+	}
+
+	if !deletedAt.Valid {
+		t.Fatal("expected deleted_at to be set, got NULL")
+	}
+
+	var vecCount int
+
+	err = conn.QueryRowContext(ctx, "SELECT count(*) FROM vec_memory WHERE id = ?1", memID).Scan(&vecCount)
+	if err != nil {
+		t.Fatalf("query vec_memory after soft delete: %v", err)
+	}
+
+	if vecCount != 1 {
+		t.Fatalf("expected vec_memory row preserved after soft delete, got %d", vecCount)
 	}
 }
 

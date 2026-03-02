@@ -116,7 +116,8 @@ CREATE TABLE IF NOT EXISTS memory (
   metadata   TEXT,
   source     TEXT,
   source_id  TEXT,
-  created_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
+  created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+  deleted_at TIMESTAMP
 );
 
 CREATE VIRTUAL TABLE IF NOT EXISTS vec_memory USING vec0(
