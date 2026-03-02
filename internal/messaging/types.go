@@ -48,4 +48,5 @@ type OutboundMessage struct {
 	Kind              string
 	Body              string
 	MimeType          string
+	LocalPath         string
 }

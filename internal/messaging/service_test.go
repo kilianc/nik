@@ -3,6 +3,7 @@ package messaging
 import (
 	"context"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -175,9 +176,11 @@ type mockPlatform struct {
 	startTypingCalls int
 	stopTypingCalls  int
 	replyCalls       int
+	sendImageCalls   int
 	markReadCalls    int
 	lastReadRefs     []InboundMessage
 	outbound         OutboundMessage
+	imageOutbound    OutboundMessage
 }
 
 func (m *mockPlatform) Platform() string { return m.platform }
@@ -188,6 +191,10 @@ func (m *mockPlatform) Stop(_ context.Context) error { return nil }
 func (m *mockPlatform) Reply(_ context.Context, _ string, _ string) (OutboundMessage, error) {
 	m.replyCalls++
 	return m.outbound, nil
+}
+func (m *mockPlatform) SendImage(_ context.Context, _ string, _ string, _ string) (OutboundMessage, error) {
+	m.sendImageCalls++
+	return m.imageOutbound, nil
 }
 func (m *mockPlatform) React(_ context.Context, _, _, _, _ string) error { return nil }
 func (m *mockPlatform) SetPresence(_ context.Context, _ bool) error      { return nil }
@@ -275,6 +282,90 @@ func TestReplyPersistsOutboundImmediately(t *testing.T) {
 	}
 	if platform.replyCalls != 1 {
 		t.Fatalf("expected one reply call, got %d", platform.replyCalls)
+	}
+}
+
+func TestSendImagePersistsOutbound(t *testing.T) {
+	ctx := context.Background()
+
+	conn, err := db.OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	contactsSvc := contacts.NewService(conn)
+	svc := NewService(&config.Config{}, conn, contactsSvc)
+	svc.replyDelay = func(string) time.Duration { return 0 }
+
+	now := time.Now()
+	err = db.UpsertConversation(ctx, conn, db.UpsertConversationParams{
+		Platform:               "whatsapp",
+		ExternalConversationID: "conversation@s.whatsapp.net",
+		Kind:                   "dm",
+		LastMessageAt:          &now,
+	})
+	if err != nil {
+		t.Fatalf("upsert conversation: %v", err)
+	}
+
+	conversation, err := db.GetConversation(ctx, conn, db.GetConversationParams{
+		Platform:               "whatsapp",
+		ExternalConversationID: "conversation@s.whatsapp.net",
+	})
+	if err != nil {
+		t.Fatalf("get conversation: %v", err)
+	}
+
+	tmpFile, err := os.CreateTemp("", "test-image-*.jpg")
+	if err != nil {
+		t.Fatalf("create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+	_, _ = tmpFile.Write([]byte("fake image data"))
+	tmpFile.Close()
+
+	platform := &mockPlatform{
+		platform: "whatsapp",
+		imageOutbound: OutboundMessage{
+			ExternalMessageID: "img-1",
+			ExternalSenderID:  "nik@s.whatsapp.net",
+			SentAt:            now,
+			Kind:              "image",
+			Body:              "check this out",
+			MimeType:          "image/jpeg",
+			LocalPath:         "abc123.jpg",
+		},
+	}
+	svc.RegisterPlatform(platform)
+
+	err = svc.SendImage(ctx, conversation.ID, tmpFile.Name(), "check this out")
+	if err != nil {
+		t.Fatalf("send image: %v", err)
+	}
+
+	msg, err := db.GetMessage(ctx, conn, db.GetMessageParams{
+		Platform:          "whatsapp",
+		ExternalMessageID: "img-1",
+	})
+	if err != nil {
+		t.Fatalf("get outbound image message: %v", err)
+	}
+
+	if !msg.IsFromMe {
+		t.Fatalf("expected outbound message is_from_me=true")
+	}
+	if msg.Kind != "image" {
+		t.Fatalf("expected kind image, got %q", msg.Kind)
+	}
+	if msg.Body != "check this out" {
+		t.Fatalf("expected body 'check this out', got %q", msg.Body)
+	}
+	if platform.sendImageCalls != 1 {
+		t.Fatalf("expected one send image call, got %d", platform.sendImageCalls)
+	}
+	if platform.startTypingCalls != 1 || platform.stopTypingCalls != 1 {
+		t.Fatalf("expected start/stop typing once each, got start=%d stop=%d", platform.startTypingCalls, platform.stopTypingCalls)
 	}
 }
 

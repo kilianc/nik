@@ -3,9 +3,13 @@ package whatsapp
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
+	"mime"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/kciuffolo/nik/internal/messaging"
@@ -161,6 +165,62 @@ func (c *Client) Reply(ctx context.Context, conversationJID, text string) (messa
 		SentAt:            resp.Timestamp,
 		Kind:              "text",
 		Body:              text,
+	}, nil
+}
+
+func (c *Client) SendImage(ctx context.Context, conversationJID, imagePath, caption string) (messaging.OutboundMessage, error) {
+	jid, err := types.ParseJID(conversationJID)
+	if err != nil {
+		return messaging.OutboundMessage{}, fmt.Errorf("parse conversation jid: %w", err)
+	}
+
+	data, err := os.ReadFile(imagePath)
+	if err != nil {
+		return messaging.OutboundMessage{}, fmt.Errorf("read image file: %w", err)
+	}
+
+	mimeType := mime.TypeByExtension(filepath.Ext(imagePath))
+	if mimeType == "" {
+		mimeType = "image/jpeg"
+	}
+
+	resp, err := c.wm.Upload(ctx, data, whatsmeow.MediaImage)
+	if err != nil {
+		return messaging.OutboundMessage{}, fmt.Errorf("upload image: %w", err)
+	}
+
+	imageMsg := &waProto.ImageMessage{
+		Caption:       proto.String(caption),
+		Mimetype:      proto.String(mimeType),
+		URL:           &resp.URL,
+		DirectPath:    &resp.DirectPath,
+		MediaKey:      resp.MediaKey,
+		FileEncSHA256: resp.FileEncSHA256,
+		FileSHA256:    resp.FileSHA256,
+		FileLength:    &resp.FileLength,
+	}
+
+	sendResp, err := c.wm.SendMessage(ctx, jid, &waProto.Message{ImageMessage: imageMsg})
+	if err != nil {
+		return messaging.OutboundMessage{}, fmt.Errorf("send image: %w", err)
+	}
+
+	externalSenderID := sendResp.Sender.String()
+	if externalSenderID == "" {
+		externalSenderID = c.SelfJID()
+	}
+
+	sum := sha256.Sum256(data)
+	hash := hex.EncodeToString(sum[:])
+
+	return messaging.OutboundMessage{
+		ExternalMessageID: string(sendResp.ID),
+		ExternalSenderID:  externalSenderID,
+		SentAt:            sendResp.Timestamp,
+		Kind:              "image",
+		Body:              caption,
+		MimeType:          mimeType,
+		LocalPath:         hash + filepath.Ext(imagePath),
 	}, nil
 }
 

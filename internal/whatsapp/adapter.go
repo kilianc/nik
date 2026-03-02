@@ -42,6 +42,10 @@ func (a *Adapter) Reply(ctx context.Context, externalConversationID string, body
 	return a.client.Reply(ctx, externalConversationID, body)
 }
 
+func (a *Adapter) SendImage(ctx context.Context, externalConversationID string, imagePath string, caption string) (messaging.OutboundMessage, error) {
+	return a.client.SendImage(ctx, externalConversationID, imagePath, caption)
+}
+
 func (a *Adapter) React(ctx context.Context, externalConversationID string, externalMessageID string, externalSenderID string, emoji string) error {
 	return a.client.React(ctx, externalConversationID, externalMessageID, externalSenderID, emoji)
 }
