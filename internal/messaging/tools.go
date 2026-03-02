@@ -10,7 +10,7 @@ import (
 
 var replyToolDef = llm.ToolDef{
 	Name:        "message_reply",
-	Description: "Send a text reply to a conversation.",
+	Description: "Send a reply to a conversation. Supports text and image messages.",
 	Parameters: map[string]any{
 		"type": "object",
 		"properties": map[string]any{
@@ -20,10 +20,14 @@ var replyToolDef = llm.ToolDef{
 			},
 			"message": map[string]any{
 				"type":        "string",
-				"description": "Reply text.",
+				"description": "Reply text, or image caption when sending an image.",
+			},
+			"image_path": map[string]any{
+				"type":        "string",
+				"description": "Absolute path to an image file to send. Pass empty string for text-only replies.",
 			},
 		},
-		"required":             []string{"conversation_id", "message"},
+		"required":             []string{"conversation_id", "message", "image_path"},
 		"additionalProperties": false,
 	},
 }
@@ -161,6 +165,7 @@ func replyHandler(svc *Service) llm.ToolExecutor {
 		var args struct {
 			ConversationID string `json:"conversation_id"`
 			Message        string `json:"message"`
+			ImagePath      string `json:"image_path"`
 		}
 
 		err := json.Unmarshal([]byte(call.Arguments), &args)
@@ -175,7 +180,12 @@ func replyHandler(svc *Service) llm.ToolExecutor {
 			return `{"error":"missing conversation_id"}`, nil
 		}
 
-		err = svc.Reply(ctx, args.ConversationID, args.Message)
+		if strings.TrimSpace(args.ImagePath) != "" {
+			err = svc.SendImage(ctx, args.ConversationID, args.ImagePath, args.Message)
+		} else {
+			err = svc.Reply(ctx, args.ConversationID, args.Message)
+		}
+
 		if err != nil {
 			return llm.ToolError(err), nil
 		}

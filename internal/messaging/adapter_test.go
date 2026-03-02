@@ -24,6 +24,9 @@ func (f *fakePlatformAdapter) Stop(context.Context) error { return nil }
 func (f *fakePlatformAdapter) Reply(context.Context, string, string) (OutboundMessage, error) {
 	return OutboundMessage{}, nil
 }
+func (f *fakePlatformAdapter) SendImage(context.Context, string, string, string) (OutboundMessage, error) {
+	return OutboundMessage{}, nil
+}
 func (f *fakePlatformAdapter) React(context.Context, string, string, string, string) error {
 	return nil
 }

@@ -30,6 +30,33 @@ func TestBuildToolsReturnsExpectedToolNames(t *testing.T) {
 	}
 }
 
+func TestReplyToolDefHasImagePathParam(t *testing.T) {
+	props, ok := replyToolDef.Parameters["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected properties map")
+	}
+
+	if _, ok := props["image_path"]; !ok {
+		t.Fatalf("expected 'image_path' parameter in reply tool def")
+	}
+
+	required, ok := replyToolDef.Parameters["required"].([]string)
+	if !ok {
+		t.Fatalf("expected required slice")
+	}
+
+	found := false
+	for _, r := range required {
+		if r == "image_path" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected 'image_path' in required list")
+	}
+}
+
 func TestReplyHandlerRejectsInvalidJSON(t *testing.T) {
 	handler := replyHandler(&Service{})
 

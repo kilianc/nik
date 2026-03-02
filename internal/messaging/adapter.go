@@ -13,6 +13,7 @@ type MessagingPlatform interface {
 	Start(ctx context.Context, receiver MessageReceiver) error
 	Stop(ctx context.Context) error
 	Reply(ctx context.Context, externalConversationID string, body string) (OutboundMessage, error)
+	SendImage(ctx context.Context, externalConversationID string, imagePath string, caption string) (OutboundMessage, error)
 	React(ctx context.Context, externalConversationID string, externalMessageID string, externalSenderID string, emoji string) error
 	SetPresence(ctx context.Context, available bool) error
 	StartTyping(ctx context.Context, externalConversationID string) error

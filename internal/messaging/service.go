@@ -2,9 +2,12 @@ package messaging
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -297,6 +300,74 @@ func (s *Service) Reply(ctx context.Context, conversationID string, body string)
 		SentAt:                 sentAt,
 		IsFromMe:               true,
 		IsGroup:                conv.Kind == "group",
+	})
+}
+
+func (s *Service) SendImage(ctx context.Context, conversationID string, imagePath string, caption string) error {
+	conv, err := db.GetConversation(ctx, s.db, db.GetConversationParams{ID: conversationID})
+	if err != nil {
+		return err
+	}
+
+	platform, err := s.registry.Get(conv.Platform)
+	if err != nil {
+		return err
+	}
+
+	_ = platform.StartTyping(ctx, conv.ExternalConversationID)
+
+	delayFn := s.replyDelay
+	if delayFn == nil {
+		delayFn = humanizedReplyDelay
+	}
+
+	delay := delayFn(caption)
+	if delay > 0 {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(delay):
+		}
+	}
+
+	outbound, err := platform.SendImage(ctx, conv.ExternalConversationID, imagePath, caption)
+	_ = platform.StopTyping(ctx, conv.ExternalConversationID)
+	if err != nil {
+		return err
+	}
+
+	if outbound.ExternalMessageID == "" {
+		return fmt.Errorf("platform send image missing external_message_id")
+	}
+
+	if outbound.ExternalSenderID == "" {
+		return fmt.Errorf("platform send image missing external_sender_id")
+	}
+
+	sentAt := outbound.SentAt
+	if sentAt.IsZero() {
+		sentAt = time.Now()
+	}
+
+	kind := outbound.Kind
+	if kind == "" {
+		kind = "image"
+	}
+
+	return s.ReceiveMessage(ctx, InboundMessage{
+		Platform:               conv.Platform,
+		ExternalConversationID: conv.ExternalConversationID,
+		ExternalMessageID:      outbound.ExternalMessageID,
+		ExternalSenderID:       outbound.ExternalSenderID,
+		Kind:                   kind,
+		Body:                   caption,
+		MimeType:               outbound.MimeType,
+		SentAt:                 sentAt,
+		IsFromMe:               true,
+		IsGroup:                conv.Kind == "group",
+		LocalPath:              outbound.LocalPath,
+		MediaHash:              mediaHashFromPath(imagePath),
+		MediaSizeBytes:         fileSize(imagePath),
 	})
 }
 
@@ -744,4 +815,23 @@ func (s *Service) FindMessage(ctx context.Context, conversationID, text string) 
 	}
 
 	return db.Message{}, fmt.Errorf("%d messages match %q, quote more text or include sender", len(matches), text)
+}
+
+func mediaHashFromPath(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
+}
+
+func fileSize(path string) int64 {
+	info, err := os.Stat(path)
+	if err != nil {
+		return 0
+	}
+
+	return info.Size()
 }
