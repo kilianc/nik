@@ -21,7 +21,7 @@ func TestDeadSessionRetrigger(t *testing.T) {
 	id := "test-retrigger"
 	defer cleanup(t, id)
 
-	err := newSession(id, "echo done")
+	err := newSession(id, "echo done", "")
 	if err != nil {
 		t.Fatalf("newSession: %v", err)
 	}

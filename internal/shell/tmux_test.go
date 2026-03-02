@@ -27,7 +27,7 @@ func TestNewSessionAndKill(t *testing.T) {
 	id := "test-new-kill"
 	defer cleanup(t, id)
 
-	err := newSession(id, "sleep 60")
+	err := newSession(id, "sleep 60", "")
 	if err != nil {
 		t.Fatalf("newSession: %v", err)
 	}
@@ -48,7 +48,7 @@ func TestEnvVars(t *testing.T) {
 	id := "test-env"
 	defer cleanup(t, id)
 
-	err := newSession(id, "sleep 60")
+	err := newSession(id, "sleep 60", "")
 	if err != nil {
 		t.Fatalf("newSession: %v", err)
 	}
@@ -73,7 +73,7 @@ func TestFastCommand(t *testing.T) {
 	id := "test-fast"
 	defer cleanup(t, id)
 
-	err := newSession(id, "echo hello-nik")
+	err := newSession(id, "echo hello-nik", "")
 	if err != nil {
 		t.Fatalf("newSession: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestStare(t *testing.T) {
 	id := "test-bg"
 	defer cleanup(t, id)
 
-	err := newSession(id, "sleep 30")
+	err := newSession(id, "sleep 30", "")
 	if err != nil {
 		t.Fatalf("newSession: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestSendInput(t *testing.T) {
 	id := "test-send"
 	defer cleanup(t, id)
 
-	err := newSession(id, "cat")
+	err := newSession(id, "cat", "")
 	if err != nil {
 		t.Fatalf("newSession: %v", err)
 	}
@@ -149,7 +149,7 @@ func TestListSessions(t *testing.T) {
 	id := "test-list"
 	defer cleanup(t, id)
 
-	err := newSession(id, "sleep 60")
+	err := newSession(id, "sleep 60", "")
 	if err != nil {
 		t.Fatalf("newSession: %v", err)
 	}
@@ -180,7 +180,7 @@ func TestOutputTruncation(t *testing.T) {
 	id := "test-trunc"
 	defer cleanup(t, id)
 
-	err := newSession(id, "seq 1 50000")
+	err := newSession(id, "seq 1 50000", "")
 	if err != nil {
 		t.Fatalf("newSession: %v", err)
 	}
@@ -203,7 +203,7 @@ func TestExitCode(t *testing.T) {
 	id := "test-exit"
 	defer cleanup(t, id)
 
-	err := newSession(id, "exit 42")
+	err := newSession(id, "exit 42", "")
 	if err != nil {
 		t.Fatalf("newSession: %v", err)
 	}
@@ -223,7 +223,7 @@ func TestStareMissingSession(t *testing.T) {
 
 	id := "test-stare-missing"
 
-	err := newSession(id, "sleep 60")
+	err := newSession(id, "sleep 60", "")
 	if err != nil {
 		t.Fatalf("newSession: %v", err)
 	}

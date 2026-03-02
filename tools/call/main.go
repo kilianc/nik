@@ -138,7 +138,7 @@ func buildTools(cfg *config.Config, llmClient *llm.Client, conn *sql.DB) map[str
 		}
 	}
 
-	for _, t := range shell.BuildTools() {
+	for _, t := range shell.BuildTools(cfg) {
 		tools[t.Def.Name] = t.Handler
 	}
 
