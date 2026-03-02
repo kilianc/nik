@@ -21,6 +21,7 @@ import (
 	"github.com/kciuffolo/nik/internal/dream"
 	"github.com/kciuffolo/nik/internal/journal"
 	"github.com/kciuffolo/nik/internal/llm"
+	niklog "github.com/kciuffolo/nik/internal/log"
 	"github.com/kciuffolo/nik/internal/memory"
 	"github.com/kciuffolo/nik/internal/messaging"
 	"github.com/kciuffolo/nik/internal/search"
@@ -51,7 +52,7 @@ func main() {
 	}
 	defer logFile.Close()
 	logWriter := io.MultiWriter(os.Stderr, logFile)
-	logger := slog.New(slog.NewTextHandler(logWriter, nil))
+	logger := slog.New(&niklog.TruncHandler{Inner: slog.NewTextHandler(logWriter, nil)})
 	slog.SetDefault(logger)
 
 	ascii := []string{
