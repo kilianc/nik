@@ -3,7 +3,6 @@ package journal
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/kciuffolo/nik/internal/llm"
 )
@@ -41,7 +40,7 @@ func journalWriteHandler(svc *Service) llm.ToolExecutor {
 
 		err := json.Unmarshal([]byte(call.Arguments), &args)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		if args.Content == "" {
@@ -50,7 +49,7 @@ func journalWriteHandler(svc *Service) llm.ToolExecutor {
 
 		err = svc.WritePage(ctx, args.Content)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		return `{"written":true}`, nil

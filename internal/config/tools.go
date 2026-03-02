@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"slices"
 	"strconv"
@@ -58,7 +57,7 @@ func updateConfigHandler(cfg *Config, conn *sql.DB) llm.ToolExecutor {
 
 		err := json.Unmarshal([]byte(call.Arguments), &args)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		switch args.Action {
@@ -73,7 +72,7 @@ func updateConfigHandler(cfg *Config, conn *sql.DB) llm.ToolExecutor {
 		case "allow_reload":
 			return allowlistReload(cfg)
 		default:
-			return fmt.Sprintf(`{"error":"unknown action %q"}`, args.Action), nil
+			return llm.ToolErrorf("unknown action %q", args.Action), nil
 		}
 	}
 }
@@ -92,7 +91,7 @@ func configGet(cfg *Config) (string, error) {
 
 	data, err := json.Marshal(out)
 	if err != nil {
-		return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+		return llm.ToolError(err), nil
 	}
 
 	return string(data), nil
@@ -109,7 +108,7 @@ func configSet(cfg *Config, field, value string) (string, error) {
 	}
 
 	if readOnlyFields[field] {
-		return fmt.Sprintf(`{"error":"field %q is read-only"}`, field), nil
+		return llm.ToolErrorf("field %q is read-only", field), nil
 	}
 
 	switch field {
@@ -126,16 +125,16 @@ func configSet(cfg *Config, field, value string) (string, error) {
 	case "max_history":
 		n, err := strconv.Atoi(value)
 		if err != nil {
-			return fmt.Sprintf(`{"error":"invalid max_history: %s"}`, value), nil
+			return llm.ToolErrorf("invalid max_history: %s", value), nil
 		}
 		cfg.MaxHistory = n
 	default:
-		return fmt.Sprintf(`{"error":"unknown field %q"}`, field), nil
+		return llm.ToolErrorf("unknown field %q", field), nil
 	}
 
 	err := cfg.Save(cfg.ConfigPath())
 	if err != nil {
-		return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+		return llm.ToolError(err), nil
 	}
 
 	slog.Info("config set", "pkg", "config", "field", field, "value", value)
@@ -150,7 +149,7 @@ func allowlistAdd(ctx context.Context, cfg *Config, conn *sql.DB, conversationID
 
 	_, err := db.GetConversation(ctx, conn, db.GetConversationParams{ID: conversationID})
 	if err != nil {
-		return fmt.Sprintf(`{"error":"conversation not found: %s"}`, conversationID), nil
+		return llm.ToolErrorf("conversation not found: %s", conversationID), nil
 	}
 
 	if slices.Contains(cfg.AllowConversationIDs, conversationID) {
@@ -162,7 +161,7 @@ func allowlistAdd(ctx context.Context, cfg *Config, conn *sql.DB, conversationID
 	err = cfg.Save(cfg.ConfigPath())
 	if err != nil {
 		cfg.AllowConversationIDs = cfg.AllowConversationIDs[:len(cfg.AllowConversationIDs)-1]
-		return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+		return llm.ToolError(err), nil
 	}
 
 	slog.Info("allowlist add", "pkg", "config", "conversation_id", conversationID)
@@ -173,7 +172,7 @@ func allowlistAdd(ctx context.Context, cfg *Config, conn *sql.DB, conversationID
 func allowlistReload(cfg *Config) (string, error) {
 	fresh, err := Load(cfg.Home)
 	if err != nil {
-		return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+		return llm.ToolError(err), nil
 	}
 
 	cfg.AllowConversationIDs = append([]string(nil), fresh.AllowConversationIDs...)
@@ -205,7 +204,7 @@ func allowlistRemove(cfg *Config, conversationID string) (string, error) {
 
 	err := cfg.Save(cfg.ConfigPath())
 	if err != nil {
-		return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+		return llm.ToolError(err), nil
 	}
 
 	slog.Info("allowlist remove", "pkg", "config", "conversation_id", conversationID)

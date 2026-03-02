@@ -3,7 +3,6 @@ package alarms
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/kciuffolo/nik/internal/db"
@@ -114,7 +113,7 @@ func alarmHandler(svc *Service) llm.ToolExecutor {
 
 		err := json.Unmarshal([]byte(call.Arguments), &args)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 		if args.Goal == "" {
 			return `{"error":"empty goal"}`, nil
@@ -133,7 +132,7 @@ func alarmHandler(svc *Service) llm.ToolExecutor {
 
 		alarm, err := svc.CreateAlarm(ctx, args.OriginContactID, originConversationID, args.Goal, args.Recurrence, args.FireAt)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		result := map[string]any{
@@ -163,7 +162,7 @@ func updateAlarmHandler(svc *Service) llm.ToolExecutor {
 
 		err := json.Unmarshal([]byte(call.Arguments), &args)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 		if args.AlarmID == "" {
 			return `{"error":"empty alarm_id"}`, nil
@@ -181,14 +180,14 @@ func updateAlarmHandler(svc *Service) llm.ToolExecutor {
 			if args.NextFireAt != "" {
 				t, err := time.Parse(time.RFC3339, args.NextFireAt)
 				if err != nil {
-					return fmt.Sprintf(`{"error":"parse next_fire_at: %s"}`, err.Error()), nil
+					return llm.ToolErrorf("parse next_fire_at: %s", err.Error()), nil
 				}
 				p.NextFireAt = t
 			}
 
 			err = svc.UpdateAlarm(ctx, args.AlarmID, p)
 			if err != nil {
-				return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+				return llm.ToolError(err), nil
 			}
 		}
 
@@ -200,7 +199,7 @@ func updateAlarmHandler(svc *Service) llm.ToolExecutor {
 			if occurrenceID != "" {
 				err = svc.UpdateOccurrenceNote(ctx, occurrenceID, args.OccurrenceNote)
 				if err != nil {
-					return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+					return llm.ToolError(err), nil
 				}
 			}
 		}
@@ -217,7 +216,7 @@ func cancelAlarmHandler(svc *Service) llm.ToolExecutor {
 
 		err := json.Unmarshal([]byte(call.Arguments), &args)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 		if args.AlarmID == "" {
 			return `{"error":"empty alarm_id"}`, nil
@@ -225,7 +224,7 @@ func cancelAlarmHandler(svc *Service) llm.ToolExecutor {
 
 		err = svc.Cancel(ctx, args.AlarmID)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		return `{"cancelled":true}`, nil

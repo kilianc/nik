@@ -56,7 +56,7 @@ func dreamWriteHandler(svc *Service) llm.ToolExecutor {
 
 		err := json.Unmarshal([]byte(call.Arguments), &args)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		if args.Content == "" {
@@ -65,15 +65,15 @@ func dreamWriteHandler(svc *Service) llm.ToolExecutor {
 
 		pass, err := passFromContext(ctx)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		err = svc.WriteDream(ctx, pass, args.Content)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
-		return fmt.Sprintf(`{"written":true,"pass":%d}`, pass), nil
+		return llm.ToolResult(map[string]any{"written": true, "pass": pass}), nil
 	}
 }
 
@@ -85,7 +85,7 @@ func soulEvolveHandler(svc *Service) llm.ToolExecutor {
 
 		err := json.Unmarshal([]byte(call.Arguments), &args)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		if args.Content == "" {
@@ -94,7 +94,7 @@ func soulEvolveHandler(svc *Service) llm.ToolExecutor {
 
 		pass, err := passFromContext(ctx)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		if pass != totalPasses {
@@ -103,10 +103,10 @@ func soulEvolveHandler(svc *Service) llm.ToolExecutor {
 
 		version, err := svc.WriteSoul(ctx, args.Content)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
-		return fmt.Sprintf(`{"evolved":true,"version":%d}`, version), nil
+		return llm.ToolResult(map[string]any{"evolved": true, "version": version}), nil
 	}
 }
 

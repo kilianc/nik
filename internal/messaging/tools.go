@@ -3,7 +3,6 @@ package messaging
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	"github.com/kciuffolo/nik/internal/llm"
@@ -166,7 +165,7 @@ func replyHandler(svc *Service) llm.ToolExecutor {
 
 		err := json.Unmarshal([]byte(call.Arguments), &args)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		if strings.TrimSpace(args.ConversationID) == "" {
@@ -178,7 +177,7 @@ func replyHandler(svc *Service) llm.ToolExecutor {
 
 		err = svc.Reply(ctx, args.ConversationID, args.Message)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		return `{"sent":true}`, nil
@@ -194,7 +193,7 @@ func noopHandler() llm.ToolExecutor {
 
 		err := json.Unmarshal([]byte(call.Arguments), &args)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		if strings.TrimSpace(args.ConversationID) == "" {
@@ -217,7 +216,7 @@ func reactHandler(svc *Service) llm.ToolExecutor {
 
 		err := json.Unmarshal([]byte(call.Arguments), &args)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		if strings.TrimSpace(args.Text) == "" {
@@ -231,12 +230,12 @@ func reactHandler(svc *Service) llm.ToolExecutor {
 
 		msg, err := svc.FindMessage(ctx, conversationID, args.Text)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		err = svc.React(ctx, msg.ID, args.Emoji)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		return `{"sent":true}`, nil
@@ -251,7 +250,7 @@ func startTypingHandler(svc *Service) llm.ToolExecutor {
 
 		err := json.Unmarshal([]byte(call.Arguments), &args)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		if strings.TrimSpace(args.ConversationID) == "" {
@@ -263,7 +262,7 @@ func startTypingHandler(svc *Service) llm.ToolExecutor {
 
 		err = svc.StartTyping(ctx, args.ConversationID)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		return `{"ok":true}`, nil
@@ -278,7 +277,7 @@ func stopTypingHandler(svc *Service) llm.ToolExecutor {
 
 		err := json.Unmarshal([]byte(call.Arguments), &args)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		if strings.TrimSpace(args.ConversationID) == "" {
@@ -290,7 +289,7 @@ func stopTypingHandler(svc *Service) llm.ToolExecutor {
 
 		err = svc.StopTyping(ctx, args.ConversationID)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		return `{"ok":true}`, nil
@@ -306,12 +305,12 @@ func setPresenceHandler(svc *Service) llm.ToolExecutor {
 
 		err := json.Unmarshal([]byte(call.Arguments), &args)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		err = svc.SetPresence(ctx, args.Platform, args.Available)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		return `{"ok":true}`, nil
@@ -328,7 +327,7 @@ func updateMediaDescriptionHandler(svc *Service) llm.ToolExecutor {
 
 		err := json.Unmarshal([]byte(call.Arguments), &args)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		if strings.TrimSpace(args.Text) == "" {
@@ -342,12 +341,12 @@ func updateMediaDescriptionHandler(svc *Service) llm.ToolExecutor {
 
 		msg, err := svc.FindMessage(ctx, conversationID, args.Text)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		err = svc.UpdateMediaDescription(ctx, msg.ID, args.Description, args.Body)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		return `{"ok":true}`, nil

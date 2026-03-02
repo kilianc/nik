@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 
 	"github.com/kciuffolo/nik/internal/llm"
 )
@@ -79,7 +78,7 @@ func briefingWriteHandler(svc *Service) llm.ToolExecutor {
 
 		err := json.Unmarshal([]byte(call.Arguments), &args)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		if args.Content == "" {
@@ -88,7 +87,7 @@ func briefingWriteHandler(svc *Service) llm.ToolExecutor {
 
 		err = svc.WriteBriefing(ctx, args.Content)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		return `{"written":true}`, nil
@@ -107,7 +106,7 @@ func briefingTopicsHandler(svc *Service) llm.ToolExecutor {
 
 		err := json.Unmarshal([]byte(call.Arguments), &args)
 		if err != nil {
-			return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+			return llm.ToolError(err), nil
 		}
 
 		switch args.Action {
@@ -126,7 +125,7 @@ func briefingTopicsHandler(svc *Service) llm.ToolExecutor {
 func listTopics(ctx context.Context, svc *Service) (string, error) {
 	topics, err := svc.ListTopics(ctx)
 	if err != nil {
-		return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+		return llm.ToolError(err), nil
 	}
 
 	type topicEntry struct {
@@ -150,7 +149,7 @@ func listTopics(ctx context.Context, svc *Service) (string, error) {
 
 	out, err := json.Marshal(map[string]any{"topics": entries})
 	if err != nil {
-		return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+		return llm.ToolError(err), nil
 	}
 
 	return string(out), nil
@@ -168,10 +167,10 @@ func addTopic(ctx context.Context, svc *Service, query, reason, contactID string
 
 	id, err := svc.AddTopic(ctx, query, reason, cid)
 	if err != nil {
-		return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+		return llm.ToolError(err), nil
 	}
 
-	return fmt.Sprintf(`{"added":true,"id":%q}`, id), nil
+	return llm.ToolResult(map[string]any{"added": true, "id": id}), nil
 }
 
 func removeTopic(ctx context.Context, svc *Service, id string) (string, error) {
@@ -181,7 +180,7 @@ func removeTopic(ctx context.Context, svc *Service, id string) (string, error) {
 
 	err := svc.RemoveTopic(ctx, id)
 	if err != nil {
-		return fmt.Sprintf(`{"error":%q}`, err.Error()), nil
+		return llm.ToolError(err), nil
 	}
 
 	return `{"removed":true}`, nil
