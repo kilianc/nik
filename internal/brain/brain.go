@@ -123,6 +123,8 @@ func (b *Brain) activate(ctx context.Context, output DataSourceOutput) {
 
 	_, _, err := b.think(ctx, output.Lines)
 	if err != nil {
+		// think errors are logged but never block Processed -- datasources
+		// must always run their cleanup (mark-read, release locks, etc.)
 		slog.Error("think failed", "pkg", "brain", "error", err)
 	}
 
@@ -142,13 +144,7 @@ func (b *Brain) think(ctx context.Context, input []string) (string, llm.Usage, e
 		now = time.Now
 	}
 
-	instructions, err := b.loadInstructions(now())
-	if err != nil {
-		return "", llm.Usage{}, err
-	}
-
 	userInput := strings.Join(input, "\n")
-	userInput += "\n\n---\n\nRemember to obey the json output contract."
 
 	thinkCtx, cancel := context.WithTimeout(ctx, activationTimeout)
 	defer cancel()
@@ -160,6 +156,16 @@ func (b *Brain) think(ctx context.Context, input []string) (string, llm.Usage, e
 	var totalUsage llm.Usage
 
 	for attempt := range maxThinkAttempts {
+		retry := attempt > 0
+		if retry {
+			slog.Warn("no tool calls produced, retrying", "pkg", "brain", "attempt", attempt)
+		}
+
+		instructions, err := b.loadInstructions(now(), retry)
+		if err != nil {
+			return "", totalUsage, err
+		}
+
 		output, usage, toolCalls, processErr := b.llm.Complete(thinkCtx, instructions, userInput, tools, executor)
 		b.writeDebugRecord(meta, instructions, userInput, output, tools, toolCalls, usage, processErr)
 
@@ -174,10 +180,6 @@ func (b *Brain) think(ctx context.Context, input []string) (string, llm.Usage, e
 
 		if len(toolCalls) > 0 {
 			return output, totalUsage, nil
-		}
-
-		if attempt < maxThinkAttempts-1 {
-			slog.Warn("no tool calls produced, retrying", "pkg", "brain", "attempt", attempt+1)
 		}
 	}
 

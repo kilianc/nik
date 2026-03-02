@@ -38,8 +38,6 @@ type debugInput struct {
 
 type debugOutput struct {
 	Raw        string
-	Parsed     map[string]any
-	ParseErr   string
 	ProcessErr string
 }
 
@@ -70,12 +68,6 @@ func (b *Brain) writeDebugRecord(meta map[string]string, instructions, userInput
 		return
 	}
 
-	var parsed map[string]any
-	var parseErr error
-	if rawOutput != "" {
-		parseErr = json.Unmarshal([]byte(rawOutput), &parsed)
-	}
-
 	toolNames := make([]string, len(tools))
 	for i, t := range tools {
 		toolNames[i] = t.Name
@@ -91,9 +83,7 @@ func (b *Brain) writeDebugRecord(meta map[string]string, instructions, userInput
 		},
 		Tools:     toolNames,
 		ToolCalls: buildDebugToolCalls(toolCalls),
-		Output: debugOutput{
-			Raw: rawOutput,
-		},
+		Output:    debugOutput{Raw: rawOutput},
 		Usage: debugUsage{
 			InputTokens:  usage.InputTokens,
 			OutputTokens: usage.OutputTokens,
@@ -101,12 +91,6 @@ func (b *Brain) writeDebugRecord(meta map[string]string, instructions, userInput
 			CachedTokens: usage.CachedTokens,
 			CostUSD:      llm.ComputeCost(b.llm.Model(), usage.InputTokens, usage.OutputTokens, usage.CachedTokens),
 		},
-	}
-
-	if parseErr != nil {
-		record.Output.ParseErr = parseErr.Error()
-	} else if parsed != nil {
-		record.Output.Parsed = parsed
 	}
 
 	if processErr != nil {
@@ -220,30 +204,9 @@ func writeDebugMarkdown(path string, rec debugRecord) error {
 }
 
 func writeOutputSection(w *strings.Builder, out debugOutput) {
-	if out.Parsed != nil {
-		if waves, ok := out.Parsed["waves"]; ok {
-			if waveList, ok := waves.([]any); ok && len(waveList) > 0 {
-				w.WriteString("### Waves\n\n")
-				for i, wave := range waveList {
-					fmt.Fprintf(w, "%d. %v\n", i+1, wave)
-				}
-				w.WriteString("\n")
-			}
-		} else {
-			formatted, err := json.MarshalIndent(out.Parsed, "", "  ")
-			if err == nil {
-				w.WriteString("```json\n")
-				w.Write(formatted)
-				w.WriteString("\n```\n\n")
-			}
-		}
-	} else if out.Raw != "" {
-		writeFencedBlock(w, out.Raw)
-	}
-
-	if out.ParseErr != "" {
-		w.WriteString("### Parse Error\n\n")
-		w.WriteString(out.ParseErr)
+	if out.Raw != "" {
+		w.WriteString("### Thinking\n\n")
+		w.WriteString(out.Raw)
 		w.WriteString("\n\n")
 	}
 

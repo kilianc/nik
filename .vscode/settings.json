@@ -1,4 +1,8 @@
 {
+  "markdownlint.config": {
+    "default": false
+  },
+  "markdown.validate.enabled": false,
   "cSpell.words": [
     "duckdb",
     "jids",
