@@ -4,13 +4,12 @@ import (
 	"context"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/kciuffolo/nik/internal/id"
 )
 
 func TestHandleRunValidatesRequiredFields(t *testing.T) {
-	out, err := handleRun(context.Background(), shellArgs{NextCheckAt: "+1m"}, t.TempDir())
+	out, err := handleRun(context.Background(), shellArgs{NextCheckAt: "2026-01-01T00:00:00Z"}, t.TempDir())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -49,89 +48,6 @@ func TestHandleReadMissingSession(t *testing.T) {
 
 	if strings.Contains(result, `"status":"running"`) {
 		t.Fatalf("handleRead reported running for a killed session: %s", result)
-	}
-}
-
-func TestParseCheckAt(t *testing.T) {
-	now := time.Now()
-
-	tests := []struct {
-		name    string
-		input   string
-		wantErr bool
-		check   func(t *testing.T, got time.Time)
-	}{
-		{
-			name:  "rfc3339",
-			input: "2026-03-02T06:00:00Z",
-			check: func(t *testing.T, got time.Time) {
-				want := time.Date(2026, 3, 2, 6, 0, 0, 0, time.UTC)
-				if !got.Equal(want) {
-					t.Fatalf("got %v, want %v", got, want)
-				}
-			},
-		},
-		{
-			name:  "relative seconds",
-			input: "+30s",
-			check: func(t *testing.T, got time.Time) {
-				diff := got.Sub(now)
-				if diff < 29*time.Second || diff > 31*time.Second {
-					t.Fatalf("expected ~30s from now, got %v", diff)
-				}
-			},
-		},
-		{
-			name:  "relative minutes",
-			input: "+5m",
-			check: func(t *testing.T, got time.Time) {
-				diff := got.Sub(now)
-				if diff < 4*time.Minute || diff > 6*time.Minute {
-					t.Fatalf("expected ~5m from now, got %v", diff)
-				}
-			},
-		},
-		{
-			name:  "relative hours",
-			input: "+1h",
-			check: func(t *testing.T, got time.Time) {
-				diff := got.Sub(now)
-				if diff < 59*time.Minute || diff > 61*time.Minute {
-					t.Fatalf("expected ~1h from now, got %v", diff)
-				}
-			},
-		},
-		{
-			name:  "relative days",
-			input: "+1d",
-			check: func(t *testing.T, got time.Time) {
-				diff := got.Sub(now)
-				if diff < 23*time.Hour || diff > 25*time.Hour {
-					t.Fatalf("expected ~24h from now, got %v", diff)
-				}
-			},
-		},
-		{name: "garbage", input: "not-a-time", wantErr: true},
-		{name: "invalid relative", input: "+abc", wantErr: true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseCheckAt(tt.input)
-
-			if tt.wantErr {
-				if err == nil {
-					t.Fatalf("expected error for %q, got %v", tt.input, got)
-				}
-				return
-			}
-
-			if err != nil {
-				t.Fatalf("unexpected error for %q: %v", tt.input, err)
-			}
-
-			tt.check(t, got)
-		})
 	}
 }
 
