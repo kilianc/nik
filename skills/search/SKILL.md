@@ -1,8 +1,8 @@
 ---
 name: search
 summary: >
-  Load this skill to learn how to run read-only SQL queries against
-  nik's SQLite database for ad-hoc data exploration and debugging.
+  Read-only SQL against nik's database. Load this for ad-hoc lookups,
+  stats, and debugging. Owner-only.
 tools: [db_query]
 ---
 

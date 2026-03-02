@@ -1,8 +1,8 @@
 ---
 name: briefing
 summary: >
-  Manage your morning news feed. Add topics to follow,
-  remove stale ones, see what you're tracking.
+  Your morning news feed. Load this when you learn someone cares about a
+  topic, or during the morning briefing activation.
 tools:
   - briefing_topics
   - briefing_write

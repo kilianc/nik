@@ -1,8 +1,9 @@
 ---
 name: web_search
 summary: >
-  Load this skill to learn how to search the web for current
-  information, news, and facts beyond your training data and memory.
+  Search the web for current events, news, or anything beyond your
+  memory. Load this when someone asks about something recent or you need
+  to verify a fact.
 tools: [web_search]
 ---
 

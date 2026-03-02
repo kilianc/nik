@@ -1,8 +1,9 @@
 ---
 name: media
 summary: >
-  Load this skill to learn how to describe or transcribe media files
-  (images, audio, documents, stickers) and persist the results.
+  Describe or transcribe images, audio, stickers, and documents. Load
+  this when you see unprocessed media or someone asks about a past
+  attachment.
 tools: [describe_media]
 ---
 
@@ -28,10 +29,13 @@ Describe or transcribe a media file on disk.
 ### Workflow
 
 1. When you see an unprocessed media attachment in conversation
-   (shown as `[... attached: /path/...]`), call `describe_media` on it
-   first.
+   (identified by `media=` like `(audio) | media=media/abc.ogg`),
+   call `describe_media` with the `media=` value as `file_path`.
 2. After getting the description, call `message_update_media_description`
    to persist it so future activations see the result without
    re-processing.
-3. Use the `question` parameter to re-examine a past photo when someone
+3. If a message shows `media_unavailable` instead of a `media=` path,
+   the file was not downloaded. Do not call `describe_media` --
+   acknowledge you can't process it.
+4. Use the `question` parameter to re-examine a past photo when someone
    asks something specific about it.
