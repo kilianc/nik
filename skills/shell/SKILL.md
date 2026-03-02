@@ -33,7 +33,7 @@ commands in tmux/screen/nohup/bg yourself.
 | `session_id` | read, send, kill | target session |
 | `input` | send | text to type + Enter |
 | `max_wait` | run, read, send | seconds to watch the terminal (polls for exit, returns early). Default 10 for run, 0 for read/send. |
-| `next_check_at` | run, read, send | when to come back. RFC3339 or relative: `+30s`, `+5m`, `+1h`, `+1d`. Required for run. |
+| `next_check_at` | run, read, send | when to come back (RFC3339 absolute timestamp). Required for run. |
 
 ## Two modes
 
@@ -48,8 +48,7 @@ this turn -- reply to the user and stop.
 
 ## Workflow
 
-1. `run` with a `next_check_at` estimate: `+30s` for prompts, `+5m`
-   for builds, `+1d` for long-running services.
+1. `run` with a `next_check_at` estimate based on expected duration.
 2. If the command finishes within `max_wait`, you get the exit code and
    output immediately -- done.
 3. If it's still running, you get partial output and a `session_id`.

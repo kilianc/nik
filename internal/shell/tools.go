@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/id"
 	"github.com/kciuffolo/nik/internal/llm"
 )
