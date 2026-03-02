@@ -18,7 +18,7 @@ coverage: lint
 
 .PHONY: run
 run:
-	go run ./cmd/nik/main.go --home $(NIK_HOME)
+	cd $(NIK_HOME) && go run ../cmd/nik/main.go
 
 .PHONY: run-loop
 run-loop:
@@ -32,7 +32,7 @@ run-loop:
 
 .PHONY: run-replay
 run-replay: clean
-	go run ./cmd/nik/main.go --home $(NIK_HOME) -wapp-replay-history wapp_history.pb64
+	cd $(NIK_HOME) && go run ../cmd/nik/main.go -wapp-replay-history wapp_history.pb64
 
 .PHONY: schema-diff
 schema-diff:
