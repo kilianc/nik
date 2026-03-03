@@ -6,8 +6,6 @@ tools:
   - message_reply
   - message_noop
   - message_react
-  - message_start_typing
-  - message_stop_typing
   - message_set_presence
   - message_update_media_description
 ---
@@ -47,12 +45,6 @@ quoting text from the message line (substring match).
   `"[09:32:10] Kilian Ciuffolo: ok"`.
 - `emoji` -- reaction emoji
 
-### message_start_typing / message_stop_typing
-
-Send typing or paused indicator for a conversation.
-
-- `conversation_id` -- nik conversation UUID (empty = current)
-
 ### message_set_presence
 
 Set account-level presence for a platform.
@@ -74,8 +66,7 @@ from the message line (same matching as `message_react`).
 
 - Every turn must end with at least one action tool call. If you say
   nothing, call `message_noop`.
-- Use `message_start_typing` before long processing to show you're
-  active. Call `message_stop_typing` or just reply (reply stops it
-  implicitly on most platforms).
+- Typing indicators are sent automatically as part of reply -- no need
+  to manage them manually.
 - Reactions are cheap and expressive. A single emoji often says more
   than a message.
