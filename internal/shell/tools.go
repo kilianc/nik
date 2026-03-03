@@ -48,8 +48,12 @@ var shellToolDef = llm.ToolDef{
 				"type":        "string",
 				"description": "When to come back and check (RFC3339 absolute timestamp). You receive the session output at this time and decide what to do. Required for run -- estimate based on expected duration. Optional for read/send -- omit to keep the current schedule.",
 			},
+			"watch_for": map[string]any{
+				"type":        "string",
+				"description": "String to watch for in terminal output. When stare sees this string in new output, it returns early instead of waiting full max_wait. Useful for REPLs that print a prompt after each response.",
+			},
 		},
-		"required":             []string{"action", "command", "description", "session_id", "input", "max_wait", "next_check_at"},
+		"required":             []string{"action", "command", "description", "session_id", "input", "max_wait", "next_check_at", "watch_for"},
 		"additionalProperties": false,
 	},
 }
@@ -62,6 +66,7 @@ type shellArgs struct {
 	Input       string `json:"input"`
 	MaxWait     int    `json:"max_wait"`
 	NextCheckAt string `json:"next_check_at"`
+	WatchFor    string `json:"watch_for"`
 }
 
 func BuildTools(cfg *config.Config) []llm.Tool {
@@ -154,7 +159,7 @@ func handleRun(ctx context.Context, args shellArgs, home string) (string, error)
 		maxWait = 10
 	}
 
-	output, alive, code := stare(sid, maxWait)
+	output, alive, code := stare(sid, maxWait, args.WatchFor)
 
 	if !alive {
 		killSession(sid)
@@ -170,6 +175,14 @@ func handleInteract(args shellArgs) (string, error) {
 		return `{"error":"empty session_id"}`, nil
 	}
 
+	// capture baseline before sending input so watch_for only matches new output
+	var baseline int
+	if args.WatchFor != "" {
+		if out, err := capturePane(args.SessionID); err == nil {
+			baseline = len(out)
+		}
+	}
+
 	if args.Input != "" {
 		err := sendKeys(args.SessionID, args.Input, "Enter")
 		if err != nil {
@@ -177,7 +190,7 @@ func handleInteract(args shellArgs) (string, error) {
 		}
 	}
 
-	output, alive, code := stare(args.SessionID, args.MaxWait)
+	output, alive, code := stareWith(args.SessionID, args.MaxWait, args.WatchFor, baseline)
 
 	if !alive {
 		killSession(args.SessionID)
