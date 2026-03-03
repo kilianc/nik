@@ -83,9 +83,19 @@ func (d *DataSource) Check(ctx context.Context) ([]brain.DataSourceOutput, error
 
 	newsContext := d.fetchNews(ctx, topics)
 
+	journal, err := d.svc.YesterdayJournal(ctx)
+	if err != nil {
+		slog.Warn("briefing: fetch yesterday journal", "pkg", "briefing", "error", err)
+	}
+
 	var lines []string
 	lines = append(lines, "[Morning briefing]", "")
 	lines = append(lines, prompt...)
+
+	if journal != "" {
+		lines = append(lines, "", "---", "", "## Yesterday's journal", "", journal)
+	}
+
 	lines = append(lines, "", "---", "")
 	lines = append(lines, newsContext...)
 
@@ -162,10 +172,12 @@ func (d *DataSource) fetchNews(ctx context.Context, topics []db.BriefingTopic) [
 		}
 	}
 
+	startDate := d.svc.now().Add(-48 * time.Hour).Format("2006-01-02")
+
 	var lines []string
 
 	for _, tq := range queries {
-		result, err := websearch.DoSearch(ctx, d.client, apiKey, tq.query, resultsPerTopic, "news")
+		result, err := websearch.DoSearch(ctx, d.client, apiKey, tq.query, resultsPerTopic, "news", startDate)
 		if err != nil {
 			slog.Warn("briefing news fetch", "pkg", "briefing", "query", tq.query, "error", err)
 			lines = append(lines, fmt.Sprintf("## %s", tq.label), "", fmt.Sprintf("(fetch failed: %s)", err), "")

@@ -49,11 +49,12 @@ type searchArgs struct {
 }
 
 type exaRequest struct {
-	Query      string      `json:"query"`
-	Type       string      `json:"type"`
-	NumResults int         `json:"numResults"`
-	Category   string      `json:"category,omitempty"`
-	Contents   exaContents `json:"contents"`
+	Query              string      `json:"query"`
+	Type               string      `json:"type"`
+	NumResults         int         `json:"numResults"`
+	Category           string      `json:"category,omitempty"`
+	StartPublishedDate string      `json:"startPublishedDate,omitempty"`
+	Contents           exaContents `json:"contents"`
 }
 
 type exaContents struct {
@@ -123,7 +124,7 @@ func webSearchHandler(apiKey string) llm.ToolExecutor {
 		results := map[string]any{}
 
 		for _, q := range args.Queries {
-			result, err := DoSearch(ctx, client, apiKey, q, numResults, args.Category)
+			result, err := DoSearch(ctx, client, apiKey, q, numResults, args.Category, "")
 			if err != nil {
 				results[q] = map[string]any{"error": err.Error()}
 				continue
@@ -139,12 +140,13 @@ func webSearchHandler(apiKey string) llm.ToolExecutor {
 	}
 }
 
-func DoSearch(ctx context.Context, client *http.Client, apiKey, query string, numResults int, category string) (string, error) {
+func DoSearch(ctx context.Context, client *http.Client, apiKey, query string, numResults int, category, startDate string) (string, error) {
 	reqBody := exaRequest{
-		Query:      query,
-		Type:       "auto",
-		NumResults: numResults,
-		Category:   category,
+		Query:              query,
+		Type:               "auto",
+		NumResults:         numResults,
+		Category:           category,
+		StartPublishedDate: startDate,
 		Contents: exaContents{
 			Text: exaText{MaxCharacters: 4000},
 		},
