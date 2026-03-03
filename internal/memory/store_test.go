@@ -176,6 +176,46 @@ func TestListDefaultLimit(t *testing.T) {
 	}
 }
 
+func TestSearchExcludesDeleted(t *testing.T) {
+	ctx := context.Background()
+
+	conn, err := db.OpenInMemory()
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer conn.Close()
+
+	svc := &Service{db: conn}
+
+	seed := 0.42
+	insertTestMemory(t, ctx, svc, "alive memory", seed)
+	deletedID := insertTestMemory(t, ctx, svc, "deleted memory", seed+0.001)
+
+	err = svc.Delete(ctx, deletedID)
+	if err != nil {
+		t.Fatalf("delete memory: %v", err)
+	}
+
+	rows, err := conn.QueryContext(ctx, queries.MemorySearch, fakeEmbedding(seed), 10)
+	if err != nil {
+		t.Fatalf("search query: %v", err)
+	}
+
+	results, err := scanMemories(rows, true)
+	rows.Close()
+	if err != nil {
+		t.Fatalf("scan search results: %v", err)
+	}
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result (deleted excluded), got %d", len(results))
+	}
+
+	if results[0].Content != "alive memory" {
+		t.Fatalf("expected alive memory, got %q", results[0].Content)
+	}
+}
+
 func TestSourceStoredAndReturned(t *testing.T) {
 	ctx := context.Background()
 

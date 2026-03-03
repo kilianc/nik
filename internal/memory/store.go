@@ -95,8 +95,8 @@ func (s *Service) SearchMulti(ctx context.Context, queries_ []string, limit int)
 			return nil, fmt.Errorf("serialize embedding: %w", err)
 		}
 
-		// over-fetch from the vector index because the deleted_at filter
-		// runs after KNN retrieval and may discard some of the k results
+		// over-fetch because deleted rows are filtered in Go after KNN
+		// retrieval (sqlite-vec can't filter on joined table columns)
 		rows, err := s.db.QueryContext(ctx, queries.MemorySearch, embedding, limit*2)
 		if err != nil {
 			return nil, fmt.Errorf("search memories: %w", err)
@@ -159,17 +159,22 @@ func scanMemories(rows *sql.Rows, withScore bool) ([]Memory, error) {
 		var metaStr sql.NullString
 		var source sql.NullString
 		var sourceID sql.NullString
+		var deletedAt sql.NullString
 		var distance float64
 
 		var err error
 		if withScore {
-			err = rows.Scan(&m.ID, &m.Content, &metaStr, &source, &sourceID, &m.CreatedAt, &distance)
+			err = rows.Scan(&m.ID, &m.Content, &metaStr, &source, &sourceID, &m.CreatedAt, &deletedAt, &distance)
 			m.Score = 1 - distance
 		} else {
 			err = rows.Scan(&m.ID, &m.Content, &metaStr, &source, &sourceID, &m.CreatedAt)
 		}
 		if err != nil {
 			return nil, fmt.Errorf("scan memory: %w", err)
+		}
+
+		if deletedAt.Valid {
+			continue
 		}
 
 		m.Source = source.String
