@@ -2,6 +2,7 @@
 openai_key: sk-proj-...  # optional when use_codex is true
 use_codex: false         # use ChatGPT subscription (OAuth) instead of API key for Think
 model: gpt-5.3-codex
+reasoning_effort: ""     # none, minimal, low, medium, high, xhigh (empty = model default)
 
 # search
 exa_api_key: ""          # Exa web search API key
