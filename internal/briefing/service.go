@@ -55,6 +55,11 @@ func (s *Service) RemoveTopic(ctx context.Context, id string) error {
 	return db.BriefingTopicDelete(ctx, s.db, id)
 }
 
+func (s *Service) YesterdayJournal(ctx context.Context) (string, error) {
+	yesterday := s.now().In(s.cfg.TZ()).AddDate(0, 0, -1).Format("2006-01-02")
+	return db.JournalGetPage(ctx, s.db, yesterday)
+}
+
 func (s *Service) today() string {
 	now := s.now()
 	return now.In(s.cfg.TZ()).Format("2006-01-02")

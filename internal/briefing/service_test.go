@@ -157,6 +157,41 @@ func TestRemoveTopic(t *testing.T) {
 	}
 }
 
+func TestYesterdayJournalReturnsContent(t *testing.T) {
+	ctx := context.Background()
+	svc := testService(t)
+
+	yesterday := svc.now().In(svc.cfg.TZ()).AddDate(0, 0, -1).Format("2006-01-02")
+
+	_, err := svc.db.ExecContext(ctx, "INSERT INTO journal (date, content) VALUES (?, ?)", yesterday, "talked about F1 with CT")
+	if err != nil {
+		t.Fatalf("insert journal: %v", err)
+	}
+
+	journal, err := svc.YesterdayJournal(ctx)
+	if err != nil {
+		t.Fatalf("yesterday journal: %v", err)
+	}
+
+	if journal != "talked about F1 with CT" {
+		t.Fatalf("expected journal content, got %q", journal)
+	}
+}
+
+func TestYesterdayJournalReturnsEmptyWhenMissing(t *testing.T) {
+	ctx := context.Background()
+	svc := testService(t)
+
+	journal, err := svc.YesterdayJournal(ctx)
+	if err != nil {
+		t.Fatalf("yesterday journal: %v", err)
+	}
+
+	if journal != "" {
+		t.Fatalf("expected empty journal, got %q", journal)
+	}
+}
+
 func testService(t *testing.T) *Service {
 	t.Helper()
 
