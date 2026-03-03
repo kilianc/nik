@@ -27,6 +27,7 @@ import (
 	"github.com/kciuffolo/nik/internal/search"
 	"github.com/kciuffolo/nik/internal/shell"
 	"github.com/kciuffolo/nik/internal/skills"
+	"github.com/kciuffolo/nik/internal/stats"
 	"github.com/kciuffolo/nik/internal/websearch"
 	"github.com/kciuffolo/nik/internal/whatsapp"
 )
@@ -137,6 +138,7 @@ func main() {
 	b := brain.New(cfg, llmClient)
 
 	b.SetSoulReader(dreamSvc.CurrentSoul)
+	b.SetStatsRecorder(stats.NewRecorder(conn).Record)
 	b.RegisterDataSource(messaging.NewDataSource(cfg, messagingSvc))
 	b.RegisterDataSource(alarms.NewDataSource(alarmSvc, messagingSvc))
 	b.RegisterDataSource(shell.NewDataSource(messagingSvc, b.IsActive))

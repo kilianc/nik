@@ -11,6 +11,29 @@ func TestIsImageMime(t *testing.T) {
 	}
 }
 
+func TestRoundSignature(t *testing.T) {
+	a := ToolCall{Name: "load_skill", Arguments: `{"action":"load","name":"search"}`}
+	b := ToolCall{Name: "search_memory", Arguments: `{"query":"hello"}`}
+
+	sig1 := roundSignature([]ToolCall{a})
+	sig2 := roundSignature([]ToolCall{a})
+	if sig1 != sig2 {
+		t.Fatalf("identical calls should produce identical signatures")
+	}
+
+	sig3 := roundSignature([]ToolCall{a, b})
+	sig4 := roundSignature([]ToolCall{b, a})
+	if sig3 != sig4 {
+		t.Fatalf("order should not matter: %q != %q", sig3, sig4)
+	}
+
+	different := ToolCall{Name: "load_skill", Arguments: `{"action":"load","name":"alarm"}`}
+	sig5 := roundSignature([]ToolCall{different})
+	if sig1 == sig5 {
+		t.Fatalf("different args should produce different signatures")
+	}
+}
+
 func TestBuildToolParamsIncludesDefinitions(t *testing.T) {
 	params := buildToolParams([]ToolDef{
 		{

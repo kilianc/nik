@@ -12,15 +12,36 @@ import (
 	"github.com/kciuffolo/nik/internal/llm"
 )
 
+// ActivationStats holds non-sensitive metadata for a single brain activation.
+type ActivationStats struct {
+	Meta            map[string]string
+	Model           string
+	ReasoningEffort string
+	Usage           llm.Usage
+	CostUSD         float64
+	ToolCalls       []ToolCallStats
+	DurationMS      int64
+	Error           bool
+}
+
+type ToolCallStats struct {
+	Name       string
+	DurationMS int64
+	Error      bool
+}
+
+type StatsRecorder func(ctx context.Context, stats ActivationStats)
+
 type Brain struct {
-	cfg         *config.Config
-	llm         *llm.Client
-	toolDefs    []llm.ToolDef
-	toolExec    map[string]llm.ToolExecutor
-	privileged  map[string]bool
-	dataSources []DataSource
-	soulReader  func(ctx context.Context) (string, error)
-	now         func() time.Time
+	cfg           *config.Config
+	llm           *llm.Client
+	toolDefs      []llm.ToolDef
+	toolExec      map[string]llm.ToolExecutor
+	privileged    map[string]bool
+	dataSources   []DataSource
+	soulReader    func(ctx context.Context) (string, error)
+	statsRecorder StatsRecorder
+	now           func() time.Time
 
 	activeConversations *SyncSet
 	activations         *SyncSet
@@ -45,6 +66,10 @@ func New(cfg *config.Config, llmClient *llm.Client) *Brain {
 
 func (b *Brain) SetSoulReader(fn func(ctx context.Context) (string, error)) {
 	b.soulReader = fn
+}
+
+func (b *Brain) SetStatsRecorder(fn StatsRecorder) {
+	b.statsRecorder = fn
 }
 
 const activationTimeout = 20 * time.Minute
@@ -139,6 +164,8 @@ func (b *Brain) activate(ctx context.Context, output DataSourceOutput) {
 const maxThinkAttempts = 2
 
 func (b *Brain) think(ctx context.Context, input []string) (string, llm.Usage, error) {
+	start := time.Now()
+
 	now := b.now
 	if now == nil {
 		now = time.Now
@@ -154,6 +181,35 @@ func (b *Brain) think(ctx context.Context, input []string) (string, llm.Usage, e
 	executor := b.toolExecutor()
 
 	var totalUsage llm.Usage
+	var allToolCalls []llm.ToolCallRecord
+	var reasoningEffort string
+	var thinkErr error
+
+	defer func() {
+		if b.statsRecorder == nil {
+			return
+		}
+
+		tcStats := make([]ToolCallStats, len(allToolCalls))
+		for i, tc := range allToolCalls {
+			tcStats[i] = ToolCallStats{
+				Name:       tc.Name,
+				DurationMS: tc.DurationMS,
+				Error:      tc.Error,
+			}
+		}
+
+		b.statsRecorder(ctx, ActivationStats{
+			Meta:            meta,
+			Model:           b.llm.Model(),
+			ReasoningEffort: reasoningEffort,
+			Usage:           totalUsage,
+			CostUSD:         llm.ComputeCost(b.llm.Model(), totalUsage.InputTokens, totalUsage.OutputTokens, totalUsage.CachedTokens),
+			ToolCalls:       tcStats,
+			DurationMS:      time.Since(start).Milliseconds(),
+			Error:           thinkErr != nil,
+		})
+	}()
 
 	for attempt := range maxThinkAttempts {
 		retry := attempt > 0
@@ -163,11 +219,17 @@ func (b *Brain) think(ctx context.Context, input []string) (string, llm.Usage, e
 
 		instructions, err := b.loadInstructions(now(), retry)
 		if err != nil {
+			thinkErr = err
 			return "", totalUsage, err
 		}
 
 		output, usage, toolCalls, extra, processErr := b.llm.Complete(thinkCtx, instructions, userInput, tools, executor)
 		b.writeDebugRecord(meta, instructions, userInput, output, tools, toolCalls, extra, usage, processErr)
+
+		allToolCalls = append(allToolCalls, toolCalls...)
+		if extra.ReasoningEffort != "" {
+			reasoningEffort = extra.ReasoningEffort
+		}
 
 		totalUsage.InputTokens += usage.InputTokens
 		totalUsage.OutputTokens += usage.OutputTokens
@@ -176,6 +238,7 @@ func (b *Brain) think(ctx context.Context, input []string) (string, llm.Usage, e
 		totalUsage.ReasoningTokens += usage.ReasoningTokens
 
 		if processErr != nil {
+			thinkErr = processErr
 			return "", totalUsage, processErr
 		}
 
@@ -184,5 +247,6 @@ func (b *Brain) think(ctx context.Context, input []string) (string, llm.Usage, e
 		}
 	}
 
-	return "", totalUsage, errors.New("no tool calls produced after retries")
+	thinkErr = errors.New("no tool calls produced after retries")
+	return "", totalUsage, thinkErr
 }

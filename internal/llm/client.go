@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"time"
 
 	"github.com/kciuffolo/nik/internal/codex"
 	"github.com/openai/openai-go/v3"
@@ -136,11 +138,17 @@ type CompletionExtra struct {
 }
 
 type ToolCallRecord struct {
-	Name   string
-	Args   string
-	Result string
-	Error  bool
+	Name       string
+	Args       string
+	Result     string
+	Error      bool
+	DurationMS int64
 }
+
+const (
+	maxRounds     = 75
+	loopThreshold = 4
+)
 
 func (c *Client) Complete(ctx context.Context, instructions, input string, tools []ToolDef, executor ToolExecutor) (string, Usage, []ToolCallRecord, CompletionExtra, error) {
 	total := Usage{}
@@ -180,7 +188,14 @@ func (c *Client) Complete(ctx context.Context, instructions, input string, tools
 
 	useStreaming := c.codexClient != nil
 
+	var prevSig string
+	var consecutiveRepeats int
+
 	for round := 0; ; round++ {
+		if round >= maxRounds {
+			slog.Warn("max rounds reached", "pkg", "llm", "rounds", round)
+			return "", total, history, extra, fmt.Errorf("max rounds (%d) reached without final response", maxRounds)
+		}
 		params.Input = responses.ResponseNewParamsInputUnion{OfInputItemList: items}
 
 		var resp *responses.Response
@@ -246,15 +261,31 @@ func (c *Client) Complete(ctx context.Context, instructions, input string, tools
 			return resp.OutputText(), total, history, extra, nil
 		}
 
+		sig := roundSignature(calls)
+		if sig == prevSig {
+			consecutiveRepeats++
+			if consecutiveRepeats >= loopThreshold {
+				slog.Warn("loop detected", "pkg", "llm", "round", round, "repeats", consecutiveRepeats, "tool", calls[0].Name)
+				return "", total, history, extra, fmt.Errorf("loop detected: %d identical rounds calling %s", consecutiveRepeats, calls[0].Name)
+			}
+		} else {
+			consecutiveRepeats = 1
+		}
+		prevSig = sig
+
 		for _, call := range calls {
 			items = append(items, responses.ResponseInputItemParamOfFunctionCall(call.Arguments, call.CallID, call.Name))
 
 			slog.Info("tool call", toolCallAttrs(call.Name, round, call.Arguments)...)
+
+			start := time.Now()
 			result, err := executor(ctx, call)
+			elapsed := time.Since(start)
 
 			rec := ToolCallRecord{
-				Name: call.Name,
-				Args: call.Arguments,
+				Name:       call.Name,
+				Args:       call.Arguments,
+				DurationMS: elapsed.Milliseconds(),
 			}
 
 			if err != nil {
@@ -441,4 +472,13 @@ func toolCallAttrs(name string, round int, raw string) []any {
 	}
 
 	return attrs
+}
+
+func roundSignature(calls []ToolCall) string {
+	sigs := make([]string, len(calls))
+	for i, c := range calls {
+		sigs[i] = c.Name + "\x00" + c.Arguments
+	}
+	slices.Sort(sigs)
+	return strings.Join(sigs, "\x01")
 }

@@ -191,3 +191,13 @@ var SoulCurrent string
 
 //go:embed soul_insert.sql
 var SoulInsert string
+
+// activation queries
+
+//go:embed activation_insert.sql
+var ActivationInsert string
+
+// tool call queries
+
+//go:embed tool_call_insert.sql
+var ToolCallInsert string
