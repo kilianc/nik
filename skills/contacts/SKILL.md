@@ -1,9 +1,6 @@
 ---
 name: contacts
-summary: >
-  Your address book -- the people in your life. Load this whenever you're
-  talking to someone and want to know who they are, or you've learned
-  something new about them.
+summary: Your address book. Search and update contact profiles as you learn about people.
 tools: [update_contact, search_contacts]
 ---
 

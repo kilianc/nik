@@ -1,9 +1,7 @@
 ---
 name: messaging
 preload: true
-summary: >
-  Load this skill to learn how to send messages, reactions, typing
-  indicators, and presence across platforms.
+summary: Send messages, reactions, typing indicators, and presence across platforms.
 tools:
   - message_reply
   - message_noop

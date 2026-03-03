@@ -1,7 +1,6 @@
 ---
 name: config
-summary: >
-  Nik's runtime config and the conversation allow list. Owner-only.
+summary: Read and update nik's runtime config and conversation allow list. Owner-only.
 tools: [update_config]
 ---
 

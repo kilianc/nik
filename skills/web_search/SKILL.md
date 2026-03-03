@@ -1,9 +1,6 @@
 ---
 name: web_search
-summary: >
-  Search the web for current events, news, or anything beyond your
-  memory. Load this when someone asks about something recent or you need
-  to verify a fact.
+summary: Search the live web for current events, news, or facts beyond your memory.
 tools: [web_search]
 ---
 

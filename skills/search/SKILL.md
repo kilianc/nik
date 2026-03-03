@@ -1,8 +1,6 @@
 ---
 name: search
-summary: >
-  Read-only SQL against nik's database. Load this for ad-hoc lookups,
-  stats, and debugging. Owner-only.
+summary: Read-only SQL against nik's SQLite database for ad-hoc lookups and stats. Owner-only.
 tools: [db_query]
 ---
 
