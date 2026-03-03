@@ -13,7 +13,7 @@ Examples:
 ```
 go run ./tools/call describe_media '{"file_path":"media/chat/msg.oga","question":""}'
 go run ./tools/call message_update_media_description '{"message_id":"3A...","description":"hello","body":""}'
-go run ./tools/call shell '{"action":"list","command":"","description":"","session_id":"","input":"","max_wait":0,"next_check_at":""}'
+go run ./tools/call shell '{"action":"list","command":"","description":"","session_id":"","input":"","max_wait":0,"next_check_at":"","watch_for":""}'
 ```
 
 ## Available tools

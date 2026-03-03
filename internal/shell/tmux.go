@@ -196,7 +196,11 @@ func listSessions() ([]SessionInfo, error) {
 	return sessions, nil
 }
 
-func stare(id string, maxWait int) (output string, alive bool, exitCode int) {
+func stare(id string, maxWait int, watchFor string) (output string, alive bool, exitCode int) {
+	return stareWith(id, maxWait, watchFor, 0)
+}
+
+func stareWith(id string, maxWait int, watchFor string, baseline int) (output string, alive bool, exitCode int) {
 	deadline := time.Now().Add(time.Duration(maxWait) * time.Second)
 
 	for {
@@ -204,6 +208,17 @@ func stare(id string, maxWait int) (output string, alive bool, exitCode int) {
 			out, _ := capturePane(id)
 			c, _ := getExitCode(id)
 			return out, false, c
+		}
+
+		if watchFor != "" {
+			out, _ := capturePane(id)
+			newContent := ""
+			if baseline < len(out) {
+				newContent = out[baseline:]
+			}
+			if strings.Contains(newContent, watchFor) {
+				return out, true, 0
+			}
 		}
 
 		if time.Now().After(deadline) {

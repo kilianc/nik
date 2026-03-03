@@ -78,7 +78,7 @@ func TestFastCommand(t *testing.T) {
 		t.Fatalf("newSession: %v", err)
 	}
 
-	output, alive, code := stare(id, 5)
+	output, alive, code := stare(id, 5, "")
 
 	if alive {
 		t.Fatal("expected command to have exited")
@@ -103,7 +103,7 @@ func TestStare(t *testing.T) {
 	}
 
 	start := time.Now()
-	_, alive, _ := stare(id, 2)
+	_, alive, _ := stare(id, 2, "")
 	elapsed := time.Since(start)
 
 	if !alive {
@@ -185,7 +185,7 @@ func TestOutputTruncation(t *testing.T) {
 		t.Fatalf("newSession: %v", err)
 	}
 
-	stare(id, 5)
+	stare(id, 5, "")
 
 	output, err := capturePane(id)
 	if err != nil {
@@ -208,7 +208,7 @@ func TestExitCode(t *testing.T) {
 		t.Fatalf("newSession: %v", err)
 	}
 
-	_, alive, code := stare(id, 5)
+	_, alive, code := stare(id, 5, "")
 
 	if alive {
 		t.Fatal("expected command to have exited")
@@ -233,9 +233,66 @@ func TestStareMissingSession(t *testing.T) {
 		t.Fatalf("killSession: %v", err)
 	}
 
-	_, alive, _ := stare(id, 2)
+	_, alive, _ := stare(id, 2, "")
 	if alive {
 		t.Fatal("stare reported alive for a killed session")
+	}
+}
+
+func TestStareWatchFor(t *testing.T) {
+	requireTmux(t)
+
+	id := "test-watchfor"
+	defer cleanup(t, id)
+
+	err := newSession(id, `sh -c 'sleep 1; echo MARKER_READY; cat'`, "")
+	if err != nil {
+		t.Fatalf("newSession: %v", err)
+	}
+
+	start := time.Now()
+	output, alive, _ := stare(id, 10, "MARKER_READY")
+	elapsed := time.Since(start)
+
+	if !alive {
+		t.Fatal("expected session to still be alive")
+	}
+	if !strings.Contains(output, "MARKER_READY") {
+		t.Fatalf("expected output to contain MARKER_READY, got: %s", output)
+	}
+	if elapsed > 5*time.Second {
+		t.Fatalf("watch_for should have returned early, took %v", elapsed)
+	}
+}
+
+func TestStareWatchForBaseline(t *testing.T) {
+	requireTmux(t)
+
+	id := "test-watchfor-baseline"
+	defer cleanup(t, id)
+
+	err := newSession(id, `sh -c 'echo OLD_MARKER; cat'`, "")
+	if err != nil {
+		t.Fatalf("newSession: %v", err)
+	}
+
+	time.Sleep(500 * time.Millisecond)
+
+	// capture baseline that already contains OLD_MARKER
+	baseline, _ := capturePane(id)
+	baselineLen := len(baseline)
+
+	// stare with watchFor looking for OLD_MARKER should NOT match early
+	// because it only appears before the baseline
+	start := time.Now()
+	_, alive, _ := stareWith(id, 2, "OLD_MARKER", baselineLen)
+	elapsed := time.Since(start)
+
+	if !alive {
+		t.Fatal("expected session to still be alive")
+	}
+	if elapsed < time.Second {
+		t.Fatalf("stare with baseline should not have matched old content, returned in %v", elapsed)
 	}
 }
 

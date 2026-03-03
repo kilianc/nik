@@ -26,7 +26,7 @@ func TestDeadSessionRetrigger(t *testing.T) {
 		t.Fatalf("newSession: %v", err)
 	}
 
-	stare(id, 5)
+	stare(id, 5, "")
 
 	if isAlive(id) {
 		t.Fatal("expected session to be dead")
