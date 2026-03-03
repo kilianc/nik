@@ -17,12 +17,12 @@ func TestDueAlarmsReturnsOnlyActiveAndDue(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Second)
 
-	dueAlarm, err := CreateAlarm(ctx, conn, "", "", "due", "", now.Add(-1*time.Minute))
+	dueAlarm, err := CreateAlarm(ctx, conn, "", "", "due", "", "", "", now.Add(-1*time.Minute))
 	if err != nil {
 		t.Fatalf("create due alarm: %v", err)
 	}
 
-	cancelledAlarm, err := CreateAlarm(ctx, conn, "", "", "cancelled", "", now.Add(-30*time.Second))
+	cancelledAlarm, err := CreateAlarm(ctx, conn, "", "", "cancelled", "", "", "", now.Add(-30*time.Second))
 	if err != nil {
 		t.Fatalf("create cancelled alarm: %v", err)
 	}
@@ -32,7 +32,7 @@ func TestDueAlarmsReturnsOnlyActiveAndDue(t *testing.T) {
 		t.Fatalf("cancel alarm: %v", err)
 	}
 
-	_, err = CreateAlarm(ctx, conn, "", "", "future", "", now.Add(5*time.Minute))
+	_, err = CreateAlarm(ctx, conn, "", "", "future", "", "", "", now.Add(5*time.Minute))
 	if err != nil {
 		t.Fatalf("create future alarm: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestDueAlarmsStillReturnsClaimedAlarms(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Second)
 
-	alarm, err := CreateAlarm(ctx, conn, "", "", "claimed", "", now.Add(-1*time.Minute))
+	alarm, err := CreateAlarm(ctx, conn, "", "", "claimed", "", "", "", now.Add(-1*time.Minute))
 	if err != nil {
 		t.Fatalf("create alarm: %v", err)
 	}

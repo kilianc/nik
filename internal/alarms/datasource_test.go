@@ -79,6 +79,35 @@ func TestFormatAlarmAlreadyFiredRecurring(t *testing.T) {
 	}
 }
 
+func TestFormatAlarmWithSource(t *testing.T) {
+	alarm := Alarm{
+		ID:     "alarm-src",
+		Goal:   "check in with CT",
+		Source: sql.NullString{Valid: true, String: "message"},
+	}
+
+	lines := formatAlarm(alarm, "", nil, nil, nil, false)
+	out := strings.Join(lines, "\n")
+
+	if !strings.Contains(out, "Created from: message") {
+		t.Fatalf("expected source line, got %q", out)
+	}
+}
+
+func TestFormatAlarmWithoutSource(t *testing.T) {
+	alarm := Alarm{
+		ID:   "alarm-nosrc",
+		Goal: "do something",
+	}
+
+	lines := formatAlarm(alarm, "", nil, nil, nil, false)
+	out := strings.Join(lines, "\n")
+
+	if strings.Contains(out, "Created from:") {
+		t.Fatalf("expected no source line for alarm without source, got %q", out)
+	}
+}
+
 func TestFormatAlarmAlreadyFiredOneShot(t *testing.T) {
 	now := time.Now()
 	alarm := Alarm{

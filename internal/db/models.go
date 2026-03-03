@@ -99,6 +99,8 @@ type Alarm struct {
 	OriginConversationID sql.NullString
 	Goal                 string
 	Recurrence           sql.NullString
+	Source               sql.NullString
+	SourceID             sql.NullString
 	NextFireAt           sql.NullTime
 	LastFiredAt          sql.NullTime
 	CreatedAt            time.Time

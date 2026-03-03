@@ -20,13 +20,13 @@ func New(conn *sql.DB) *Service {
 	return &Service{db: conn}
 }
 
-func (s *Service) CreateAlarm(ctx context.Context, originContactID, originConversationID, goal, recurrence, nextFireAtStr string) (*Alarm, error) {
+func (s *Service) CreateAlarm(ctx context.Context, originContactID, originConversationID, goal, recurrence, source, sourceID, nextFireAtStr string) (*Alarm, error) {
 	nextFireAt, err := time.Parse(time.RFC3339, nextFireAtStr)
 	if err != nil {
 		return nil, fmt.Errorf("parse next_fire_at %q: %w", nextFireAtStr, err)
 	}
 
-	alarm, err := db.CreateAlarm(ctx, s.db, originContactID, originConversationID, goal, recurrence, nextFireAt)
+	alarm, err := db.CreateAlarm(ctx, s.db, originContactID, originConversationID, goal, recurrence, source, sourceID, nextFireAt)
 	if err != nil {
 		return nil, fmt.Errorf("create alarm: %w", err)
 	}

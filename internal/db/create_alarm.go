@@ -9,7 +9,7 @@ import (
 	"github.com/kciuffolo/nik/internal/queries"
 )
 
-func CreateAlarm(ctx context.Context, db *sql.DB, originContactID, originConversationID, goal, recurrence string, nextFireAt time.Time) (Alarm, error) {
+func CreateAlarm(ctx context.Context, db *sql.DB, originContactID, originConversationID, goal, recurrence, source, sourceID string, nextFireAt time.Time) (Alarm, error) {
 	newID := id.V7()
 	now := time.Now()
 
@@ -28,7 +28,17 @@ func CreateAlarm(ctx context.Context, db *sql.DB, originContactID, originConvers
 		rec = recurrence
 	}
 
-	_, err := db.ExecContext(ctx, queries.CreateAlarm, newID, contactID, conversationID, goal, rec, nextFireAt, now)
+	src := any(nil)
+	if source != "" {
+		src = source
+	}
+
+	srcID := any(nil)
+	if sourceID != "" {
+		srcID = sourceID
+	}
+
+	_, err := db.ExecContext(ctx, queries.CreateAlarm, newID, contactID, conversationID, goal, rec, src, srcID, nextFireAt, now)
 	if err != nil {
 		return Alarm{}, err
 	}
@@ -39,6 +49,8 @@ func CreateAlarm(ctx context.Context, db *sql.DB, originContactID, originConvers
 		OriginConversationID: sql.NullString{String: originConversationID, Valid: originConversationID != ""},
 		Goal:                 goal,
 		Recurrence:           sql.NullString{String: recurrence, Valid: recurrence != ""},
+		Source:               sql.NullString{String: source, Valid: source != ""},
+		SourceID:             sql.NullString{String: sourceID, Valid: sourceID != ""},
 		NextFireAt:           sql.NullTime{Time: nextFireAt, Valid: true},
 		CreatedAt:            now,
 	}, nil

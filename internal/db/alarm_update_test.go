@@ -17,7 +17,7 @@ func TestAlarmUpdateGoal(t *testing.T) {
 	defer conn.Close()
 
 	now := time.Now().UTC().Truncate(time.Second)
-	alarm, err := CreateAlarm(ctx, conn, "", "", "old goal", "", now)
+	alarm, err := CreateAlarm(ctx, conn, "", "", "old goal", "", "", "", now)
 	if err != nil {
 		t.Fatalf("create alarm: %v", err)
 	}
@@ -48,7 +48,7 @@ func TestAlarmUpdateRecurrence(t *testing.T) {
 	defer conn.Close()
 
 	now := time.Now().UTC().Truncate(time.Second)
-	alarm, err := CreateAlarm(ctx, conn, "", "", "test", "every day", now)
+	alarm, err := CreateAlarm(ctx, conn, "", "", "test", "every day", "", "", now)
 	if err != nil {
 		t.Fatalf("create alarm: %v", err)
 	}

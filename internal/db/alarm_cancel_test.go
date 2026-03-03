@@ -16,7 +16,7 @@ func TestAlarmCancelRemovesFromDueList(t *testing.T) {
 	defer conn.Close()
 
 	now := time.Now().UTC().Truncate(time.Second)
-	alarm, err := CreateAlarm(ctx, conn, "", "", "cancel me", "", now.Add(-time.Minute))
+	alarm, err := CreateAlarm(ctx, conn, "", "", "cancel me", "", "", "", now.Add(-time.Minute))
 	if err != nil {
 		t.Fatalf("create alarm: %v", err)
 	}
