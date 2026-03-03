@@ -4,6 +4,8 @@ SELECT
   origin_conversation_id,
   goal,
   recurrence,
+  source,
+  source_id,
   next_fire_at,
   last_fired_at,
   created_at

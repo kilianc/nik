@@ -96,6 +96,8 @@ CREATE TABLE IF NOT EXISTS alarm (
   origin_conversation_id TEXT REFERENCES conversation(id),
   goal                   TEXT NOT NULL,
   recurrence             TEXT,
+  source                 TEXT,
+  source_id              TEXT,
   next_fire_at           TIMESTAMP,
   last_fired_at          TIMESTAMP,
   cancelled_at           TIMESTAMP,

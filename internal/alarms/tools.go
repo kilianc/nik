@@ -125,12 +125,14 @@ func alarmHandler(svc *Service) llm.ToolExecutor {
 			return `{"error":"empty fire_at"}`, nil
 		}
 
-		originConversationID := ""
+		var originConversationID, source, sourceID string
 		if meta, ok := ctx.Value("meta").(map[string]string); ok {
 			originConversationID = meta["conversation_id"]
+			source = meta["source"]
+			sourceID = meta["source_id"]
 		}
 
-		alarm, err := svc.CreateAlarm(ctx, args.OriginContactID, originConversationID, args.Goal, args.Recurrence, args.FireAt)
+		alarm, err := svc.CreateAlarm(ctx, args.OriginContactID, originConversationID, args.Goal, args.Recurrence, source, sourceID, args.FireAt)
 		if err != nil {
 			return llm.ToolError(err), nil
 		}

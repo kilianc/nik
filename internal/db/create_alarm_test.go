@@ -20,7 +20,7 @@ func TestCreateAlarmPersistsRow(t *testing.T) {
 	convID := seedConversation(t, ctx, conn, "whatsapp", "alarm-conv@g.us", "group")
 
 	fireAt := time.Now().Add(2 * time.Minute).UTC().Truncate(time.Second)
-	alarm, err := CreateAlarm(ctx, conn, contact.ID, convID, "follow up", "", fireAt)
+	alarm, err := CreateAlarm(ctx, conn, contact.ID, convID, "follow up", "", "message", "msg-123", fireAt)
 	if err != nil {
 		t.Fatalf("create alarm: %v", err)
 	}
@@ -40,6 +40,12 @@ func TestCreateAlarmPersistsRow(t *testing.T) {
 	if alarm.Recurrence.Valid {
 		t.Fatalf("expected null recurrence for one-shot alarm")
 	}
+	if !alarm.Source.Valid || alarm.Source.String != "message" {
+		t.Fatalf("unexpected source: %+v", alarm.Source)
+	}
+	if !alarm.SourceID.Valid || alarm.SourceID.String != "msg-123" {
+		t.Fatalf("unexpected source_id: %+v", alarm.SourceID)
+	}
 
 	var (
 		id              string
@@ -47,13 +53,15 @@ func TestCreateAlarmPersistsRow(t *testing.T) {
 		originID        sql.NullString
 		goal            string
 		recurrence      sql.NullString
+		source          sql.NullString
+		sourceID        sql.NullString
 		gotNextFireAt   string
 	)
 	err = conn.QueryRowContext(
 		ctx,
-		`SELECT id, origin_contact_id, origin_conversation_id, goal, recurrence, next_fire_at FROM alarm WHERE id = ?1`,
+		`SELECT id, origin_contact_id, origin_conversation_id, goal, recurrence, source, source_id, next_fire_at FROM alarm WHERE id = ?1`,
 		alarm.ID,
-	).Scan(&id, &originContactID, &originID, &goal, &recurrence, &gotNextFireAt)
+	).Scan(&id, &originContactID, &originID, &goal, &recurrence, &source, &sourceID, &gotNextFireAt)
 	if err != nil {
 		t.Fatalf("query persisted alarm: %v", err)
 	}
@@ -73,6 +81,12 @@ func TestCreateAlarmPersistsRow(t *testing.T) {
 	if recurrence.Valid {
 		t.Fatalf("expected null recurrence")
 	}
+	if !source.Valid || source.String != "message" {
+		t.Fatalf("unexpected persisted source: %+v", source)
+	}
+	if !sourceID.Valid || sourceID.String != "msg-123" {
+		t.Fatalf("unexpected persisted source_id: %+v", sourceID)
+	}
 }
 
 func TestCreateAlarmWithRecurrence(t *testing.T) {
@@ -85,7 +99,7 @@ func TestCreateAlarmWithRecurrence(t *testing.T) {
 	defer conn.Close()
 
 	fireAt := time.Now().Add(2 * time.Minute).UTC().Truncate(time.Second)
-	alarm, err := CreateAlarm(ctx, conn, "", "", "check in", "every Sunday at 7pm", fireAt)
+	alarm, err := CreateAlarm(ctx, conn, "", "", "check in", "every Sunday at 7pm", "", "", fireAt)
 	if err != nil {
 		t.Fatalf("create alarm: %v", err)
 	}
@@ -105,7 +119,7 @@ func TestCreateAlarmWithNullFKs(t *testing.T) {
 	defer conn.Close()
 
 	fireAt := time.Now().Add(2 * time.Minute).UTC().Truncate(time.Second)
-	alarm, err := CreateAlarm(ctx, conn, "", "", "reminder", "", fireAt)
+	alarm, err := CreateAlarm(ctx, conn, "", "", "reminder", "", "", "", fireAt)
 	if err != nil {
 		t.Fatalf("create alarm with null FKs: %v", err)
 	}

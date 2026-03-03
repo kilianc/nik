@@ -140,6 +140,10 @@ func formatAlarm(a Alarm, requesterName string, msgs []db.Message, senderLabels 
 		lines = append(lines, fmt.Sprintf("origin_conversation_id: %s", a.OriginConversationID.String))
 	}
 
+	if a.Source.Valid && a.Source.String != "" {
+		lines = append(lines, fmt.Sprintf("Created from: %s", a.Source.String))
+	}
+
 	if len(occurrences) > 0 {
 		lines = append(lines, "", "## Recent occurrences")
 		for _, o := range occurrences {

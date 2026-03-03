@@ -24,6 +24,8 @@ func DueAlarms(ctx context.Context, db *sql.DB, now time.Time) ([]Alarm, error) 
 			&a.OriginConversationID,
 			&a.Goal,
 			&a.Recurrence,
+			&a.Source,
+			&a.SourceID,
 			&a.NextFireAt,
 			&a.LastFiredAt,
 			&a.CreatedAt,
