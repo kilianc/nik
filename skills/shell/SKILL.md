@@ -1,9 +1,6 @@
 ---
 name: shell
-summary: >
-  Run commands on the owner's machine via persistent tmux sessions. Load
-  this when asked to run, check, or manage anything on the system.
-  Owner-only.
+summary: Run commands on the owner's machine via persistent tmux sessions. Owner-only.
 tools: [shell]
 ---
 

@@ -1,9 +1,6 @@
 ---
 name: media
-summary: >
-  Describe or transcribe images, audio, stickers, and documents. Load
-  this when you see unprocessed media or someone asks about a past
-  attachment.
+summary: Describe or transcribe images, audio, stickers, and documents attached to messages.
 tools: [describe_media]
 ---
 

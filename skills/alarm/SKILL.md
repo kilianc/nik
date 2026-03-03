@@ -1,9 +1,6 @@
 ---
 name: alarm
-summary: >
-  Your time control. Load this when someone asks to be reminded, you need
-  to schedule a follow-up, or you want to set up a routine. One-shot or
-  recurring.
+summary: Schedule one-shot or recurring alarms for reminders, follow-ups, and routines.
 tools: [alarm, update_alarm, cancel_alarm]
 ---
 

@@ -1,8 +1,6 @@
 ---
 name: briefing
-summary: >
-  Your morning news feed. Load this when you learn someone cares about a
-  topic, or during the morning briefing activation.
+summary: Manage news feed topics and write morning briefings. Load when someone mentions an interest.
 tools:
   - briefing_topics
   - briefing_write
