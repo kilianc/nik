@@ -481,6 +481,94 @@ func TestMarkReadSkipsZeroReadUpTo(t *testing.T) {
 	}
 }
 
+func TestMarkReadPicksUpMessagesAfterOutbound(t *testing.T) {
+	ctx := context.Background()
+
+	conn, err := db.OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	contactsSvc := contacts.NewService(conn)
+	svc := NewService(&config.Config{}, conn, contactsSvc)
+	svc.replyDelay = func(string) time.Duration { return 0 }
+
+	platform := &mockPlatform{
+		platform: "whatsapp",
+		outbound: OutboundMessage{
+			ExternalMessageID: "nik-reply-1",
+			ExternalSenderID:  "nik@s.whatsapp.net",
+			Kind:              "text",
+			Body:              "got it",
+		},
+	}
+	svc.RegisterPlatform(platform)
+
+	externalConversationID := "conversation@s.whatsapp.net"
+	externalSenderID := "alice@s.whatsapp.net"
+
+	t1 := time.Date(2026, time.February, 27, 10, 0, 0, 0, time.UTC)
+	t2 := time.Date(2026, time.February, 27, 10, 0, 5, 0, time.UTC)
+	t3 := time.Date(2026, time.February, 27, 10, 0, 6, 0, time.UTC)
+
+	sendInboundMessageForReadTest(t, ctx, svc, externalConversationID, externalSenderID, "in-1", "hello", t1)
+
+	conversationID, err := svc.ConversationIDFromExternal(ctx, "whatsapp", externalConversationID)
+	if err != nil {
+		t.Fatalf("conversation id from external: %v", err)
+	}
+
+	err = svc.MarkRead(ctx, conversationID, t1)
+	if err != nil {
+		t.Fatalf("mark read up to t1: %v", err)
+	}
+
+	if platform.markReadCalls != 1 {
+		t.Fatalf("expected one mark-read call after first batch, got %d", platform.markReadCalls)
+	}
+	if len(platform.lastReadRefs) != 1 || platform.lastReadRefs[0].ExternalMessageID != "in-1" {
+		t.Fatalf("expected mark-read for in-1, got %+v", platform.lastReadRefs)
+	}
+
+	platform.outbound.SentAt = t1.Add(3 * time.Second)
+	err = svc.Reply(ctx, conversationID, "got it")
+	if err != nil {
+		t.Fatalf("reply: %v", err)
+	}
+
+	conv, err := db.GetConversation(ctx, conn, db.GetConversationParams{ID: conversationID})
+	if err != nil {
+		t.Fatalf("get conversation after reply: %v", err)
+	}
+	if conv.LastReadAt.Valid && conv.LastReadAt.Time.After(t1) {
+		t.Fatalf("outbound reply should not advance last_read_at past t1, got %v", conv.LastReadAt.Time)
+	}
+
+	sendInboundMessageForReadTest(t, ctx, svc, externalConversationID, externalSenderID, "in-2", "also this", t2)
+	sendInboundMessageForReadTest(t, ctx, svc, externalConversationID, externalSenderID, "in-3", "one more", t3)
+
+	err = svc.MarkRead(ctx, conversationID, t3)
+	if err != nil {
+		t.Fatalf("mark read up to t3: %v", err)
+	}
+
+	if platform.markReadCalls != 2 {
+		t.Fatalf("expected two total mark-read calls, got %d", platform.markReadCalls)
+	}
+	if len(platform.lastReadRefs) != 2 {
+		t.Fatalf("expected two read refs for second batch, got %d", len(platform.lastReadRefs))
+	}
+
+	refIDs := map[string]bool{}
+	for _, ref := range platform.lastReadRefs {
+		refIDs[ref.ExternalMessageID] = true
+	}
+	if !refIDs["in-2"] || !refIDs["in-3"] {
+		t.Fatalf("expected in-2 and in-3 in second mark-read batch, got %+v", platform.lastReadRefs)
+	}
+}
+
 func TestFindMessageUniqueMatch(t *testing.T) {
 	ctx := context.Background()
 	conn, err := db.OpenInMemory()

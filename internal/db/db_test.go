@@ -86,13 +86,6 @@ func insertTestMessage(t *testing.T, ctx context.Context, conn *sql.DB, p insert
 		t.Fatalf("insert test message: %v", err)
 	}
 
-	if p.IsFromMe {
-		_, err = conn.ExecContext(ctx, queries.ConversationMarkRead, p.ConversationID, p.SentAt)
-		if err != nil {
-			t.Fatalf("mark conversation read on outbound: %v", err)
-		}
-	}
-
 	row := conn.QueryRowContext(ctx, queries.MessageGet, "", p.Platform, p.ExternalMessageID)
 	msg, scanErr := scanMessage(row)
 	if scanErr != nil {

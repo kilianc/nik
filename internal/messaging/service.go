@@ -182,13 +182,6 @@ func (s *Service) ReceiveMessage(ctx context.Context, msg InboundMessage) error 
 		return fmt.Errorf("insert message %s/%s: %w", msg.Platform, msg.ExternalMessageID, err)
 	}
 
-	if msg.IsFromMe {
-		_, err = tx.ExecContext(ctx, queries.ConversationMarkRead, conversationID, sentAt)
-		if err != nil {
-			return fmt.Errorf("mark conversation read on outbound %s: %w", conversationID, err)
-		}
-	}
-
 	err = db.UpsertConversationParticipant(ctx, tx, conversationID, contactID, nil)
 	if err != nil {
 		return err
