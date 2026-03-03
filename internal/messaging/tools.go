@@ -3,6 +3,7 @@ package messaging
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/kciuffolo/nik/internal/llm"
@@ -10,13 +11,17 @@ import (
 
 var replyToolDef = llm.ToolDef{
 	Name:        "message_reply",
-	Description: "Send a reply to a conversation. Supports text and image messages.",
+	Description: "Send a message to a conversation or contact. Supports text and image messages. Use conversation_id for existing conversations, or contact_id to start a new DM.",
 	Parameters: map[string]any{
 		"type": "object",
 		"properties": map[string]any{
 			"conversation_id": map[string]any{
 				"type":        "string",
 				"description": "Nik conversation UUID. Pass empty string to use the current conversation from context.",
+			},
+			"contact_id": map[string]any{
+				"type":        "string",
+				"description": "Contact UUID. Use to start a new DM when no conversation exists yet. Pass empty string when using conversation_id.",
 			},
 			"message": map[string]any{
 				"type":        "string",
@@ -27,7 +32,7 @@ var replyToolDef = llm.ToolDef{
 				"description": "Absolute path to an image file to send. Pass empty string for text-only replies.",
 			},
 		},
-		"required":             []string{"conversation_id", "message", "image_path"},
+		"required":             []string{"conversation_id", "contact_id", "message", "image_path"},
 		"additionalProperties": false,
 	},
 }
@@ -130,6 +135,7 @@ func replyHandler(svc *Service) llm.ToolExecutor {
 	return func(ctx context.Context, call llm.ToolCall) (string, error) {
 		var args struct {
 			ConversationID string `json:"conversation_id"`
+			ContactID      string `json:"contact_id"`
 			Message        string `json:"message"`
 			ImagePath      string `json:"image_path"`
 		}
@@ -139,11 +145,23 @@ func replyHandler(svc *Service) llm.ToolExecutor {
 			return llm.ToolError(err), nil
 		}
 
+		resolvedFromContact := false
+
 		if strings.TrimSpace(args.ConversationID) == "" {
 			args.ConversationID = contextMetaValue(ctx, "conversation_id")
 		}
+
+		if strings.TrimSpace(args.ConversationID) == "" && strings.TrimSpace(args.ContactID) != "" {
+			convID, err := svc.ResolveConversation(ctx, args.ContactID)
+			if err != nil {
+				return llm.ToolError(err), nil
+			}
+			args.ConversationID = convID
+			resolvedFromContact = true
+		}
+
 		if strings.TrimSpace(args.ConversationID) == "" {
-			return `{"error":"missing conversation_id"}`, nil
+			return `{"error":"missing conversation_id and contact_id"}`, nil
 		}
 
 		if strings.TrimSpace(args.ImagePath) != "" {
@@ -154,6 +172,10 @@ func replyHandler(svc *Service) llm.ToolExecutor {
 
 		if err != nil {
 			return llm.ToolError(err), nil
+		}
+
+		if resolvedFromContact {
+			return fmt.Sprintf(`{"sent":true,"conversation_id":%q}`, args.ConversationID), nil
 		}
 
 		return `{"sent":true}`, nil

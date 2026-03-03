@@ -509,6 +509,44 @@ func (s *Service) MessagesAround(ctx context.Context, conversationID string, piv
 	return db.GetMessagesAround(ctx, s.db, conversationID, pivot, limit)
 }
 
+func (s *Service) ResolveConversation(ctx context.Context, contactID string) (string, error) {
+	contact, err := db.GetContact(ctx, s.db, contactID)
+	if err != nil {
+		return "", fmt.Errorf("get contact %s: %w", contactID, err)
+	}
+
+	if len(contact.WhatsappIDs) == 0 {
+		return "", fmt.Errorf("contact %s has no whatsapp id", contactID)
+	}
+	jid := contact.WhatsappIDs[0]
+
+	now := time.Now()
+	err = db.UpsertConversation(ctx, s.db, db.UpsertConversationParams{
+		Platform:               "whatsapp",
+		ExternalConversationID: jid,
+		Kind:                   "dm",
+		LastMessageAt:          &now,
+	})
+	if err != nil {
+		return "", fmt.Errorf("upsert conversation for contact %s: %w", contactID, err)
+	}
+
+	conv, err := db.GetConversation(ctx, s.db, db.GetConversationParams{
+		Platform:               "whatsapp",
+		ExternalConversationID: jid,
+	})
+	if err != nil {
+		return "", fmt.Errorf("get conversation for contact %s: %w", contactID, err)
+	}
+
+	err = db.UpsertConversationParticipant(ctx, s.db, conv.ID, contactID, nil)
+	if err != nil {
+		return "", fmt.Errorf("link participant for contact %s: %w", contactID, err)
+	}
+
+	return conv.ID, nil
+}
+
 func (s *Service) ConversationIDFromExternal(ctx context.Context, platform, externalConversationID string) (string, error) {
 	conversation, err := db.GetConversation(ctx, s.db, db.GetConversationParams{
 		Platform:               platform,
