@@ -72,38 +72,6 @@ var reactToolDef = llm.ToolDef{
 	},
 }
 
-var startTypingToolDef = llm.ToolDef{
-	Name:        "message_start_typing",
-	Description: "Send typing indicator for a conversation.",
-	Parameters: map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"conversation_id": map[string]any{
-				"type":        "string",
-				"description": "Nik conversation UUID. Pass empty string to use the current conversation from context.",
-			},
-		},
-		"required":             []string{"conversation_id"},
-		"additionalProperties": false,
-	},
-}
-
-var stopTypingToolDef = llm.ToolDef{
-	Name:        "message_stop_typing",
-	Description: "Send paused indicator for a conversation.",
-	Parameters: map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"conversation_id": map[string]any{
-				"type":        "string",
-				"description": "Nik conversation UUID. Pass empty string to use the current conversation from context.",
-			},
-		},
-		"required":             []string{"conversation_id"},
-		"additionalProperties": false,
-	},
-}
-
 var setPresenceToolDef = llm.ToolDef{
 	Name:        "message_set_presence",
 	Description: "Set account-level presence for a messaging platform.",
@@ -153,8 +121,6 @@ func BuildTools(svc *Service) []llm.Tool {
 		{Def: replyToolDef, Handler: replyHandler(svc)},
 		{Def: noopToolDef, Handler: noopHandler()},
 		{Def: reactToolDef, Handler: reactHandler(svc)},
-		{Def: startTypingToolDef, Handler: startTypingHandler(svc)},
-		{Def: stopTypingToolDef, Handler: stopTypingHandler(svc)},
 		{Def: setPresenceToolDef, Handler: setPresenceHandler(svc)},
 		{Def: updateMediaDescriptionToolDef, Handler: updateMediaDescriptionHandler(svc)},
 	}
@@ -249,60 +215,6 @@ func reactHandler(svc *Service) llm.ToolExecutor {
 		}
 
 		return `{"sent":true}`, nil
-	}
-}
-
-func startTypingHandler(svc *Service) llm.ToolExecutor {
-	return func(ctx context.Context, call llm.ToolCall) (string, error) {
-		var args struct {
-			ConversationID string `json:"conversation_id"`
-		}
-
-		err := json.Unmarshal([]byte(call.Arguments), &args)
-		if err != nil {
-			return llm.ToolError(err), nil
-		}
-
-		if strings.TrimSpace(args.ConversationID) == "" {
-			args.ConversationID = contextMetaValue(ctx, "conversation_id")
-		}
-		if strings.TrimSpace(args.ConversationID) == "" {
-			return `{"error":"missing conversation_id"}`, nil
-		}
-
-		err = svc.StartTyping(ctx, args.ConversationID)
-		if err != nil {
-			return llm.ToolError(err), nil
-		}
-
-		return `{"ok":true}`, nil
-	}
-}
-
-func stopTypingHandler(svc *Service) llm.ToolExecutor {
-	return func(ctx context.Context, call llm.ToolCall) (string, error) {
-		var args struct {
-			ConversationID string `json:"conversation_id"`
-		}
-
-		err := json.Unmarshal([]byte(call.Arguments), &args)
-		if err != nil {
-			return llm.ToolError(err), nil
-		}
-
-		if strings.TrimSpace(args.ConversationID) == "" {
-			args.ConversationID = contextMetaValue(ctx, "conversation_id")
-		}
-		if strings.TrimSpace(args.ConversationID) == "" {
-			return `{"error":"missing conversation_id"}`, nil
-		}
-
-		err = svc.StopTyping(ctx, args.ConversationID)
-		if err != nil {
-			return llm.ToolError(err), nil
-		}
-
-		return `{"ok":true}`, nil
 	}
 }
 

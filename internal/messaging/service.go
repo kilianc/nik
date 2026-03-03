@@ -378,34 +378,6 @@ func (s *Service) React(ctx context.Context, messageID string, emoji string) err
 	return platform.React(ctx, msg.ExternalConversationID, msg.ExternalMessageID, msg.ExternalSenderID, emoji)
 }
 
-func (s *Service) StartTyping(ctx context.Context, conversationID string) error {
-	conv, err := db.GetConversation(ctx, s.db, db.GetConversationParams{ID: conversationID})
-	if err != nil {
-		return err
-	}
-
-	platform, err := s.registry.Get(conv.Platform)
-	if err != nil {
-		return err
-	}
-
-	return platform.StartTyping(ctx, conv.ExternalConversationID)
-}
-
-func (s *Service) StopTyping(ctx context.Context, conversationID string) error {
-	conv, err := db.GetConversation(ctx, s.db, db.GetConversationParams{ID: conversationID})
-	if err != nil {
-		return err
-	}
-
-	platform, err := s.registry.Get(conv.Platform)
-	if err != nil {
-		return err
-	}
-
-	return platform.StopTyping(ctx, conv.ExternalConversationID)
-}
-
 func (s *Service) SetPresence(ctx context.Context, platformName string, available bool) error {
 	platform, err := s.registry.Get(platformName)
 	if err != nil {

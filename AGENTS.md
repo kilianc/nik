@@ -223,7 +223,7 @@ Tools are defined in their domain package, not in `brain/`:
 
 | Package | Tools | Why |
 |---------|-------|-----|
-| `internal/messaging/` | `message_reply`, `message_noop`, `message_react`, `message_start_typing`, `message_stop_typing`, `message_set_presence`, `message_update_media_description` | canonical messaging actions routed by platform |
+| `internal/messaging/` | `message_reply`, `message_noop`, `message_react`, `message_set_presence`, `message_update_media_description` | canonical messaging actions routed by platform |
 | `internal/contacts/` | `update_contact` | contact profile management |
 | `internal/search/` | `db_query`, `search_contacts` | read/search tooling |
 | `internal/llm/` | `describe_media` | generic AI capability, wraps LLM methods |
