@@ -86,7 +86,7 @@ func (d *DataSource) Check(ctx context.Context) ([]brain.DataSourceOutput, error
 		Meta:  map[string]string{},
 		Processing: func(ctx context.Context) error {
 			slog.Info("journal started", "pkg", "journal", "date", date)
-			return nil
+			return d.svc.Start(ctx)
 		},
 		Processed: func(ctx context.Context) error {
 			d.mu.Lock()

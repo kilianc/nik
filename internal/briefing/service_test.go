@@ -44,7 +44,7 @@ func TestWriteBriefingThenHasBriefing(t *testing.T) {
 	}
 }
 
-func TestWriteBriefingDuplicateErrors(t *testing.T) {
+func TestWriteBriefingUpsertOverwrites(t *testing.T) {
 	ctx := context.Background()
 	svc := testService(t)
 
@@ -54,8 +54,51 @@ func TestWriteBriefingDuplicateErrors(t *testing.T) {
 	}
 
 	err = svc.WriteBriefing(ctx, "second briefing")
-	if err == nil {
-		t.Fatal("expected error on duplicate write")
+	if err != nil {
+		t.Fatalf("upsert write: %v", err)
+	}
+}
+
+func TestStartBriefingThenHasBriefing(t *testing.T) {
+	ctx := context.Background()
+	svc := testService(t)
+
+	err := svc.StartBriefing(ctx)
+	if err != nil {
+		t.Fatalf("start briefing: %v", err)
+	}
+
+	has, err := svc.HasBriefing(ctx)
+	if err != nil {
+		t.Fatalf("has briefing: %v", err)
+	}
+
+	if !has {
+		t.Fatal("expected briefing to exist after start")
+	}
+}
+
+func TestStartBriefingThenWriteOverwrites(t *testing.T) {
+	ctx := context.Background()
+	svc := testService(t)
+
+	err := svc.StartBriefing(ctx)
+	if err != nil {
+		t.Fatalf("start briefing: %v", err)
+	}
+
+	err = svc.WriteBriefing(ctx, "real content")
+	if err != nil {
+		t.Fatalf("write after start: %v", err)
+	}
+
+	has, err := svc.HasBriefing(ctx)
+	if err != nil {
+		t.Fatalf("has briefing: %v", err)
+	}
+
+	if !has {
+		t.Fatal("expected briefing to exist after write")
 	}
 }
 

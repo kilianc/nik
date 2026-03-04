@@ -94,6 +94,38 @@ func TestCheckReleasesActiveOnProcessed(t *testing.T) {
 	}
 }
 
+func TestCheckNoRetriggerAfterProcessing(t *testing.T) {
+	ctx := context.Background()
+	ds := testDataSource(t, time.Date(2026, 2, 27, 23, 0, 0, 0, time.UTC))
+
+	outputs, err := ds.Check(ctx)
+	if err != nil {
+		t.Fatalf("first check: %v", err)
+	}
+	if len(outputs) != 1 {
+		t.Fatalf("expected 1 output, got %d", len(outputs))
+	}
+
+	err = outputs[0].Processing(ctx)
+	if err != nil {
+		t.Fatalf("processing: %v", err)
+	}
+
+	err = outputs[0].Processed(ctx)
+	if err != nil {
+		t.Fatalf("processed: %v", err)
+	}
+
+	outputs, err = ds.Check(ctx)
+	if err != nil {
+		t.Fatalf("second check: %v", err)
+	}
+
+	if len(outputs) != 0 {
+		t.Fatalf("expected no outputs after processing inserted placeholder, got %d", len(outputs))
+	}
+}
+
 func testDataSource(t *testing.T, now time.Time) *DataSource {
 	t.Helper()
 

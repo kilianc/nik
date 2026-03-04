@@ -42,7 +42,7 @@ func TestWritePageThenHasPage(t *testing.T) {
 	}
 }
 
-func TestWritePageDuplicateErrors(t *testing.T) {
+func TestWritePageUpsertOverwrites(t *testing.T) {
 	ctx := context.Background()
 	svc := testService(t)
 
@@ -52,8 +52,51 @@ func TestWritePageDuplicateErrors(t *testing.T) {
 	}
 
 	err = svc.WritePage(ctx, "second entry")
-	if err == nil {
-		t.Fatal("expected error on duplicate write")
+	if err != nil {
+		t.Fatalf("upsert write: %v", err)
+	}
+}
+
+func TestStartThenHasPage(t *testing.T) {
+	ctx := context.Background()
+	svc := testService(t)
+
+	err := svc.Start(ctx)
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+
+	has, err := svc.HasPage(ctx)
+	if err != nil {
+		t.Fatalf("has page: %v", err)
+	}
+
+	if !has {
+		t.Fatal("expected page to exist after start")
+	}
+}
+
+func TestStartThenWriteOverwrites(t *testing.T) {
+	ctx := context.Background()
+	svc := testService(t)
+
+	err := svc.Start(ctx)
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+
+	err = svc.WritePage(ctx, "real content")
+	if err != nil {
+		t.Fatalf("write after start: %v", err)
+	}
+
+	has, err := svc.HasPage(ctx)
+	if err != nil {
+		t.Fatalf("has page: %v", err)
+	}
+
+	if !has {
+		t.Fatal("expected page to exist after write")
 	}
 }
 

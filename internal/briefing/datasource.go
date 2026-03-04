@@ -110,7 +110,7 @@ func (d *DataSource) Check(ctx context.Context) ([]brain.DataSourceOutput, error
 		},
 		Processing: func(ctx context.Context) error {
 			slog.Info("briefing started", "pkg", "briefing", "date", date)
-			return nil
+			return d.svc.StartBriefing(ctx)
 		},
 		Processed: func(ctx context.Context) error {
 			d.mu.Lock()

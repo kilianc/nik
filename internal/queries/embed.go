@@ -135,6 +135,9 @@ var MemoryRandom string
 //go:embed journal_check.sql
 var JournalCheck string
 
+//go:embed journal_start.sql
+var JournalStart string
+
 //go:embed journal_write.sql
 var JournalWrite string
 
@@ -171,6 +174,9 @@ var DreamPasses string
 
 //go:embed briefing_check.sql
 var BriefingCheck string
+
+//go:embed briefing_start.sql
+var BriefingStart string
 
 //go:embed briefing_write.sql
 var BriefingWrite string

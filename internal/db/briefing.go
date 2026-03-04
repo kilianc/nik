@@ -37,6 +37,15 @@ func BriefingGetPage(ctx context.Context, db *sql.DB, date string) (string, erro
 	return content, nil
 }
 
+func BriefingStartPage(ctx context.Context, db *sql.DB, date string) error {
+	_, err := db.ExecContext(ctx, queries.BriefingStart, date)
+	if err != nil {
+		return fmt.Errorf("start briefing page %s: %w", date, err)
+	}
+
+	return nil
+}
+
 func BriefingWritePage(ctx context.Context, db *sql.DB, date, content string) error {
 	_, err := db.ExecContext(ctx, queries.BriefingWrite, date, content)
 	if err != nil {
