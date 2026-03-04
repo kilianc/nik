@@ -24,6 +24,10 @@ func (s *Service) HasPage(ctx context.Context) (bool, error) {
 	return db.JournalHasPage(ctx, s.db, s.today())
 }
 
+func (s *Service) Start(ctx context.Context) error {
+	return db.JournalStartPage(ctx, s.db, s.today())
+}
+
 func (s *Service) WritePage(ctx context.Context, content string) error {
 	date := s.today()
 

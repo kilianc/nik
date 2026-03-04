@@ -37,6 +37,15 @@ func JournalGetPage(ctx context.Context, db *sql.DB, date string) (string, error
 	return content, nil
 }
 
+func JournalStartPage(ctx context.Context, db *sql.DB, date string) error {
+	_, err := db.ExecContext(ctx, queries.JournalStart, date)
+	if err != nil {
+		return fmt.Errorf("start journal page %s: %w", date, err)
+	}
+
+	return nil
+}
+
 func JournalWritePage(ctx context.Context, db *sql.DB, date, content string) error {
 	_, err := db.ExecContext(ctx, queries.JournalWrite, date, content)
 	if err != nil {

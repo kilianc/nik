@@ -25,6 +25,10 @@ func (s *Service) HasBriefing(ctx context.Context) (bool, error) {
 	return db.BriefingHasPage(ctx, s.db, s.today())
 }
 
+func (s *Service) StartBriefing(ctx context.Context) error {
+	return db.BriefingStartPage(ctx, s.db, s.today())
+}
+
 func (s *Service) WriteBriefing(ctx context.Context, content string) error {
 	date := s.today()
 
