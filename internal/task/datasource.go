@@ -165,8 +165,7 @@ func (d *DataSource) conversationContext(ctx context.Context, conversationID str
 	return lines
 }
 
-// ActiveTasksForConversation returns active tasks for debug output.
-// Implements brain.DebugTaskQuerier.
+// implements brain.DebugTaskQuerier.
 func (s *Service) ActiveTasksForConversation(ctx context.Context, conversationID string) ([]brain.DebugTaskInfo, error) {
 	active, err := s.ActiveTasks(ctx, "message", conversationID)
 	if err != nil {
@@ -186,8 +185,7 @@ func (s *Service) ActiveTasksForConversation(ctx context.Context, conversationID
 	return out, nil
 }
 
-// ConversationTasks returns active tasks for a conversation.
-// Implements messaging.TaskQuerier.
+// implements messaging.TaskQuerier.
 func (s *Service) ConversationTasks(ctx context.Context, conversationID string) ([]messaging.TaskInfo, error) {
 	active, err := s.ActiveTasks(ctx, "message", conversationID)
 	if err != nil {

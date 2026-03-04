@@ -68,6 +68,7 @@ When working in plan mode, always put details, before/after examples, and ration
 - keep comments minimal and focused on the why
 - avoid comments that restate the code
 - avoid placeholder comments like `// helper function`
+- no godoc-style comments that restate the function/type name (e.g. `// GetUser returns a user by ID`); only comment exported symbols when the comment adds info the name and signature don't already convey
 
 ### Go
 

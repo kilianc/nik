@@ -48,8 +48,7 @@ func WithCodex(auth *codex.Auth) ClientOption {
 	}
 }
 
-// WithReasoningEffort sets the pointer to the reasoning effort string.
-// The Client reads through this pointer on each call, so the caller
+// the client reads through this pointer on each call, so the caller
 // can update the value at runtime (e.g. from config).
 func WithReasoningEffort(effort *string) ClientOption {
 	return func(c *clientConfig) {
@@ -150,7 +149,6 @@ type Usage struct {
 	ReasoningTokens int64
 }
 
-// CompletionExtra holds debug-only data from a Complete call.
 type CompletionExtra struct {
 	RawResponses       []string
 	ReasoningSummaries []string

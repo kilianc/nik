@@ -14,7 +14,6 @@ import (
 	"github.com/kciuffolo/nik/internal/llm"
 )
 
-// DebugInput holds everything the brain knows about a single LLM round.
 type DebugInput struct {
 	Meta         map[string]string
 	Instructions string
@@ -27,14 +26,12 @@ type DebugInput struct {
 	ProcessErr   error
 }
 
-// DebugRecorder writes debug output for a single LLM round.
 type DebugRecorder func(DebugInput)
 
 func (b *Brain) SetDebugRecorder(fn DebugRecorder) {
 	b.debugRecorder = fn
 }
 
-// DebugTaskInfo holds task data for debug output.
 type DebugTaskInfo struct {
 	ID        string
 	Goal      string
@@ -42,13 +39,11 @@ type DebugTaskInfo struct {
 	CreatedAt time.Time
 }
 
-// DebugTaskQuerier fetches active tasks for a conversation.
 type DebugTaskQuerier interface {
 	ActiveTasksForConversation(ctx context.Context, conversationID string) ([]DebugTaskInfo, error)
 }
 
-// NewDebugRecorder creates a DebugRecorder that writes markdown files.
-// All debug state (paths, model, task querier) is captured in the closure.
+// all debug state (paths, model, task querier) is captured in the closure.
 func NewDebugRecorder(debugPath, model string, now func() time.Time, tasks DebugTaskQuerier) DebugRecorder {
 	return func(input DebugInput) {
 		if debugPath == "" {

@@ -109,7 +109,6 @@ func handleLoad(dirs []string, name string) (string, error) {
 	return llm.ToolErrorf("skill %q not found", name), nil
 }
 
-// ListSkills reads skill directories and parses frontmatter summaries.
 // later directories override earlier ones when skills share a name.
 func ListSkills(dirs ...string) ([]skillSummary, error) {
 	seen := map[string]int{}
@@ -252,14 +251,12 @@ func parseFrontmatter(path string) (skillSummary, error) {
 	return s, nil
 }
 
-// PreloadedSkill holds the name and body content of a skill marked preload: true.
 type PreloadedSkill struct {
 	Name    string
 	Content string
 }
 
-// PreloadedSkills returns the full SKILL.md body (after frontmatter) for all
-// skills with preload: true. later directories override earlier ones by name.
+// later directories override earlier ones by name.
 func PreloadedSkills(dirs ...string) ([]PreloadedSkill, error) {
 	seen := map[string]int{}
 	var result []PreloadedSkill

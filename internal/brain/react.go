@@ -8,7 +8,6 @@ import (
 
 const reactionMinGap = 800 * time.Millisecond
 
-// ToolReactor sends a reaction emoji to the message that triggered an activation.
 type ToolReactor func(ctx context.Context, messageID, emoji string) error
 
 type reactionQueueKey struct{}

@@ -56,7 +56,6 @@ func scanContact(s scanner) (Contact, error) {
 	return c, nil
 }
 
-// GetContact looks up a contact by UUID or known platform identifier.
 func GetContact(ctx context.Context, db *sql.DB, identifier string) (Contact, error) {
 	row := db.QueryRowContext(ctx, queries.GetContact, identifier)
 	return scanContact(row)

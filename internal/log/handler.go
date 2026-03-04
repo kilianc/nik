@@ -7,8 +7,6 @@ import (
 
 const maxAttrLen = 20
 
-// TruncHandler wraps an slog.Handler and truncates all string attribute
-// values to maxAttrLen characters.
 type TruncHandler struct {
 	Inner slog.Handler
 }

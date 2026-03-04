@@ -145,7 +145,6 @@ func (c Config) BriefingAt(now time.Time) time.Time {
 	return time.Date(y, m, d, hour, min, 0, 0, loc)
 }
 
-// DreamAt returns the scheduled time for a dream pass on the current night.
 // passes 1-4 are hourly from dream_start; pass 5 (wake) is dream_start + 4h.
 // handles overnight boundaries: at 11pm, returns tomorrow's 2am.
 func (c Config) DreamAt(now time.Time, pass int) time.Time {

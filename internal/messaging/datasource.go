@@ -8,12 +8,10 @@ import (
 	"github.com/kciuffolo/nik/internal/config"
 )
 
-// TaskQuerier provides active task context for conversation inputs.
 type TaskQuerier interface {
 	ConversationTasks(ctx context.Context, conversationID string) ([]TaskInfo, error)
 }
 
-// TaskInfo is the subset of task data needed for conversation context.
 type TaskInfo struct {
 	ID        string
 	Goal      string

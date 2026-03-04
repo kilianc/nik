@@ -12,7 +12,6 @@ import (
 	"github.com/kciuffolo/nik/internal/llm"
 )
 
-// ActivationStats holds non-sensitive metadata for a single brain activation.
 type ActivationStats struct {
 	Meta            map[string]string
 	Model           string
@@ -51,7 +50,6 @@ type Brain struct {
 	activations *SyncSet
 }
 
-// IsActive reports whether an activation with the given run ID is still alive.
 func (b *Brain) IsActive(activationID string) bool {
 	return b.activations.Has(activationID)
 }

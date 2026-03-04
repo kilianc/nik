@@ -776,8 +776,7 @@ func previewForLog(s string, maxRunes int) string {
 	return string(runes[:maxRunes])
 }
 
-// FindMessage resolves a text snippet to a message in the conversation.
-// The snippet is matched against formatted message lines (the same lines
+// the snippet is matched against formatted message lines (the same lines
 // the LLM sees in the prompt), so any substring the LLM copies will match.
 func (s *Service) FindMessage(ctx context.Context, conversationID, text string) (db.Message, error) {
 	msgs, err := db.GetMessagesByConversation(ctx, s.db, conversationID, "", 200)
