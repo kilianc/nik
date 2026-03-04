@@ -43,8 +43,8 @@ type Brain struct {
 	statsRecorder StatsRecorder
 	now           func() time.Time
 
-	activeConversations *SyncSet
-	activations         *SyncSet
+	claimed     *SyncSet
+	activations *SyncSet
 }
 
 // IsActive reports whether an activation with the given run ID is still alive.
@@ -52,20 +52,15 @@ func (b *Brain) IsActive(activationID string) bool {
 	return b.activations.Has(activationID)
 }
 
-// IsConversationActive reports whether a conversation is currently being activated.
-func (b *Brain) IsConversationActive(conversationID string) bool {
-	return b.activeConversations.Has(conversationID)
-}
-
 func New(cfg *config.Config, llmClient *llm.Client) *Brain {
 	return &Brain{
-		cfg:                 cfg,
-		llm:                 llmClient,
-		toolExec:            make(map[string]llm.ToolExecutor),
-		privileged:          make(map[string]bool),
-		now:                 time.Now,
-		activeConversations: NewSyncSet(),
-		activations:         NewSyncSet(),
+		cfg:         cfg,
+		llm:         llmClient,
+		toolExec:    make(map[string]llm.ToolExecutor),
+		privileged:  make(map[string]bool),
+		now:         time.Now,
+		claimed:     NewSyncSet(),
+		activations: NewSyncSet(),
 	}
 }
 
@@ -115,10 +110,12 @@ func (b *Brain) perceive(ctx context.Context) {
 	}
 
 	for _, output := range outputs {
-		conversationID := output.Meta["conversation_id"]
-
-		if conversationID != "" && !b.activeConversations.TrySet(conversationID) {
-			continue
+		sourceID := output.Meta["source_id"]
+		if sourceID != "" {
+			key := output.Meta["source"] + ":" + sourceID
+			if !b.claimed.TrySet(key) {
+				continue
+			}
 		}
 
 		go b.activate(ctx, output)
@@ -130,9 +127,10 @@ func (b *Brain) activate(ctx context.Context, output DataSourceOutput) {
 		output.Meta = make(map[string]string)
 	}
 
-	conversationID := output.Meta["conversation_id"]
-	if conversationID != "" {
-		defer b.activeConversations.Delete(conversationID)
+	sourceID := output.Meta["source_id"]
+	if sourceID != "" {
+		key := output.Meta["source"] + ":" + sourceID
+		defer b.claimed.Delete(key)
 	}
 
 	activationID := id.Short(8)

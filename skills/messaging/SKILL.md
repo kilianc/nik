@@ -21,10 +21,12 @@ matching: quote part of the message text and the handler finds it.
 
 ### message_reply
 
-Send a text reply to a conversation.
+Send one or more messages to a conversation. Each item in the array
+becomes a separate text bubble -- like texting. One thought per message.
 
 - `conversation_id` -- nik conversation UUID (empty = current)
-- `message` -- reply text
+- `contact_id` -- contact UUID for starting a new DM (empty = skip)
+- `messages` -- array of `{text, image_path}` objects sent in order
 
 ### message_noop
 

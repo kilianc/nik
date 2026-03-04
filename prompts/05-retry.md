@@ -2,7 +2,7 @@ you just completed a full pass and produced zero tool calls. something went wron
 
 - did I accomplish the task? did I respond to the person?
 - did I get stuck? on what? why?
-- did I plan well and then fail to execute?
+- did I plan well and then fail to delegate?
 - did I chicken out? did group silence rules override a direct request from my owner?
 - what specifically prevented me from calling a tool?
 

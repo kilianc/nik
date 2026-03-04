@@ -21,6 +21,7 @@ import (
 	"github.com/kciuffolo/nik/internal/search"
 	"github.com/kciuffolo/nik/internal/shell"
 	"github.com/kciuffolo/nik/internal/skills"
+	"github.com/kciuffolo/nik/internal/task"
 	"github.com/kciuffolo/nik/internal/websearch"
 )
 
@@ -135,6 +136,35 @@ func buildTools(cfg *config.Config, llmClient *llm.Client, conn *sql.DB) map[str
 
 		alarmSvc := alarms.New(conn)
 		for _, t := range alarms.BuildTools(alarmSvc) {
+			tools[t.Def.Name] = t.Handler
+		}
+
+		taskSvc := task.NewService(conn)
+		searchSvcT := search.NewService(conn)
+		var taskToolList []llm.Tool
+		taskToolList = append(taskToolList, shell.BuildTools(cfg)...)
+		taskToolList = append(taskToolList, websearch.BuildTools(cfg)...)
+		taskToolList = append(taskToolList, llm.BuildTools(llmClient, cfg.Home)...)
+		taskToolList = append(taskToolList, search.BuildTools(conn, searchSvcT)...)
+		taskToolList = append(taskToolList, memory.BuildReadTools(memorySvc)...)
+		taskToolList = append(taskToolList, skills.BuildTools(cfg)...)
+
+		taskToolDefs := make([]llm.ToolDef, len(taskToolList))
+		taskHandlers := make(map[string]llm.ToolExecutor, len(taskToolList))
+		for i, t := range taskToolList {
+			taskToolDefs[i] = t.Def
+			taskHandlers[t.Def.Name] = t.Handler
+		}
+		taskExec := func(ctx context.Context, call llm.ToolCall) (string, error) {
+			h, ok := taskHandlers[call.Name]
+			if !ok {
+				return llm.ToolErrorf("unknown tool %q", call.Name), nil
+			}
+			return h(ctx, call)
+		}
+
+		taskRunner := task.NewRunner(cfg, llmClient, taskSvc, conn, taskToolDefs, taskExec)
+		for _, t := range task.BuildTools(taskSvc, taskRunner) {
 			tools[t.Def.Name] = t.Handler
 		}
 	}

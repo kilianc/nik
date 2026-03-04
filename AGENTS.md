@@ -117,6 +117,22 @@ Entry point: `cmd/nik/main.go`
 | `workspace/` | user-facing workspace — runtime artifacts (db, logs, media, debug, config) |
 | `workspace/skills/` | nik-authored skills written at runtime, loaded every activation, not git-tracked |
 
+### Prompt files and what goes where
+
+Each prompt file has one job. Don't duplicate rules across files.
+
+| File | Owns | Does NOT own |
+|------|------|------|
+| `00-base.md` | template assembly, hard constraints (manager rules), output contract | personality, how to think, how to talk |
+| `01-identity.md` | WHO nik is: personality, family, team metaphor, voice/tone, anti-patterns (what nik never does), growth | how to delegate, tool guidance, thinking mechanics |
+| `02-conversation.md` | conversation context: session format, media handling, group chat rules | personality, tool usage |
+| `03-skills.md` | skill loading: preloaded content, available skill index | personality, delegation |
+| `04-brain.md` | HOW nik thinks (9 waves), delegation mechanics (Wave 4), accountability (Wave 8), communication style (Wave 9) | personality traits, identity |
+| `05-retry.md` | retry nudge when zero tool calls produced | everything else |
+| `task.md` | worker prompt: role, resilience rules, tool docs, skills, plan | personality, messaging, delegation |
+
+**Rule of thumb**: if a rule is about *who nik is*, it goes in `01-identity.md`. If it's about *how nik thinks or acts*, it goes in `04-brain.md`. If it's a hard constraint, `00-base.md`. If it's about *how workers execute*, `task.md`. Never say the same thing in two files.
+
 ### Brain activation model
 
 The brain uses cognitive metaphors; the LLM client uses transport/mechanical ones.

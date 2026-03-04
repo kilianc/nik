@@ -28,6 +28,7 @@ import (
 	"github.com/kciuffolo/nik/internal/shell"
 	"github.com/kciuffolo/nik/internal/skills"
 	"github.com/kciuffolo/nik/internal/stats"
+	"github.com/kciuffolo/nik/internal/task"
 	"github.com/kciuffolo/nik/internal/websearch"
 	"github.com/kciuffolo/nik/internal/whatsapp"
 )
@@ -135,30 +136,43 @@ func main() {
 	journalSvc := journal.NewService(conn, cfg)
 	dreamSvc := dream.NewService(conn, cfg)
 	briefingSvc := briefing.NewService(conn, cfg)
+	taskSvc := task.NewService(conn)
+
+	// task runner tools: subset available to background subagents
+	var taskTools []llm.Tool
+	taskTools = append(taskTools, shell.BuildTools(cfg)...)
+	taskTools = append(taskTools, websearch.BuildTools(cfg)...)
+	taskTools = append(taskTools, llm.BuildTools(llmClient, cfg.Home)...)
+	taskTools = append(taskTools, search.BuildTools(conn, searchSvc)...)
+	taskTools = append(taskTools, memory.BuildReadTools(memorySvc)...)
+	taskTools = append(taskTools, skills.BuildTools(cfg)...)
+
+	taskToolDefs, taskExec := llm.SplitTools(taskTools)
+	taskRunner := task.NewRunner(cfg, llmClient, taskSvc, conn, taskToolDefs, taskExec)
+
 	b := brain.New(cfg, llmClient)
 
 	b.SetSoulReader(dreamSvc.CurrentSoul)
 	b.SetStatsRecorder(stats.NewRecorder(conn).Record)
-	b.RegisterDataSource(messaging.NewDataSource(cfg, messagingSvc))
+
+	b.RegisterDataSource(messaging.NewDataSource(cfg, messagingSvc, taskSvc))
 	b.RegisterDataSource(alarms.NewDataSource(alarmSvc, messagingSvc))
-	b.RegisterDataSource(shell.NewDataSource(messagingSvc, b.IsActive, b.IsConversationActive))
+	b.RegisterDataSource(task.NewDataSource(taskSvc, messagingSvc))
 	b.RegisterDataSource(journal.NewDataSource(journalSvc, conn, messagingSvc, cfg))
 	b.RegisterDataSource(dream.NewDataSource(dreamSvc, conn, memorySvc, cfg))
 	b.RegisterDataSource(briefing.NewDataSource(briefingSvc, cfg))
 
 	b.RegisterTools(config.BuildTools(cfg, conn)...)
 	b.RegisterTools(contacts.BuildTools(conn)...)
-	b.RegisterTools(llm.BuildTools(llmClient, cfg.Home)...)
 	b.RegisterTools(memory.BuildTools(memorySvc)...)
 	b.RegisterTools(messaging.BuildTools(messagingSvc)...)
 	b.RegisterTools(alarms.BuildTools(alarmSvc)...)
 	b.RegisterTools(search.BuildTools(conn, searchSvc)...)
-	b.RegisterTools(shell.BuildTools(cfg)...)
-	b.RegisterTools(websearch.BuildTools(cfg)...)
 	b.RegisterTools(skills.BuildTools(cfg)...)
 	b.RegisterTools(journal.BuildTools(journalSvc)...)
 	b.RegisterTools(dream.BuildTools(dreamSvc)...)
 	b.RegisterTools(briefing.BuildTools(briefingSvc)...)
+	b.RegisterTools(task.BuildTools(taskSvc, taskRunner)...)
 
 	go b.Awake(ctx, 2*time.Second)
 

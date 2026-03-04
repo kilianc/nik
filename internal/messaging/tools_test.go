@@ -28,14 +28,19 @@ func TestBuildToolsReturnsExpectedToolNames(t *testing.T) {
 	}
 }
 
-func TestReplyToolDefHasImagePathParam(t *testing.T) {
+func TestReplyToolDefHasMessagesArray(t *testing.T) {
 	props, ok := replyToolDef.Parameters["properties"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected properties map")
 	}
 
-	if _, ok := props["image_path"]; !ok {
-		t.Fatalf("expected 'image_path' parameter in reply tool def")
+	msgsProp, ok := props["messages"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected 'messages' parameter in reply tool def")
+	}
+
+	if msgsProp["type"] != "array" {
+		t.Fatalf("expected messages to be array type, got %v", msgsProp["type"])
 	}
 
 	required, ok := replyToolDef.Parameters["required"].([]string)
@@ -45,13 +50,13 @@ func TestReplyToolDefHasImagePathParam(t *testing.T) {
 
 	found := false
 	for _, r := range required {
-		if r == "image_path" {
+		if r == "messages" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Fatalf("expected 'image_path' in required list")
+		t.Fatalf("expected 'messages' in required list")
 	}
 }
 
@@ -64,6 +69,25 @@ func TestReplyHandlerRejectsInvalidJSON(t *testing.T) {
 	}
 	if !strings.Contains(out, `"error"`) {
 		t.Fatalf("expected JSON error response, got %q", out)
+	}
+}
+
+func TestReplyHandlerRejectsEmptyMessages(t *testing.T) {
+	handler := replyHandler(&Service{})
+
+	ctx := context.WithValue(
+		context.Background(),
+		"meta",
+		map[string]string{"conversation_id": "conv-123"},
+	)
+	out, err := handler(ctx, llm.ToolCall{
+		Arguments: `{"conversation_id":"","contact_id":"","messages":[]}`,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "empty") {
+		t.Fatalf("expected empty messages error, got %q", out)
 	}
 }
 

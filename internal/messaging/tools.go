@@ -11,7 +11,7 @@ import (
 
 var replyToolDef = llm.ToolDef{
 	Name:        "message_reply",
-	Description: "Send a message to a conversation or contact. Supports text and image messages. Use conversation_id for existing conversations, or contact_id to start a new DM.",
+	Description: "Send one or more messages to a conversation or contact. Each message is a separate text bubble, like texting. Use conversation_id for existing conversations, or contact_id to start a new DM.",
 	Parameters: map[string]any{
 		"type": "object",
 		"properties": map[string]any{
@@ -23,16 +23,27 @@ var replyToolDef = llm.ToolDef{
 				"type":        "string",
 				"description": "Contact UUID. Use to start a new DM when no conversation exists yet. Pass empty string when using conversation_id.",
 			},
-			"message": map[string]any{
-				"type":        "string",
-				"description": "Reply text, or image caption when sending an image.",
+			"messages": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"text": map[string]any{
+							"type":        "string",
+							"description": "Message text, or image caption when sending an image.",
+						},
+						"image_path": map[string]any{
+							"type":        "string",
+							"description": "Absolute path to an image file to send. Omit or pass empty string for text-only.",
+						},
+					},
+				"required":             []string{"text", "image_path"},
+				"additionalProperties": false,
 			},
-			"image_path": map[string]any{
-				"type":        "string",
-				"description": "Absolute path to an image file to send. Pass empty string for text-only replies.",
+				"description": "Array of messages to send, in order. Each becomes a separate bubble.",
 			},
 		},
-		"required":             []string{"conversation_id", "contact_id", "message", "image_path"},
+		"required":             []string{"conversation_id", "contact_id", "messages"},
 		"additionalProperties": false,
 	},
 }
@@ -131,18 +142,26 @@ func BuildTools(svc *Service) []llm.Tool {
 	}
 }
 
+type replyMessage struct {
+	Text      string `json:"text"`
+	ImagePath string `json:"image_path"`
+}
+
 func replyHandler(svc *Service) llm.ToolExecutor {
 	return func(ctx context.Context, call llm.ToolCall) (string, error) {
 		var args struct {
-			ConversationID string `json:"conversation_id"`
-			ContactID      string `json:"contact_id"`
-			Message        string `json:"message"`
-			ImagePath      string `json:"image_path"`
+			ConversationID string         `json:"conversation_id"`
+			ContactID      string         `json:"contact_id"`
+			Messages       []replyMessage `json:"messages"`
 		}
 
 		err := json.Unmarshal([]byte(call.Arguments), &args)
 		if err != nil {
 			return llm.ToolError(err), nil
+		}
+
+		if len(args.Messages) == 0 {
+			return `{"error":"messages array is empty"}`, nil
 		}
 
 		resolvedFromContact := false
@@ -152,9 +171,9 @@ func replyHandler(svc *Service) llm.ToolExecutor {
 		}
 
 		if strings.TrimSpace(args.ConversationID) == "" && strings.TrimSpace(args.ContactID) != "" {
-			convID, err := svc.ResolveConversation(ctx, args.ContactID)
-			if err != nil {
-				return llm.ToolError(err), nil
+			convID, resolveErr := svc.ResolveConversation(ctx, args.ContactID)
+			if resolveErr != nil {
+				return llm.ToolError(resolveErr), nil
 			}
 			args.ConversationID = convID
 			resolvedFromContact = true
@@ -164,21 +183,24 @@ func replyHandler(svc *Service) llm.ToolExecutor {
 			return `{"error":"missing conversation_id and contact_id"}`, nil
 		}
 
-		if strings.TrimSpace(args.ImagePath) != "" {
-			err = svc.SendImage(ctx, args.ConversationID, args.ImagePath, args.Message)
-		} else {
-			err = svc.Reply(ctx, args.ConversationID, args.Message)
+		for _, msg := range args.Messages {
+			if strings.TrimSpace(msg.ImagePath) != "" {
+				err = svc.SendImage(ctx, args.ConversationID, msg.ImagePath, msg.Text)
+			} else {
+				err = svc.Reply(ctx, args.ConversationID, msg.Text)
+			}
+
+			if err != nil {
+				return llm.ToolError(err), nil
+			}
 		}
 
-		if err != nil {
-			return llm.ToolError(err), nil
-		}
-
+		result := fmt.Sprintf(`{"sent":%d}`, len(args.Messages))
 		if resolvedFromContact {
-			return fmt.Sprintf(`{"sent":true,"conversation_id":%q}`, args.ConversationID), nil
+			result = fmt.Sprintf(`{"sent":%d,"conversation_id":%q}`, len(args.Messages), args.ConversationID)
 		}
 
-		return `{"sent":true}`, nil
+		return result, nil
 	}
 }
 

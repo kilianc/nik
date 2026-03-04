@@ -164,7 +164,7 @@ func TestBuildConversationInputRendersResolvedContactName(t *testing.T) {
 	}
 
 	labels := svc.SenderLabels(ctx, msgs)
-	lines := BuildConversationInput(conv, msgs, labels, svc.SessionContext(ctx, conv))
+	lines := BuildConversationInput(conv, msgs, labels, svc.SessionContext(ctx, conv), nil)
 	out := strings.Join(lines, "\n")
 	if !strings.Contains(out, "Alice: hello") {
 		t.Fatalf("expected resolved contact name in output, got %q", out)

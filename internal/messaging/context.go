@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/kciuffolo/nik/internal/db"
 )
@@ -12,7 +13,7 @@ type SessionContext struct {
 	Lines []string
 }
 
-func BuildConversationInput(conv db.Conversation, msgs []db.Message, senderLabels map[string]string, session SessionContext) []string {
+func BuildConversationInput(conv db.Conversation, msgs []db.Message, senderLabels map[string]string, session SessionContext, tasks []TaskInfo) []string {
 	lines := []string{"## Session", ""}
 
 	if len(session.Lines) == 0 {
@@ -28,33 +29,83 @@ func BuildConversationInput(conv db.Conversation, msgs []db.Message, senderLabel
 
 	if len(contextMsgs) > 0 {
 		lines = append(lines, "", "### Context (already handled, do NOT act on these)", "")
-		lines = append(lines, formatMessagesWithDateSeparators(contextMsgs, senderLabels)...)
+		lines = append(lines, formatTimelineWithDateSeparators(contextMsgs, senderLabels, tasks)...)
 	}
 
 	lines = append(lines, "", "### New messages", "")
-	lines = append(lines, formatMessagesWithDateSeparators(newMsgs, senderLabels)...)
+	lines = append(lines, formatTimelineWithDateSeparators(newMsgs, senderLabels, tasks)...)
 
 	return lines
 }
 
-func formatMessagesWithDateSeparators(msgs []db.Message, senderLabels map[string]string) []string {
-	var lines []string
-	lastDate := ""
+// timelineEntry is a message or task, sorted by timestamp.
+type timelineEntry struct {
+	at   time.Time
+	line string
+}
+
+func formatTimelineWithDateSeparators(msgs []db.Message, senderLabels map[string]string, tasks []TaskInfo) []string {
+	if len(msgs) == 0 {
+		return nil
+	}
+
+	start := msgs[0].SentAt
+	var end time.Time
+	if len(msgs) > 0 {
+		end = msgs[len(msgs)-1].SentAt
+	}
+
+	var entries []timelineEntry
 
 	for _, msg := range msgs {
-		date := msg.SentAt.Format("Jan 2, 2006")
+		line := FormatMessageLine(msg, senderLabel(msg, senderLabels))
+		if line != "" {
+			entries = append(entries, timelineEntry{at: msg.SentAt, line: line})
+		}
+	}
+
+	for _, t := range tasks {
+		if t.CreatedAt.Before(start) || t.CreatedAt.After(end) {
+			continue
+		}
+		entries = append(entries, timelineEntry{at: t.CreatedAt, line: formatTaskLine(t)})
+	}
+
+	sortTimeline(entries)
+
+	var lines []string
+	lastDate := ""
+	for _, e := range entries {
+		date := e.at.Format("Jan 2, 2006")
 		if date != lastDate {
 			lines = append(lines, fmt.Sprintf("--- %s ---", date))
 			lastDate = date
 		}
+		lines = append(lines, e.line)
+	}
 
-		line := FormatMessageLine(msg, senderLabel(msg, senderLabels))
-		if line != "" {
-			lines = append(lines, line)
+	// active tasks that fall after the last message still need to show
+	for _, t := range tasks {
+		if !t.CreatedAt.After(end) {
+			continue
 		}
+		lines = append(lines, formatTaskLine(t))
 	}
 
 	return lines
+}
+
+func formatTaskLine(t TaskInfo) string {
+	ts := t.CreatedAt.Format("15:04:05")
+	return fmt.Sprintf("[%s] ⚙️ task %s — %s (%s)", ts, t.Goal, t.ID, t.Status)
+}
+
+func sortTimeline(entries []timelineEntry) {
+	for i := 1; i < len(entries); i++ {
+		for j := i; j > 0 && entries[j].at.Before(entries[j-1].at); j-- {
+			entries[j], entries[j-1] = entries[j-1], entries[j]
+		}
+	}
 }
 
 func FormatMessageLine(msg db.Message, sender string) string {

@@ -10,7 +10,7 @@ func TestNewDataSourceStoresDependencies(t *testing.T) {
 	cfg := &config.Config{MaxHistory: 42}
 	svc := &Service{}
 
-	ds := NewDataSource(cfg, svc)
+	ds := NewDataSource(cfg, svc, nil)
 	if ds == nil {
 		t.Fatalf("expected non-nil data source")
 	}

@@ -1,6 +1,7 @@
 package shell
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"regexp"
@@ -196,11 +197,11 @@ func listSessions() ([]SessionInfo, error) {
 	return sessions, nil
 }
 
-func stare(id string, maxWait int, watchFor string) (output string, alive bool, exitCode int) {
-	return stareWith(id, maxWait, watchFor, 0)
+func stare(ctx context.Context, id string, maxWait int, watchFor string) (output string, alive bool, exitCode int) {
+	return stareWith(ctx, id, maxWait, watchFor, 0)
 }
 
-func stareWith(id string, maxWait int, watchFor string, baseline int) (output string, alive bool, exitCode int) {
+func stareWith(ctx context.Context, id string, maxWait int, watchFor string, baseline int) (output string, alive bool, exitCode int) {
 	deadline := time.Now().Add(time.Duration(maxWait) * time.Second)
 
 	for {
@@ -226,7 +227,12 @@ func stareWith(id string, maxWait int, watchFor string, baseline int) (output st
 			return out, true, 0
 		}
 
-		time.Sleep(500 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			out, _ := capturePane(id)
+			return out, true, 0
+		case <-time.After(500 * time.Millisecond):
+		}
 	}
 }
 
