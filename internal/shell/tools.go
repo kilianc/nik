@@ -11,18 +11,16 @@ import (
 	"github.com/kciuffolo/nik/internal/llm"
 )
 
-const defaultCheckIn = 5 * time.Minute
-
 var shellToolDef = llm.ToolDef{
 	Name:        "shell",
-	Description: "Your personal shell. Each run opens a new tmux session -- just pass the raw command. Never wrap commands in tmux/screen/nohup/bg yourself, and never ask the user how to run things.\n\nTwo modes:\n- Staring (max_wait): watch output live, returns early on exit. Costs a round.\n- Checking in (next_check_at): schedule a reminder and yield. You get the output later.\n\nOnce next_check_at is set, you're done with that session this turn. Reply to the user and stop. The reminder fires automatically -- do not read the session again.\n\nActions: run (start + watch), read (look / stare), send (type + watch), kill (destroy).\n\nUse non-interactive flags (-y) when possible. For interactive prompts, use send.",
+	Description: "Run a shell command in a persistent tmux session.\n\nActions: run (start + watch), read (look at terminal), send (type + Enter and watch), kill (destroy).\n\nUse non-interactive flags (-y) when possible. For interactive prompts, use send.",
 	Parameters: map[string]any{
 		"type": "object",
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
 				"enum":        []string{"run", "read", "send", "kill"},
-				"description": "run: start a command and watch. read: look at terminal (or stare with max_wait). send: type + Enter and watch. kill: destroy session.",
+				"description": "run: start a command and watch. read: look at terminal output. send: type + Enter and watch. kill: destroy session.",
 			},
 			"command": map[string]any{
 				"type":        "string",
@@ -42,18 +40,14 @@ var shellToolDef = llm.ToolDef{
 			},
 			"max_wait": map[string]any{
 				"type":        "integer",
-				"description": "Seconds to watch the terminal. Polls for completion -- returns early if the command finishes. Default 10 for run, 0 for read/send. Use on read/send to 'stare' at the screen after looking or typing.",
-			},
-			"next_check_at": map[string]any{
-				"type":        "string",
-				"description": "When to come back and check (RFC3339 absolute timestamp). You receive the session output at this time and decide what to do. Required for run -- estimate based on expected duration. Optional for read/send -- omit to keep the current schedule.",
+				"description": "Seconds to watch the terminal. Polls for completion -- returns early if the command finishes. Default 10.",
 			},
 			"watch_for": map[string]any{
 				"type":        "string",
-				"description": "String to watch for in terminal output. When stare sees this string in new output, it returns early instead of waiting full max_wait. Useful for REPLs that print a prompt after each response.",
+				"description": "String to watch for in terminal output. Returns early when found instead of waiting full max_wait.",
 			},
 		},
-		"required":             []string{"action", "command", "description", "session_id", "input", "max_wait", "next_check_at", "watch_for"},
+		"required":             []string{"action", "command", "description", "session_id", "input", "max_wait", "watch_for"},
 		"additionalProperties": false,
 	},
 }
@@ -65,7 +59,6 @@ type shellArgs struct {
 	SessionID   string `json:"session_id"`
 	Input       string `json:"input"`
 	MaxWait     int    `json:"max_wait"`
-	NextCheckAt string `json:"next_check_at"`
 	WatchFor    string `json:"watch_for"`
 }
 
@@ -98,7 +91,7 @@ func shellHandler(home string) llm.ToolExecutor {
 		case "run":
 			return handleRun(ctx, args, home)
 		case "read", "send":
-			return handleInteract(args)
+			return handleInteract(ctx, args)
 		case "kill":
 			return handleKill(args)
 		default:
@@ -111,18 +104,10 @@ func handleRun(ctx context.Context, args shellArgs, home string) (string, error)
 	if args.Command == "" {
 		return `{"error":"empty command"}`, nil
 	}
-	if args.NextCheckAt == "" {
-		return `{"error":"next_check_at required for run"}`, nil
-	}
-
-	nextCheckAt, err := time.Parse(time.RFC3339, args.NextCheckAt)
-	if err != nil {
-		return llm.ToolErrorf("parse next_check_at %q: %s", args.NextCheckAt, err), nil
-	}
 
 	sid := id.Short(4)
 
-	err = newSession(sid, args.Command, home)
+	err := newSession(sid, args.Command, home)
 	if err != nil {
 		return llm.ToolError(err), nil
 	}
@@ -136,7 +121,6 @@ func handleRun(ctx context.Context, args shellArgs, home string) (string, error)
 		ConversationID: ctxMeta["conversation_id"],
 		MessageID:      ctxMeta["message_id"],
 		ActivationID:   ctxMeta["activation_id"],
-		NextCheckAt:    nextCheckAt.UTC(),
 		StartedAt:      now,
 	}
 
@@ -150,8 +134,6 @@ func handleRun(ctx context.Context, args shellArgs, home string) (string, error)
 		"command", args.Command,
 		"description", args.Description,
 		"conversation_id", meta.ConversationID,
-		"message_id", meta.MessageID,
-		"next_check_at", meta.NextCheckAt.Format(time.RFC3339),
 	)
 
 	maxWait := args.MaxWait
@@ -159,18 +141,17 @@ func handleRun(ctx context.Context, args shellArgs, home string) (string, error)
 		maxWait = 10
 	}
 
-	output, alive, code := stare(sid, maxWait, args.WatchFor)
+	output, alive, code := stare(ctx, sid, maxWait, args.WatchFor)
 
 	if !alive {
 		killSession(sid)
 		return llm.ToolResult(map[string]any{"status": "exited", "exit_code": code, "output": output}), nil
 	}
 
-	nca := meta.NextCheckAt.Format(time.RFC3339)
-	return llm.ToolResult(map[string]any{"status": "running", "session_id": sid, "next_check_at": nca, "output": output}), nil
+	return llm.ToolResult(map[string]any{"status": "running", "session_id": sid, "output": output}), nil
 }
 
-func handleInteract(args shellArgs) (string, error) {
+func handleInteract(ctx context.Context, args shellArgs) (string, error) {
 	if args.SessionID == "" {
 		return `{"error":"empty session_id"}`, nil
 	}
@@ -190,25 +171,14 @@ func handleInteract(args shellArgs) (string, error) {
 		}
 	}
 
-	output, alive, code := stareWith(args.SessionID, args.MaxWait, args.WatchFor, baseline)
+	output, alive, code := stareWith(ctx, args.SessionID, args.MaxWait, args.WatchFor, baseline)
 
 	if !alive {
 		killSession(args.SessionID)
 		return llm.ToolResult(map[string]any{"status": "exited", "exit_code": code, "output": output}), nil
 	}
 
-	meta, _ := loadMeta(args.SessionID)
-
-	if args.NextCheckAt != "" {
-		nextCheckAt, err := time.Parse(time.RFC3339, args.NextCheckAt)
-		if err == nil {
-			meta.NextCheckAt = nextCheckAt.UTC()
-			saveMeta(args.SessionID, meta)
-		}
-	}
-
-	nca := meta.NextCheckAt.Format(time.RFC3339)
-	return llm.ToolResult(map[string]any{"status": "running", "next_check_at": nca, "output": output}), nil
+	return llm.ToolResult(map[string]any{"status": "running", "session_id": args.SessionID, "output": output}), nil
 }
 
 func handleKill(args shellArgs) (string, error) {

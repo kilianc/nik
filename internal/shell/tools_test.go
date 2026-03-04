@@ -9,20 +9,12 @@ import (
 )
 
 func TestHandleRunValidatesRequiredFields(t *testing.T) {
-	out, err := handleRun(context.Background(), shellArgs{NextCheckAt: "2026-01-01T00:00:00Z"}, t.TempDir())
+	out, err := handleRun(context.Background(), shellArgs{}, t.TempDir())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !strings.Contains(out, "empty command") {
 		t.Fatalf("expected empty command validation, got %q", out)
-	}
-
-	out, err = handleRun(context.Background(), shellArgs{Command: "echo hello"}, t.TempDir())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.Contains(out, "next_check_at required for run") {
-		t.Fatalf("expected next_check_at validation, got %q", out)
 	}
 }
 
@@ -41,7 +33,7 @@ func TestHandleReadMissingSession(t *testing.T) {
 		t.Fatalf("killSession: %v", err)
 	}
 
-	result, err := handleInteract(shellArgs{SessionID: id, MaxWait: 2})
+	result, err := handleInteract(context.Background(), shellArgs{SessionID: id, MaxWait: 2})
 	if err != nil {
 		t.Fatalf("handleInteract: %v", err)
 	}

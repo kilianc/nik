@@ -190,3 +190,26 @@ CREATE TABLE IF NOT EXISTS tool_call (
   error         INTEGER NOT NULL DEFAULT 0,
   created_at    TIMESTAMP NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS task (
+  id            TEXT PRIMARY KEY,
+  source        TEXT NOT NULL,
+  source_id     TEXT,
+  activation_id TEXT REFERENCES activation(id),
+  goal          TEXT NOT NULL,
+  plan          TEXT NOT NULL DEFAULT '',
+  thinking      TEXT NOT NULL DEFAULT 'low',
+  status        TEXT NOT NULL DEFAULT 'pending',
+  created_at    TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+  started_at    TIMESTAMP,
+  completed_at  TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS task_report (
+  id          TEXT PRIMARY KEY,
+  task_id     TEXT NOT NULL REFERENCES task(id),
+  kind        TEXT NOT NULL,
+  content     TEXT NOT NULL,
+  reported_at TIMESTAMP,
+  created_at  TIMESTAMP NOT NULL DEFAULT (datetime('now'))
+);

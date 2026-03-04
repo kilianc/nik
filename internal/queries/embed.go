@@ -197,7 +197,50 @@ var SoulInsert string
 //go:embed activation_insert.sql
 var ActivationInsert string
 
+//go:embed activation_update_stats.sql
+var ActivationUpdateStats string
+
 // tool call queries
 
 //go:embed tool_call_insert.sql
 var ToolCallInsert string
+
+//go:embed tool_call_insert_one.sql
+var ToolCallInsertOne string
+
+// task queries
+
+//go:embed task_insert.sql
+var TaskInsert string
+
+//go:embed task_get.sql
+var TaskGet string
+
+//go:embed task_update_status.sql
+var TaskUpdateStatus string
+
+//go:embed task_set_activation_id.sql
+var TaskSetActivationID string
+
+//go:embed task_list.sql
+var TaskList string
+
+//go:embed task_active.sql
+var TaskActive string
+
+//go:embed task_stale.sql
+var TaskStale string
+
+// task report queries
+
+//go:embed task_report_insert.sql
+var TaskReportInsert string
+
+//go:embed task_report_unreported.sql
+var TaskReportUnreported string
+
+//go:embed task_report_mark_reported.sql
+var TaskReportMarkReported string
+
+//go:embed task_tool_calls.sql
+var TaskToolCalls string

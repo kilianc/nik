@@ -2,20 +2,36 @@ package messaging
 
 import (
 	"context"
+	"time"
 
 	"github.com/kciuffolo/nik/internal/brain"
 	"github.com/kciuffolo/nik/internal/config"
 )
 
-type DataSource struct {
-	cfg *config.Config
-	svc *Service
+// TaskQuerier provides active task context for conversation inputs.
+type TaskQuerier interface {
+	ConversationTasks(ctx context.Context, conversationID string) ([]TaskInfo, error)
 }
 
-func NewDataSource(cfg *config.Config, svc *Service) *DataSource {
+// TaskInfo is the subset of task data needed for conversation context.
+type TaskInfo struct {
+	ID        string
+	Goal      string
+	Status    string
+	CreatedAt time.Time
+}
+
+type DataSource struct {
+	cfg   *config.Config
+	svc   *Service
+	tasks TaskQuerier
+}
+
+func NewDataSource(cfg *config.Config, svc *Service, tasks TaskQuerier) *DataSource {
 	return &DataSource{
-		cfg: cfg,
-		svc: svc,
+		cfg:   cfg,
+		svc:   svc,
+		tasks: tasks,
 	}
 }
 
@@ -37,24 +53,33 @@ func (d *DataSource) Check(ctx context.Context) ([]brain.DataSourceOutput, error
 			continue
 		}
 
+		lastMessage := msgs[len(msgs)-1]
+
+		// mark read synchronously so subsequent polls don't re-trigger
+		if err := d.svc.MarkRead(ctx, conv.ID, lastMessage.SentAt); err != nil {
+			continue
+		}
+
 		senderLabels := d.svc.SenderLabels(ctx, msgs)
 		session := d.svc.SessionContext(ctx, conv)
-		lines := BuildConversationInput(conv, msgs, senderLabels, session)
-		lastMessage := msgs[len(msgs)-1]
+
+		var tasks []TaskInfo
+		if d.tasks != nil {
+			tasks, _ = d.tasks.ConversationTasks(ctx, conversationID)
+		}
+
+		lines := BuildConversationInput(conv, msgs, senderLabels, session, tasks)
 
 		meta := map[string]string{
 			"conversation_id": conversationID,
 			"platform":        conv.Platform,
 			"source":          "message",
-			"source_id":       msgs[len(msgs)-1].ID,
+			"source_id":       lastMessage.ID,
 		}
 
 		outputs = append(outputs, brain.DataSourceOutput{
 			Lines: lines,
 			Meta:  meta,
-			Processing: func(ctx context.Context) error {
-				return d.svc.MarkRead(ctx, conv.ID, lastMessage.SentAt)
-			},
 		})
 	}
 

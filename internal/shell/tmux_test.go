@@ -1,6 +1,7 @@
 package shell
 
 import (
+	"context"
 	"os/exec"
 	"strings"
 	"testing"
@@ -78,7 +79,7 @@ func TestFastCommand(t *testing.T) {
 		t.Fatalf("newSession: %v", err)
 	}
 
-	output, alive, code := stare(id, 5, "")
+	output, alive, code := stare(context.Background(), id, 5, "")
 
 	if alive {
 		t.Fatal("expected command to have exited")
@@ -103,7 +104,7 @@ func TestStare(t *testing.T) {
 	}
 
 	start := time.Now()
-	_, alive, _ := stare(id, 2, "")
+	_, alive, _ := stare(context.Background(), id, 2, "")
 	elapsed := time.Since(start)
 
 	if !alive {
@@ -185,7 +186,7 @@ func TestOutputTruncation(t *testing.T) {
 		t.Fatalf("newSession: %v", err)
 	}
 
-	stare(id, 5, "")
+	stare(context.Background(), id, 5, "")
 
 	output, err := capturePane(id)
 	if err != nil {
@@ -208,7 +209,7 @@ func TestExitCode(t *testing.T) {
 		t.Fatalf("newSession: %v", err)
 	}
 
-	_, alive, code := stare(id, 5, "")
+	_, alive, code := stare(context.Background(), id, 5, "")
 
 	if alive {
 		t.Fatal("expected command to have exited")
@@ -233,7 +234,7 @@ func TestStareMissingSession(t *testing.T) {
 		t.Fatalf("killSession: %v", err)
 	}
 
-	_, alive, _ := stare(id, 2, "")
+	_, alive, _ := stare(context.Background(), id, 2, "")
 	if alive {
 		t.Fatal("stare reported alive for a killed session")
 	}
@@ -251,7 +252,7 @@ func TestStareWatchFor(t *testing.T) {
 	}
 
 	start := time.Now()
-	output, alive, _ := stare(id, 10, "MARKER_READY")
+	output, alive, _ := stare(context.Background(), id, 10, "MARKER_READY")
 	elapsed := time.Since(start)
 
 	if !alive {
@@ -285,7 +286,7 @@ func TestStareWatchForBaseline(t *testing.T) {
 	// stare with watchFor looking for OLD_MARKER should NOT match early
 	// because it only appears before the baseline
 	start := time.Now()
-	_, alive, _ := stareWith(id, 2, "OLD_MARKER", baselineLen)
+	_, alive, _ := stareWith(context.Background(), id, 2, "OLD_MARKER", baselineLen)
 	elapsed := time.Since(start)
 
 	if !alive {

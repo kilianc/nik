@@ -12,7 +12,6 @@ type SessionMeta struct {
 	ConversationID string    `json:"conversation_id,omitempty"`
 	MessageID      string    `json:"message_id,omitempty"`
 	ActivationID   string    `json:"activation_id"`
-	NextCheckAt    time.Time `json:"next_check_at"`
 	StartedAt      time.Time `json:"started_at"`
 }
 
@@ -47,9 +46,6 @@ func saveMeta(id string, m SessionMeta) error {
 	}
 	if m.StartedAt.IsZero() {
 		return fmt.Errorf("save meta %s: zero started_at", id)
-	}
-	if m.NextCheckAt.IsZero() {
-		return fmt.Errorf("save meta %s: zero next_check_at", id)
 	}
 
 	data, err := json.Marshal(m)

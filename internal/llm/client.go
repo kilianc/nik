@@ -122,6 +122,26 @@ type Tool struct {
 	Privileged bool
 }
 
+func SplitTools(tools []Tool) ([]ToolDef, ToolExecutor) {
+	defs := make([]ToolDef, len(tools))
+	handlers := make(map[string]ToolExecutor, len(tools))
+
+	for i, t := range tools {
+		defs[i] = t.Def
+		handlers[t.Def.Name] = t.Handler
+	}
+
+	exec := func(ctx context.Context, call ToolCall) (string, error) {
+		h, ok := handlers[call.Name]
+		if !ok {
+			return ToolErrorf("unknown tool %q", call.Name), nil
+		}
+		return h(ctx, call)
+	}
+
+	return defs, exec
+}
+
 type Usage struct {
 	InputTokens     int64
 	OutputTokens    int64

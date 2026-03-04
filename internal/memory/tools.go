@@ -75,6 +75,13 @@ func BuildTools(svc *Service) []llm.Tool {
 	}
 }
 
+// BuildReadTools returns read-only memory tools (search only).
+func BuildReadTools(svc *Service) []llm.Tool {
+	return []llm.Tool{
+		{Def: searchMemoryToolDef, Handler: searchMemoryHandler(svc)},
+	}
+}
+
 func storeMemoryHandler(svc *Service) llm.ToolExecutor {
 	return func(ctx context.Context, call llm.ToolCall) (string, error) {
 		var args struct {
