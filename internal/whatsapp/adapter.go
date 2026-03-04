@@ -184,10 +184,10 @@ func (a *Adapter) handleMessage(evt *events.Message) error {
 		media = a.client.downloadMedia(context.Background(), evt.Message, string(evt.Info.ID), kind)
 	}
 
-	senderJID := evt.Info.Sender.String()
+	senderJID := normalizeJID(evt.Info.Sender.String())
 	senderIDs := []string{senderJID}
 	if alt := jidString(evt.Info.SenderAlt); alt != "" {
-		senderIDs = append(senderIDs, alt)
+		senderIDs = append(senderIDs, normalizeJID(alt))
 	}
 
 	msg := messaging.InboundMessage{
@@ -494,6 +494,14 @@ func formatLocationBody(loc *waProto.LocationMessage) string {
 	}
 
 	return strings.Join(parts, " | ")
+}
+
+func normalizeJID(raw string) string {
+	parsed, err := types.ParseJID(raw)
+	if err != nil {
+		return raw
+	}
+	return parsed.ToNonAD().String()
 }
 
 func jidString(jid types.JID) string {
