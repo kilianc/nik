@@ -69,6 +69,12 @@ func (b *Brain) isPrivilegedContext(meta map[string]string) bool {
 
 func (b *Brain) toolExecutor() llm.ToolExecutor {
 	return func(ctx context.Context, call llm.ToolCall) (string, error) {
+		if q := reactionQueueFromContext(ctx); q != nil {
+			if emoji, ok := b.toolEmojis[call.Name]; ok {
+				q.enqueue(emoji)
+			}
+		}
+
 		handler, ok := b.toolExec[call.Name]
 		if !ok {
 			return llm.ToolErrorf("unknown tool %q", call.Name), nil

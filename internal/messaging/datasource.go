@@ -70,11 +70,22 @@ func (d *DataSource) Check(ctx context.Context) ([]brain.DataSourceOutput, error
 
 		lines := BuildConversationInput(conv, msgs, senderLabels, session, tasks)
 
+		var reactToID string
+		for i := len(msgs) - 1; i >= 0; i-- {
+			if !msgs[i].IsFromMe {
+				reactToID = msgs[i].ID
+				break
+			}
+		}
+
 		meta := map[string]string{
 			"conversation_id": conversationID,
 			"platform":        conv.Platform,
 			"source":          "message",
 			"source_id":       lastMessage.ID,
+		}
+		if reactToID != "" {
+			meta["react_to_message_id"] = reactToID
 		}
 
 		outputs = append(outputs, brain.DataSourceOutput{
