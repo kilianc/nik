@@ -19,7 +19,7 @@ func TestDataSourceCheckReturnsReports(t *testing.T) {
 	ds := NewDataSource(svc, nil)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, "message", "conv-1", "test", "", "low")
+	task, err := svc.Create(ctx, "message", "conv-1", "", "test", "", "low")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestDataSourceStaleDetection(t *testing.T) {
 	svc := NewService(conn)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, "message", "conv-1", "stale test", "", "low")
+	task, err := svc.Create(ctx, "message", "conv-1", "", "stale test", "", "low")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}

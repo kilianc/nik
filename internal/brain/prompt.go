@@ -19,6 +19,7 @@ var htmlCommentRe = regexp.MustCompile(`(?s)<!--.*?-->\n?`)
 type promptData struct {
 	Now             nowData
 	Soul            string
+	Crew            string
 	PreloadedSkills []skills.PreloadedSkill
 	AvailableSkills []skillSummaryData
 }
@@ -141,6 +142,15 @@ func (b *Brain) buildPromptData(now time.Time) promptData {
 			slog.Warn("load soul", "pkg", "brain", "error", err)
 		} else {
 			data.Soul = soul
+		}
+	}
+
+	if b.crewReader != nil {
+		roster, err := b.crewReader(context.Background())
+		if err != nil {
+			slog.Warn("load crew", "pkg", "brain", "error", err)
+		} else {
+			data.Crew = roster
 		}
 	}
 

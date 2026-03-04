@@ -21,6 +21,7 @@ func buildDayContext(ctx context.Context, conn *sql.DB, msgsSvc *messaging.Servi
 	convos := conversationSection(ctx, conn, dayStart, dayEnd)
 	msgs := messagesSection(ctx, conn, msgsSvc, dayStart, dayEnd)
 	contacts := contactsSection(ctx, conn, dayStart, dayEnd)
+	crew := crewSection(ctx, conn, dayStart, dayEnd)
 	memories := memoriesSection(ctx, conn, dayStart, dayEnd)
 
 	if len(briefing) > 0 {
@@ -37,6 +38,10 @@ func buildDayContext(ctx context.Context, conn *sql.DB, msgsSvc *messaging.Servi
 
 	if len(contacts) > 0 {
 		lines = append(lines, contacts...)
+	}
+
+	if len(crew) > 0 {
+		lines = append(lines, crew...)
 	}
 
 	if len(memories) > 0 {
@@ -133,6 +138,36 @@ func contactDisplayName(c db.JournalContact) string {
 	}
 
 	return c.ID
+}
+
+func crewSection(ctx context.Context, conn *sql.DB, dayStart, dayEnd time.Time) []string {
+	hires, err := db.JournalCrewToday(ctx, conn, dayStart, dayEnd)
+	if err != nil {
+		slog.Warn("journal context: crew", "error", err)
+		return nil
+	}
+
+	if len(hires) == 0 {
+		return nil
+	}
+
+	lines := []string{"## New crew members", ""}
+	for _, h := range hires {
+		prompt := h.Prompt
+		if len(prompt) > 80 {
+			prompt = prompt[:80] + "..."
+		}
+
+		line := fmt.Sprintf("- **%s**: %s", h.Name, prompt)
+		if h.TaskCount > 0 {
+			line += fmt.Sprintf(" (%d tasks today)", h.TaskCount)
+		}
+
+		lines = append(lines, line)
+	}
+
+	lines = append(lines, "")
+	return lines
 }
 
 func memoriesSection(ctx context.Context, conn *sql.DB, dayStart, dayEnd time.Time) []string {

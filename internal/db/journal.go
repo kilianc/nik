@@ -147,6 +147,42 @@ func JournalContactsToday(ctx context.Context, db *sql.DB, dayStart, dayEnd time
 	return out, rows.Err()
 }
 
+type JournalCrewHire struct {
+	ID        string
+	Name      string
+	Prompt    string
+	CreatedAt time.Time
+	TaskCount int
+}
+
+func JournalCrewToday(ctx context.Context, db *sql.DB, dayStart, dayEnd time.Time) ([]JournalCrewHire, error) {
+	rows, err := db.QueryContext(ctx, queries.JournalCrewToday, dayStart, dayEnd)
+	if err != nil {
+		return nil, fmt.Errorf("journal crew today: %w", err)
+	}
+	defer rows.Close()
+
+	var out []JournalCrewHire
+	for rows.Next() {
+		var c JournalCrewHire
+
+		err = rows.Scan(
+			&c.ID,
+			&c.Name,
+			&c.Prompt,
+			&c.CreatedAt,
+			&c.TaskCount,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan journal crew hire: %w", err)
+		}
+
+		out = append(out, c)
+	}
+
+	return out, rows.Err()
+}
+
 type JournalMemory struct {
 	ID        string
 	Content   string

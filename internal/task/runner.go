@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/kciuffolo/nik/internal/config"
+	"github.com/kciuffolo/nik/internal/crew"
 	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/id"
 	"github.com/kciuffolo/nik/internal/llm"
@@ -23,6 +24,7 @@ const runnerTimeout = 20 * time.Minute
 
 type taskPromptData struct {
 	Now      string
+	Member   string
 	ToolDocs string
 	Skills   string
 	Plan     string
@@ -49,7 +51,7 @@ func NewRunner(cfg *config.Config, llmClient *llm.Client, svc *Service, conn *sq
 	}
 }
 
-func (r *Runner) renderPrompt(t Task, tools []llm.ToolDef) string {
+func (r *Runner) renderPrompt(t Task, tools []llm.ToolDef, member *crew.Member) string {
 	tmplPath := filepath.Join(r.cfg.PromptsPath(), "task.md")
 
 	raw, err := os.ReadFile(tmplPath)
@@ -67,8 +69,14 @@ func (r *Runner) renderPrompt(t Task, tools []llm.ToolDef) string {
 	loc := r.cfg.TZ()
 	now := time.Now().In(loc).Format("Monday, January 2, 2006 3:04 PM")
 
+	var memberPrompt string
+	if member != nil {
+		memberPrompt = member.Prompt
+	}
+
 	data := taskPromptData{
 		Now:      now,
+		Member:   memberPrompt,
 		ToolDocs: buildToolDocs(tools),
 		Skills:   buildSkillDocs(r.cfg),
 		Plan:     t.Plan,
@@ -120,7 +128,7 @@ func buildSkillDocs(cfg *config.Config) string {
 	return b.String()
 }
 
-func (r *Runner) Run(ctx context.Context, t Task) {
+func (r *Runner) Run(ctx context.Context, t Task, member *crew.Member) {
 	ctx, cancel := context.WithTimeout(ctx, runnerTimeout)
 	r.cancels.Store(t.ID, cancel)
 	defer r.cancels.Delete(t.ID)
@@ -185,7 +193,7 @@ func (r *Runner) Run(ctx context.Context, t Task) {
 		return result, execErr
 	}
 
-	instructions := r.renderPrompt(t, tools)
+	instructions := r.renderPrompt(t, tools, member)
 
 	output, usage, toolCalls, _, completeErr := r.llm.Complete(ctx, instructions, "", tools, loggingExec)
 

@@ -191,18 +191,26 @@ CREATE TABLE IF NOT EXISTS tool_call (
   created_at    TIMESTAMP NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS crew_member (
+  id         TEXT PRIMARY KEY,
+  name       TEXT NOT NULL UNIQUE,
+  prompt     TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS task (
-  id            TEXT PRIMARY KEY,
-  source        TEXT NOT NULL,
-  source_id     TEXT,
-  activation_id TEXT REFERENCES activation(id),
-  goal          TEXT NOT NULL,
-  plan          TEXT NOT NULL DEFAULT '',
-  thinking      TEXT NOT NULL DEFAULT 'low',
-  status        TEXT NOT NULL DEFAULT 'pending',
-  created_at    TIMESTAMP NOT NULL DEFAULT (datetime('now')),
-  started_at    TIMESTAMP,
-  completed_at  TIMESTAMP
+  id             TEXT PRIMARY KEY,
+  source         TEXT NOT NULL,
+  source_id      TEXT,
+  activation_id  TEXT REFERENCES activation(id),
+  crew_member_id TEXT REFERENCES crew_member(id),
+  goal           TEXT NOT NULL,
+  plan           TEXT NOT NULL DEFAULT '',
+  thinking       TEXT NOT NULL DEFAULT 'low',
+  status         TEXT NOT NULL DEFAULT 'pending',
+  created_at     TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+  started_at     TIMESTAMP,
+  completed_at   TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS task_report (

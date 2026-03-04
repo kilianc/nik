@@ -3,6 +3,7 @@ SELECT
   source,
   source_id,
   activation_id,
+  crew_member_id,
   goal,
   plan,
   thinking,

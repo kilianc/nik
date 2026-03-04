@@ -17,6 +17,7 @@ import (
 	"github.com/kciuffolo/nik/internal/codex"
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/contacts"
+	"github.com/kciuffolo/nik/internal/crew"
 	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/dream"
 	"github.com/kciuffolo/nik/internal/journal"
@@ -137,6 +138,7 @@ func main() {
 	dreamSvc := dream.NewService(conn, cfg)
 	briefingSvc := briefing.NewService(conn, cfg)
 	taskSvc := task.NewService(conn)
+	crewSvc := crew.NewService(conn)
 
 	// task runner tools: subset available to background subagents
 	var taskTools []llm.Tool
@@ -153,6 +155,7 @@ func main() {
 	b := brain.New(cfg, llmClient)
 
 	b.SetSoulReader(dreamSvc.CurrentSoul)
+	b.SetCrewReader(crewSvc.Roster)
 	b.SetStatsRecorder(stats.NewRecorder(conn).Record)
 
 	b.RegisterDataSource(messaging.NewDataSource(cfg, messagingSvc, taskSvc))
@@ -172,7 +175,8 @@ func main() {
 	b.RegisterTools(journal.BuildTools(journalSvc)...)
 	b.RegisterTools(dream.BuildTools(dreamSvc)...)
 	b.RegisterTools(briefing.BuildTools(briefingSvc)...)
-	b.RegisterTools(task.BuildTools(taskSvc, taskRunner)...)
+	b.RegisterTools(crew.BuildTools(crewSvc)...)
+	b.RegisterTools(task.BuildTools(taskSvc, taskRunner, crewSvc)...)
 
 	go b.Awake(ctx, 2*time.Second)
 
