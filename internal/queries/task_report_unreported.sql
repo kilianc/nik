@@ -12,4 +12,5 @@ SELECT
 FROM task_report tr
 JOIN task t ON tr.task_id = t.id
 WHERE tr.reported_at IS NULL
+  AND t.status != 'cancelled'
 ORDER BY tr.created_at ASC

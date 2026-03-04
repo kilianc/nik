@@ -206,21 +206,11 @@ func replyHandler(svc *Service) llm.ToolExecutor {
 
 func noopHandler() llm.ToolExecutor {
 	return func(ctx context.Context, call llm.ToolCall) (string, error) {
-		var args struct {
-			ConversationID string `json:"conversation_id"`
-			Reason         string `json:"reason"`
-		}
+		var args json.RawMessage
 
 		err := json.Unmarshal([]byte(call.Arguments), &args)
 		if err != nil {
 			return llm.ToolError(err), nil
-		}
-
-		if strings.TrimSpace(args.ConversationID) == "" {
-			args.ConversationID = contextMetaValue(ctx, "conversation_id")
-		}
-		if strings.TrimSpace(args.ConversationID) == "" {
-			return `{"error":"missing conversation_id"}`, nil
 		}
 
 		return `{"ok":true,"silent":true}`, nil

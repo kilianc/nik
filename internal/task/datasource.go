@@ -48,12 +48,17 @@ func (d *DataSource) Check(ctx context.Context) ([]brain.DataSourceOutput, error
 		lines := d.formatReport(ctx, report)
 		reportID := report.ID
 
+		meta := map[string]string{
+			"source":    report.Source,
+			"source_id": report.SourceID,
+		}
+		if report.Source == "message" && report.SourceID != "" {
+			meta["conversation_id"] = report.SourceID
+		}
+
 		outputs = append(outputs, brain.DataSourceOutput{
 			Lines: lines,
-			Meta: map[string]string{
-				"source":    report.Source,
-				"source_id": report.SourceID,
-			},
+			Meta:  meta,
 			Processing: func(ctx context.Context) error {
 				return d.svc.MarkReported(ctx, reportID)
 			},
