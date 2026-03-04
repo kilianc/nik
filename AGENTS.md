@@ -75,6 +75,7 @@ When working in plan mode, always put details, before/after examples, and ration
 - avoid inline error assignment in if statements; assign first, then check
 - never chain multiple operations in a single if condition
 - use blank lines to separate logical blocks within a function (guard clauses, parse steps, main logic, return)
+- `cmd/nik/main.go` is wiring only — no types, no helper functions, no adapters. If you need a bridge between packages, put it in the domain package that owns the logic.
 
 ## Configuration
 

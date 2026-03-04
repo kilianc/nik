@@ -92,13 +92,95 @@ func TestDataSourceStaleDetection(t *testing.T) {
 
 	time.Sleep(10 * time.Millisecond)
 
-	// override stale threshold temporarily by using StaleTasks directly
 	stale, err := svc.StaleTasks(ctx, 1*time.Millisecond)
 	if err != nil {
 		t.Fatalf("stale tasks: %v", err)
 	}
 	if len(stale) != 1 {
 		t.Fatalf("expected 1 stale task, got %d", len(stale))
+	}
+}
+
+func TestDataSourceStaleSurfacedDirectly(t *testing.T) {
+	conn, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer conn.Close()
+
+	svc := NewService(conn)
+	ds := NewDataSource(svc, nil)
+	ctx := context.Background()
+
+	tk, err := svc.Create(ctx, "message", "conv-1", "", "stale direct", "", "low")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	dummyActID := "act-stale-direct"
+	_, execErr := conn.ExecContext(ctx,
+		"INSERT INTO activation (id, source, source_id, model, created_at) VALUES (?, 'task', ?, 'test', datetime('now'))",
+		dummyActID, tk.ID)
+	if execErr != nil {
+		t.Fatalf("insert dummy activation: %v", execErr)
+	}
+
+	err = svc.SetActivationID(ctx, tk.ID, dummyActID)
+	if err != nil {
+		t.Fatalf("set activation id: %v", err)
+	}
+
+	err = svc.UpdateStatus(ctx, tk.ID, "running")
+	if err != nil {
+		t.Fatalf("update status: %v", err)
+	}
+
+	// manually set started_at in the past so it's stale with a tiny threshold
+	_, err = conn.ExecContext(ctx, "UPDATE task SET started_at = datetime('now', '-5 minutes') WHERE id = ?", tk.ID)
+	if err != nil {
+		t.Fatalf("backdate started_at: %v", err)
+	}
+	_, err = conn.ExecContext(ctx,
+		"INSERT INTO tool_call (id, activation_id, name, created_at) VALUES ('tc-1', ?, 'shell', datetime('now', '-5 minutes'))",
+		dummyActID)
+	if err != nil {
+		t.Fatalf("insert old tool call: %v", err)
+	}
+
+	outputs, err := ds.Check(ctx)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if len(outputs) != 1 {
+		t.Fatalf("expected 1 stale output, got %d", len(outputs))
+	}
+	if outputs[0].Meta["source"] != "message" {
+		t.Fatalf("expected source message, got %s", outputs[0].Meta["source"])
+	}
+	if outputs[0].Lines[0] != "[Stale task]" {
+		t.Fatalf("expected stale header, got %q", outputs[0].Lines[0])
+	}
+
+	// run Processed callback to set checked_at
+	err = outputs[0].Processed(ctx)
+	if err != nil {
+		t.Fatalf("processed: %v", err)
+	}
+
+	// second check should return nothing (checked_at cooldown)
+	outputs, err = ds.Check(ctx)
+	if err != nil {
+		t.Fatalf("check 2: %v", err)
+	}
+
+	staleOnly := 0
+	for _, o := range outputs {
+		if len(o.Lines) > 0 && o.Lines[0] == "[Stale task]" {
+			staleOnly++
+		}
+	}
+	if staleOnly != 0 {
+		t.Fatalf("expected 0 stale outputs after checked_at, got %d", staleOnly)
 	}
 }
 

@@ -245,6 +245,9 @@ var TaskActive string
 //go:embed task_stale.sql
 var TaskStale string
 
+//go:embed task_mark_checked.sql
+var TaskMarkChecked string
+
 // task report queries
 
 //go:embed task_report_insert.sql

@@ -176,6 +176,7 @@ func main() {
 			slog.Warn("tool reaction failed", "pkg", "brain", "message_id", messageID, "emoji", emoji, "error", err)
 		}
 	})
+	b.SetDebugRecorder(brain.NewDebugRecorder(cfg.DebugPath(), llmClient.Model(), time.Now, taskSvc))
 
 	b.RegisterDataSource(messaging.NewDataSource(cfg, messagingSvc, taskSvc))
 	b.RegisterDataSource(alarms.NewDataSource(alarmSvc, messagingSvc))

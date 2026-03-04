@@ -44,6 +44,7 @@ type Brain struct {
 	statsRecorder StatsRecorder
 	toolReactor   ToolReactor
 	toolEmojis    map[string]string
+	debugRecorder DebugRecorder
 	now           func() time.Time
 
 	claimed     *SyncSet
@@ -248,7 +249,20 @@ func (b *Brain) think(ctx context.Context, input []string) (string, llm.Usage, e
 		}
 
 		output, usage, toolCalls, extra, processErr := b.llm.Complete(thinkCtx, instructions, userInput, tools, executor)
-		b.writeDebugRecord(meta, instructions, userInput, output, tools, toolCalls, extra, usage, processErr)
+
+		if b.debugRecorder != nil {
+			b.debugRecorder(DebugInput{
+				Meta:         meta,
+				Instructions: instructions,
+				UserInput:    userInput,
+				RawOutput:    output,
+				Tools:        tools,
+				ToolCalls:    toolCalls,
+				Extra:        extra,
+				Usage:        usage,
+				ProcessErr:   processErr,
+			})
+		}
 
 		allToolCalls = append(allToolCalls, toolCalls...)
 		if extra.ReasoningEffort != "" {
