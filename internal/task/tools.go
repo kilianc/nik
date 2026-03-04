@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/kciuffolo/nik/internal/crew"
 	"github.com/kciuffolo/nik/internal/llm"
 	"github.com/kciuffolo/nik/internal/queries"
 )
@@ -29,8 +30,12 @@ var spawnToolDef = llm.ToolDef{
 				"enum":        []string{"low", "medium", "high"},
 				"description": "Reasoning effort for the task. low for simple commands, high for complex research.",
 			},
+			"member": map[string]any{
+				"type":        "string",
+				"description": "Name of the crew member to assign this to. Omit to run unassigned.",
+			},
 		},
-		"required":             []string{"goal", "plan", "thinking"},
+		"required":             []string{"goal", "plan", "thinking", "member"},
 		"additionalProperties": false,
 	},
 }
@@ -91,6 +96,7 @@ type spawnArgs struct {
 	Goal     string `json:"goal"`
 	Plan     string `json:"plan"`
 	Thinking string `json:"thinking"`
+	Member   string `json:"member"`
 }
 
 type statusArgs struct {
@@ -107,9 +113,9 @@ type reportArgs struct {
 }
 
 // BuildTools returns Nik's task management tools (spawn, status, cancel).
-func BuildTools(svc *Service, runner *Runner) []llm.Tool {
+func BuildTools(svc *Service, runner *Runner, crewSvc *crew.Service) []llm.Tool {
 	return []llm.Tool{
-		{Def: spawnToolDef, Handler: spawnHandler(svc, runner)},
+		{Def: spawnToolDef, Handler: spawnHandler(svc, runner, crewSvc)},
 		{Def: statusToolDef, Handler: statusHandler(svc)},
 		{Def: cancelToolDef, Handler: cancelHandler(svc, runner)},
 	}
@@ -123,7 +129,7 @@ func BuildReportTool(svc *Service, taskID string) llm.Tool {
 	}
 }
 
-func spawnHandler(svc *Service, runner *Runner) llm.ToolExecutor {
+func spawnHandler(svc *Service, runner *Runner, crewSvc *crew.Service) llm.ToolExecutor {
 	return func(ctx context.Context, call llm.ToolCall) (string, error) {
 		var args spawnArgs
 
@@ -139,6 +145,19 @@ func spawnHandler(svc *Service, runner *Runner) llm.ToolExecutor {
 			return llm.ToolErrorf("plan is required"), nil
 		}
 
+		var member *crew.Member
+		var crewMemberID string
+
+		if args.Member != "" {
+			m, memberErr := crewSvc.Get(ctx, args.Member)
+			if memberErr != nil {
+				return llm.ToolErrorf("crew member %q not found: %v", args.Member, memberErr), nil
+			}
+
+			member = &m
+			crewMemberID = m.ID
+		}
+
 		meta, _ := ctx.Value("meta").(map[string]string)
 		source := meta["source"]
 		sourceID := meta["conversation_id"]
@@ -146,18 +165,23 @@ func spawnHandler(svc *Service, runner *Runner) llm.ToolExecutor {
 			sourceID = meta["source_id"]
 		}
 
-		t, err := svc.Create(ctx, source, sourceID, args.Goal, args.Plan, args.Thinking)
+		t, err := svc.Create(ctx, source, sourceID, crewMemberID, args.Goal, args.Plan, args.Thinking)
 		if err != nil {
 			return llm.ToolError(err), nil
 		}
 
-		go runner.Run(context.Background(), t)
+		go runner.Run(context.Background(), t, member)
 
-		return llm.ToolResult(map[string]any{
+		result := map[string]any{
 			"task_id": t.ID,
 			"status":  "pending",
 			"goal":    t.Goal,
-		}), nil
+		}
+		if member != nil {
+			result["assigned_to"] = member.Name
+		}
+
+		return llm.ToolResult(result), nil
 	}
 }
 

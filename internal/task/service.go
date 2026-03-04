@@ -15,6 +15,7 @@ type Task struct {
 	Source       string
 	SourceID     string
 	ActivationID string
+	CrewMemberID string
 	Goal         string
 	Plan         string
 	Thinking     string
@@ -47,16 +48,22 @@ func NewService(db *sql.DB) *Service {
 	return &Service{db: db}
 }
 
-func (s *Service) Create(ctx context.Context, source, sourceID, goal, plan, thinking string) (Task, error) {
+func (s *Service) Create(ctx context.Context, source, sourceID, crewMemberID, goal, plan, thinking string) (Task, error) {
 	t := Task{
-		ID:        id.V7(),
-		Source:    source,
-		SourceID:  sourceID,
-		Goal:      goal,
-		Plan:      plan,
-		Thinking:  thinking,
-		Status:    "pending",
-		CreatedAt: time.Now().UTC(),
+		ID:           id.V7(),
+		Source:       source,
+		SourceID:     sourceID,
+		CrewMemberID: crewMemberID,
+		Goal:         goal,
+		Plan:         plan,
+		Thinking:     thinking,
+		Status:       "pending",
+		CreatedAt:    time.Now().UTC(),
+	}
+
+	var memberID any
+	if crewMemberID != "" {
+		memberID = crewMemberID
 	}
 
 	_, err := s.db.ExecContext(ctx, queries.TaskInsert,
@@ -64,6 +71,7 @@ func (s *Service) Create(ctx context.Context, source, sourceID, goal, plan, thin
 		t.Source,
 		t.SourceID,
 		nil,
+		memberID,
 		t.Goal,
 		t.Plan,
 		t.Thinking,
@@ -84,12 +92,14 @@ func (s *Service) Get(ctx context.Context, taskID string) (Task, error) {
 
 	var t Task
 	var activationID sql.NullString
+	var crewMemberID sql.NullString
 
 	err := row.Scan(
 		&t.ID,
 		&t.Source,
 		&t.SourceID,
 		&activationID,
+		&crewMemberID,
 		&t.Goal,
 		&t.Plan,
 		&t.Thinking,
@@ -103,6 +113,7 @@ func (s *Service) Get(ctx context.Context, taskID string) (Task, error) {
 	}
 
 	t.ActivationID = activationID.String
+	t.CrewMemberID = crewMemberID.String
 
 	return t, nil
 }
@@ -118,12 +129,14 @@ func (s *Service) List(ctx context.Context, source, sourceID string) ([]Task, er
 	for rows.Next() {
 		var t Task
 		var activationID sql.NullString
+		var crewMemberID sql.NullString
 
 		err = rows.Scan(
 			&t.ID,
 			&t.Source,
 			&t.SourceID,
 			&activationID,
+			&crewMemberID,
 			&t.Goal,
 			&t.Plan,
 			&t.Thinking,
@@ -137,6 +150,7 @@ func (s *Service) List(ctx context.Context, source, sourceID string) ([]Task, er
 		}
 
 		t.ActivationID = activationID.String
+		t.CrewMemberID = crewMemberID.String
 		tasks = append(tasks, t)
 	}
 
@@ -260,12 +274,14 @@ func (s *Service) StaleTasks(ctx context.Context, threshold time.Duration) ([]Ta
 	for rows.Next() {
 		var t Task
 		var activationID sql.NullString
+		var crewMemberID sql.NullString
 
 		err = rows.Scan(
 			&t.ID,
 			&t.Source,
 			&t.SourceID,
 			&activationID,
+			&crewMemberID,
 			&t.Goal,
 			&t.Plan,
 			&t.Thinking,
@@ -279,6 +295,7 @@ func (s *Service) StaleTasks(ctx context.Context, threshold time.Duration) ([]Ta
 		}
 
 		t.ActivationID = activationID.String
+		t.CrewMemberID = crewMemberID.String
 		tasks = append(tasks, t)
 	}
 

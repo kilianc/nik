@@ -19,7 +19,7 @@ func TestReportHandler(t *testing.T) {
 	svc := NewService(conn)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, "message", "conv-1", "test goal", "", "low")
+	task, err := svc.Create(ctx, "message", "conv-1", "", "test goal", "", "low")
 	if err != nil {
 		t.Fatalf("create task: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestReportHandlerNoAttention(t *testing.T) {
 	svc := NewService(conn)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, "message", "conv-1", "test goal", "", "low")
+	task, err := svc.Create(ctx, "message", "conv-1", "", "test goal", "", "low")
 	if err != nil {
 		t.Fatalf("create task: %v", err)
 	}
@@ -109,7 +109,7 @@ func TestCancelHandlerNoRunner(t *testing.T) {
 	svc := NewService(conn)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, "message", "conv-1", "test goal", "", "low")
+	task, err := svc.Create(ctx, "message", "conv-1", "", "test goal", "", "low")
 	if err != nil {
 		t.Fatalf("create task: %v", err)
 	}

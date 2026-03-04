@@ -3,6 +3,7 @@ SELECT
   t.source,
   t.source_id,
   t.activation_id,
+  t.crew_member_id,
   t.goal,
   t.plan,
   t.thinking,

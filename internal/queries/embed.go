@@ -153,6 +153,9 @@ var JournalMemoriesToday string
 //go:embed journal_get.sql
 var JournalGet string
 
+//go:embed journal_crew_today.sql
+var JournalCrewToday string
+
 // dream queries
 
 //go:embed dream_check.sql
@@ -207,6 +210,17 @@ var ToolCallInsert string
 
 //go:embed tool_call_insert_one.sql
 var ToolCallInsertOne string
+
+// crew member queries
+
+//go:embed crew_member_insert.sql
+var CrewMemberInsert string
+
+//go:embed crew_member_list.sql
+var CrewMemberList string
+
+//go:embed crew_member_get.sql
+var CrewMemberGet string
 
 // task queries
 

@@ -13,6 +13,7 @@ import (
 	"github.com/kciuffolo/nik/internal/codex"
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/contacts"
+	"github.com/kciuffolo/nik/internal/crew"
 	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/dream"
 	"github.com/kciuffolo/nik/internal/llm"
@@ -163,8 +164,13 @@ func buildTools(cfg *config.Config, llmClient *llm.Client, conn *sql.DB) map[str
 			return h(ctx, call)
 		}
 
+		crewSvc := crew.NewService(conn)
+		for _, t := range crew.BuildTools(crewSvc) {
+			tools[t.Def.Name] = t.Handler
+		}
+
 		taskRunner := task.NewRunner(cfg, llmClient, taskSvc, conn, taskToolDefs, taskExec)
-		for _, t := range task.BuildTools(taskSvc, taskRunner) {
+		for _, t := range task.BuildTools(taskSvc, taskRunner, crewSvc) {
 			tools[t.Def.Name] = t.Handler
 		}
 	}

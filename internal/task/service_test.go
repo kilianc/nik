@@ -22,7 +22,7 @@ func TestCreateAndGet(t *testing.T) {
 	svc := testDB(t)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, "message", "conv-1", "run build", "step 1\nstep 2", "low")
+	task, err := svc.Create(ctx, "message", "conv-1", "", "run build", "step 1\nstep 2", "low")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -56,7 +56,7 @@ func TestUpdateStatus(t *testing.T) {
 	svc := testDB(t)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, "message", "conv-1", "test", "", "low")
+	task, err := svc.Create(ctx, "message", "conv-1", "", "test", "", "low")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestSetActivationID(t *testing.T) {
 	svc := testDB(t)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, "message", "conv-1", "test", "", "low")
+	task, err := svc.Create(ctx, "message", "conv-1", "", "test", "", "low")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -128,9 +128,9 @@ func TestList(t *testing.T) {
 	svc := testDB(t)
 	ctx := context.Background()
 
-	svc.Create(ctx, "message", "conv-1", "task a", "", "low")
-	svc.Create(ctx, "message", "conv-1", "task b", "", "low")
-	svc.Create(ctx, "message", "conv-2", "task c", "", "low")
+	svc.Create(ctx, "message", "conv-1", "", "task a", "", "low")
+	svc.Create(ctx, "message", "conv-1", "", "task b", "", "low")
+	svc.Create(ctx, "message", "conv-2", "", "task c", "", "low")
 
 	tasks, err := svc.List(ctx, "message", "conv-1")
 	if err != nil {
@@ -145,7 +145,7 @@ func TestReportCRUD(t *testing.T) {
 	svc := testDB(t)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, "message", "conv-1", "test", "", "low")
+	task, err := svc.Create(ctx, "message", "conv-1", "", "test", "", "low")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -191,7 +191,7 @@ func TestStaleTasks(t *testing.T) {
 	ctx := context.Background()
 
 	// create a task and mark it running with started_at in the past
-	task, err := svc.Create(ctx, "message", "conv-1", "stale test", "", "low")
+	task, err := svc.Create(ctx, "message", "conv-1", "", "stale test", "", "low")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}

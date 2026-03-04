@@ -40,6 +40,7 @@ type Brain struct {
 	privileged    map[string]bool
 	dataSources   []DataSource
 	soulReader    func(ctx context.Context) (string, error)
+	crewReader    func(ctx context.Context) (string, error)
 	statsRecorder StatsRecorder
 	now           func() time.Time
 
@@ -66,6 +67,10 @@ func New(cfg *config.Config, llmClient *llm.Client) *Brain {
 
 func (b *Brain) SetSoulReader(fn func(ctx context.Context) (string, error)) {
 	b.soulReader = fn
+}
+
+func (b *Brain) SetCrewReader(fn func(ctx context.Context) (string, error)) {
+	b.crewReader = fn
 }
 
 func (b *Brain) SetStatsRecorder(fn StatsRecorder) {
