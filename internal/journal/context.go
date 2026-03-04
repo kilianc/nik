@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -14,7 +15,7 @@ import (
 
 const defaultMessageLimit = 200
 
-func buildDayContext(ctx context.Context, conn *sql.DB, msgsSvc *messaging.Service, dayStart, dayEnd time.Time) []string {
+func buildDayContext(ctx context.Context, conn *sql.DB, msgsSvc *messaging.Service, home string, dayStart, dayEnd time.Time) []string {
 	var lines []string
 
 	briefing := briefingSection(ctx, conn, dayStart)
@@ -23,6 +24,7 @@ func buildDayContext(ctx context.Context, conn *sql.DB, msgsSvc *messaging.Servi
 	contacts := contactsSection(ctx, conn, dayStart, dayEnd)
 	crew := crewSection(ctx, conn, dayStart, dayEnd)
 	memories := memoriesSection(ctx, conn, dayStart, dayEnd)
+	changelog := gitChangelogSection(home, dayStart, dayEnd)
 
 	if len(briefing) > 0 {
 		lines = append(lines, briefing...)
@@ -46,6 +48,10 @@ func buildDayContext(ctx context.Context, conn *sql.DB, msgsSvc *messaging.Servi
 
 	if len(memories) > 0 {
 		lines = append(lines, memories...)
+	}
+
+	if len(changelog) > 0 {
+		lines = append(lines, changelog...)
 	}
 
 	return lines
@@ -205,4 +211,35 @@ func briefingSection(ctx context.Context, conn *sql.DB, dayStart time.Time) []st
 	}
 
 	return []string{"## Morning briefing", "", content, ""}
+}
+
+func gitChangelogSection(home string, dayStart, dayEnd time.Time) []string {
+	if home == "" {
+		return nil
+	}
+
+	cmd := exec.Command("git", "log",
+		"--after="+dayStart.UTC().Format(time.RFC3339),
+		"--before="+dayEnd.UTC().Format(time.RFC3339),
+		"--oneline", "--no-merges")
+	cmd.Dir = home
+
+	out, err := cmd.Output()
+	if err != nil {
+		slog.Warn("journal context: git changelog", "error", err)
+		return nil
+	}
+
+	raw := strings.TrimSpace(string(out))
+	if raw == "" {
+		return nil
+	}
+
+	lines := []string{"## Git changelog", ""}
+	for _, line := range strings.Split(raw, "\n") {
+		lines = append(lines, "- "+line)
+	}
+
+	lines = append(lines, "")
+	return lines
 }
