@@ -50,7 +50,7 @@ func TestDueAlarmsReturnsOnlyActiveAndDue(t *testing.T) {
 	}
 }
 
-func TestDueAlarmsStillReturnsClaimedAlarms(t *testing.T) {
+func TestDueAlarmsExcludesClaimedAlarms(t *testing.T) {
 	ctx := context.Background()
 
 	conn, err := OpenInMemory()
@@ -76,7 +76,7 @@ func TestDueAlarmsStillReturnsClaimedAlarms(t *testing.T) {
 		t.Fatalf("due alarms: %v", err)
 	}
 
-	if len(alarms) != 1 {
-		t.Fatalf("expected claimed alarm to still appear as due, got %d", len(alarms))
+	if len(alarms) != 0 {
+		t.Fatalf("expected claimed alarm to be excluded, got %d", len(alarms))
 	}
 }
