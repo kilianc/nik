@@ -2,6 +2,7 @@ package brain
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/kciuffolo/nik/internal/config"
@@ -49,5 +50,46 @@ func TestToolsForContextFiltersPrivilegedTools(t *testing.T) {
 	ownerTools := b.toolsForContext(ownerCtx)
 	if len(ownerTools) != 2 {
 		t.Fatalf("expected both tools for owner context, got %+v", ownerTools)
+	}
+}
+
+func TestToolExecutorBlocksPrivilegedInUnprivilegedContext(t *testing.T) {
+	b := New(&config.Config{PrivilegedConversationIDs: []string{"owner-conv"}}, nil)
+
+	called := false
+	b.RegisterTool(llm.Tool{
+		Def: llm.ToolDef{Name: "secret_tool"},
+		Handler: func(context.Context, llm.ToolCall) (string, error) {
+			called = true
+			return `{"ok":true}`, nil
+		},
+		Privileged: true,
+	})
+
+	executor := b.toolExecutor()
+	call := llm.ToolCall{Name: "secret_tool", Arguments: "{}"}
+
+	unprivCtx := context.WithValue(context.Background(), "meta", map[string]string{"conversation_id": "other"})
+	result, err := executor(unprivCtx, call)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if called {
+		t.Fatal("privileged tool handler was called in unprivileged context")
+	}
+	if !strings.Contains(result, "requires privileged context") {
+		t.Fatalf("expected privilege error, got %s", result)
+	}
+
+	privCtx := context.WithValue(context.Background(), "meta", map[string]string{"conversation_id": "owner-conv"})
+	result, err = executor(privCtx, call)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !called {
+		t.Fatal("privileged tool handler was not called in privileged context")
+	}
+	if !strings.Contains(result, `"ok"`) {
+		t.Fatalf("expected ok result, got %s", result)
 	}
 }

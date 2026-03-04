@@ -74,6 +74,17 @@ func (b *Brain) toolExecutor() llm.ToolExecutor {
 			return llm.ToolErrorf("unknown tool %q", call.Name), nil
 		}
 
+		if b.privileged[call.Name] {
+			meta, _ := ctx.Value("meta").(map[string]string)
+			if !b.isPrivilegedContext(meta) {
+				slog.Warn("blocked privileged tool in unprivileged context",
+					"pkg", "brain", "tool", call.Name,
+					"conversation_id", meta["conversation_id"],
+				)
+				return llm.ToolErrorf("tool %q requires privileged context", call.Name), nil
+			}
+		}
+
 		return handler(ctx, call)
 	}
 }
