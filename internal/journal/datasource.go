@@ -70,7 +70,7 @@ func (d *DataSource) Check(ctx context.Context) ([]brain.DataSourceOutput, error
 
 	date := now.In(d.cfg.TZ()).Format("2006-01-02")
 	dayStart, dayEnd := dayBounds(now, d.cfg)
-	dayContext := buildDayContext(ctx, d.conn, d.msgs, dayStart, dayEnd)
+	dayContext := buildDayContext(ctx, d.conn, d.msgs, d.cfg.Home, dayStart, dayEnd)
 
 	var lines []string
 	lines = append(lines, "[End of day journal]", "")
