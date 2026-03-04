@@ -6,69 +6,52 @@ tools: [alarm, update_alarm, cancel_alarm]
 
 # Alarm
 
-Your tool to control time. Set alarms to wake yourself up later and do
-something. When an alarm fires, you receive conversation context, recent
-occurrence history, and can use any of your tools.
+Set alarms to wake yourself up later and do something. When an alarm
+fires you receive the goal, conversation context, occurrence history,
+and can use any of your tools.
 
 ## Tools
 
 ### `alarm` -- create
 
-- `origin_contact_id` -- canonical contact_id for who requested it
-- `goal` -- note to your future self: what to do and why
-- `fire_at` -- RFC3339 timestamp for when it should first fire
-- `recurrence` -- natural language recurrence pattern, empty for one-shot
+- `origin_contact_id` -- who requested it
+- `goal` -- note to your future self: what to do, why, and where to
+  deliver (DMs or group)
+- `fire_at` -- RFC3339 timestamp
+- `recurrence` -- natural language pattern, empty for one-shot
 
 ### `update_alarm` -- edit or log
 
-- `alarm_id` -- the alarm to update
-- `goal` -- updated goal (omit to keep current)
-- `recurrence` -- updated recurrence pattern (omit to keep current)
-- `next_fire_at` -- RFC3339 timestamp to reschedule or skip
-- `occurrence_note` -- short note about what you did during this firing
+- `alarm_id`, `goal`, `recurrence`, `next_fire_at`, `occurrence_note`
 
 ### `cancel_alarm` -- stop
 
-- `alarm_id` -- the alarm to cancel permanently
+- `alarm_id`
 
-## When to use
+## Recurring flow
 
-**One-shot:**
-- "Remind me in 10 minutes" -- compute RFC3339 and set it
-- "Tomorrow at 9am, ask how the interview went"
-- Proactively when you notice something time-sensitive
+1. Create with `fire_at` + `recurrence`
+2. When it fires, act on the goal
+3. Call `update_alarm` with `occurrence_note` and the system computes
+   `next_fire_at` from the recurrence
+4. To stop, `cancel_alarm`
 
-**Recurring:**
-- "Every Sunday at 7pm, check in with Kevin"
-- "Every weekday at 8am, give me a weather update"
-- "On the first of every month, remind me about the budget"
-- "Every evening at 9pm, check for unread messages"
+## Delivery
 
-**Adaptive:**
-- "Check on the PR every couple days until it's merged"
-- Set the first alarm, then reschedule or cancel based on outcome
+Encode the delivery target in the `goal` so your future self knows
+where to send it. Infer from the request language:
 
-## How recurring alarms work
+- "remind me" (from a group) → DMs to the requester
+- "remind us" / collective language → the origin group
+- "remind [someone else]" → DMs to that person
+- ambiguous → ask before setting
 
-1. You create the alarm with `fire_at` (first occurrence) and `recurrence`
-2. When it fires, you receive the goal + occurrence history + conversation
-   context
-3. Act on the goal using your tools
-4. Call `update_alarm` with `occurrence_note` to record what you did
-5. The system automatically computes `next_fire_at` from the recurrence
-6. To adjust timing, call `update_alarm` with `next_fire_at`
-7. To stop, call `cancel_alarm`
+At firing time: pass `contact_id` for DMs, `origin_conversation_id`
+for the group.
 
 ## Tips
 
-- Write `goal` as instructions to yourself -- you'll read it when you
-  wake up
-- `origin_contact_id` is required on creation. Get it from meta
-  (`contact_id`) or `search_contacts`
-- The system preserves ~10 messages of conversation context from when the
-  alarm was created
-- Occurrence notes build a history you see on future firings -- use them
-  to track what happened ("sent Kevin a check-in, he mentioned the
-  interview")
-- Find alarm IDs from the activation context (`alarm_id` in meta) or via
-  `db_query`
+- `origin_contact_id` is required -- get from meta or `search_contacts`
+- ~10 messages of conversation context are preserved from creation time
+- Occurrence notes build a history visible on future firings
+- Find alarm IDs from meta (`alarm_id`) or `db_query`
