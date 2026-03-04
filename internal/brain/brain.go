@@ -42,6 +42,8 @@ type Brain struct {
 	soulReader    func(ctx context.Context) (string, error)
 	crewReader    func(ctx context.Context) (string, error)
 	statsRecorder StatsRecorder
+	toolReactor   ToolReactor
+	toolEmojis    map[string]string
 	now           func() time.Time
 
 	claimed     *SyncSet
@@ -75,6 +77,11 @@ func (b *Brain) SetCrewReader(fn func(ctx context.Context) (string, error)) {
 
 func (b *Brain) SetStatsRecorder(fn StatsRecorder) {
 	b.statsRecorder = fn
+}
+
+func (b *Brain) SetToolReactor(emojis map[string]string, fn ToolReactor) {
+	b.toolEmojis = emojis
+	b.toolReactor = fn
 }
 
 const activationTimeout = 20 * time.Minute
@@ -146,6 +153,15 @@ func (b *Brain) activate(ctx context.Context, output DataSourceOutput) {
 	output.Meta["activation_id"] = activationID
 
 	ctx = context.WithValue(ctx, "meta", output.Meta)
+
+	if b.toolReactor != nil {
+		reactTo := output.Meta["react_to_message_id"]
+		if reactTo != "" {
+			q := startReactionQueue(ctx, reactTo, b.toolReactor)
+			ctx = context.WithValue(ctx, reactionQueueKey{}, q)
+			defer q.close()
+		}
+	}
 
 	if output.Processing != nil {
 		err := output.Processing(ctx)

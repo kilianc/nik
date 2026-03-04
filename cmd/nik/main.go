@@ -36,6 +36,19 @@ import (
 
 const version = "0.0.1"
 
+var toolEmojis = map[string]string{
+	"store_memory":   "🧠",
+	"search_memory":  "🔍",
+	"alarm":          "⏰",
+	"update_alarm":   "⏰",
+	"cancel_alarm":   "🔕",
+	"update_contact": "📇",
+	"load_skill":     "📚",
+	"task_spawn":     "🛠️",
+	"update_config":  "⚙️",
+	"describe_media": "👁️",
+}
+
 func main() {
 	home := flag.String("home", "", "workspace directory (default: current directory)")
 	wappLink := flag.Bool("force-wapp-link", false, "force WhatsApp QR pairing")
@@ -157,6 +170,12 @@ func main() {
 	b.SetSoulReader(dreamSvc.CurrentSoul)
 	b.SetCrewReader(crewSvc.Roster)
 	b.SetStatsRecorder(stats.NewRecorder(conn).Record)
+	b.SetToolReactor(toolEmojis, func(ctx context.Context, messageID, emoji string) {
+		err := messagingSvc.React(ctx, messageID, emoji)
+		if err != nil {
+			slog.Warn("tool reaction failed", "pkg", "brain", "message_id", messageID, "emoji", emoji, "error", err)
+		}
+	})
 
 	b.RegisterDataSource(messaging.NewDataSource(cfg, messagingSvc, taskSvc))
 	b.RegisterDataSource(alarms.NewDataSource(alarmSvc, messagingSvc))
