@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestFormatAlarmFreshOneShot(t *testing.T) {
@@ -14,7 +13,7 @@ func TestFormatAlarmFreshOneShot(t *testing.T) {
 		OriginContactID: sql.NullString{Valid: true, String: "contact-1"},
 	}
 
-	lines := formatAlarm(alarm, "kevin", nil, nil, nil, false)
+	lines := formatAlarm(alarm, "kevin", nil, nil, nil)
 	out := strings.Join(lines, "\n")
 
 	if !strings.Contains(out, "[Alarm fired]") {
@@ -41,7 +40,7 @@ func TestFormatAlarmFreshRecurring(t *testing.T) {
 		Recurrence: sql.NullString{Valid: true, String: "every Sunday afternoon"},
 	}
 
-	lines := formatAlarm(alarm, "", nil, nil, nil, false)
+	lines := formatAlarm(alarm, "", nil, nil, nil)
 	out := strings.Join(lines, "\n")
 
 	if !strings.Contains(out, "[Recurring alarm fired]") {
@@ -58,27 +57,6 @@ func TestFormatAlarmFreshRecurring(t *testing.T) {
 	}
 }
 
-func TestFormatAlarmAlreadyFiredRecurring(t *testing.T) {
-	now := time.Now()
-	alarm := Alarm{
-		ID:          "alarm-3",
-		Goal:        "weekly report",
-		Recurrence:  sql.NullString{Valid: true, String: "every Monday at 9am"},
-		NextFireAt:  sql.NullTime{Valid: true, Time: now.Add(-time.Hour)},
-		LastFiredAt: sql.NullTime{Valid: true, Time: now},
-	}
-
-	lines := formatAlarm(alarm, "", nil, nil, nil, true)
-	out := strings.Join(lines, "\n")
-
-	if !strings.Contains(out, "[Alarm pending reschedule]") {
-		t.Fatalf("expected pending reschedule header, got %q", out)
-	}
-	if !strings.Contains(out, "not rescheduled") {
-		t.Fatalf("expected reschedule reminder, got %q", out)
-	}
-}
-
 func TestFormatAlarmWithSource(t *testing.T) {
 	alarm := Alarm{
 		ID:     "alarm-src",
@@ -86,7 +64,7 @@ func TestFormatAlarmWithSource(t *testing.T) {
 		Source: sql.NullString{Valid: true, String: "message"},
 	}
 
-	lines := formatAlarm(alarm, "", nil, nil, nil, false)
+	lines := formatAlarm(alarm, "", nil, nil, nil)
 	out := strings.Join(lines, "\n")
 
 	if !strings.Contains(out, "Created from: message") {
@@ -100,30 +78,10 @@ func TestFormatAlarmWithoutSource(t *testing.T) {
 		Goal: "do something",
 	}
 
-	lines := formatAlarm(alarm, "", nil, nil, nil, false)
+	lines := formatAlarm(alarm, "", nil, nil, nil)
 	out := strings.Join(lines, "\n")
 
 	if strings.Contains(out, "Created from:") {
 		t.Fatalf("expected no source line for alarm without source, got %q", out)
-	}
-}
-
-func TestFormatAlarmAlreadyFiredOneShot(t *testing.T) {
-	now := time.Now()
-	alarm := Alarm{
-		ID:          "alarm-4",
-		Goal:        "send email",
-		NextFireAt:  sql.NullTime{Valid: true, Time: now.Add(-time.Hour)},
-		LastFiredAt: sql.NullTime{Valid: true, Time: now},
-	}
-
-	lines := formatAlarm(alarm, "", nil, nil, nil, true)
-	out := strings.Join(lines, "\n")
-
-	if !strings.Contains(out, "[Alarm pending reschedule]") {
-		t.Fatalf("expected pending header, got %q", out)
-	}
-	if !strings.Contains(out, "cancel_alarm") {
-		t.Fatalf("expected cancel instruction, got %q", out)
 	}
 }

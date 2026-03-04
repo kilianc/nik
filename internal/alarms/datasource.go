@@ -28,7 +28,6 @@ func (d *DataSource) Check(ctx context.Context) ([]brain.DataSourceOutput, error
 	var outputs []brain.DataSourceOutput
 	for _, a := range alarms {
 		alarm := a
-		alreadyFired := alarm.LastFiredAt.Valid && !alarm.LastFiredAt.Time.Before(alarm.NextFireAt.Time)
 
 		msgs := d.conversationContext(ctx, alarm)
 		senderLabels := d.msgsSvc.SenderLabels(ctx, msgs)
@@ -38,7 +37,7 @@ func (d *DataSource) Check(ctx context.Context) ([]brain.DataSourceOutput, error
 		}
 
 		occurrences := d.recentOccurrences(ctx, alarm.ID)
-		lines := formatAlarm(alarm, requesterName, msgs, senderLabels, occurrences, alreadyFired)
+		lines := formatAlarm(alarm, requesterName, msgs, senderLabels, occurrences)
 
 		meta := map[string]string{
 			"source":    "alarm",
@@ -55,13 +54,10 @@ func (d *DataSource) Check(ctx context.Context) ([]brain.DataSourceOutput, error
 			meta["contact_id"] = alarm.OriginContactID.String
 		}
 
-		out := brain.DataSourceOutput{
+		outputs = append(outputs, brain.DataSourceOutput{
 			Lines: lines,
 			Meta:  meta,
-		}
-
-		if !alreadyFired {
-			out.Processing = func(ctx context.Context) error {
+			Processing: func(ctx context.Context) error {
 				slog.Info("alarm fired", "pkg", "alarms", "id", alarm.ID, "goal", alarm.Goal,
 					"recurrence", alarm.Recurrence.String)
 
@@ -75,10 +71,8 @@ func (d *DataSource) Check(ctx context.Context) ([]brain.DataSourceOutput, error
 				}
 
 				return d.svc.ClaimAlarm(ctx, alarm.ID)
-			}
-		}
-
-		outputs = append(outputs, out)
+			},
+		})
 	}
 
 	return outputs, nil
@@ -107,13 +101,11 @@ func (d *DataSource) recentOccurrences(ctx context.Context, alarmID string) []Al
 	return occurrences
 }
 
-func formatAlarm(a Alarm, requesterName string, msgs []db.Message, senderLabels map[string]string, occurrences []AlarmOccurrence, alreadyFired bool) []string {
+func formatAlarm(a Alarm, requesterName string, msgs []db.Message, senderLabels map[string]string, occurrences []AlarmOccurrence) []string {
 	recurring := a.Recurrence.Valid && a.Recurrence.String != ""
 
 	header := "[Alarm fired]"
-	if alreadyFired {
-		header = "[Alarm pending reschedule]"
-	} else if recurring {
+	if recurring {
 		header = "[Recurring alarm fired]"
 	}
 
@@ -162,14 +154,9 @@ func formatAlarm(a Alarm, requesterName string, msgs []db.Message, senderLabels 
 		}
 	}
 
-	switch {
-	case alreadyFired && recurring:
-		lines = append(lines, "", "This recurring alarm already fired but was not rescheduled. Call update_alarm with next_fire_at set to the next occurrence based on the recurrence pattern.")
-	case alreadyFired:
-		lines = append(lines, "", "This alarm already fired but was not resolved. Call cancel_alarm to dismiss it.")
-	case recurring:
+	if recurring {
 		lines = append(lines, "", "Act on this now. After acting, call update_alarm with an occurrence_note describing what you did and next_fire_at set to the next occurrence based on the recurrence pattern.")
-	default:
+	} else {
 		lines = append(lines, "", "Act on this now. After acting, call cancel_alarm to dismiss it.")
 	}
 
