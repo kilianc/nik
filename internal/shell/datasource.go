@@ -12,14 +12,16 @@ import (
 )
 
 type DataSource struct {
-	msgsSvc      *messaging.Service
-	isActivating func(string) bool
+	msgsSvc              *messaging.Service
+	isActivating         func(string) bool
+	isConversationActive func(string) bool
 }
 
-func NewDataSource(msgsSvc *messaging.Service, isActivating func(string) bool) *DataSource {
+func NewDataSource(msgsSvc *messaging.Service, isActivating, isConversationActive func(string) bool) *DataSource {
 	return &DataSource{
-		msgsSvc:      msgsSvc,
-		isActivating: isActivating,
+		msgsSvc:              msgsSvc,
+		isActivating:         isActivating,
+		isConversationActive: isConversationActive,
 	}
 }
 
@@ -43,6 +45,10 @@ func (d *DataSource) Check(ctx context.Context) ([]brain.DataSourceOutput, error
 			continue
 		}
 
+		if meta.ConversationID != "" && d.isConversationActive(meta.ConversationID) {
+			continue
+		}
+
 		// dead sessions trigger immediately, alive sessions wait for next_check_at
 		if s.isAlive && now.Before(meta.NextCheckAt) {
 			continue
@@ -52,8 +58,6 @@ func (d *DataSource) Check(ctx context.Context) ([]brain.DataSourceOutput, error
 		if !s.isAlive {
 			status = "exited"
 		}
-
-		slog.Info("shell nudge", "pkg", "shell", "id", s.ID, "status", status)
 
 		sessionID := s.ID
 		conversationID, msgs := d.conversationContext(ctx, meta.ConversationID)
@@ -81,6 +85,8 @@ func (d *DataSource) Check(ctx context.Context) ([]brain.DataSourceOutput, error
 				"source_id":       sessionID,
 			},
 			Processing: func(ctx context.Context) error {
+				slog.Info("shell nudge", "pkg", "shell", "id", sessionID, "status", status)
+
 				ctxMeta, _ := ctx.Value("meta").(map[string]string)
 				m, err := loadMeta(sessionID)
 				if err != nil {

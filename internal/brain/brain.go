@@ -52,6 +52,11 @@ func (b *Brain) IsActive(activationID string) bool {
 	return b.activations.Has(activationID)
 }
 
+// IsConversationActive reports whether a conversation is currently being activated.
+func (b *Brain) IsConversationActive(conversationID string) bool {
+	return b.activeConversations.Has(conversationID)
+}
+
 func New(cfg *config.Config, llmClient *llm.Client) *Brain {
 	return &Brain{
 		cfg:                 cfg,
