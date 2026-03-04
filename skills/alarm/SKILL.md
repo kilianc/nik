@@ -52,6 +52,6 @@ for the group.
 ## Tips
 
 - `origin_contact_id` is required -- get from meta or `search_contacts`
-- ~10 messages of conversation context are preserved from creation time
+- First firing shows creation-time conversation context; subsequent firings show recent messages from the conversation
 - Occurrence notes build a history visible on future firings
 - Find alarm IDs from meta (`alarm_id`) or `db_query`

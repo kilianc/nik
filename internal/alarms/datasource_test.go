@@ -13,7 +13,7 @@ func TestFormatAlarmFreshOneShot(t *testing.T) {
 		OriginContactID: sql.NullString{Valid: true, String: "contact-1"},
 	}
 
-	lines := formatAlarm(alarm, "kevin", nil, nil, nil)
+	lines := formatAlarm(alarm, "kevin", nil, nil, nil, false)
 	out := strings.Join(lines, "\n")
 
 	if !strings.Contains(out, "[Alarm fired]") {
@@ -40,7 +40,7 @@ func TestFormatAlarmFreshRecurring(t *testing.T) {
 		Recurrence: sql.NullString{Valid: true, String: "every Sunday afternoon"},
 	}
 
-	lines := formatAlarm(alarm, "", nil, nil, nil)
+	lines := formatAlarm(alarm, "", nil, nil, nil, false)
 	out := strings.Join(lines, "\n")
 
 	if !strings.Contains(out, "[Recurring alarm fired]") {
@@ -64,7 +64,7 @@ func TestFormatAlarmWithSource(t *testing.T) {
 		Source: sql.NullString{Valid: true, String: "message"},
 	}
 
-	lines := formatAlarm(alarm, "", nil, nil, nil)
+	lines := formatAlarm(alarm, "", nil, nil, nil, false)
 	out := strings.Join(lines, "\n")
 
 	if !strings.Contains(out, "Created from: message") {
@@ -78,10 +78,43 @@ func TestFormatAlarmWithoutSource(t *testing.T) {
 		Goal: "do something",
 	}
 
-	lines := formatAlarm(alarm, "", nil, nil, nil)
+	lines := formatAlarm(alarm, "", nil, nil, nil, false)
 	out := strings.Join(lines, "\n")
 
 	if strings.Contains(out, "Created from:") {
 		t.Fatalf("expected no source line for alarm without source, got %q", out)
+	}
+}
+
+func TestFormatAlarmSubsequentFiringContextLabel(t *testing.T) {
+	alarm := Alarm{
+		ID:         "alarm-sub",
+		Goal:       "send daily recap",
+		Recurrence: sql.NullString{Valid: true, String: "every day at 1am"},
+	}
+
+	lines := formatAlarm(alarm, "", nil, nil, nil, true)
+	out := strings.Join(lines, "\n")
+
+	if strings.Contains(out, "original request") {
+		t.Fatalf("subsequent firing should not show original request header, got %q", out)
+	}
+	if !strings.Contains(out, "act silently") {
+		t.Fatalf("expected silent-action guidance for recurring alarm, got %q", out)
+	}
+}
+
+func TestFormatAlarmFirstFiringContextLabel(t *testing.T) {
+	alarm := Alarm{
+		ID:         "alarm-first",
+		Goal:       "send daily recap",
+		Recurrence: sql.NullString{Valid: true, String: "every day at 1am"},
+	}
+
+	lines := formatAlarm(alarm, "", nil, nil, nil, false)
+	out := strings.Join(lines, "\n")
+
+	if strings.Contains(out, "Recent conversation") {
+		t.Fatalf("first firing should not show recent conversation header, got %q", out)
 	}
 }
