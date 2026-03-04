@@ -23,6 +23,15 @@ func DreamHasPass(ctx context.Context, db *sql.DB, date string, pass int) (bool,
 	return true, nil
 }
 
+func DreamStartPass(ctx context.Context, db *sql.DB, date string, pass int) error {
+	_, err := db.ExecContext(ctx, queries.DreamStart, date, pass)
+	if err != nil {
+		return fmt.Errorf("start dream pass %s/%d: %w", date, pass, err)
+	}
+
+	return nil
+}
+
 func DreamWritePass(ctx context.Context, db *sql.DB, date string, pass int, content string) error {
 	_, err := db.ExecContext(ctx, queries.DreamWrite, date, pass, content)
 	if err != nil {

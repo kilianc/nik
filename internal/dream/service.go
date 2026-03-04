@@ -26,6 +26,10 @@ func (s *Service) HasPass(ctx context.Context, pass int) (bool, error) {
 	return db.DreamHasPass(ctx, s.db, s.tonight(), pass)
 }
 
+func (s *Service) StartPass(ctx context.Context, pass int) error {
+	return db.DreamStartPass(ctx, s.db, s.tonight(), pass)
+}
+
 func (s *Service) WriteDream(ctx context.Context, pass int, content string) error {
 	date := s.tonight()
 

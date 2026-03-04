@@ -42,7 +42,7 @@ func TestWriteDreamThenHasPass(t *testing.T) {
 	}
 }
 
-func TestWriteDreamDuplicateErrors(t *testing.T) {
+func TestWriteDreamUpsertOverwrites(t *testing.T) {
 	ctx := context.Background()
 	svc := testService(t)
 
@@ -51,9 +51,52 @@ func TestWriteDreamDuplicateErrors(t *testing.T) {
 		t.Fatalf("first write: %v", err)
 	}
 
-	err = svc.WriteDream(ctx, 1, "duplicate dream")
-	if err == nil {
-		t.Fatal("expected error on duplicate pass")
+	err = svc.WriteDream(ctx, 1, "second dream")
+	if err != nil {
+		t.Fatalf("upsert write: %v", err)
+	}
+}
+
+func TestStartPassThenHasPass(t *testing.T) {
+	ctx := context.Background()
+	svc := testService(t)
+
+	err := svc.StartPass(ctx, 1)
+	if err != nil {
+		t.Fatalf("start pass: %v", err)
+	}
+
+	has, err := svc.HasPass(ctx, 1)
+	if err != nil {
+		t.Fatalf("has pass: %v", err)
+	}
+
+	if !has {
+		t.Fatal("expected pass to exist after start")
+	}
+}
+
+func TestStartPassThenWriteOverwrites(t *testing.T) {
+	ctx := context.Background()
+	svc := testService(t)
+
+	err := svc.StartPass(ctx, 1)
+	if err != nil {
+		t.Fatalf("start pass: %v", err)
+	}
+
+	err = svc.WriteDream(ctx, 1, "real content")
+	if err != nil {
+		t.Fatalf("write after start: %v", err)
+	}
+
+	has, err := svc.HasPass(ctx, 1)
+	if err != nil {
+		t.Fatalf("has pass: %v", err)
+	}
+
+	if !has {
+		t.Fatal("expected pass to exist after write")
 	}
 }
 

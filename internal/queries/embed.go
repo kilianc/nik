@@ -164,6 +164,9 @@ var JournalCrewToday string
 //go:embed dream_check.sql
 var DreamCheck string
 
+//go:embed dream_start.sql
+var DreamStart string
+
 //go:embed dream_write.sql
 var DreamWrite string
 
