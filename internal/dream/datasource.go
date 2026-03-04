@@ -85,7 +85,7 @@ func (d *DataSource) Check(ctx context.Context) ([]brain.DataSourceOutput, error
 		},
 		Processing: func(ctx context.Context) error {
 			slog.Info("dream started", "pkg", "dream", "pass", pass, "name", name)
-			return nil
+			return d.svc.StartPass(ctx, pass)
 		},
 		Processed: func(ctx context.Context) error {
 			d.mu.Lock()
