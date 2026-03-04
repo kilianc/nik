@@ -170,12 +170,7 @@ func main() {
 	b.SetSoulReader(dreamSvc.CurrentSoul)
 	b.SetCrewReader(crewSvc.Roster)
 	b.SetStatsRecorder(stats.NewRecorder(conn).Record)
-	b.SetToolReactor(toolEmojis, func(ctx context.Context, messageID, emoji string) {
-		err := messagingSvc.React(ctx, messageID, emoji)
-		if err != nil {
-			slog.Warn("tool reaction failed", "pkg", "brain", "message_id", messageID, "emoji", emoji, "error", err)
-		}
-	})
+	b.SetToolReactor(toolEmojis, messagingSvc.React)
 	b.SetDebugRecorder(brain.NewDebugRecorder(cfg.DebugPath(), llmClient.Model(), time.Now, taskSvc))
 
 	b.RegisterDataSource(messaging.NewDataSource(cfg, messagingSvc, taskSvc))

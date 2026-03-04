@@ -2,13 +2,14 @@ package brain
 
 import (
 	"context"
+	"log/slog"
 	"time"
 )
 
 const reactionMinGap = 800 * time.Millisecond
 
 // ToolReactor sends a reaction emoji to the message that triggered an activation.
-type ToolReactor func(ctx context.Context, messageID, emoji string)
+type ToolReactor func(ctx context.Context, messageID, emoji string) error
 
 type reactionQueueKey struct{}
 
@@ -50,7 +51,11 @@ func (q *reactionQueue) drain(ctx context.Context, messageID string, reactor Too
 			time.Sleep(reactionMinGap - gap)
 		}
 
-		reactor(ctx, messageID, emoji)
+		err := reactor(ctx, messageID, emoji)
+		if err != nil {
+			slog.Warn("tool reaction failed", "pkg", "brain", "message_id", messageID, "emoji", emoji, "error", err)
+		}
+
 		last = time.Now()
 		sent = true
 	}
@@ -59,7 +64,11 @@ func (q *reactionQueue) drain(ctx context.Context, messageID string, reactor Too
 		if gap := time.Since(last); gap < reactionMinGap {
 			time.Sleep(reactionMinGap - gap)
 		}
-		reactor(ctx, messageID, "")
+
+		err := reactor(ctx, messageID, "")
+		if err != nil {
+			slog.Warn("tool reaction clear failed", "pkg", "brain", "message_id", messageID, "error", err)
+		}
 	}
 }
 
