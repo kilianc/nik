@@ -12,7 +12,6 @@ import (
 	"github.com/mattn/go-sqlite3"
 )
 
-// DBTX is satisfied by *sql.DB and *sql.Tx.
 type DBTX interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row

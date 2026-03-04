@@ -46,7 +46,6 @@ func scanStringSlice(val any) ([]string, error) {
 	}
 }
 
-// MarshalStringSlice converts []string to a JSON array string for binding to TEXT columns.
 func MarshalStringSlice(s []string) string {
 	if s == nil {
 		return "[]"

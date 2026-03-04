@@ -112,7 +112,6 @@ type reportArgs struct {
 	NeedsAttention bool   `json:"needs_attention"`
 }
 
-// BuildTools returns Nik's task management tools (spawn, status, cancel).
 func BuildTools(svc *Service, runner *Runner, crewSvc *crew.Service) []llm.Tool {
 	return []llm.Tool{
 		{Def: spawnToolDef, Handler: spawnHandler(svc, runner, crewSvc)},
@@ -121,7 +120,6 @@ func BuildTools(svc *Service, runner *Runner, crewSvc *crew.Service) []llm.Tool 
 	}
 }
 
-// BuildReportTool returns the task_report tool for task subagents.
 func BuildReportTool(svc *Service, taskID string) llm.Tool {
 	return llm.Tool{
 		Def:     reportToolDef,

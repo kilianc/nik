@@ -41,8 +41,6 @@ type authFile struct {
 	ExpiresAt string `json:"expires_at,omitempty"`
 }
 
-// LoadOrLogin loads codex credentials from disk. If missing or expired, it
-// triggers an interactive login flow and saves the result.
 func LoadOrLogin(path string) (*Auth, error) {
 	if path == "" {
 		home, err := os.UserHomeDir()
@@ -106,7 +104,6 @@ func load(path string) (*Auth, error) {
 	}, nil
 }
 
-// Token returns a valid access token, refreshing it if near expiry.
 func (a *Auth) Token() (string, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()

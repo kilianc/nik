@@ -39,14 +39,12 @@ var modelPricing = map[string]tokenPricing{
 	"o1-mini": {input: 1.10e-6, output: 4.40e-6, contextWindow: 128_000},
 }
 
-// Rates holds per-1M-token display rates for a model.
 type Rates struct {
 	Input  float64
 	Output float64
 	Cached float64
 }
 
-// ModelRates returns the per-1M-token rates for the given model.
 func ModelRates(model string) (Rates, bool) {
 	p, ok := modelPricing[model]
 	if !ok {
@@ -59,7 +57,6 @@ func ModelRates(model string) (Rates, bool) {
 	}, true
 }
 
-// ModelContextWindow returns the context window size in tokens for the given model.
 func ModelContextWindow(model string) (int, bool) {
 	p, ok := modelPricing[model]
 	if !ok || p.contextWindow == 0 {
