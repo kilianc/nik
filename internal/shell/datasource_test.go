@@ -44,7 +44,7 @@ func TestDeadSessionRetrigger(t *testing.T) {
 		t.Fatalf("saveMeta: %v", err)
 	}
 
-	ds := NewDataSource(new(messaging.Service), func(string) bool { return false })
+	ds := NewDataSource(new(messaging.Service), func(string) bool { return false }, func(string) bool { return false })
 
 	outputs, err := ds.Check(context.Background())
 	if err != nil {

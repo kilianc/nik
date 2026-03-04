@@ -141,7 +141,7 @@ func main() {
 	b.SetStatsRecorder(stats.NewRecorder(conn).Record)
 	b.RegisterDataSource(messaging.NewDataSource(cfg, messagingSvc))
 	b.RegisterDataSource(alarms.NewDataSource(alarmSvc, messagingSvc))
-	b.RegisterDataSource(shell.NewDataSource(messagingSvc, b.IsActive))
+	b.RegisterDataSource(shell.NewDataSource(messagingSvc, b.IsActive, b.IsConversationActive))
 	b.RegisterDataSource(journal.NewDataSource(journalSvc, conn, messagingSvc, cfg))
 	b.RegisterDataSource(dream.NewDataSource(dreamSvc, conn, memorySvc, cfg))
 	b.RegisterDataSource(briefing.NewDataSource(briefingSvc, cfg))
