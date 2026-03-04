@@ -1,6 +1,7 @@
 package brain
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -13,11 +14,123 @@ import (
 	"github.com/kciuffolo/nik/internal/llm"
 )
 
+// DebugInput holds everything the brain knows about a single LLM round.
+type DebugInput struct {
+	Meta         map[string]string
+	Instructions string
+	UserInput    string
+	RawOutput    string
+	Tools        []llm.ToolDef
+	ToolCalls    []llm.ToolCallRecord
+	Extra        llm.CompletionExtra
+	Usage        llm.Usage
+	ProcessErr   error
+}
+
+// DebugRecorder writes debug output for a single LLM round.
+type DebugRecorder func(DebugInput)
+
+func (b *Brain) SetDebugRecorder(fn DebugRecorder) {
+	b.debugRecorder = fn
+}
+
+// DebugTaskInfo holds task data for debug output.
+type DebugTaskInfo struct {
+	ID        string
+	Goal      string
+	Status    string
+	CreatedAt time.Time
+}
+
+// DebugTaskQuerier fetches active tasks for a conversation.
+type DebugTaskQuerier interface {
+	ActiveTasksForConversation(ctx context.Context, conversationID string) ([]DebugTaskInfo, error)
+}
+
+// NewDebugRecorder creates a DebugRecorder that writes markdown files.
+// All debug state (paths, model, task querier) is captured in the closure.
+func NewDebugRecorder(debugPath, model string, now func() time.Time, tasks DebugTaskQuerier) DebugRecorder {
+	return func(input DebugInput) {
+		if debugPath == "" {
+			return
+		}
+
+		if now == nil {
+			now = time.Now
+		}
+		timestamp := now()
+
+		debugFile, err := createDebugFilePath(debugPath, input.UserInput, timestamp)
+		if err != nil {
+			slog.Warn("create debug path failed", "pkg", "brain", "error", err)
+			return
+		}
+
+		toolNames := make([]string, len(input.Tools))
+		for i, t := range input.Tools {
+			toolNames[i] = t.Name
+		}
+
+		var activeTasks []debugTaskInfo
+		if tasks != nil {
+			convID := input.Meta["conversation_id"]
+			if convID != "" {
+				found, qErr := tasks.ActiveTasksForConversation(context.Background(), convID)
+				if qErr == nil {
+					for _, t := range found {
+						activeTasks = append(activeTasks, debugTaskInfo{
+							ID:     t.ID,
+							Goal:   t.Goal,
+							Status: t.Status,
+							Age:    time.Since(t.CreatedAt).Truncate(time.Second).String(),
+						})
+					}
+				}
+			}
+		}
+
+		record := debugRecord{
+			Timestamp:       timestamp.Format(time.RFC3339),
+			Model:           model,
+			ReasoningEffort: input.Extra.ReasoningEffort,
+			Trigger:         input.Meta,
+			ActiveTasks:     activeTasks,
+			Input: debugInput{
+				Instructions: input.Instructions,
+				UserInput:    input.UserInput,
+			},
+			Tools:              toolNames,
+			ToolCalls:          buildDebugToolCalls(input.ToolCalls),
+			ReasoningSummaries: input.Extra.ReasoningSummaries,
+			RawResponses:       input.Extra.RawResponses,
+			Output:             debugOutput{Raw: input.RawOutput},
+			Usage: debugUsage{
+				InputTokens:     input.Usage.InputTokens,
+				OutputTokens:    input.Usage.OutputTokens,
+				TotalTokens:     input.Usage.TotalTokens,
+				CachedTokens:    input.Usage.CachedTokens,
+				ReasoningTokens: input.Usage.ReasoningTokens,
+				CostUSD:         llm.ComputeCost(model, input.Usage.InputTokens, input.Usage.OutputTokens, input.Usage.CachedTokens),
+			},
+		}
+
+		if input.ProcessErr != nil {
+			record.Output.ProcessErr = input.ProcessErr.Error()
+		}
+
+		err = writeDebugMarkdown(debugFile, record)
+		if err != nil {
+			slog.Warn("write debug record failed", "pkg", "brain", "error", err)
+		}
+	}
+}
+
 type debugRecord struct {
 	Timestamp          string
 	Model              string
 	ReasoningEffort    string
 	Trigger            map[string]string
+	ActiveTasks        []debugTaskInfo
 	Input              debugInput
 	Tools              []string
 	ToolCalls          []debugToolCall
@@ -25,6 +138,13 @@ type debugRecord struct {
 	RawResponses       []string
 	Output             debugOutput
 	Usage              debugUsage
+}
+
+type debugTaskInfo struct {
+	ID     string
+	Goal   string
+	Status string
+	Age    string
 }
 
 type debugToolCall struct {
@@ -54,62 +174,6 @@ type debugUsage struct {
 }
 
 var nonAlphaNum = regexp.MustCompile(`[^a-zA-Z0-9]+`)
-
-func (b *Brain) writeDebugRecord(meta map[string]string, instructions, userInput, rawOutput string, tools []llm.ToolDef, toolCalls []llm.ToolCallRecord, extra llm.CompletionExtra, usage llm.Usage, processErr error) {
-	if b.cfg.DebugPath() == "" {
-		return
-	}
-
-	now := b.now
-	if now == nil {
-		now = time.Now
-	}
-	timestamp := now()
-
-	debugFile, err := createDebugFilePath(b.cfg.DebugPath(), userInput, timestamp)
-	if err != nil {
-		slog.Warn("create debug path failed", "pkg", "brain", "error", err)
-		return
-	}
-
-	toolNames := make([]string, len(tools))
-	for i, t := range tools {
-		toolNames[i] = t.Name
-	}
-
-	record := debugRecord{
-		Timestamp:       timestamp.Format(time.RFC3339),
-		Model:           b.llm.Model(),
-		ReasoningEffort: extra.ReasoningEffort,
-		Trigger:         meta,
-		Input: debugInput{
-			Instructions: instructions,
-			UserInput:    userInput,
-		},
-		Tools:              toolNames,
-		ToolCalls:          buildDebugToolCalls(toolCalls),
-		ReasoningSummaries: extra.ReasoningSummaries,
-		RawResponses:       extra.RawResponses,
-		Output:             debugOutput{Raw: rawOutput},
-		Usage: debugUsage{
-			InputTokens:     usage.InputTokens,
-			OutputTokens:    usage.OutputTokens,
-			TotalTokens:     usage.TotalTokens,
-			CachedTokens:    usage.CachedTokens,
-			ReasoningTokens: usage.ReasoningTokens,
-			CostUSD:         llm.ComputeCost(b.llm.Model(), usage.InputTokens, usage.OutputTokens, usage.CachedTokens),
-		},
-	}
-
-	if processErr != nil {
-		record.Output.ProcessErr = processErr.Error()
-	}
-
-	err = writeDebugMarkdown(debugFile, record)
-	if err != nil {
-		slog.Warn("write debug record failed", "pkg", "brain", "error", err)
-	}
-}
 
 func buildDebugToolCalls(calls []llm.ToolCallRecord) []debugToolCall {
 	if len(calls) == 0 {
@@ -166,6 +230,14 @@ func writeDebugMarkdown(path string, rec debugRecord) error {
 	}
 
 	writeCostTable(&w, rec.Model, rec.Usage)
+
+	if len(rec.ActiveTasks) > 0 {
+		fmt.Fprintf(&w, "\n**Active Tasks:** %d\n", len(rec.ActiveTasks))
+		for _, t := range rec.ActiveTasks {
+			fmt.Fprintf(&w, "- %s | %s | %s | %s ago\n", t.ID, t.Goal, t.Status, t.Age)
+		}
+	}
+
 	w.WriteString("\n---\n\n")
 
 	w.WriteString("<details><summary>Instructions (system prompt)</summary>\n\n")

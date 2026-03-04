@@ -210,7 +210,8 @@ CREATE TABLE IF NOT EXISTS task (
   status         TEXT NOT NULL DEFAULT 'pending',
   created_at     TIMESTAMP NOT NULL DEFAULT (datetime('now')),
   started_at     TIMESTAMP,
-  completed_at   TIMESTAMP
+  completed_at   TIMESTAMP,
+  checked_at     TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS task_report (

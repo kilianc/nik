@@ -261,6 +261,15 @@ func (s *Service) ActiveTasks(ctx context.Context, source, sourceID string) ([]A
 	return tasks, rows.Err()
 }
 
+func (s *Service) MarkChecked(ctx context.Context, taskID string) error {
+	_, err := s.db.ExecContext(ctx, queries.TaskMarkChecked, taskID)
+	if err != nil {
+		return fmt.Errorf("mark task checked %s: %w", taskID, err)
+	}
+
+	return nil
+}
+
 func (s *Service) StaleTasks(ctx context.Context, threshold time.Duration) ([]Task, error) {
 	cutoff := time.Now().UTC().Add(-threshold)
 

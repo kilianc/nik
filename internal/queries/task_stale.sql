@@ -14,6 +14,7 @@ SELECT
 FROM task t
 WHERE t.status = 'running'
   AND t.activation_id IS NOT NULL
+  AND (t.checked_at IS NULL OR t.checked_at < ?1)
   AND (
     (SELECT MAX(tc.created_at) FROM tool_call tc WHERE tc.activation_id = t.activation_id) < ?1
     OR (

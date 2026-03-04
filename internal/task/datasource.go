@@ -10,7 +10,7 @@ import (
 	"github.com/kciuffolo/nik/internal/messaging"
 )
 
-const staleThreshold = 5 * time.Minute
+const staleThreshold = 2 * time.Minute
 
 type DataSource struct {
 	svc    *Service
@@ -25,17 +25,32 @@ func NewDataSource(svc *Service, msgSvc *messaging.Service) *DataSource {
 }
 
 func (d *DataSource) Check(ctx context.Context) ([]brain.DataSourceOutput, error) {
+	var outputs []brain.DataSourceOutput
+
 	staleTasks, err := d.svc.StaleTasks(ctx, staleThreshold)
 	if err != nil {
 		slog.Warn("check stale tasks", "pkg", "task", "error", err)
 	}
 
 	for _, t := range staleTasks {
-		reportErr := d.svc.InsertReport(ctx, t.ID, "attention",
-			fmt.Sprintf("stale: no tool activity for %s", staleThreshold))
-		if reportErr != nil {
-			slog.Warn("insert stale report", "pkg", "task", "task_id", t.ID, "error", reportErr)
+		lines := d.formatStaleTask(ctx, t)
+		taskID := t.ID
+
+		meta := map[string]string{
+			"source":    t.Source,
+			"source_id": t.SourceID,
 		}
+		if t.Source == "message" && t.SourceID != "" {
+			meta["conversation_id"] = t.SourceID
+		}
+
+		outputs = append(outputs, brain.DataSourceOutput{
+			Lines: lines,
+			Meta:  meta,
+			Processed: func(ctx context.Context) error {
+				return d.svc.MarkChecked(ctx, taskID)
+			},
+		})
 	}
 
 	reports, err := d.svc.UnreportedReports(ctx)
@@ -43,7 +58,6 @@ func (d *DataSource) Check(ctx context.Context) ([]brain.DataSourceOutput, error
 		return nil, fmt.Errorf("query unreported task reports: %w", err)
 	}
 
-	var outputs []brain.DataSourceOutput
 	for _, report := range reports {
 		lines := d.formatReport(ctx, report)
 		reportID := report.ID
@@ -66,6 +80,27 @@ func (d *DataSource) Check(ctx context.Context) ([]brain.DataSourceOutput, error
 	}
 
 	return outputs, nil
+}
+
+func (d *DataSource) formatStaleTask(ctx context.Context, t Task) []string {
+	lines := []string{
+		"[Stale task]",
+		fmt.Sprintf("Task ID: %s", t.ID),
+		fmt.Sprintf("Goal: %s", t.Goal),
+		fmt.Sprintf("Status: %s", t.Status),
+		"",
+		fmt.Sprintf("No tool activity for %s. Cancel it or leave it if you have a reason.", staleThreshold),
+	}
+
+	if t.Source == "message" && t.SourceID != "" {
+		convLines := d.conversationContext(ctx, t.SourceID)
+		if len(convLines) > 0 {
+			lines = append(lines, "")
+			lines = append(lines, convLines...)
+		}
+	}
+
+	return lines
 }
 
 func (d *DataSource) formatReport(ctx context.Context, r Report) []string {
@@ -128,6 +163,27 @@ func (d *DataSource) conversationContext(ctx context.Context, conversationID str
 	}
 
 	return lines
+}
+
+// ActiveTasksForConversation returns active tasks for debug output.
+// Implements brain.DebugTaskQuerier.
+func (s *Service) ActiveTasksForConversation(ctx context.Context, conversationID string) ([]brain.DebugTaskInfo, error) {
+	active, err := s.ActiveTasks(ctx, "message", conversationID)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]brain.DebugTaskInfo, len(active))
+	for i, t := range active {
+		out[i] = brain.DebugTaskInfo{
+			ID:        t.ID,
+			Goal:      t.Goal,
+			Status:    t.Status,
+			CreatedAt: t.CreatedAt,
+		}
+	}
+
+	return out, nil
 }
 
 // ConversationTasks returns active tasks for a conversation.
