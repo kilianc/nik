@@ -18,7 +18,10 @@ func TestAlarmClaimSetsLastFiredAtAndKeepsNextFireAt(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Second)
 	fireAt := now.Add(-time.Minute)
-	alarm, err := CreateAlarm(ctx, conn, "", "", "test", "", "", "", fireAt)
+	alarm, err := CreateAlarm(ctx, conn, CreateAlarmParams{
+		Goal:       "test",
+		NextFireAt: fireAt,
+	})
 	if err != nil {
 		t.Fatalf("create alarm: %v", err)
 	}

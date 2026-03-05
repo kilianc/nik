@@ -3,56 +3,37 @@ package task
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"time"
 
+	"github.com/kciuffolo/nik/internal/brain"
+	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/id"
-	"github.com/kciuffolo/nik/internal/queries"
+	"github.com/kciuffolo/nik/internal/messaging"
 )
 
-type Task struct {
-	ID           string
-	Source       string
-	SourceID     string
-	ActivationID string
-	CrewMemberID string
-	Goal         string
-	Plan         string
-	Thinking     string
-	Status       string
-	CreatedAt    time.Time
-	StartedAt    sql.NullTime
-	CompletedAt  sql.NullTime
-}
-
-type Report struct {
-	ID         string
-	TaskID     string
-	Kind       string
-	Content    string
-	ReportedAt sql.NullTime
-	CreatedAt  time.Time
-
-	// joined from task
-	Source   string
-	SourceID string
-	Goal     string
-	Status   string
-}
-
 type Service struct {
-	db *sql.DB
+	conn *sql.DB
 }
 
-func NewService(db *sql.DB) *Service {
-	return &Service{db: db}
+func NewService(conn *sql.DB) *Service {
+	return &Service{conn: conn}
 }
 
-func (s *Service) Create(ctx context.Context, source, sourceID, crewMemberID, goal, plan, thinking string) (Task, error) {
-	t := Task{
+func (s *Service) Create(ctx context.Context, crewMemberID, goal, plan, thinking string, meta map[string]string) (db.Task, error) {
+	if meta == nil {
+		meta = map[string]string{}
+	}
+
+	metaJSON, err := json.Marshal(meta)
+	if err != nil {
+		return db.Task{}, fmt.Errorf("marshal task meta: %w", err)
+	}
+
+	p := db.TaskInsertParams{
 		ID:           id.V7(),
-		Source:       source,
-		SourceID:     sourceID,
+		MetaJSON:     string(metaJSON),
 		CrewMemberID: crewMemberID,
 		Goal:         goal,
 		Plan:         plan,
@@ -61,252 +42,120 @@ func (s *Service) Create(ctx context.Context, source, sourceID, crewMemberID, go
 		CreatedAt:    time.Now().UTC(),
 	}
 
-	var memberID any
-	if crewMemberID != "" {
-		memberID = crewMemberID
-	}
-
-	_, err := s.db.ExecContext(ctx, queries.TaskInsert,
-		t.ID,
-		t.Source,
-		t.SourceID,
-		nil,
-		memberID,
-		t.Goal,
-		t.Plan,
-		t.Thinking,
-		t.Status,
-		t.CreatedAt,
-		nil,
-		nil,
-	)
+	err = db.TaskInsert(ctx, s.conn, p)
 	if err != nil {
-		return Task{}, fmt.Errorf("insert task %s: %w", t.ID, err)
+		return db.Task{}, err
 	}
 
-	return t, nil
+	return db.Task{
+		ID:           p.ID,
+		Meta:         meta,
+		CrewMemberID: crewMemberID,
+		Goal:         goal,
+		Plan:         plan,
+		Thinking:     thinking,
+		Status:       p.Status,
+		CreatedAt:    p.CreatedAt,
+	}, nil
 }
 
-func (s *Service) Get(ctx context.Context, taskID string) (Task, error) {
-	row := s.db.QueryRowContext(ctx, queries.TaskGet, taskID)
-
-	var t Task
-	var activationID sql.NullString
-	var crewMemberID sql.NullString
-
-	err := row.Scan(
-		&t.ID,
-		&t.Source,
-		&t.SourceID,
-		&activationID,
-		&crewMemberID,
-		&t.Goal,
-		&t.Plan,
-		&t.Thinking,
-		&t.Status,
-		&t.CreatedAt,
-		&t.StartedAt,
-		&t.CompletedAt,
-	)
-	if err != nil {
-		return Task{}, fmt.Errorf("get task %s: %w", taskID, err)
-	}
-
-	t.ActivationID = activationID.String
-	t.CrewMemberID = crewMemberID.String
-
-	return t, nil
+func (s *Service) Get(ctx context.Context, taskID string) (db.Task, error) {
+	return db.TaskGet(ctx, s.conn, taskID)
 }
 
-func (s *Service) List(ctx context.Context, source, sourceID string) ([]Task, error) {
-	rows, err := s.db.QueryContext(ctx, queries.TaskList, source, sourceID)
-	if err != nil {
-		return nil, fmt.Errorf("list tasks: %w", err)
-	}
-	defer rows.Close()
-
-	var tasks []Task
-	for rows.Next() {
-		var t Task
-		var activationID sql.NullString
-		var crewMemberID sql.NullString
-
-		err = rows.Scan(
-			&t.ID,
-			&t.Source,
-			&t.SourceID,
-			&activationID,
-			&crewMemberID,
-			&t.Goal,
-			&t.Plan,
-			&t.Thinking,
-			&t.Status,
-			&t.CreatedAt,
-			&t.StartedAt,
-			&t.CompletedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("scan task: %w", err)
-		}
-
-		t.ActivationID = activationID.String
-		t.CrewMemberID = crewMemberID.String
-		tasks = append(tasks, t)
-	}
-
-	return tasks, rows.Err()
-}
-
-func (s *Service) SetActivationID(ctx context.Context, taskID, activationID string) error {
-	_, err := s.db.ExecContext(ctx, queries.TaskSetActivationID, taskID, activationID)
-	if err != nil {
-		return fmt.Errorf("set activation id for task %s: %w", taskID, err)
-	}
-
-	return nil
+func (s *Service) Start(ctx context.Context, taskID, activationID string) error {
+	return db.TaskStart(ctx, s.conn, taskID, activationID)
 }
 
 func (s *Service) UpdateStatus(ctx context.Context, taskID, status string) error {
-	_, err := s.db.ExecContext(ctx, queries.TaskUpdateStatus, taskID, status)
-	if err != nil {
-		return fmt.Errorf("update task status %s: %w", taskID, err)
-	}
-
-	return nil
+	return db.TaskUpdateStatus(ctx, s.conn, taskID, status)
 }
 
 func (s *Service) InsertReport(ctx context.Context, taskID, kind, content string) error {
-	_, err := s.db.ExecContext(ctx, queries.TaskReportInsert,
-		id.V7(),
-		taskID,
-		kind,
-		content,
-		time.Now().UTC(),
-	)
-	if err != nil {
-		return fmt.Errorf("insert task report for %s: %w", taskID, err)
-	}
-
-	return nil
+	return db.TaskReportInsert(ctx, s.conn, db.TaskReportInsertParams{
+		ID:        id.V7(),
+		TaskID:    taskID,
+		Kind:      kind,
+		Content:   content,
+		CreatedAt: time.Now().UTC(),
+	})
 }
 
-func (s *Service) UnreportedReports(ctx context.Context) ([]Report, error) {
-	rows, err := s.db.QueryContext(ctx, queries.TaskReportUnreported)
-	if err != nil {
-		return nil, fmt.Errorf("query unreported reports: %w", err)
+func (s *Service) UnreadReports(ctx context.Context) ([]db.TaskReport, error) {
+	return db.TaskReportUnread(ctx, s.conn)
+}
+
+func (s *Service) MarkRead(ctx context.Context, reportID string) error {
+	return db.TaskReportMarkRead(ctx, s.conn, reportID)
+}
+
+func (s *Service) List(ctx context.Context, includeRecent bool) ([]db.TaskListRow, error) {
+	recency := "-0 seconds"
+	if includeRecent {
+		recency = "-1 hour"
 	}
-	defer rows.Close()
 
-	var reports []Report
-	for rows.Next() {
-		var r Report
+	return db.TaskList(ctx, s.conn, recency)
+}
 
-		err = rows.Scan(
-			&r.ID,
-			&r.TaskID,
-			&r.Kind,
-			&r.Content,
-			&r.ReportedAt,
-			&r.CreatedAt,
-			&r.Source,
-			&r.SourceID,
-			&r.Goal,
-			&r.Status,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("scan report: %w", err)
+func (s *Service) ActiveTasks(ctx context.Context, conversationID string) ([]db.ActiveTask, error) {
+	return db.TaskActiveTasks(ctx, s.conn, conversationID)
+}
+
+// MarkSeen stamps checked_at so the datasource won't resurface this stale alert
+// until the task goes idle again.
+func (s *Service) MarkSeen(ctx context.Context, taskID string) error {
+	return db.TaskMarkSeen(ctx, s.conn, taskID)
+}
+
+func (s *Service) StaleTasks(ctx context.Context, staleThreshold, maxRunning time.Duration) ([]db.Task, error) {
+	now := time.Now().UTC()
+	staleCutoff := now.Add(-staleThreshold)
+	maxCutoff := now.Add(-maxRunning)
+
+	return db.TaskStaleTasks(ctx, s.conn, staleCutoff, maxCutoff)
+}
+
+func (s *Service) ActiveTasksForConversation(ctx context.Context, conversationID string) ([]brain.DebugTaskInfo, error) {
+	active, err := s.ActiveTasks(ctx, conversationID)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]brain.DebugTaskInfo, len(active))
+	for i, t := range active {
+		out[i] = brain.DebugTaskInfo{
+			ID:        t.ID,
+			Goal:      t.Goal,
+			Status:    t.Status,
+			CreatedAt: t.CreatedAt,
 		}
-
-		reports = append(reports, r)
 	}
 
-	return reports, rows.Err()
+	return out, nil
 }
 
-func (s *Service) MarkReported(ctx context.Context, reportID string) error {
-	_, err := s.db.ExecContext(ctx, queries.TaskReportMarkReported, reportID)
+func (s *Service) ActiveConversationTasks(ctx context.Context, conversationID string) ([]messaging.TaskInfo, error) {
+	active, err := s.ActiveTasks(ctx, conversationID)
 	if err != nil {
-		return fmt.Errorf("mark report reported %s: %w", reportID, err)
+		return nil, err
 	}
 
-	return nil
-}
-
-type ActiveTask struct {
-	ID        string
-	Goal      string
-	Status    string
-	CreatedAt time.Time
-}
-
-func (s *Service) ActiveTasks(ctx context.Context, source, sourceID string) ([]ActiveTask, error) {
-	rows, err := s.db.QueryContext(ctx, queries.TaskActive, source, sourceID)
-	if err != nil {
-		return nil, fmt.Errorf("query active tasks: %w", err)
-	}
-	defer rows.Close()
-
-	var tasks []ActiveTask
-	for rows.Next() {
-		var t ActiveTask
-
-		err = rows.Scan(&t.ID, &t.Goal, &t.Status, &t.CreatedAt)
-		if err != nil {
-			return nil, fmt.Errorf("scan active task: %w", err)
+	out := make([]messaging.TaskInfo, len(active))
+	for i, t := range active {
+		out[i] = messaging.TaskInfo{
+			ID:        t.ID,
+			Goal:      t.Goal,
+			Status:    t.Status,
+			CreatedAt: t.CreatedAt,
 		}
-
-		tasks = append(tasks, t)
 	}
 
-	return tasks, rows.Err()
+	return out, nil
 }
 
-func (s *Service) MarkChecked(ctx context.Context, taskID string) error {
-	_, err := s.db.ExecContext(ctx, queries.TaskMarkChecked, taskID)
-	if err != nil {
-		return fmt.Errorf("mark task checked %s: %w", taskID, err)
-	}
-
-	return nil
-}
-
-func (s *Service) StaleTasks(ctx context.Context, threshold time.Duration) ([]Task, error) {
-	cutoff := time.Now().UTC().Add(-threshold)
-
-	rows, err := s.db.QueryContext(ctx, queries.TaskStale, cutoff)
-	if err != nil {
-		return nil, fmt.Errorf("query stale tasks: %w", err)
-	}
-	defer rows.Close()
-
-	var tasks []Task
-	for rows.Next() {
-		var t Task
-		var activationID sql.NullString
-		var crewMemberID sql.NullString
-
-		err = rows.Scan(
-			&t.ID,
-			&t.Source,
-			&t.SourceID,
-			&activationID,
-			&crewMemberID,
-			&t.Goal,
-			&t.Plan,
-			&t.Thinking,
-			&t.Status,
-			&t.CreatedAt,
-			&t.StartedAt,
-			&t.CompletedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("scan stale task: %w", err)
-		}
-
-		t.ActivationID = activationID.String
-		t.CrewMemberID = crewMemberID.String
-		tasks = append(tasks, t)
-	}
-
-	return tasks, rows.Err()
+// RecentToolCalls returns the latest tool calls for a task activation,
+// used by task_status to show Nik what the worker has been doing.
+func (s *Service) RecentToolCalls(ctx context.Context, activationID string) ([]db.ToolCallInfo, error) {
+	return db.TaskRecentToolCalls(ctx, s.conn, activationID)
 }

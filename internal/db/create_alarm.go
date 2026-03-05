@@ -9,49 +9,59 @@ import (
 	"github.com/kciuffolo/nik/internal/queries"
 )
 
-func CreateAlarm(ctx context.Context, db *sql.DB, originContactID, originConversationID, goal, recurrence, source, sourceID string, nextFireAt time.Time) (Alarm, error) {
+type CreateAlarmParams struct {
+	OriginContactID      string
+	OriginConversationID string
+	Goal                 string
+	Recurrence           string
+	Source               string
+	SourceID             string
+	NextFireAt           time.Time
+}
+
+func CreateAlarm(ctx context.Context, db *sql.DB, p CreateAlarmParams) (Alarm, error) {
 	newID := id.V7()
 	now := time.Now()
 
 	contactID := any(nil)
-	if originContactID != "" {
-		contactID = originContactID
+	if p.OriginContactID != "" {
+		contactID = p.OriginContactID
 	}
 
 	conversationID := any(nil)
-	if originConversationID != "" {
-		conversationID = originConversationID
+	if p.OriginConversationID != "" {
+		conversationID = p.OriginConversationID
 	}
 
 	rec := any(nil)
-	if recurrence != "" {
-		rec = recurrence
+	if p.Recurrence != "" {
+		rec = p.Recurrence
 	}
 
 	src := any(nil)
-	if source != "" {
-		src = source
+	if p.Source != "" {
+		src = p.Source
 	}
 
 	srcID := any(nil)
-	if sourceID != "" {
-		srcID = sourceID
+	if p.SourceID != "" {
+		srcID = p.SourceID
 	}
 
-	_, err := db.ExecContext(ctx, queries.CreateAlarm, newID, contactID, conversationID, goal, rec, src, srcID, nextFireAt, now)
+	_, err := db.ExecContext(ctx, queries.CreateAlarm, newID, contactID, conversationID, p.Goal, rec, src, srcID, p.NextFireAt, now)
 	if err != nil {
 		return Alarm{}, err
 	}
 
 	return Alarm{
 		ID:                   newID,
-		OriginContactID:      sql.NullString{String: originContactID, Valid: originContactID != ""},
-		OriginConversationID: sql.NullString{String: originConversationID, Valid: originConversationID != ""},
-		Goal:                 goal,
-		Recurrence:           sql.NullString{String: recurrence, Valid: recurrence != ""},
-		Source:               sql.NullString{String: source, Valid: source != ""},
-		SourceID:             sql.NullString{String: sourceID, Valid: sourceID != ""},
-		NextFireAt:           sql.NullTime{Time: nextFireAt, Valid: true},
+		OriginContactID:      sql.NullString{String: p.OriginContactID, Valid: p.OriginContactID != ""},
+		OriginConversationID: sql.NullString{String: p.OriginConversationID, Valid: p.OriginConversationID != ""},
+		Goal:                 p.Goal,
+		Recurrence:           sql.NullString{String: p.Recurrence, Valid: p.Recurrence != ""},
+		Source:               sql.NullString{String: p.Source, Valid: p.Source != ""},
+		SourceID:             sql.NullString{String: p.SourceID, Valid: p.SourceID != ""},
+		NextFireAt:           sql.NullTime{Time: p.NextFireAt, Valid: true},
 		CreatedAt:            now,
 	}, nil
 }

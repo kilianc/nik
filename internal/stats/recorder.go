@@ -6,9 +6,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/kciuffolo/nik/internal/brain"
 	"github.com/kciuffolo/nik/internal/db"
-	"github.com/kciuffolo/nik/internal/id"
+	"github.com/kciuffolo/nik/internal/llm"
 )
 
 type Recorder struct {
@@ -19,42 +18,74 @@ func NewRecorder(conn *sql.DB) *Recorder {
 	return &Recorder{conn: conn}
 }
 
-func (r *Recorder) Record(ctx context.Context, stats brain.ActivationStats) {
-	actID := id.V7()
-
-	err := db.ActivationInsert(ctx, r.conn, db.ActivationRow{
-		ID:              actID,
-		Source:          stats.Meta["source"],
-		SourceID:        stats.Meta["source_id"],
-		Model:           stats.Model,
-		ReasoningEffort: stats.ReasoningEffort,
-		InputTokens:     stats.Usage.InputTokens,
-		OutputTokens:    stats.Usage.OutputTokens,
-		TotalTokens:     stats.Usage.TotalTokens,
-		CachedTokens:    stats.Usage.CachedTokens,
-		ReasoningTokens: stats.Usage.ReasoningTokens,
-		CostUSD:         stats.CostUSD,
-		ToolCallCount:   len(stats.ToolCalls),
-		DurationMS:      stats.DurationMS,
-		Error:           stats.Error,
-		CreatedAt:       time.Now().UTC(),
-	})
-	if err != nil {
-		slog.Error("record activation stats", "pkg", "stats", "error", err)
+func (r *Recorder) OnStart(ctx context.Context, model string) {
+	meta := metaFromCtx(ctx)
+	actID := meta["activation_id"]
+	if actID == "" {
 		return
 	}
 
-	tcRows := make([]db.ToolCallRow, len(stats.ToolCalls))
-	for i, tc := range stats.ToolCalls {
-		tcRows[i] = db.ToolCallRow{
-			Name:       tc.Name,
-			DurationMS: tc.DurationMS,
-			Error:      tc.Error,
-		}
-	}
-
-	err = db.ToolCallInsert(ctx, r.conn, actID, tcRows)
+	err := db.ActivationInsert(ctx, r.conn, db.ActivationRow{
+		ID:        actID,
+		Source:    meta["source"],
+		SourceID:  meta["source_id"],
+		Model:     model,
+		CreatedAt: time.Now().UTC(),
+	})
 	if err != nil {
-		slog.Error("record tool call stats", "pkg", "stats", "error", err)
+		slog.Warn("create activation", "pkg", "stats", "activation_id", actID, "error", err)
 	}
 }
+
+func (r *Recorder) OnToolCall(ctx context.Context, name string, duration time.Duration, isError bool) {
+	meta := metaFromCtx(ctx)
+	actID := meta["activation_id"]
+	if actID == "" {
+		return
+	}
+
+	err := db.ToolCallInsertOne(ctx, r.conn, db.ToolCallInsertParams{
+		ActivationID: actID,
+		Name:         name,
+		Duration:     duration,
+		IsError:      isError,
+	})
+	if err != nil {
+		slog.Warn("record tool call", "pkg", "stats", "activation_id", actID, "error", err)
+	}
+}
+
+func (r *Recorder) OnFinish(ctx context.Context, model, reasoningEffort string, usage llm.Usage, toolCalls int, durationMS int64, isError bool) {
+	meta := metaFromCtx(ctx)
+	actID := meta["activation_id"]
+	if actID == "" {
+		return
+	}
+
+	err := db.ActivationUpdateStats(ctx, r.conn, actID, db.ActivationStatsUpdate{
+		ReasoningEffort: reasoningEffort,
+		InputTokens:     usage.InputTokens,
+		OutputTokens:    usage.OutputTokens,
+		TotalTokens:     usage.TotalTokens,
+		CachedTokens:    usage.CachedTokens,
+		ReasoningTokens: usage.ReasoningTokens,
+		CostUSD:         llm.ComputeCost(model, usage.InputTokens, usage.OutputTokens, usage.CachedTokens),
+		ToolCallCount:   toolCalls,
+		DurationMS:      durationMS,
+		IsError:         isError,
+	})
+	if err != nil {
+		slog.Warn("update activation stats", "pkg", "stats", "activation_id", actID, "error", err)
+	}
+}
+
+func metaFromCtx(ctx context.Context) map[string]string {
+	meta, _ := ctx.Value("meta").(map[string]string)
+	if meta == nil {
+		return map[string]string{}
+	}
+	return meta
+}
+
+// compile-time check
+var _ llm.CompletionObserver = (*Recorder)(nil)

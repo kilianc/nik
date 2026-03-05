@@ -16,7 +16,11 @@ func TestAlarmOccurrenceSummaryReturnsRecentWithNotes(t *testing.T) {
 	defer conn.Close()
 
 	now := time.Now().UTC().Truncate(time.Second)
-	alarm, err := CreateAlarm(ctx, conn, "", "", "check in", "every Sunday", "", "", now.Add(-time.Minute))
+	alarm, err := CreateAlarm(ctx, conn, CreateAlarmParams{
+		Goal:       "check in",
+		Recurrence: "every Sunday",
+		NextFireAt: now.Add(-time.Minute),
+	})
 	if err != nil {
 		t.Fatalf("create alarm: %v", err)
 	}
@@ -68,7 +72,10 @@ func TestAlarmOccurrenceSummaryRespectsLimit(t *testing.T) {
 	defer conn.Close()
 
 	now := time.Now().UTC().Truncate(time.Second)
-	alarm, err := CreateAlarm(ctx, conn, "", "", "test", "", "", "", now)
+	alarm, err := CreateAlarm(ctx, conn, CreateAlarmParams{
+		Goal:       "test",
+		NextFireAt: now,
+	})
 	if err != nil {
 		t.Fatalf("create alarm: %v", err)
 	}

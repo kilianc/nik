@@ -2,17 +2,15 @@ package memory
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"sort"
 
-	sqlite_vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
+	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/id"
-	"github.com/kciuffolo/nik/internal/queries"
 )
 
-func (s *Service) Add(ctx context.Context, content string, metadata map[string]any, source, sourceID string) (*Memory, error) {
+func (s *Service) Add(ctx context.Context, content string, metadata map[string]any, source, sourceID string) (*db.Memory, error) {
 	vec, err := s.llm.Embed(ctx, content)
 	if err != nil {
 		return nil, fmt.Errorf("embed content: %w", err)
@@ -23,35 +21,29 @@ func (s *Service) Add(ctx context.Context, content string, metadata map[string]a
 		return nil, fmt.Errorf("marshal metadata: %w", err)
 	}
 
-	embedding, err := serializeEmbedding(vec)
+	embedding, err := db.SerializeEmbedding(vec)
 	if err != nil {
 		return nil, fmt.Errorf("serialize embedding: %w", err)
 	}
 
 	memID := id.V7()
 
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.conn.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("begin tx: %w", err)
 	}
 	defer tx.Rollback()
 
-	var srcPtr, srcIDPtr *string
-	if source != "" {
-		srcPtr = &source
-	}
-	if sourceID != "" {
-		srcIDPtr = &sourceID
-	}
-
-	_, err = tx.ExecContext(ctx, queries.MemoryInsert, memID, content, string(metaJSON), srcPtr, srcIDPtr)
+	err = db.MemoryInsert(ctx, tx, db.MemoryInsertParams{
+		ID:        memID,
+		Content:   content,
+		MetaJSON:  string(metaJSON),
+		Source:    source,
+		SourceID:  sourceID,
+		Embedding: embedding,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("insert memory: %w", err)
-	}
-
-	_, err = tx.ExecContext(ctx, queries.MemoryVecInsert, memID, embedding)
-	if err != nil {
-		return nil, fmt.Errorf("insert vec_memory: %w", err)
+		return nil, err
 	}
 
 	err = tx.Commit()
@@ -59,7 +51,7 @@ func (s *Service) Add(ctx context.Context, content string, metadata map[string]a
 		return nil, fmt.Errorf("commit memory insert: %w", err)
 	}
 
-	return &Memory{
+	return &db.Memory{
 		ID:       memID,
 		Content:  content,
 		Metadata: metadata,
@@ -68,42 +60,36 @@ func (s *Service) Add(ctx context.Context, content string, metadata map[string]a
 	}, nil
 }
 
-func (s *Service) Search(ctx context.Context, query string, limit int) ([]Memory, error) {
+func (s *Service) Search(ctx context.Context, query string, limit int) ([]db.Memory, error) {
 	return s.SearchMulti(ctx, []string{query}, limit)
 }
 
-func (s *Service) SearchMulti(ctx context.Context, queries_ []string, limit int) ([]Memory, error) {
+func (s *Service) SearchMulti(ctx context.Context, queries []string, limit int) ([]db.Memory, error) {
 	if limit <= 0 {
 		limit = 5
 	}
 
-	if len(queries_) == 0 {
+	if len(queries) == 0 {
 		return nil, nil
 	}
 
-	vecs, err := s.llm.EmbedBatch(ctx, queries_)
+	vecs, err := s.llm.EmbedBatch(ctx, queries)
 	if err != nil {
 		return nil, fmt.Errorf("embed queries: %w", err)
 	}
 
 	seen := map[string]int{}
-	var merged []Memory
+	var merged []db.Memory
 
 	for _, vec := range vecs {
-		embedding, err := serializeEmbedding(vec)
+		embedding, err := db.SerializeEmbedding(vec)
 		if err != nil {
 			return nil, fmt.Errorf("serialize embedding: %w", err)
 		}
 
 		// over-fetch because deleted rows are filtered in Go after KNN
 		// retrieval (sqlite-vec can't filter on joined table columns)
-		rows, err := s.db.QueryContext(ctx, queries.MemorySearch, embedding, limit*2)
-		if err != nil {
-			return nil, fmt.Errorf("search memories: %w", err)
-		}
-
-		batch, err := scanMemories(rows, true)
-		rows.Close()
+		batch, err := db.MemorySearch(ctx, s.conn, embedding, limit*2)
 		if err != nil {
 			return nil, err
 		}
@@ -128,72 +114,14 @@ func (s *Service) SearchMulti(ctx context.Context, queries_ []string, limit int)
 	return merged, nil
 }
 
-func (s *Service) Delete(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, queries.MemoryDelete, id)
-	if err != nil {
-		return fmt.Errorf("soft-delete memory %s: %w", id, err)
-	}
-
-	return nil
+func (s *Service) Delete(ctx context.Context, memID string) error {
+	return db.MemoryDelete(ctx, s.conn, memID)
 }
 
-func (s *Service) List(ctx context.Context, limit int) ([]Memory, error) {
+func (s *Service) List(ctx context.Context, limit int) ([]db.Memory, error) {
 	if limit <= 0 {
 		limit = 20
 	}
 
-	rows, err := s.db.QueryContext(ctx, queries.MemoryList, limit)
-	if err != nil {
-		return nil, fmt.Errorf("list memories: %w", err)
-	}
-	defer rows.Close()
-
-	return scanMemories(rows, false)
-}
-
-func scanMemories(rows *sql.Rows, withScore bool) ([]Memory, error) {
-	var memories []Memory
-
-	for rows.Next() {
-		var m Memory
-		var metaStr sql.NullString
-		var source sql.NullString
-		var sourceID sql.NullString
-		var deletedAt sql.NullString
-		var distance float64
-
-		var err error
-		if withScore {
-			err = rows.Scan(&m.ID, &m.Content, &metaStr, &source, &sourceID, &m.CreatedAt, &deletedAt, &distance)
-			m.Score = 1 - distance
-		} else {
-			err = rows.Scan(&m.ID, &m.Content, &metaStr, &source, &sourceID, &m.CreatedAt)
-		}
-		if err != nil {
-			return nil, fmt.Errorf("scan memory: %w", err)
-		}
-
-		if deletedAt.Valid {
-			continue
-		}
-
-		m.Source = source.String
-		m.SourceID = sourceID.String
-
-		if metaStr.Valid && metaStr.String != "" {
-			_ = json.Unmarshal([]byte(metaStr.String), &m.Metadata)
-		}
-
-		memories = append(memories, m)
-	}
-
-	return memories, rows.Err()
-}
-
-func serializeEmbedding(vec []float64) ([]byte, error) {
-	f32 := make([]float32, len(vec))
-	for i, v := range vec {
-		f32[i] = float32(v)
-	}
-	return sqlite_vec.SerializeFloat32(f32)
+	return db.MemoryList(ctx, s.conn, limit)
 }

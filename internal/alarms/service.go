@@ -26,7 +26,15 @@ func (s *Service) CreateAlarm(ctx context.Context, originContactID, originConver
 		return nil, fmt.Errorf("parse next_fire_at %q: %w", nextFireAtStr, err)
 	}
 
-	alarm, err := db.CreateAlarm(ctx, s.db, originContactID, originConversationID, goal, recurrence, source, sourceID, nextFireAt)
+	alarm, err := db.CreateAlarm(ctx, s.db, db.CreateAlarmParams{
+		OriginContactID:      originContactID,
+		OriginConversationID: originConversationID,
+		Goal:                 goal,
+		Recurrence:           recurrence,
+		Source:               source,
+		SourceID:             sourceID,
+		NextFireAt:           nextFireAt,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("create alarm: %w", err)
 	}

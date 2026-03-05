@@ -1,7 +1,6 @@
 SELECT
   id,
-  source,
-  source_id,
+  meta,
   activation_id,
   crew_member_id,
   goal,

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/kciuffolo/nik/internal/codex"
+	"github.com/kciuffolo/nik/internal/id"
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/packages/param"
@@ -21,11 +22,22 @@ import (
 	"github.com/openai/openai-go/v3/shared"
 )
 
+type CompletionObserver interface {
+	OnStart(ctx context.Context, model string)
+	OnToolCall(ctx context.Context, name string, duration time.Duration, isError bool)
+	OnFinish(ctx context.Context, model string, reasoningEffort string, usage Usage, toolCalls int, durationMS int64, isError bool)
+}
+
 type Client struct {
 	codexClient     *openai.Client
 	apiClient       *openai.Client
 	model           shared.ResponsesModel
 	reasoningEffort *string
+	observer        CompletionObserver
+}
+
+func (c *Client) SetObserver(obs CompletionObserver) {
+	c.observer = obs
 }
 
 type clientConfig struct {
@@ -163,14 +175,24 @@ type ToolCallRecord struct {
 	DurationMS int64
 }
 
+type CompletionResult struct {
+	Output  string
+	Usage   Usage
+	History []ToolCallRecord
+	Extra   CompletionExtra
+	Err     error
+}
+
 const (
 	maxRounds     = 75
 	loopThreshold = 4
 )
 
-func (c *Client) Complete(ctx context.Context, instructions, input string, tools []ToolDef, executor ToolExecutor) (string, Usage, []ToolCallRecord, CompletionExtra, error) {
-	total := Usage{}
-	extra := CompletionExtra{}
+// Complete starts an LLM completion. It generates an activation ID, records
+// the activation via the observer, then runs the LLM loop in a goroutine.
+// Returns the activation ID and a channel that receives exactly one result.
+func (c *Client) Complete(ctx context.Context, instructions, input string, tools []ToolDef, executor ToolExecutor) (string, <-chan CompletionResult) {
+	ch := make(chan CompletionResult, 1)
 
 	client := c.apiClient
 	if c.codexClient != nil {
@@ -178,10 +200,50 @@ func (c *Client) Complete(ctx context.Context, instructions, input string, tools
 	}
 
 	if client == nil {
-		return "", total, nil, extra, fmt.Errorf("no client configured (need api key or codex auth)")
+		ch <- CompletionResult{Err: fmt.Errorf("no client configured (need api key or codex auth)")}
+		close(ch)
+		return "", ch
 	}
 
+	actID := id.V7()
+	ctx = augmentCtxMeta(ctx, "activation_id", actID)
+
+	if c.observer != nil {
+		c.observer.OnStart(ctx, string(c.model))
+	}
+
+	go func() {
+		defer close(ch)
+		result := c.completeLoop(ctx, client, instructions, input, tools, executor)
+		ch <- result
+	}()
+
+	return actID, ch
+}
+
+func augmentCtxMeta(ctx context.Context, key, value string) context.Context {
+	existing, _ := ctx.Value("meta").(map[string]string)
+	m := make(map[string]string, len(existing)+1)
+	for k, v := range existing {
+		m[k] = v
+	}
+	m[key] = value
+	return context.WithValue(ctx, "meta", m)
+}
+
+func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instructions, input string, tools []ToolDef, executor ToolExecutor) CompletionResult {
+	total := Usage{}
+	extra := CompletionExtra{}
+
+	completeStart := time.Now()
+	var retErr error
 	var history []ToolCallRecord
+
+	if c.observer != nil {
+		defer func() {
+			c.observer.OnFinish(ctx, string(c.model), extra.ReasoningEffort, total, len(history), time.Since(completeStart).Milliseconds(), retErr != nil)
+		}()
+	}
 
 	items := responses.ResponseInputParam{
 		responses.ResponseInputItemParamOfMessage(input, responses.EasyInputMessageRoleUser),
@@ -212,7 +274,8 @@ func (c *Client) Complete(ctx context.Context, instructions, input string, tools
 	for round := 0; ; round++ {
 		if round >= maxRounds {
 			slog.Warn("max rounds reached", "pkg", "llm", "rounds", round)
-			return "", total, history, extra, fmt.Errorf("max rounds (%d) reached without final response", maxRounds)
+			retErr = fmt.Errorf("max rounds (%d) reached without final response", maxRounds)
+			return CompletionResult{Usage: total, History: history, Extra: extra, Err: retErr}
 		}
 		params.Input = responses.ResponseNewParamsInputUnion{OfInputItemList: items}
 
@@ -221,13 +284,15 @@ func (c *Client) Complete(ctx context.Context, instructions, input string, tools
 		if useStreaming {
 			r, err := completeStreaming(ctx, client, params)
 			if err != nil {
-				return "", total, history, extra, fmt.Errorf("complete round %d: %w", round, err)
+				retErr = fmt.Errorf("complete round %d: %w", round, err)
+				return CompletionResult{Usage: total, History: history, Extra: extra, Err: retErr}
 			}
 			resp = r
 		} else {
 			r, err := client.Responses.New(ctx, params)
 			if err != nil {
-				return "", total, history, extra, fmt.Errorf("complete round %d: %w", round, err)
+				retErr = fmt.Errorf("complete round %d: %w", round, err)
+				return CompletionResult{Usage: total, History: history, Extra: extra, Err: retErr}
 			}
 			resp = r
 		}
@@ -258,7 +323,8 @@ func (c *Client) Complete(ctx context.Context, instructions, input string, tools
 		if resp.Status == responses.ResponseStatusIncomplete {
 			reason := resp.IncompleteDetails.Reason
 			slog.Warn("response incomplete", "pkg", "llm", "reason", reason, "round", round)
-			return "", total, history, extra, fmt.Errorf("response incomplete: %s", reason)
+			retErr = fmt.Errorf("response incomplete: %s", reason)
+			return CompletionResult{Usage: total, History: history, Extra: extra, Err: retErr}
 		}
 
 		var calls []ToolCall
@@ -276,7 +342,7 @@ func (c *Client) Complete(ctx context.Context, instructions, input string, tools
 		}
 
 		if len(calls) == 0 {
-			return resp.OutputText(), total, history, extra, nil
+			return CompletionResult{Output: resp.OutputText(), Usage: total, History: history, Extra: extra}
 		}
 
 		sig := roundSignature(calls)
@@ -284,7 +350,8 @@ func (c *Client) Complete(ctx context.Context, instructions, input string, tools
 			consecutiveRepeats++
 			if consecutiveRepeats >= loopThreshold {
 				slog.Warn("loop detected", "pkg", "llm", "round", round, "repeats", consecutiveRepeats, "tool", calls[0].Name)
-				return "", total, history, extra, fmt.Errorf("loop detected: %d identical rounds calling %s", consecutiveRepeats, calls[0].Name)
+				retErr = fmt.Errorf("loop detected: %d identical rounds calling %s", consecutiveRepeats, calls[0].Name)
+				return CompletionResult{Usage: total, History: history, Extra: extra, Err: retErr}
 			}
 		} else {
 			consecutiveRepeats = 1
@@ -313,6 +380,10 @@ func (c *Client) Complete(ctx context.Context, instructions, input string, tools
 
 			rec.Result = result
 			history = append(history, rec)
+
+			if c.observer != nil {
+				c.observer.OnToolCall(ctx, rec.Name, elapsed, rec.Error)
+			}
 
 			items = append(items, responses.ResponseInputItemParamOfFunctionCallOutput(call.CallID, result))
 		}

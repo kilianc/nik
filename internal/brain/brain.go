@@ -8,28 +8,8 @@ import (
 	"time"
 
 	"github.com/kciuffolo/nik/internal/config"
-	"github.com/kciuffolo/nik/internal/id"
 	"github.com/kciuffolo/nik/internal/llm"
 )
-
-type ActivationStats struct {
-	Meta            map[string]string
-	Model           string
-	ReasoningEffort string
-	Usage           llm.Usage
-	CostUSD         float64
-	ToolCalls       []ToolCallStats
-	DurationMS      int64
-	Error           bool
-}
-
-type ToolCallStats struct {
-	Name       string
-	DurationMS int64
-	Error      bool
-}
-
-type StatsRecorder func(ctx context.Context, stats ActivationStats)
 
 type Brain struct {
 	cfg           *config.Config
@@ -40,29 +20,22 @@ type Brain struct {
 	dataSources   []DataSource
 	soulReader    func(ctx context.Context) (string, error)
 	crewReader    func(ctx context.Context) (string, error)
-	statsRecorder StatsRecorder
 	toolReactor   ToolReactor
 	toolEmojis    map[string]string
 	debugRecorder DebugRecorder
 	now           func() time.Time
 
-	claimed     *SyncSet
-	activations *SyncSet
-}
-
-func (b *Brain) IsActive(activationID string) bool {
-	return b.activations.Has(activationID)
+	claimed *SyncSet
 }
 
 func New(cfg *config.Config, llmClient *llm.Client) *Brain {
 	return &Brain{
-		cfg:         cfg,
-		llm:         llmClient,
-		toolExec:    make(map[string]llm.ToolExecutor),
-		privileged:  make(map[string]bool),
-		now:         time.Now,
-		claimed:     NewSyncSet(),
-		activations: NewSyncSet(),
+		cfg:        cfg,
+		llm:        llmClient,
+		toolExec:   make(map[string]llm.ToolExecutor),
+		privileged: make(map[string]bool),
+		now:        time.Now,
+		claimed:    NewSyncSet(),
 	}
 }
 
@@ -72,10 +45,6 @@ func (b *Brain) SetSoulReader(fn func(ctx context.Context) (string, error)) {
 
 func (b *Brain) SetCrewReader(fn func(ctx context.Context) (string, error)) {
 	b.crewReader = fn
-}
-
-func (b *Brain) SetStatsRecorder(fn StatsRecorder) {
-	b.statsRecorder = fn
 }
 
 func (b *Brain) SetToolReactor(emojis map[string]string, fn ToolReactor) {
@@ -144,13 +113,6 @@ func (b *Brain) activate(ctx context.Context, output DataSourceOutput) {
 		defer b.claimed.Delete(key)
 	}
 
-	activationID := id.Short(8)
-
-	b.activations.Set(activationID)
-	defer b.activations.Delete(activationID)
-
-	output.Meta["activation_id"] = activationID
-
 	ctx = context.WithValue(ctx, "meta", output.Meta)
 
 	if b.toolReactor != nil {
@@ -187,8 +149,6 @@ func (b *Brain) activate(ctx context.Context, output DataSourceOutput) {
 const maxThinkAttempts = 2
 
 func (b *Brain) think(ctx context.Context, input []string) (string, llm.Usage, error) {
-	start := time.Now()
-
 	now := b.now
 	if now == nil {
 		now = time.Now
@@ -204,35 +164,6 @@ func (b *Brain) think(ctx context.Context, input []string) (string, llm.Usage, e
 	executor := b.toolExecutor()
 
 	var totalUsage llm.Usage
-	var allToolCalls []llm.ToolCallRecord
-	var reasoningEffort string
-	var thinkErr error
-
-	defer func() {
-		if b.statsRecorder == nil {
-			return
-		}
-
-		tcStats := make([]ToolCallStats, len(allToolCalls))
-		for i, tc := range allToolCalls {
-			tcStats[i] = ToolCallStats{
-				Name:       tc.Name,
-				DurationMS: tc.DurationMS,
-				Error:      tc.Error,
-			}
-		}
-
-		b.statsRecorder(ctx, ActivationStats{
-			Meta:            meta,
-			Model:           b.llm.Model(),
-			ReasoningEffort: reasoningEffort,
-			Usage:           totalUsage,
-			CostUSD:         llm.ComputeCost(b.llm.Model(), totalUsage.InputTokens, totalUsage.OutputTokens, totalUsage.CachedTokens),
-			ToolCalls:       tcStats,
-			DurationMS:      time.Since(start).Milliseconds(),
-			Error:           thinkErr != nil,
-		})
-	}()
 
 	for attempt := range maxThinkAttempts {
 		retry := attempt > 0
@@ -242,47 +173,42 @@ func (b *Brain) think(ctx context.Context, input []string) (string, llm.Usage, e
 
 		instructions, err := b.loadInstructions(now(), retry)
 		if err != nil {
-			thinkErr = err
 			return "", totalUsage, err
 		}
 
-		output, usage, toolCalls, extra, processErr := b.llm.Complete(thinkCtx, instructions, userInput, tools, executor)
+		actID, ch := b.llm.Complete(thinkCtx, instructions, userInput, tools, executor)
+		result := <-ch
+
+		meta["activation_id"] = actID
 
 		if b.debugRecorder != nil {
 			b.debugRecorder(DebugInput{
 				Meta:         meta,
 				Instructions: instructions,
 				UserInput:    userInput,
-				RawOutput:    output,
+				RawOutput:    result.Output,
 				Tools:        tools,
-				ToolCalls:    toolCalls,
-				Extra:        extra,
-				Usage:        usage,
-				ProcessErr:   processErr,
+				ToolCalls:    result.History,
+				Extra:        result.Extra,
+				Usage:        result.Usage,
+				ProcessErr:   result.Err,
 			})
 		}
 
-		allToolCalls = append(allToolCalls, toolCalls...)
-		if extra.ReasoningEffort != "" {
-			reasoningEffort = extra.ReasoningEffort
+		totalUsage.InputTokens += result.Usage.InputTokens
+		totalUsage.OutputTokens += result.Usage.OutputTokens
+		totalUsage.TotalTokens += result.Usage.TotalTokens
+		totalUsage.CachedTokens += result.Usage.CachedTokens
+		totalUsage.ReasoningTokens += result.Usage.ReasoningTokens
+
+		if result.Err != nil {
+			return "", totalUsage, result.Err
 		}
 
-		totalUsage.InputTokens += usage.InputTokens
-		totalUsage.OutputTokens += usage.OutputTokens
-		totalUsage.TotalTokens += usage.TotalTokens
-		totalUsage.CachedTokens += usage.CachedTokens
-		totalUsage.ReasoningTokens += usage.ReasoningTokens
-
-		if processErr != nil {
-			thinkErr = processErr
-			return "", totalUsage, processErr
-		}
-
-		if len(toolCalls) > 0 {
-			return output, totalUsage, nil
+		if len(result.History) > 0 {
+			return result.Output, totalUsage, nil
 		}
 	}
 
-	thinkErr = errors.New("no tool calls produced after retries")
-	return "", totalUsage, thinkErr
+	return "", totalUsage, errors.New("no tool calls produced after retries")
 }

@@ -9,17 +9,11 @@ import (
 )
 
 func TestDataSourceCheckReturnsReports(t *testing.T) {
-	conn, err := db.Open(":memory:")
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
-	defer conn.Close()
-
-	svc := NewService(conn)
+	svc, _ := testDB(t)
 	ds := NewDataSource(svc, nil)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, "message", "conv-1", "", "test", "", "low")
+	task, err := svc.Create(ctx, "", "test", "", "low", map[string]string{"conversation_id": "conv-1"})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -36,17 +30,18 @@ func TestDataSourceCheckReturnsReports(t *testing.T) {
 	if len(outputs) != 1 {
 		t.Fatalf("expected 1 output, got %d", len(outputs))
 	}
-	if outputs[0].Meta["source"] != "message" {
-		t.Fatalf("expected source message, got %s", outputs[0].Meta["source"])
+	if outputs[0].Meta["source"] != "task" {
+		t.Fatalf("expected source task, got %s", outputs[0].Meta["source"])
+	}
+	if outputs[0].Meta["conversation_id"] != "conv-1" {
+		t.Fatalf("expected conversation_id conv-1, got %s", outputs[0].Meta["conversation_id"])
 	}
 
-	// processing callback marks reported
 	err = outputs[0].Processing(ctx)
 	if err != nil {
 		t.Fatalf("processing: %v", err)
 	}
 
-	// second check should return nothing
 	outputs, err = ds.Check(ctx)
 	if err != nil {
 		t.Fatalf("check 2: %v", err)
@@ -57,21 +52,14 @@ func TestDataSourceCheckReturnsReports(t *testing.T) {
 }
 
 func TestDataSourceStaleDetection(t *testing.T) {
-	conn, err := db.Open(":memory:")
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
-	defer conn.Close()
-
-	svc := NewService(conn)
+	svc, conn := testDB(t)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, "message", "conv-1", "", "stale test", "", "low")
+	task, err := svc.Create(ctx, "", "stale test", "", "low", nil)
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
-	// insert a dummy activation
 	dummyActID := "act-ds-stale"
 	_, execErr := conn.ExecContext(ctx,
 		"INSERT INTO activation (id, source, source_id, model, created_at) VALUES (?, 'task', ?, 'test', datetime('now'))",
@@ -80,19 +68,14 @@ func TestDataSourceStaleDetection(t *testing.T) {
 		t.Fatalf("insert dummy activation: %v", execErr)
 	}
 
-	err = svc.SetActivationID(ctx, task.ID, dummyActID)
+	err = svc.Start(ctx, task.ID, dummyActID)
 	if err != nil {
-		t.Fatalf("set activation id: %v", err)
-	}
-
-	err = svc.UpdateStatus(ctx, task.ID, "running")
-	if err != nil {
-		t.Fatalf("update status: %v", err)
+		t.Fatalf("start: %v", err)
 	}
 
 	time.Sleep(10 * time.Millisecond)
 
-	stale, err := svc.StaleTasks(ctx, 1*time.Millisecond)
+	stale, err := svc.StaleTasks(ctx, 1*time.Millisecond, 10*time.Minute)
 	if err != nil {
 		t.Fatalf("stale tasks: %v", err)
 	}
@@ -102,17 +85,11 @@ func TestDataSourceStaleDetection(t *testing.T) {
 }
 
 func TestDataSourceStaleSurfacedDirectly(t *testing.T) {
-	conn, err := db.Open(":memory:")
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
-	defer conn.Close()
-
-	svc := NewService(conn)
+	svc, conn := testDB(t)
 	ds := NewDataSource(svc, nil)
 	ctx := context.Background()
 
-	tk, err := svc.Create(ctx, "message", "conv-1", "", "stale direct", "", "low")
+	tk, err := svc.Create(ctx, "", "stale direct", "", "low", map[string]string{"conversation_id": "conv-1"})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -125,17 +102,12 @@ func TestDataSourceStaleSurfacedDirectly(t *testing.T) {
 		t.Fatalf("insert dummy activation: %v", execErr)
 	}
 
-	err = svc.SetActivationID(ctx, tk.ID, dummyActID)
+	err = svc.Start(ctx, tk.ID, dummyActID)
 	if err != nil {
-		t.Fatalf("set activation id: %v", err)
+		t.Fatalf("start: %v", err)
 	}
 
-	err = svc.UpdateStatus(ctx, tk.ID, "running")
-	if err != nil {
-		t.Fatalf("update status: %v", err)
-	}
-
-	// manually set started_at in the past so it's stale with a tiny threshold
+	// backdate started_at and add an old tool call so it's stale by activity
 	_, err = conn.ExecContext(ctx, "UPDATE task SET started_at = datetime('now', '-5 minutes') WHERE id = ?", tk.ID)
 	if err != nil {
 		t.Fatalf("backdate started_at: %v", err)
@@ -154,20 +126,21 @@ func TestDataSourceStaleSurfacedDirectly(t *testing.T) {
 	if len(outputs) != 1 {
 		t.Fatalf("expected 1 stale output, got %d", len(outputs))
 	}
-	if outputs[0].Meta["source"] != "message" {
-		t.Fatalf("expected source message, got %s", outputs[0].Meta["source"])
+	if outputs[0].Meta["source"] != "task" {
+		t.Fatalf("expected source task, got %s", outputs[0].Meta["source"])
 	}
-	if outputs[0].Lines[0] != "[Stale task]" {
-		t.Fatalf("expected stale header, got %q", outputs[0].Lines[0])
+	if outputs[0].Meta["conversation_id"] != "conv-1" {
+		t.Fatalf("expected conversation_id conv-1, got %s", outputs[0].Meta["conversation_id"])
+	}
+	if outputs[0].Lines[0] != "[Long-running task]" {
+		t.Fatalf("expected long-running header, got %q", outputs[0].Lines[0])
 	}
 
-	// run Processed callback to set checked_at
 	err = outputs[0].Processed(ctx)
 	if err != nil {
 		t.Fatalf("processed: %v", err)
 	}
 
-	// second check should return nothing (checked_at cooldown)
 	outputs, err = ds.Check(ctx)
 	if err != nil {
 		t.Fatalf("check 2: %v", err)
@@ -175,7 +148,7 @@ func TestDataSourceStaleSurfacedDirectly(t *testing.T) {
 
 	staleOnly := 0
 	for _, o := range outputs {
-		if len(o.Lines) > 0 && o.Lines[0] == "[Stale task]" {
+		if len(o.Lines) > 0 && o.Lines[0] == "[Long-running task]" {
 			staleOnly++
 		}
 	}
@@ -184,10 +157,41 @@ func TestDataSourceStaleSurfacedDirectly(t *testing.T) {
 	}
 }
 
+func TestDataSourceAlarmSourcedWithMeta(t *testing.T) {
+	svc, _ := testDB(t)
+	ds := NewDataSource(svc, nil)
+	ctx := context.Background()
+
+	meta := map[string]string{"conversation_id": "conv-from-alarm"}
+	task, err := svc.Create(ctx, "", "alarm task", "", "low", meta)
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	err = svc.InsertReport(ctx, task.ID, "result", "alarm done")
+	if err != nil {
+		t.Fatalf("insert report: %v", err)
+	}
+
+	outputs, err := ds.Check(ctx)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if len(outputs) != 1 {
+		t.Fatalf("expected 1 output, got %d", len(outputs))
+	}
+	if outputs[0].Meta["conversation_id"] != "conv-from-alarm" {
+		t.Fatalf("expected conversation_id conv-from-alarm, got %q", outputs[0].Meta["conversation_id"])
+	}
+	if outputs[0].Meta["source"] != "task" {
+		t.Fatalf("expected source task, got %q", outputs[0].Meta["source"])
+	}
+}
+
 func TestDataSourceFormatReport(t *testing.T) {
 	ds := &DataSource{}
 
-	r := Report{
+	r := db.TaskReport{
 		ID:      "rpt-1",
 		TaskID:  "task-1",
 		Kind:    "result",

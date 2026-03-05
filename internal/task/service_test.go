@@ -2,27 +2,28 @@ package task
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 	"time"
 
 	"github.com/kciuffolo/nik/internal/db"
 )
 
-func testDB(t *testing.T) *Service {
+func testDB(t *testing.T) (*Service, *sql.DB) {
 	t.Helper()
 	conn, err := db.Open(":memory:")
 	if err != nil {
 		t.Fatalf("open test db: %v", err)
 	}
 	t.Cleanup(func() { conn.Close() })
-	return NewService(conn)
+	return NewService(conn), conn
 }
 
 func TestCreateAndGet(t *testing.T) {
-	svc := testDB(t)
+	svc, _ := testDB(t)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, "message", "conv-1", "", "run build", "step 1\nstep 2", "low")
+	task, err := svc.Create(ctx, "", "run build", "step 1\nstep 2", "low", nil)
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -52,18 +53,26 @@ func TestCreateAndGet(t *testing.T) {
 	}
 }
 
-func TestUpdateStatus(t *testing.T) {
-	svc := testDB(t)
+func TestStartAndComplete(t *testing.T) {
+	svc, conn := testDB(t)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, "message", "conv-1", "", "test", "", "low")
+	task, err := svc.Create(ctx, "", "test", "", "low", nil)
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
-	err = svc.UpdateStatus(ctx, task.ID, "running")
+	actID := "act-start-test"
+	_, execErr := conn.ExecContext(ctx,
+		"INSERT INTO activation (id, source, source_id, model, created_at) VALUES (?, 'task', ?, 'test', datetime('now'))",
+		actID, task.ID)
+	if execErr != nil {
+		t.Fatalf("insert dummy activation: %v", execErr)
+	}
+
+	err = svc.Start(ctx, task.ID, actID)
 	if err != nil {
-		t.Fatalf("update status running: %v", err)
+		t.Fatalf("start: %v", err)
 	}
 
 	got, err := svc.Get(ctx, task.ID)
@@ -75,6 +84,9 @@ func TestUpdateStatus(t *testing.T) {
 	}
 	if !got.StartedAt.Valid {
 		t.Fatal("expected started_at to be set")
+	}
+	if got.ActivationID != actID {
+		t.Fatalf("expected activation id %s, got %q", actID, got.ActivationID)
 	}
 
 	err = svc.UpdateStatus(ctx, task.ID, "completed")
@@ -94,58 +106,11 @@ func TestUpdateStatus(t *testing.T) {
 	}
 }
 
-func TestSetActivationID(t *testing.T) {
-	svc := testDB(t)
-	ctx := context.Background()
-
-	task, err := svc.Create(ctx, "message", "conv-1", "", "test", "", "low")
-	if err != nil {
-		t.Fatalf("create: %v", err)
-	}
-
-	_, execErr := svc.db.ExecContext(ctx,
-		"INSERT INTO activation (id, source, source_id, model, created_at) VALUES (?, 'task', ?, 'test', datetime('now'))",
-		"act-123", task.ID)
-	if execErr != nil {
-		t.Fatalf("insert dummy activation: %v", execErr)
-	}
-
-	err = svc.SetActivationID(ctx, task.ID, "act-123")
-	if err != nil {
-		t.Fatalf("set activation id: %v", err)
-	}
-
-	got, err := svc.Get(ctx, task.ID)
-	if err != nil {
-		t.Fatalf("get: %v", err)
-	}
-	if got.ActivationID != "act-123" {
-		t.Fatalf("expected activation id act-123, got %q", got.ActivationID)
-	}
-}
-
-func TestList(t *testing.T) {
-	svc := testDB(t)
-	ctx := context.Background()
-
-	svc.Create(ctx, "message", "conv-1", "", "task a", "", "low")
-	svc.Create(ctx, "message", "conv-1", "", "task b", "", "low")
-	svc.Create(ctx, "message", "conv-2", "", "task c", "", "low")
-
-	tasks, err := svc.List(ctx, "message", "conv-1")
-	if err != nil {
-		t.Fatalf("list: %v", err)
-	}
-	if len(tasks) != 2 {
-		t.Fatalf("expected 2 tasks, got %d", len(tasks))
-	}
-}
-
 func TestReportCRUD(t *testing.T) {
-	svc := testDB(t)
+	svc, _ := testDB(t)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, "message", "conv-1", "", "test", "", "low")
+	task, err := svc.Create(ctx, "", "test", "", "low", nil)
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -155,9 +120,9 @@ func TestReportCRUD(t *testing.T) {
 		t.Fatalf("insert report: %v", err)
 	}
 
-	reports, err := svc.UnreportedReports(ctx)
+	reports, err := svc.UnreadReports(ctx)
 	if err != nil {
-		t.Fatalf("unreported: %v", err)
+		t.Fatalf("unread: %v", err)
 	}
 	if len(reports) != 1 {
 		t.Fatalf("expected 1 report, got %d", len(reports))
@@ -172,62 +137,116 @@ func TestReportCRUD(t *testing.T) {
 		t.Fatalf("expected joined goal 'test', got %q", reports[0].Goal)
 	}
 
-	err = svc.MarkReported(ctx, reports[0].ID)
+	err = svc.MarkRead(ctx, reports[0].ID)
 	if err != nil {
 		t.Fatalf("mark reported: %v", err)
 	}
 
-	reports, err = svc.UnreportedReports(ctx)
+	reports, err = svc.UnreadReports(ctx)
 	if err != nil {
-		t.Fatalf("unreported after mark: %v", err)
+		t.Fatalf("unread after mark: %v", err)
 	}
 	if len(reports) != 0 {
 		t.Fatalf("expected 0 reports after marking, got %d", len(reports))
 	}
 }
 
-func TestStaleTasks(t *testing.T) {
-	svc := testDB(t)
+func TestMetaRoundTrip(t *testing.T) {
+	svc, _ := testDB(t)
 	ctx := context.Background()
 
-	// create a task and mark it running with started_at in the past
-	task, err := svc.Create(ctx, "message", "conv-1", "", "stale test", "", "low")
+	meta := map[string]string{
+		"conversation_id": "conv-123",
+		"contact_id":      "contact-456",
+	}
+
+	task, err := svc.Create(ctx, "", "test meta", "", "low", meta)
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
-	err = svc.UpdateStatus(ctx, task.ID, "running")
-	if err != nil {
-		t.Fatalf("update status: %v", err)
+	if task.Meta["conversation_id"] != "conv-123" {
+		t.Fatalf("expected conversation_id conv-123, got %q", task.Meta["conversation_id"])
 	}
 
-	// with no activation_id, task shouldn't appear as stale
-	stale, err := svc.StaleTasks(ctx, 1*time.Millisecond)
+	got, err := svc.Get(ctx, task.ID)
 	if err != nil {
-		t.Fatalf("stale tasks: %v", err)
+		t.Fatalf("get: %v", err)
 	}
-	if len(stale) != 0 {
-		t.Fatalf("expected 0 stale tasks without activation_id, got %d", len(stale))
+	if got.Meta["conversation_id"] != "conv-123" {
+		t.Fatalf("expected conversation_id conv-123 after get, got %q", got.Meta["conversation_id"])
+	}
+	if got.Meta["contact_id"] != "contact-456" {
+		t.Fatalf("expected contact_id contact-456 after get, got %q", got.Meta["contact_id"])
 	}
 
-	// set activation_id (normally runner creates the activation first, but for testing
-	// we just need the FK to exist -- insert a dummy activation)
+	err = svc.InsertReport(ctx, task.ID, "result", "done")
+	if err != nil {
+		t.Fatalf("insert report: %v", err)
+	}
+
+	reports, err := svc.UnreadReports(ctx)
+	if err != nil {
+		t.Fatalf("unread: %v", err)
+	}
+	if len(reports) != 1 {
+		t.Fatalf("expected 1 report, got %d", len(reports))
+	}
+	if reports[0].Meta["conversation_id"] != "conv-123" {
+		t.Fatalf("expected report meta conversation_id conv-123, got %q", reports[0].Meta["conversation_id"])
+	}
+}
+
+func TestActiveTasksByConversation(t *testing.T) {
+	svc, _ := testDB(t)
+	ctx := context.Background()
+
+	svc.Create(ctx, "", "task a", "", "low", map[string]string{"conversation_id": "conv-1"})
+	svc.Create(ctx, "", "task b", "", "low", map[string]string{"conversation_id": "conv-1"})
+	svc.Create(ctx, "", "task c", "", "low", map[string]string{"conversation_id": "conv-2"})
+
+	active, err := svc.ActiveTasks(ctx, "conv-1")
+	if err != nil {
+		t.Fatalf("active tasks: %v", err)
+	}
+	if len(active) != 2 {
+		t.Fatalf("expected 2 active tasks for conv-1, got %d", len(active))
+	}
+
+	active, err = svc.ActiveTasks(ctx, "conv-2")
+	if err != nil {
+		t.Fatalf("active tasks: %v", err)
+	}
+	if len(active) != 1 {
+		t.Fatalf("expected 1 active task for conv-2, got %d", len(active))
+	}
+}
+
+func TestStaleTasks(t *testing.T) {
+	svc, conn := testDB(t)
+	ctx := context.Background()
+
+	task, err := svc.Create(ctx, "", "stale test", "", "low", nil)
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
 	dummyActID := "act-stale-test"
-	_, execErr := svc.db.ExecContext(ctx,
+	_, execErr := conn.ExecContext(ctx,
 		"INSERT INTO activation (id, source, source_id, model, created_at) VALUES (?, 'task', ?, 'test', datetime('now'))",
 		dummyActID, task.ID)
 	if execErr != nil {
 		t.Fatalf("insert dummy activation: %v", execErr)
 	}
 
-	err = svc.SetActivationID(ctx, task.ID, dummyActID)
+	err = svc.Start(ctx, task.ID, dummyActID)
 	if err != nil {
-		t.Fatalf("set activation id: %v", err)
+		t.Fatalf("start: %v", err)
 	}
 
 	// now it should be stale (no tool_calls, started_at is recent but threshold is tiny)
 	time.Sleep(5 * time.Millisecond)
-	stale, err = svc.StaleTasks(ctx, 1*time.Millisecond)
+	stale, err := svc.StaleTasks(ctx, 1*time.Millisecond, 10*time.Minute)
 	if err != nil {
 		t.Fatalf("stale tasks: %v", err)
 	}
@@ -236,5 +255,60 @@ func TestStaleTasks(t *testing.T) {
 	}
 	if stale[0].ID != task.ID {
 		t.Fatalf("expected stale task %s, got %s", task.ID, stale[0].ID)
+	}
+}
+
+func TestStaleTasksLongRunning(t *testing.T) {
+	svc, conn := testDB(t)
+	ctx := context.Background()
+
+	task, err := svc.Create(ctx, "", "long running test", "", "low", nil)
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	dummyActID := "act-long-running"
+	_, execErr := conn.ExecContext(ctx,
+		"INSERT INTO activation (id, source, source_id, model, created_at) VALUES (?, 'task', ?, 'test', datetime('now'))",
+		dummyActID, task.ID)
+	if execErr != nil {
+		t.Fatalf("insert dummy activation: %v", execErr)
+	}
+
+	err = svc.Start(ctx, task.ID, dummyActID)
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+
+	// add a recent tool call so it's NOT stale by activity
+	_, err = conn.ExecContext(ctx,
+		"INSERT INTO tool_call (id, activation_id, name, created_at) VALUES ('tc-lr', ?, 'shell', datetime('now'))",
+		dummyActID)
+	if err != nil {
+		t.Fatalf("insert tool call: %v", err)
+	}
+
+	// should NOT be stale with a large stale threshold and large max running
+	stale, err := svc.StaleTasks(ctx, 10*time.Minute, 10*time.Minute)
+	if err != nil {
+		t.Fatalf("stale tasks: %v", err)
+	}
+	if len(stale) != 0 {
+		t.Fatalf("expected 0 stale tasks, got %d", len(stale))
+	}
+
+	// backdate started_at so it exceeds maxRunning threshold
+	_, err = conn.ExecContext(ctx, "UPDATE task SET started_at = datetime('now', '-15 minutes') WHERE id = ?", task.ID)
+	if err != nil {
+		t.Fatalf("backdate started_at: %v", err)
+	}
+
+	// now should appear because started_at is 15 min ago and maxRunning is 10 min
+	stale, err = svc.StaleTasks(ctx, 10*time.Minute, 10*time.Minute)
+	if err != nil {
+		t.Fatalf("stale tasks: %v", err)
+	}
+	if len(stale) != 1 {
+		t.Fatalf("expected 1 stale task via long-running trigger, got %d", len(stale))
 	}
 }

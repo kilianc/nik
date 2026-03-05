@@ -7,10 +7,14 @@ import (
 	"time"
 
 	"github.com/kciuffolo/nik/internal/brain"
+	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/messaging"
 )
 
-const staleThreshold = 2 * time.Minute
+const (
+	staleThreshold = 2 * time.Minute
+	maxRunningTime = 10 * time.Minute
+)
 
 type DataSource struct {
 	svc    *Service
@@ -27,7 +31,7 @@ func NewDataSource(svc *Service, msgSvc *messaging.Service) *DataSource {
 func (d *DataSource) Check(ctx context.Context) ([]brain.DataSourceOutput, error) {
 	var outputs []brain.DataSourceOutput
 
-	staleTasks, err := d.svc.StaleTasks(ctx, staleThreshold)
+	staleTasks, err := d.svc.StaleTasks(ctx, staleThreshold, maxRunningTime)
 	if err != nil {
 		slog.Warn("check stale tasks", "pkg", "task", "error", err)
 	}
@@ -36,45 +40,29 @@ func (d *DataSource) Check(ctx context.Context) ([]brain.DataSourceOutput, error
 		lines := d.formatStaleTask(ctx, t)
 		taskID := t.ID
 
-		meta := map[string]string{
-			"source":    t.Source,
-			"source_id": t.SourceID,
-		}
-		if t.Source == "message" && t.SourceID != "" {
-			meta["conversation_id"] = t.SourceID
-		}
-
 		outputs = append(outputs, brain.DataSourceOutput{
 			Lines: lines,
-			Meta:  meta,
+			Meta:  buildBrainMeta(taskID, t.Meta),
 			Processed: func(ctx context.Context) error {
-				return d.svc.MarkChecked(ctx, taskID)
+				return d.svc.MarkSeen(ctx, taskID)
 			},
 		})
 	}
 
-	reports, err := d.svc.UnreportedReports(ctx)
+	reports, err := d.svc.UnreadReports(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("query unreported task reports: %w", err)
+		return nil, fmt.Errorf("query unread task reports: %w", err)
 	}
 
 	for _, report := range reports {
 		lines := d.formatReport(ctx, report)
 		reportID := report.ID
 
-		meta := map[string]string{
-			"source":    report.Source,
-			"source_id": report.SourceID,
-		}
-		if report.Source == "message" && report.SourceID != "" {
-			meta["conversation_id"] = report.SourceID
-		}
-
 		outputs = append(outputs, brain.DataSourceOutput{
 			Lines: lines,
-			Meta:  meta,
+			Meta:  buildBrainMeta(report.TaskID, report.Meta),
 			Processing: func(ctx context.Context) error {
-				return d.svc.MarkReported(ctx, reportID)
+				return d.svc.MarkRead(ctx, reportID)
 			},
 		})
 	}
@@ -82,18 +70,23 @@ func (d *DataSource) Check(ctx context.Context) ([]brain.DataSourceOutput, error
 	return outputs, nil
 }
 
-func (d *DataSource) formatStaleTask(ctx context.Context, t Task) []string {
+func (d *DataSource) formatStaleTask(ctx context.Context, t db.Task) []string {
+	reason := fmt.Sprintf("No tool activity for %s.", staleThreshold)
+	if t.StartedAt.Valid && time.Since(t.StartedAt.Time) > maxRunningTime {
+		reason = fmt.Sprintf("Running for %s (over %s limit).", time.Since(t.StartedAt.Time).Truncate(time.Second), maxRunningTime)
+	}
+
 	lines := []string{
-		"[Stale task]",
+		"[Long-running task]",
 		fmt.Sprintf("Task ID: %s", t.ID),
 		fmt.Sprintf("Goal: %s", t.Goal),
 		fmt.Sprintf("Status: %s", t.Status),
 		"",
-		fmt.Sprintf("No tool activity for %s. Cancel it or leave it if you have a reason.", staleThreshold),
+		reason + " Check on it, cancel it, or leave it if you have a reason.",
 	}
 
-	if t.Source == "message" && t.SourceID != "" {
-		convLines := d.conversationContext(ctx, t.SourceID)
+	if convID := t.Meta["conversation_id"]; convID != "" {
+		convLines := d.conversationContext(ctx, convID)
 		if len(convLines) > 0 {
 			lines = append(lines, "")
 			lines = append(lines, convLines...)
@@ -103,7 +96,7 @@ func (d *DataSource) formatStaleTask(ctx context.Context, t Task) []string {
 	return lines
 }
 
-func (d *DataSource) formatReport(ctx context.Context, r Report) []string {
+func (d *DataSource) formatReport(ctx context.Context, r db.TaskReport) []string {
 	header := "[Task result]"
 	switch r.Kind {
 	case "error":
@@ -131,8 +124,8 @@ func (d *DataSource) formatReport(ctx context.Context, r Report) []string {
 
 	lines = append(lines, r.Content)
 
-	if r.Source == "message" && r.SourceID != "" {
-		convLines := d.conversationContext(ctx, r.SourceID)
+	if convID := r.Meta["conversation_id"]; convID != "" {
+		convLines := d.conversationContext(ctx, convID)
 		if len(convLines) > 0 {
 			lines = append(lines, "")
 			lines = append(lines, convLines...)
@@ -140,6 +133,19 @@ func (d *DataSource) formatReport(ctx context.Context, r Report) []string {
 	}
 
 	return lines
+}
+
+func buildBrainMeta(taskID string, taskMeta map[string]string) map[string]string {
+	meta := map[string]string{
+		"source":    "task",
+		"source_id": taskID,
+	}
+	for k, v := range taskMeta {
+		if v != "" {
+			meta[k] = v
+		}
+	}
+	return meta
 }
 
 func (d *DataSource) conversationContext(ctx context.Context, conversationID string) []string {
@@ -163,44 +169,4 @@ func (d *DataSource) conversationContext(ctx context.Context, conversationID str
 	}
 
 	return lines
-}
-
-// implements brain.DebugTaskQuerier.
-func (s *Service) ActiveTasksForConversation(ctx context.Context, conversationID string) ([]brain.DebugTaskInfo, error) {
-	active, err := s.ActiveTasks(ctx, "message", conversationID)
-	if err != nil {
-		return nil, err
-	}
-
-	out := make([]brain.DebugTaskInfo, len(active))
-	for i, t := range active {
-		out[i] = brain.DebugTaskInfo{
-			ID:        t.ID,
-			Goal:      t.Goal,
-			Status:    t.Status,
-			CreatedAt: t.CreatedAt,
-		}
-	}
-
-	return out, nil
-}
-
-// implements messaging.TaskQuerier.
-func (s *Service) ConversationTasks(ctx context.Context, conversationID string) ([]messaging.TaskInfo, error) {
-	active, err := s.ActiveTasks(ctx, "message", conversationID)
-	if err != nil {
-		return nil, err
-	}
-
-	out := make([]messaging.TaskInfo, len(active))
-	for i, t := range active {
-		out[i] = messaging.TaskInfo{
-			ID:        t.ID,
-			Goal:      t.Goal,
-			Status:    t.Status,
-			CreatedAt: t.CreatedAt,
-		}
-	}
-
-	return out, nil
 }
