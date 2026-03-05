@@ -162,14 +162,14 @@ func main() {
 	taskTools = append(taskTools, memory.BuildReadTools(memorySvc)...)
 	taskTools = append(taskTools, skills.BuildTools(cfg)...)
 
-	taskToolDefs, taskExec := llm.SplitTools(taskTools)
-	taskRunner := task.NewRunner(cfg, llmClient, taskSvc, conn, taskToolDefs, taskExec)
+	llmClient.SetObserver(stats.NewRecorder(conn))
+
+	taskRunner := task.NewRunner(cfg, llmClient, taskSvc, taskTools)
 
 	b := brain.New(cfg, llmClient)
 
 	b.SetSoulReader(dreamSvc.CurrentSoul)
 	b.SetCrewReader(crewSvc.Roster)
-	b.SetStatsRecorder(stats.NewRecorder(conn).Record)
 	b.SetToolReactor(toolEmojis, messagingSvc.React)
 	b.SetDebugRecorder(brain.NewDebugRecorder(cfg.DebugPath(), llmClient.Model(), time.Now, taskSvc))
 
@@ -180,6 +180,7 @@ func main() {
 	b.RegisterDataSource(dream.NewDataSource(dreamSvc, conn, memorySvc, cfg))
 	b.RegisterDataSource(briefing.NewDataSource(briefingSvc, cfg))
 
+	b.RegisterTools(llm.BuildTools(llmClient, cfg.Home)...)
 	b.RegisterTools(config.BuildTools(cfg, conn)...)
 	b.RegisterTools(contacts.BuildTools(conn)...)
 	b.RegisterTools(memory.BuildTools(memorySvc)...)

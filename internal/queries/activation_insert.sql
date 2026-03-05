@@ -1,4 +1,4 @@
-INSERT INTO activation (
+INSERT OR IGNORE INTO activation (
   id,
   source,
   source_id,

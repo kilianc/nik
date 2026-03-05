@@ -200,8 +200,7 @@ CREATE TABLE IF NOT EXISTS crew_member (
 
 CREATE TABLE IF NOT EXISTS task (
   id             TEXT PRIMARY KEY,
-  source         TEXT NOT NULL,
-  source_id      TEXT,
+  meta           TEXT NOT NULL DEFAULT '{}',
   activation_id  TEXT REFERENCES activation(id),
   crew_member_id TEXT REFERENCES crew_member(id),
   goal           TEXT NOT NULL,

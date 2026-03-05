@@ -16,7 +16,10 @@ func TestAlarmOccurrenceInsertPersistsRow(t *testing.T) {
 	defer conn.Close()
 
 	now := time.Now().UTC().Truncate(time.Second)
-	alarm, err := CreateAlarm(ctx, conn, "", "", "test", "", "", "", now.Add(-time.Minute))
+	alarm, err := CreateAlarm(ctx, conn, CreateAlarmParams{
+		Goal:       "test",
+		NextFireAt: now.Add(-time.Minute),
+	})
 	if err != nil {
 		t.Fatalf("create alarm: %v", err)
 	}

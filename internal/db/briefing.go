@@ -91,8 +91,15 @@ func BriefingTopicList(ctx context.Context, db *sql.DB) ([]BriefingTopic, error)
 	return out, rows.Err()
 }
 
-func BriefingTopicInsert(ctx context.Context, db *sql.DB, id, query, reason string, contactID sql.NullString) error {
-	_, err := db.ExecContext(ctx, queries.BriefingTopicInsert, id, query, reason, contactID)
+type BriefingTopicInsertParams struct {
+	ID        string
+	Query     string
+	Reason    string
+	ContactID sql.NullString
+}
+
+func BriefingTopicInsert(ctx context.Context, db *sql.DB, p BriefingTopicInsertParams) error {
+	_, err := db.ExecContext(ctx, queries.BriefingTopicInsert, p.ID, p.Query, p.Reason, p.ContactID)
 	if err != nil {
 		return fmt.Errorf("insert briefing topic: %w", err)
 	}

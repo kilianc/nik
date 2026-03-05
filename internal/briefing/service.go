@@ -47,7 +47,12 @@ func (s *Service) ListTopics(ctx context.Context) ([]db.BriefingTopic, error) {
 func (s *Service) AddTopic(ctx context.Context, query, reason string, contactID sql.NullString) (string, error) {
 	topicID := id.V7()
 
-	err := db.BriefingTopicInsert(ctx, s.db, topicID, query, reason, contactID)
+	err := db.BriefingTopicInsert(ctx, s.db, db.BriefingTopicInsertParams{
+		ID:        topicID,
+		Query:     query,
+		Reason:    reason,
+		ContactID: contactID,
+	})
 	if err != nil {
 		return "", fmt.Errorf("add briefing topic: %w", err)
 	}

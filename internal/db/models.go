@@ -113,3 +113,65 @@ type AlarmOccurrence struct {
 	NextFireAtSet sql.NullTime
 	FiredAt       time.Time
 }
+
+type Task struct {
+	ID           string
+	Meta         map[string]string
+	ActivationID string
+	CrewMemberID string
+	Goal         string
+	Plan         string
+	Thinking     string
+	Status       string
+	CreatedAt    time.Time
+	StartedAt    sql.NullTime
+	CompletedAt  sql.NullTime
+}
+
+type TaskReport struct {
+	ID         string
+	TaskID     string
+	Kind       string
+	Content    string
+	ReportedAt sql.NullTime
+	CreatedAt  time.Time
+
+	// joined from task
+	Meta   map[string]string
+	Goal   string
+	Status string
+}
+
+type ActiveTask struct {
+	ID        string
+	Goal      string
+	Status    string
+	CreatedAt time.Time
+}
+
+type TaskListRow struct {
+	ID             string
+	Goal           string
+	Status         string
+	ConversationID sql.NullString
+	CreatedAt      time.Time
+	StartedAt      sql.NullTime
+	CompletedAt    sql.NullTime
+}
+
+type ToolCallInfo struct {
+	Name       string
+	DurationMS int64
+	Error      bool
+	At         time.Time
+}
+
+type Memory struct {
+	ID        string
+	Content   string
+	Metadata  map[string]any
+	Source    string
+	SourceID  string
+	CreatedAt time.Time
+	Score     float64
+}

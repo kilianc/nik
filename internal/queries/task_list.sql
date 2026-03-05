@@ -1,17 +1,15 @@
 SELECT
   id,
-  source,
-  source_id,
-  activation_id,
-  crew_member_id,
   goal,
-  plan,
-  thinking,
   status,
+  json_extract(meta, '$.conversation_id') AS conversation_id,
   created_at,
   started_at,
   completed_at
 FROM task
-WHERE source = ?1
-  AND source_id = ?2
-ORDER BY created_at DESC
+WHERE status IN ('pending', 'running')
+   OR (status IN ('completed', 'failed', 'cancelled') AND completed_at > datetime('now', ?1))
+ORDER BY
+  CASE WHEN status IN ('pending', 'running') THEN 0 ELSE 1 END,
+  created_at DESC
+LIMIT 20

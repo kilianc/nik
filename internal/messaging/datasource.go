@@ -9,7 +9,7 @@ import (
 )
 
 type TaskQuerier interface {
-	ConversationTasks(ctx context.Context, conversationID string) ([]TaskInfo, error)
+	ActiveConversationTasks(ctx context.Context, conversationID string) ([]TaskInfo, error)
 }
 
 type TaskInfo struct {
@@ -63,7 +63,7 @@ func (d *DataSource) Check(ctx context.Context) ([]brain.DataSourceOutput, error
 
 		var tasks []TaskInfo
 		if d.tasks != nil {
-			tasks, _ = d.tasks.ConversationTasks(ctx, conversationID)
+			tasks, _ = d.tasks.ActiveConversationTasks(ctx, conversationID)
 		}
 
 		lines := BuildConversationInput(conv, msgs, senderLabels, session, tasks)

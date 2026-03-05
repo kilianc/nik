@@ -230,25 +230,26 @@ func deleteMemoryHandler(svc *Service) llm.ToolExecutor {
 func mergeMemories(ctx context.Context, llmClient *llm.Client, existing, incoming string) (string, error) {
 	input := fmt.Sprintf("Merge the following two memories into one. Respond in json.\n\nExisting: %s\n\nNew: %s", existing, incoming)
 
-	raw, _, _, _, err := llmClient.Complete(ctx, mergePrompt, input, nil, nil)
-	if err != nil {
-		return "", fmt.Errorf("merge completion: %w", err)
+	_, ch := llmClient.Complete(ctx, mergePrompt, input, nil, nil)
+	completion := <-ch
+	if completion.Err != nil {
+		return "", fmt.Errorf("merge completion: %w", completion.Err)
 	}
 
-	var result struct {
+	var parsed struct {
 		Merged string `json:"merged"`
 	}
 
-	err = json.Unmarshal([]byte(raw), &result)
+	err := json.Unmarshal([]byte(completion.Output), &parsed)
 	if err != nil {
 		return "", fmt.Errorf("parse merge response: %w", err)
 	}
 
-	if result.Merged == "" {
+	if parsed.Merged == "" {
 		return "", fmt.Errorf("merge returned empty content")
 	}
 
-	return result.Merged, nil
+	return parsed.Merged, nil
 }
 
 func truncate(s string, n int) string {

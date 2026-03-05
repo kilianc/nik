@@ -2,13 +2,11 @@ package task
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"time"
 
 	"github.com/kciuffolo/nik/internal/crew"
 	"github.com/kciuffolo/nik/internal/llm"
-	"github.com/kciuffolo/nik/internal/queries"
 )
 
 var spawnToolDef = llm.ToolDef{
@@ -56,6 +54,22 @@ var statusToolDef = llm.ToolDef{
 	},
 }
 
+var listToolDef = llm.ToolDef{
+	Name:        "task_list",
+	Description: "List active tasks and optionally recently finished ones.",
+	Parameters: map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"include_recent": map[string]any{
+				"type":        "boolean",
+				"description": "When true, also includes tasks completed/failed/cancelled in the last hour. Omit or false for active only.",
+			},
+		},
+		"required":             []string{"include_recent"},
+		"additionalProperties": false,
+	},
+}
+
 var cancelToolDef = llm.ToolDef{
 	Name:        "task_cancel",
 	Description: "Cancel a running task.",
@@ -74,20 +88,16 @@ var cancelToolDef = llm.ToolDef{
 
 var reportToolDef = llm.ToolDef{
 	Name:        "task_report",
-	Description: "Report progress or flag a blocker to your manager.",
+	Description: "Flag a blocker to your manager. Only call this when you're genuinely stuck and need help. Say what you tried and what you need.",
 	Parameters: map[string]any{
 		"type": "object",
 		"properties": map[string]any{
 			"note": map[string]any{
 				"type":        "string",
-				"description": "What happened or what you need.",
-			},
-			"needs_attention": map[string]any{
-				"type":        "boolean",
-				"description": "True if you need your manager to check in.",
+				"description": "What you tried and what you're stuck on.",
 			},
 		},
-		"required":             []string{"note", "needs_attention"},
+		"required":             []string{"note"},
 		"additionalProperties": false,
 	},
 }
@@ -103,18 +113,22 @@ type statusArgs struct {
 	TaskID string `json:"task_id"`
 }
 
+type listArgs struct {
+	IncludeRecent bool `json:"include_recent"`
+}
+
 type cancelArgs struct {
 	TaskID string `json:"task_id"`
 }
 
 type reportArgs struct {
-	Note           string `json:"note"`
-	NeedsAttention bool   `json:"needs_attention"`
+	Note string `json:"note"`
 }
 
 func BuildTools(svc *Service, runner *Runner, crewSvc *crew.Service) []llm.Tool {
 	return []llm.Tool{
 		{Def: spawnToolDef, Handler: spawnHandler(svc, runner, crewSvc)},
+		{Def: listToolDef, Handler: listHandler(svc)},
 		{Def: statusToolDef, Handler: statusHandler(svc)},
 		{Def: cancelToolDef, Handler: cancelHandler(svc, runner)},
 	}
@@ -156,14 +170,27 @@ func spawnHandler(svc *Service, runner *Runner, crewSvc *crew.Service) llm.ToolE
 			crewMemberID = m.ID
 		}
 
-		meta, _ := ctx.Value("meta").(map[string]string)
-		source := meta["source"]
-		sourceID := meta["conversation_id"]
-		if sourceID == "" {
-			sourceID = meta["source_id"]
+		brainMeta, _ := ctx.Value("meta").(map[string]string)
+
+		taskMeta := map[string]string{}
+		if v := brainMeta["conversation_id"]; v != "" {
+			taskMeta["conversation_id"] = v
+		}
+		if v := brainMeta["contact_id"]; v != "" {
+			taskMeta["contact_id"] = v
 		}
 
-		t, err := svc.Create(ctx, source, sourceID, crewMemberID, args.Goal, args.Plan, args.Thinking)
+		convID := taskMeta["conversation_id"]
+		if convID != "" {
+			active, _ := svc.ActiveTasks(ctx, convID)
+			for _, a := range active {
+				if a.Goal == args.Goal {
+					return llm.ToolErrorf("task %s already running with goal %q -- cancel it first or check its status", a.ID, a.Goal), nil
+				}
+			}
+		}
+
+		t, err := svc.Create(ctx, crewMemberID, args.Goal, args.Plan, args.Thinking, taskMeta)
 		if err != nil {
 			return llm.ToolError(err), nil
 		}
@@ -180,6 +207,52 @@ func spawnHandler(svc *Service, runner *Runner, crewSvc *crew.Service) llm.ToolE
 		}
 
 		return llm.ToolResult(result), nil
+	}
+}
+
+func listHandler(svc *Service) llm.ToolExecutor {
+	return func(ctx context.Context, call llm.ToolCall) (string, error) {
+		var args listArgs
+
+		err := json.Unmarshal([]byte(call.Arguments), &args)
+		if err != nil {
+			return llm.ToolError(err), nil
+		}
+
+		tasks, err := svc.List(ctx, args.IncludeRecent)
+		if err != nil {
+			return llm.ToolError(err), nil
+		}
+
+		if len(tasks) == 0 {
+			return llm.ToolResult(map[string]any{"tasks": []any{}, "count": 0}), nil
+		}
+
+		items := make([]map[string]any, len(tasks))
+		for i, t := range tasks {
+			item := map[string]any{
+				"task_id":    t.ID,
+				"goal":       t.Goal,
+				"status":     t.Status,
+				"created_at": t.CreatedAt.Format("2006-01-02 15:04:05"),
+			}
+
+			if t.ConversationID.Valid {
+				item["conversation_id"] = t.ConversationID.String
+			}
+
+			if t.StartedAt.Valid {
+				if t.CompletedAt.Valid {
+					item["duration"] = t.CompletedAt.Time.Sub(t.StartedAt.Time).Truncate(time.Second).String()
+				} else {
+					item["duration"] = time.Since(t.StartedAt.Time).Truncate(time.Second).String()
+				}
+			}
+
+			items[i] = item
+		}
+
+		return llm.ToolResult(map[string]any{"tasks": items, "count": len(items)}), nil
 	}
 }
 
@@ -212,52 +285,23 @@ func statusHandler(svc *Service) llm.ToolExecutor {
 		}
 
 		if t.ActivationID != "" {
-			toolCalls, tcErr := queryToolCalls(ctx, svc.db, t.ActivationID)
+			toolCalls, tcErr := svc.RecentToolCalls(ctx, t.ActivationID)
 			if tcErr == nil && len(toolCalls) > 0 {
-				result["recent_tool_calls"] = toolCalls
+				formatted := make([]map[string]any, len(toolCalls))
+				for i, tc := range toolCalls {
+					formatted[i] = map[string]any{
+						"name":        tc.Name,
+						"duration_ms": tc.DurationMS,
+						"error":       tc.Error,
+						"at":          tc.At.Format("15:04:05"),
+					}
+				}
+				result["recent_tool_calls"] = formatted
 			}
 		}
 
 		return llm.ToolResult(result), nil
 	}
-}
-
-type toolCallInfo struct {
-	Name       string `json:"name"`
-	DurationMS int64  `json:"duration_ms"`
-	Error      bool   `json:"error"`
-	At         string `json:"at"`
-}
-
-func queryToolCalls(ctx context.Context, conn *sql.DB, activationID string) ([]toolCallInfo, error) {
-	rows, err := conn.QueryContext(ctx, queries.TaskToolCalls, activationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var calls []toolCallInfo
-	for rows.Next() {
-		var tc toolCallInfo
-		var errFlag int
-		var createdAt time.Time
-
-		err = rows.Scan(
-			&tc.Name,
-			&tc.DurationMS,
-			&errFlag,
-			&createdAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		tc.Error = errFlag != 0
-		tc.At = createdAt.Format("15:04:05")
-		calls = append(calls, tc)
-	}
-
-	return calls, rows.Err()
 }
 
 func cancelHandler(svc *Service, runner *Runner) llm.ToolExecutor {
@@ -294,12 +338,7 @@ func reportHandler(svc *Service, taskID string) llm.ToolExecutor {
 			return llm.ToolError(err), nil
 		}
 
-		kind := "attention"
-		if !args.NeedsAttention {
-			kind = "result"
-		}
-
-		err = svc.InsertReport(ctx, taskID, kind, args.Note)
+		err = svc.InsertReport(ctx, taskID, "attention", args.Note)
 		if err != nil {
 			return llm.ToolError(err), nil
 		}

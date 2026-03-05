@@ -1,7 +1,6 @@
 SELECT
   t.id,
-  t.source,
-  t.source_id,
+  t.meta,
   t.activation_id,
   t.crew_member_id,
   t.goal,
@@ -21,4 +20,5 @@ WHERE t.status = 'running'
       NOT EXISTS (SELECT 1 FROM tool_call tc WHERE tc.activation_id = t.activation_id)
       AND t.started_at < ?1
     )
+    OR t.started_at < ?2
   )

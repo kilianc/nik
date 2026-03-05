@@ -5,8 +5,7 @@ SELECT
   tr.content,
   tr.reported_at,
   tr.created_at,
-  t.source,
-  t.source_id,
+  t.meta,
   t.goal,
   t.status
 FROM task_report tr

@@ -16,7 +16,11 @@ func TestAlarmSetNextFireUpdatesNextFireAt(t *testing.T) {
 	defer conn.Close()
 
 	now := time.Now().UTC().Truncate(time.Second)
-	alarm, err := CreateAlarm(ctx, conn, "", "", "recurring", "every day at 9am", "", "", now.Add(-time.Minute))
+	alarm, err := CreateAlarm(ctx, conn, CreateAlarmParams{
+		Goal:       "recurring",
+		Recurrence: "every day at 9am",
+		NextFireAt: now.Add(-time.Minute),
+	})
 	if err != nil {
 		t.Fatalf("create alarm: %v", err)
 	}

@@ -214,9 +214,6 @@ var ActivationUpdateStats string
 
 // tool call queries
 
-//go:embed tool_call_insert.sql
-var ToolCallInsert string
-
 //go:embed tool_call_insert_one.sql
 var ToolCallInsertOne string
 
@@ -242,11 +239,8 @@ var TaskGet string
 //go:embed task_update_status.sql
 var TaskUpdateStatus string
 
-//go:embed task_set_activation_id.sql
-var TaskSetActivationID string
-
-//go:embed task_list.sql
-var TaskList string
+//go:embed task_start.sql
+var TaskStart string
 
 //go:embed task_active.sql
 var TaskActive string
@@ -254,19 +248,22 @@ var TaskActive string
 //go:embed task_stale.sql
 var TaskStale string
 
-//go:embed task_mark_checked.sql
-var TaskMarkChecked string
+//go:embed task_mark_seen.sql
+var TaskMarkSeen string
+
+//go:embed task_list.sql
+var TaskList string
 
 // task report queries
 
 //go:embed task_report_insert.sql
 var TaskReportInsert string
 
-//go:embed task_report_unreported.sql
-var TaskReportUnreported string
+//go:embed task_report_unread.sql
+var TaskReportUnread string
 
-//go:embed task_report_mark_reported.sql
-var TaskReportMarkReported string
+//go:embed task_report_mark_read.sql
+var TaskReportMarkRead string
 
 //go:embed task_tool_calls.sql
 var TaskToolCalls string

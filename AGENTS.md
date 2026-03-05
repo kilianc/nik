@@ -216,6 +216,16 @@ One Go function per entity operation. Never create multiple `DoSomethingByX` / `
 
 Good — `GetContact` already does this (`get_contact.sql` uses `WHERE id = ?1 OR EXISTS (SELECT 1 FROM json_each(whatsapp_ids) WHERE value = ?1) OR ...`). `GetMessagesByConversation` dispatches between two SQL files based on `beforeID`.
 
+### DB / service layering
+
+`db/` is the only package that touches `internal/queries`. It owns model types (`db/models.go`), scan helpers, and query functions. Domain packages (`internal/<name>/`) hold services, tools, and data sources — they call `db.*` functions for all persistence.
+
+- model types (plain data structs, no methods) go in `db/models.go`
+- query functions are standalone: `func TaskGet(ctx, db, taskID) (Task, error)`
+- scan helpers are unexported: `func scanTask(s scanner) (Task, error)`
+- any db function with 3+ domain params uses a Params struct: `TaskInsertParams`, `CreateAlarmParams`
+- services own business logic: ID generation, LLM calls, time calculations, type transforms
+
 ### Naming Conventions
 
 - All table names are **singular**: `contact`, `conversation`, `conversation_participant`, `message`, `media`, `message_media`, `alarm`, `alarm_occurrence`, `memory`, `vec_memory`, `journal`, `dream`, `soul`, `briefing`, `briefing_topic`
