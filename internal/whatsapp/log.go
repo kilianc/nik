@@ -20,7 +20,7 @@ func (s *slogWaLog) Debugf(msg string, args ...interface{}) {
 	slog.Debug(fmt.Sprintf(msg, args...), "pkg", s.mod)
 }
 func (s *slogWaLog) Infof(msg string, args ...interface{}) {
-	slog.Info(fmt.Sprintf(msg, args...), "pkg", s.mod)
+	slog.Debug(fmt.Sprintf(msg, args...), "pkg", s.mod)
 }
 func (s *slogWaLog) Warnf(msg string, args ...interface{}) {
 	slog.Warn(fmt.Sprintf(msg, args...), "pkg", s.mod)
