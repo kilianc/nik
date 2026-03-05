@@ -15,7 +15,6 @@ import (
 	"github.com/kciuffolo/nik/internal/crew"
 	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/llm"
-	"github.com/kciuffolo/nik/internal/memory"
 	"github.com/kciuffolo/nik/internal/messaging"
 	"github.com/kciuffolo/nik/internal/shell"
 	"github.com/kciuffolo/nik/internal/skills"
@@ -118,11 +117,6 @@ func buildTools(cfg *config.Config, llmClient *llm.Client, conn *sql.DB) map[str
 			tools[t.Def.Name] = t.Handler
 		}
 
-		memorySvc := memory.NewService(conn, llmClient)
-		for _, t := range memory.BuildTools(memorySvc) {
-			tools[t.Def.Name] = t.Handler
-		}
-
 		alarmSvc := alarms.New(conn)
 		for _, t := range alarms.BuildTools(alarmSvc) {
 			tools[t.Def.Name] = t.Handler
@@ -133,7 +127,6 @@ func buildTools(cfg *config.Config, llmClient *llm.Client, conn *sql.DB) map[str
 		taskToolList = append(taskToolList, shell.BuildTools(cfg)...)
 		taskToolList = append(taskToolList, llm.BuildTools(llmClient, cfg.Home)...)
 		taskToolList = append(taskToolList, db.BuildTools(conn)...)
-		taskToolList = append(taskToolList, memory.BuildReadTools(memorySvc)...)
 		taskToolList = append(taskToolList, skills.BuildTools(cfg)...)
 
 		crewSvc := crew.NewService(conn)

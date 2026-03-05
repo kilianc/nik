@@ -3,7 +3,7 @@ name: briefing
 summary: >
   Morning news research session and topic management.
   Load when someone mentions an interest or when a briefing alarm fires.
-tools: [shell, alarm, store_memory, search_memory, db_query, load_skill]
+tools: [shell, alarm, db_query, load_skill]
 ---
 
 # Briefing
@@ -28,9 +28,9 @@ Use `shell` to read and write these files. Create the `briefings/` directory if 
 ```markdown
 # Briefing Topics
 
-- **F1 racing news** — CT loves F1 (contact: 019...)
-- **news in Rome Italy** — Mamma lives near Rome (contact: 019...)
-- **AI startups Bay Area** — Kilian works in AI
+- **F1 racing news** — [name] loves F1 (contact: 019...)
+- **local news [city]** — [name] lives nearby (contact: 019...)
+- **AI startups** — [name] works in AI
 ```
 
 To add a topic, append a line. To remove one, delete the line. Use `shell` to read and edit the file.
@@ -55,9 +55,10 @@ When the alarm fires, follow the full morning workflow below.
 
 Before touching the news, remember who you're reading for.
 
-1. `search_memory` for each person in your life — their interests, hobbies, what they care about. Do at least 3-4 searches.
-2. `db_query` to refresh who's in your orbit and what you know about them.
-3. Read yesterday's journal if available.
+Your memories are already in your recall context — use what you remember about the people in your life.
+
+1. `db_query` to refresh who's in your orbit and what you know about them.
+2. Read yesterday's journal if available.
 
 ### Phase 2 — Evolve topics
 
@@ -73,8 +74,7 @@ Before touching the news, remember who you're reading for.
 
 Load the `web_search` skill and use it to fetch news for each topic.
 
-- For each item: who would care? Is it worth remembering?
-- Use `store_memory` for noteworthy items. Be specific: what happened, who cares, why. One fact per memory.
+- For each item: who would care? Is it worth including?
 - If a headline is interesting but thin, search again to dig deeper or `load_skill` for `web` to use `link_reader` on full articles.
 - Follow your curiosity. Chase threads that connect to people or recent conversations.
 - Sentiment target: ~45% positive, 45% neutral, 10% negative.

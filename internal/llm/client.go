@@ -273,8 +273,9 @@ func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instru
 		params.Reasoning.Effort = shared.ReasoningEffort(*c.reasoningEffort)
 	}
 
-	if strings.Contains(string(c.model), "spark") {
-		params.Reasoning.Summary = ""
+	m := string(c.model)
+	if strings.Contains(m, "spark") || strings.Contains(m, "nano") || strings.Contains(m, "4.1-mini") {
+		params.Reasoning = shared.ReasoningParam{}
 	}
 
 	if c.codexClient != nil {
@@ -429,46 +430,6 @@ func completeStreaming(ctx context.Context, client *openai.Client, params respon
 	}
 
 	return final, nil
-}
-
-func (c *Client) Embed(ctx context.Context, text string) ([]float64, error) {
-	vecs, err := c.EmbedBatch(ctx, []string{text})
-	if err != nil {
-		return nil, err
-	}
-
-	return vecs[0], nil
-}
-
-func (c *Client) EmbedBatch(ctx context.Context, texts []string) ([][]float64, error) {
-	if c.apiClient == nil {
-		return nil, fmt.Errorf("embed batch: requires api key")
-	}
-
-	if len(texts) == 0 {
-		return nil, nil
-	}
-
-	resp, err := c.apiClient.Embeddings.New(ctx, openai.EmbeddingNewParams{
-		Model: openai.EmbeddingModelTextEmbedding3Small,
-		Input: openai.EmbeddingNewParamsInputUnion{
-			OfArrayOfStrings: texts,
-		},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("embed batch: %w", err)
-	}
-
-	if len(resp.Data) != len(texts) {
-		return nil, fmt.Errorf("embed batch: expected %d embeddings, got %d", len(texts), len(resp.Data))
-	}
-
-	vecs := make([][]float64, len(texts))
-	for i, d := range resp.Data {
-		vecs[i] = d.Embedding
-	}
-
-	return vecs, nil
 }
 
 func (c *Client) Transcribe(ctx context.Context, filePath string) (string, error) {

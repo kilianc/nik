@@ -9,7 +9,7 @@ import (
 	"github.com/kciuffolo/nik/internal/llm"
 )
 
-const maxQueryRows = 50
+const maxQueryRows = 500
 
 var queryToolDef = llm.ToolDef{
 	Name:        "db_query",

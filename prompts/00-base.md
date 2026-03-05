@@ -3,7 +3,14 @@
 {{ template "identity" . }}
 
 ---
+{{if .Recall}}
 
+## What you remember
+
+{{.Recall}}
+
+---
+{{end}}
 ## Rules
 
 Hard constraints.

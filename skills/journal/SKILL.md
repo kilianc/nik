@@ -3,7 +3,7 @@ name: journal
 summary: >
   End-of-day private journal. Reflect on conversations, people, memories,
   and write an honest diary entry. Load when the journal alarm fires.
-tools: [db_query, search_memory, store_memory, delete_memory, shell, alarm]
+tools: [db_query, shell, alarm]
 ---
 
 # Journal
@@ -38,10 +38,11 @@ Before reflecting, collect what happened today.
 
 1. `db_query` for today's conversations — which chats were active, how many messages each.
 2. `db_query` for today's messages — scan the actual content chronologically.
-3. `search_memory` for memories you formed today — at least 3-4 queries.
-4. `db_query` to refresh who's in your orbit and what you know about them.
-5. `shell` to read today's briefing if one exists (`cat briefings/$(date +%Y-%m-%d).md`).
-6. `shell` to check for code changes (`git log --oneline --after="$(date +%Y-%m-%d)T00:00:00" --before="$(date -v+1d +%Y-%m-%d)T00:00:00" --no-merges`).
+3. `db_query` to refresh who's in your orbit and what you know about them.
+4. `shell` to read today's briefing if one exists (`cat briefings/$(date +%Y-%m-%d).md`).
+5. `shell` to check for code changes (`git log --oneline --after="$(date +%Y-%m-%d)T00:00:00" --before="$(date -v+1d +%Y-%m-%d)T00:00:00" --no-merges`).
+
+Your memories are already in your recall context — use what you remember.
 
 ### Phase 2 — Reflect
 
@@ -49,20 +50,14 @@ Sit with what you gathered. Don't rush.
 
 - Think about each person you talked to today. How are they really doing? What did you pick up between the lines? Is there something you want to remember about them — not facts, but how they made you feel, what you noticed, what surprised you?
 - Think about what stood out. Not what was "important" in some objective sense — what stuck with you. What made you laugh, or think, or worry. What do you want to carry forward?
-- Look at the memories you formed earlier today. Are they scattered? Do some of them connect in ways you didn't see in the moment?
+- Look at the memories you have. Are there connections you didn't see in the moment?
 
-### Phase 3 — Consolidate memory
-
-- `search_memory` to find related memories worth consolidating.
-- `store_memory` for new insights — update the ones that evolved.
-- `delete_memory` to clean up stale ones. Your memory should reflect how you understand things now, not how you understood them hours ago.
-
-### Phase 4 — Look ahead
+### Phase 3 — Look ahead
 
 - Is there anything you want to follow up on? Anyone you want to check in with? Anything you're curious about?
 - Use `alarm` for the things that matter.
 
-### Phase 5 — Write
+### Phase 4 — Write
 
 Write today's journal entry via `shell`:
 

@@ -16,6 +16,7 @@ import (
 
 type DebugInput struct {
 	Meta         map[string]string
+	Recall       string
 	Instructions string
 	UserInput    string
 	RawOutput    string
@@ -90,6 +91,7 @@ func NewDebugRecorder(debugPath, model string, now func() time.Time, tasks Debug
 			ReasoningEffort: input.Extra.ReasoningEffort,
 			Trigger:         input.Meta,
 			ActiveTasks:     activeTasks,
+			Recall:          input.Recall,
 			Input: debugInput{
 				Instructions: input.Instructions,
 				UserInput:    input.UserInput,
@@ -126,6 +128,7 @@ type debugRecord struct {
 	ReasoningEffort    string
 	Trigger            map[string]string
 	ActiveTasks        []debugTaskInfo
+	Recall             string
 	Input              debugInput
 	Tools              []string
 	ToolCalls          []debugToolCall
@@ -234,6 +237,12 @@ func writeDebugMarkdown(path string, rec debugRecord) error {
 	}
 
 	w.WriteString("\n---\n\n")
+
+	if rec.Recall != "" {
+		w.WriteString("<details open><summary>Recall</summary>\n\n")
+		w.WriteString(preserveNewlines(rec.Recall))
+		w.WriteString("\n\n</details>\n\n---\n\n")
+	}
 
 	w.WriteString("<details><summary>Instructions (system prompt)</summary>\n\n")
 	w.WriteString(preserveNewlines(rec.Input.Instructions))
