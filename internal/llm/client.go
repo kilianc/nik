@@ -262,6 +262,10 @@ func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instru
 		params.Reasoning.Effort = shared.ReasoningEffort(*c.reasoningEffort)
 	}
 
+	if strings.Contains(string(c.model), "spark") {
+		params.Reasoning.Summary = ""
+	}
+
 	if c.codexClient != nil {
 		params.Store = openai.Bool(false)
 	}
