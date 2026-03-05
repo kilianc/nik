@@ -132,7 +132,7 @@ func (a *Adapter) handleMessage(evt *events.Message) error {
 		return nil
 	}
 
-	slog.Info(
+	slog.Debug(
 		"whatsapp inbound message",
 		"pkg",
 		"whatsapp",

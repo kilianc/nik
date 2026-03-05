@@ -80,7 +80,7 @@ func (c *Client) downloadMedia(ctx context.Context, msg *waProto.Message, messag
 
 	_, err = os.Stat(absPath)
 	if err == nil {
-		slog.Info("media reused", "pkg", "whatsapp", "msg_id", messageID, "kind", kind, "path", absPath, "bytes", len(data))
+		slog.Debug("media reused", "pkg", "whatsapp", "msg_id", messageID, "kind", kind, "path", absPath, "bytes", len(data))
 		return &mediaResult{path: absPath, filename: filename, hash: hash, mimeType: mimeType, sizeBytes: int64(len(data))}
 	}
 
@@ -90,7 +90,7 @@ func (c *Client) downloadMedia(ctx context.Context, msg *waProto.Message, messag
 		return nil
 	}
 
-	slog.Info("media downloaded", "pkg", "whatsapp", "msg_id", messageID, "kind", kind, "path", absPath, "bytes", len(data))
+	slog.Debug("media downloaded", "pkg", "whatsapp", "msg_id", messageID, "kind", kind, "path", absPath, "bytes", len(data))
 	return &mediaResult{path: absPath, filename: filename, hash: hash, mimeType: mimeType, sizeBytes: int64(len(data))}
 }
 

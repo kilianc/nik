@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -67,8 +66,10 @@ func main() {
 		os.Exit(1)
 	}
 	defer logFile.Close()
-	logWriter := io.MultiWriter(os.Stderr, logFile)
-	logger := slog.New(&niklog.TruncHandler{Inner: slog.NewTextHandler(logWriter, nil)})
+	logOpts := &slog.HandlerOptions{Level: slog.LevelInfo}
+	fileHandler := slog.NewTextHandler(logFile, logOpts)
+	stderrHandler := &niklog.TruncHandler{Inner: slog.NewTextHandler(os.Stderr, logOpts)}
+	logger := slog.New(&niklog.MultiHandler{Handlers: []slog.Handler{fileHandler, stderrHandler}})
 	slog.SetDefault(logger)
 
 	ascii := []string{

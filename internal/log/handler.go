@@ -48,3 +48,46 @@ func (h *TruncHandler) truncAttr(a slog.Attr) slog.Attr {
 	}
 	return a
 }
+
+// MultiHandler fans out each log record to all inner handlers.
+type MultiHandler struct {
+	Handlers []slog.Handler
+}
+
+func (m *MultiHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	for _, h := range m.Handlers {
+		if h.Enabled(ctx, level) {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *MultiHandler) Handle(ctx context.Context, r slog.Record) error {
+	for _, h := range m.Handlers {
+		if !h.Enabled(ctx, r.Level) {
+			continue
+		}
+		err := h.Handle(ctx, r)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (m *MultiHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	handlers := make([]slog.Handler, len(m.Handlers))
+	for i, h := range m.Handlers {
+		handlers[i] = h.WithAttrs(attrs)
+	}
+	return &MultiHandler{Handlers: handlers}
+}
+
+func (m *MultiHandler) WithGroup(name string) slog.Handler {
+	handlers := make([]slog.Handler, len(m.Handlers))
+	for i, h := range m.Handlers {
+		handlers[i] = h.WithGroup(name)
+	}
+	return &MultiHandler{Handlers: handlers}
+}
