@@ -13,7 +13,7 @@ func TestIsImageMime(t *testing.T) {
 
 func TestRoundSignature(t *testing.T) {
 	a := ToolCall{Name: "load_skill", Arguments: `{"action":"load","name":"search"}`}
-	b := ToolCall{Name: "search_memory", Arguments: `{"query":"hello"}`}
+	b := ToolCall{Name: "db_query", Arguments: `{"query":"SELECT 1"}`}
 
 	sig1 := roundSignature([]ToolCall{a})
 	sig2 := roundSignature([]ToolCall{a})

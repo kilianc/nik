@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 
-	sqlite_vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
 	"github.com/mattn/go-sqlite3"
 )
 
@@ -21,7 +20,6 @@ type DBTX interface {
 var schema string
 
 func init() {
-	sqlite_vec.Auto()
 	sql.Register("sqlite3_nik", &sqlite3.SQLiteDriver{
 		ConnectHook: func(conn *sqlite3.SQLiteConn) error {
 			return conn.RegisterFunc("jaro_winkler_similarity", jaroWinklerSimilarity, true)

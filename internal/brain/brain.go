@@ -18,6 +18,7 @@ type Brain struct {
 	privileged    map[string]bool
 	dataSources   []DataSource
 	crewReader    func(ctx context.Context) (string, error)
+	recaller      func(ctx context.Context, stimulus string) string
 	toolReactor   ToolReactor
 	toolEmojis    map[string]string
 	debugRecorder DebugRecorder
@@ -39,6 +40,10 @@ func New(cfg *config.Config, llmClient *llm.Client) *Brain {
 
 func (b *Brain) SetCrewReader(fn func(ctx context.Context) (string, error)) {
 	b.crewReader = fn
+}
+
+func (b *Brain) SetRecaller(fn func(ctx context.Context, stimulus string) string) {
+	b.recaller = fn
 }
 
 func (b *Brain) SetToolReactor(emojis map[string]string, fn ToolReactor) {
@@ -148,6 +153,16 @@ func (b *Brain) think(ctx context.Context, input []string) (string, llm.Usage, e
 
 	userInput := strings.Join(input, "\n")
 
+	var recall, debugRecall string
+	if b.recaller != nil {
+		recall = b.recaller(ctx, userInput)
+		if recall == "" {
+			debugRecall = "(no relevant memories)"
+		} else {
+			debugRecall = recall
+		}
+	}
+
 	thinkCtx, cancel := context.WithTimeout(ctx, activationTimeout)
 	defer cancel()
 
@@ -155,7 +170,7 @@ func (b *Brain) think(ctx context.Context, input []string) (string, llm.Usage, e
 	tools := b.toolsForContext(ctx)
 	executor := b.toolExecutor()
 
-	instructions, err := b.loadInstructions(now())
+	instructions, err := b.loadInstructions(now(), recall)
 	if err != nil {
 		return "", llm.Usage{}, err
 	}
@@ -168,6 +183,7 @@ func (b *Brain) think(ctx context.Context, input []string) (string, llm.Usage, e
 	if b.debugRecorder != nil {
 		b.debugRecorder(DebugInput{
 			Meta:         meta,
+			Recall:       debugRecall,
 			Instructions: instructions,
 			UserInput:    userInput,
 			RawOutput:    result.Output,

@@ -107,22 +107,25 @@ var AlarmOccurrenceUpdateNote string
 //go:embed alarm_occurrence_summary.sql
 var AlarmOccurrenceSummary string
 
-// memory queries
+// recall queries
 
-//go:embed memory_insert.sql
-var MemoryInsert string
+//go:embed recall_messages.sql
+var RecallMessages string
 
-//go:embed memory_vec_insert.sql
-var MemoryVecInsert string
+//go:embed recall_contacts.sql
+var RecallContacts string
 
-//go:embed memory_search.sql
-var MemorySearch string
+//go:embed recall_alarms.sql
+var RecallAlarms string
 
-//go:embed memory_delete.sql
-var MemoryDelete string
+//go:embed recall_journals.sql
+var RecallJournals string
 
-//go:embed memory_list.sql
-var MemoryList string
+//go:embed recall_dreams.sql
+var RecallDreams string
+
+//go:embed recall_briefings.sql
+var RecallBriefings string
 
 // activation queries
 

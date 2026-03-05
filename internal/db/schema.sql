@@ -112,22 +112,6 @@ CREATE TABLE IF NOT EXISTS alarm_occurrence (
   fired_at         TIMESTAMP NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS memory (
-  id         TEXT PRIMARY KEY,
-  content    TEXT NOT NULL,
-  metadata   TEXT,
-  source     TEXT,
-  source_id  TEXT,
-  created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
-  deleted_at TIMESTAMP
-);
-
-CREATE VIRTUAL TABLE IF NOT EXISTS vec_memory USING vec0(
-  id TEXT PRIMARY KEY,
-  embedding float[1536] distance_metric=cosine
-);
-
-
 CREATE TABLE IF NOT EXISTS activation (
   id               TEXT PRIMARY KEY,
   source           TEXT NOT NULL,

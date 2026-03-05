@@ -37,7 +37,7 @@ func TestBuildPromptDataNow(t *testing.T) {
 		},
 	}
 
-	data := b.buildPromptData(time.Date(2026, time.January, 2, 15, 4, 0, 0, time.UTC))
+	data := b.buildPromptData(time.Date(2026, time.January, 2, 15, 4, 0, 0, time.UTC), "")
 
 	if data.Now.Date != "Friday, January 2, 2026 3:04 PM" {
 		t.Fatalf("unexpected date: %q", data.Now.Date)

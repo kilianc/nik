@@ -101,13 +101,13 @@ Entry point: `cmd/nik/main.go`
 | `internal/brain/` | main loop, data source + tool registration, prompt loading, debug output |
 | `internal/codex/` | Codex auth for LLM client (login, token management) |
 | `internal/id/` | UUID generation — `V4()`, `V7()`, `Short(n)` |
-| `internal/llm/` | LLM client — `Complete`, `Embed`, `Transcribe`, `Describe`; supports OpenAI and Codex auth |
+| `internal/llm/` | LLM client — `Complete`, `Transcribe`, `Describe`; supports OpenAI and Codex auth |
 | `internal/messaging/` | canonical messaging service, datasource, and tool handlers |
 | `internal/whatsapp/` | WhatsApp platform adapter implementing messaging platform interface |
 | `internal/contacts/` | contact resolution/upsert orchestration + contact update tools |
 | `internal/shell/` | tmux-backed persistent shell tool + data source |
 | `internal/alarms/` | alarm/reminder scheduling service, tools, and data source |
-| `internal/memory/` | long-term memory store with vector search (sqlite-vec) |
+| `internal/recall/` | pre-activation recall — reads MEMORIES.md + structured data, LLM filters for relevance |
 | `internal/skills/` | skill loader — reads SKILL.md files and registers tools dynamically |
 | `tools/` | codegen/build/debug tools invoked by `make` — no runtime code; each tool has its own README |
 | `prompts/` | system prompt templates loaded at runtime |
@@ -147,7 +147,7 @@ Brain.Awake()        -- wake up, start the loop
 
 These run on schedule via data sources — the brain activates them like any other stimulus.
 
-- **Journal**: managed entirely by the `journal` skill. Nik uses a recurring alarm, gathers day context via `db_query`/`search_memory`/`shell`, and writes to `journal/` files. No domain package.
+- **Journal**: managed entirely by the `journal` skill. Nik uses a recurring alarm, gathers day context via `db_query`/`shell`, and writes to `journal/` files. No domain package.
 - **Dream**: managed entirely by the `dream` skill. Nik uses 5 recurring alarms (one per dream pass), processes the journal and memories, and writes to `dreams/` files. The final pass (Wake) evolves nik's **soul** — a living identity document stored in `soul/latest.md` and loaded into the system prompt on every activation. Dated snapshots in `soul/YYYY-MM-DD.md` preserve history. No domain package.
 - **Briefing**: managed entirely by the `briefing` skill. Nik uses a recurring alarm, `web_search` for news, and writes to `briefings/` files. No domain package.
 
@@ -192,7 +192,7 @@ All queries live in `internal/queries/*.sql` files with exact executable SQL (po
 - `json_each()`, `json_extract()` for array lookups
 - `jaro_winkler_similarity()` custom function for fuzzy contact search
 - `ON CONFLICT ... DO UPDATE` for upserts
-- `sqlite-vec` extension for vector similarity search
+
 
 ### UUIDs
 
@@ -200,7 +200,7 @@ All primary keys are **UUIDv7** (time-ordered), generated in Go via `id.V7()` fr
 
 ### SQLite Go Driver Conventions
 
-Using `mattn/go-sqlite3` with `asg017/sqlite-vec`:
+Using `mattn/go-sqlite3`:
 
 - **UUID handling**: all UUIDs are stored and queried as plain TEXT strings
 - **Array columns**: multi-value fields are JSON arrays in TEXT columns. Use `MarshalStringSlice` to bind and `scanStringSlice` to scan (both in `scan.go`)
@@ -224,8 +224,8 @@ Good — `GetContact` already does this (`get_contact.sql` uses `WHERE id = ?1 O
 
 ### Naming Conventions
 
-- All table names are **singular**: `contact`, `conversation`, `conversation_participant`, `message`, `media`, `message_media`, `alarm`, `alarm_occurrence`, `memory`, `vec_memory`, `dream`, `soul`, `briefing`, `briefing_topic`
-- Canonical query files use canonical prefixes: `conversation_*`, `message_*`, `media_*`, `message_media_*`, `contact_*`, `alarm_*`, `memory_*`
+- All table names are **singular**: `contact`, `conversation`, `conversation_participant`, `message`, `media`, `message_media`, `alarm`, `alarm_occurrence`, `dream`, `soul`, `briefing`, `briefing_topic`
+- Canonical query files use canonical prefixes: `conversation_*`, `message_*`, `media_*`, `message_media_*`, `contact_*`, `alarm_*`
 - Tool names use canonical prefixes by domain (see "Where tools live" table for the full list)
 - Metadata keys use canonical ids: `conversation_id`, `message_id` (platform ids are never exposed to LLM context)
 - FK columns always include the target table name: `<table>_id` for simple references, `<qualifier>_<table>_id` when disambiguation is needed (e.g. `origin_contact_id`, `retry_for_task_id`). Self-references follow the same pattern.
@@ -254,7 +254,6 @@ Tools are defined in their domain package, not in `brain/`:
 | `internal/llm/` | `describe_media` | generic AI capability, wraps LLM methods |
 | `internal/shell/` | `shell` | persistent tmux terminal (run/read/send/kill/list) |
 | `internal/alarms/` | `alarm`, `update_alarm`, `cancel_alarm` | alarm/reminder scheduling |
-| `internal/memory/` | `store_memory`, `search_memory`, `delete_memory` | long-term memory with vector search |
 | `internal/skills/` | `load_skill` | load skill definitions from SKILL.md files |
 | `internal/config/` | `update_config` | read and update config values |
 | `internal/task/` | `task_spawn`, `task_retry`, `task_list`, `task_status`, `task_cancel` | background task orchestration |
@@ -270,7 +269,7 @@ Data sources follow the same pattern. Each domain package that produces context 
 1. Load config, open DB, create WhatsApp client and adapter
 2. Register adapter with messaging service, start adapter
 3. Build LLM client (OpenAI key or Codex auth)
-4. Create domain services: `alarms`, `search`, `memory`
+4. Create domain services: `alarms`, `recall`
 5. Create brain: `b := brain.New(cfg, llmClient)` (soul loaded from `soul/latest.md` automatically)
 6. Register data sources: `messaging`, `alarms`, `task`
 7. Register tools from all domain packages (see tools table above)

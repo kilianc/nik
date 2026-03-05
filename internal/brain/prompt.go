@@ -20,6 +20,7 @@ type promptData struct {
 	Now             nowData
 	Soul            string
 	Crew            string
+	Recall          string
 	PreloadedSkills []skills.PreloadedSkill
 	AvailableSkills []skillSummaryData
 }
@@ -69,7 +70,7 @@ func shiftHeadings(n int, content string) string {
 	return b.String()
 }
 
-func (b *Brain) loadInstructions(now time.Time) (string, error) {
+func (b *Brain) loadInstructions(now time.Time, recall string) (string, error) {
 	dir := b.cfg.PromptsPath()
 
 	baseData, err := os.ReadFile(filepath.Join(dir, "00-base.md"))
@@ -94,7 +95,7 @@ func (b *Brain) loadInstructions(now time.Time) (string, error) {
 		}
 	}
 
-	data := b.buildPromptData(now)
+	data := b.buildPromptData(now, recall)
 
 	var buf strings.Builder
 
@@ -108,8 +109,9 @@ func (b *Brain) loadInstructions(now time.Time) (string, error) {
 	return result, nil
 }
 
-func (b *Brain) buildPromptData(now time.Time) promptData {
+func (b *Brain) buildPromptData(now time.Time, recall string) promptData {
 	var data promptData
+	data.Recall = recall
 
 	loc := b.cfg.TZ()
 	t := now.In(loc)

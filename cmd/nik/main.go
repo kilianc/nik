@@ -19,8 +19,8 @@ import (
 	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/llm"
 	niklog "github.com/kciuffolo/nik/internal/log"
-	"github.com/kciuffolo/nik/internal/memory"
 	"github.com/kciuffolo/nik/internal/messaging"
+	"github.com/kciuffolo/nik/internal/recall"
 	"github.com/kciuffolo/nik/internal/shell"
 	"github.com/kciuffolo/nik/internal/skills"
 	"github.com/kciuffolo/nik/internal/stats"
@@ -31,8 +31,6 @@ import (
 const version = "0.0.1"
 
 var toolEmojis = map[string]string{
-	"store_memory":   "🧠",
-	"search_memory":  "🔍",
 	"alarm":          "⏰",
 	"update_alarm":   "⏰",
 	"cancel_alarm":   "🔕",
@@ -140,17 +138,21 @@ func main() {
 	llmOpts = append(llmOpts, llm.WithReasoningEffort(&cfg.ReasoningEffort))
 	llmClient := llm.NewClient(cfg.Model, llmOpts...)
 
+	var recallClient *llm.Client
+	if cfg.RecallModel != "" && cfg.OpenAIKey != "" {
+		recallClient = llm.NewClient(cfg.RecallModel, llm.WithAPIKey(cfg.OpenAIKey))
+		slog.Info("recall client ready", "model", cfg.RecallModel)
+	}
+
 	alarmSvc := alarms.New(conn)
-	memorySvc := memory.NewService(conn, llmClient)
+	recallSvc := recall.NewService(cfg, conn, recallClient)
 	taskSvc := task.NewService(conn)
 	crewSvc := crew.NewService(conn)
 
-	// task runner tools: subset available to background subagents
 	var taskTools []llm.Tool
 	taskTools = append(taskTools, shell.BuildTools(cfg)...)
 	taskTools = append(taskTools, llm.BuildTools(llmClient, cfg.Home)...)
 	taskTools = append(taskTools, db.BuildTools(conn)...)
-	taskTools = append(taskTools, memory.BuildReadTools(memorySvc)...)
 	taskTools = append(taskTools, skills.BuildTools(cfg)...)
 
 	llmClient.SetObserver(stats.NewRecorder(conn))
@@ -160,6 +162,7 @@ func main() {
 	b := brain.New(cfg, llmClient)
 
 	b.SetCrewReader(crewSvc.Roster)
+	b.SetRecaller(recallSvc.Recall)
 	b.SetToolReactor(toolEmojis, messagingSvc.React)
 	b.SetDebugRecorder(brain.NewDebugRecorder(cfg.DebugPath(), llmClient.Model(), time.Now, taskSvc))
 
@@ -170,7 +173,6 @@ func main() {
 	b.RegisterTools(llm.BuildTools(llmClient, cfg.Home)...)
 	b.RegisterTools(config.BuildTools(cfg, conn)...)
 	b.RegisterTools(contacts.BuildTools(conn)...)
-	b.RegisterTools(memory.BuildTools(memorySvc)...)
 	b.RegisterTools(messaging.BuildTools(messagingSvc)...)
 	b.RegisterTools(alarms.BuildTools(alarmSvc)...)
 	b.RegisterTools(db.BuildTools(conn)...)

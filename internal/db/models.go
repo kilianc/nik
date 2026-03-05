@@ -175,12 +175,47 @@ type ToolCallInfo struct {
 	At         time.Time
 }
 
-type Memory struct {
-	ID        string
-	Content   string
-	Metadata  map[string]any
-	Source    string
-	SourceID  string
-	CreatedAt time.Time
-	Score     float64
+type RecallMessage struct {
+	Body              string
+	SentAt            time.Time
+	IsFromMe          bool
+	SenderName        string
+	ConversationTitle string
+	ConversationKind  string
+}
+
+type RecallContact struct {
+	Name         string
+	Nicknames    []string
+	Emails       []string
+	PhoneNumbers []string
+	WhatsappIDs  []string
+	Timezone     sql.NullString
+	Location     sql.NullString
+	OneLiner     sql.NullString
+	Notes        sql.NullString
+}
+
+type RecallAlarm struct {
+	Goal        string
+	Recurrence  sql.NullString
+	NextFireAt  sql.NullTime
+	CancelledAt sql.NullTime
+	CreatedAt   time.Time
+}
+
+type RecallJournal struct {
+	Date    string
+	Content string
+}
+
+type RecallDream struct {
+	Date    string
+	Pass    int
+	Content string
+}
+
+type RecallBriefing struct {
+	Date    string
+	Content string
 }

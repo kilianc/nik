@@ -3,7 +3,6 @@ module github.com/kciuffolo/nik
 go 1.25.4
 
 require (
-	github.com/asg017/sqlite-vec-go-bindings v0.1.6
 	github.com/google/uuid v1.6.0
 	github.com/mattn/go-sqlite3 v1.14.34
 	github.com/mdp/qrterminal/v3 v3.2.1

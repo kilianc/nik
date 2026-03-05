@@ -26,6 +26,8 @@ type Config struct {
 	AllowConversationIDs      []string `yaml:"allow_conversation_ids"`
 	PrivilegedConversationIDs []string `yaml:"privileged_conversation_ids"`
 
+	RecallModel string `yaml:"recall_model"`
+
 	MaxHistory   int    `yaml:"max_history"`
 	Timezone     string `yaml:"timezone"`
 	Location     string `yaml:"location"`
@@ -112,6 +114,10 @@ func (c Config) TZ() *time.Location {
 	}
 
 	return loc
+}
+
+func (c Config) MemoriesPath() string {
+	return filepath.Join(c.Home, "memories", "latest.md")
 }
 
 func (c Config) DebugPath() string {

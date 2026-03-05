@@ -1,6 +1,6 @@
 # Nik
 
-Nik (Noetic Intelligence Kernel) is an autonomous personal AI that lives on WhatsApp. Not an assistant -- a family member. It has its own phone number, its own personality, real long-term memory, and genuine relationships with the people it talks to. Built in Go, backed by SQLite, powered by LLMs.
+Nik (Noetic Intelligence Kernel) is an autonomous personal AI that lives on WhatsApp. Not an assistant -- a family member. It has its own phone number, its own personality, and genuine relationships with the people it talks to. Built in Go, backed by SQLite, powered by LLMs.
 
 ## Philosophy
 
@@ -32,7 +32,7 @@ Awake(ctx, 2s)
 └─ (repeat every 2s until ctx cancelled)
 ```
 
-Every 2 seconds the brain calls `Check()` on each registered data source. Each source returns zero or more outputs -- chunks of context with metadata like `conversation_id`. For each output, the brain spawns a goroutine (an activation): it loads the system prompt (personality + preloaded skills + soul), concatenates the input, and thinks -- which under the hood means calling `llm.Complete`. The LLM can make tool calls (reply, search memory, set alarms, run shell commands), and each result feeds back into the completion loop until the model is done.
+Every 2 seconds the brain calls `Check()` on each registered data source. Each source returns zero or more outputs -- chunks of context with metadata like `conversation_id`. For each output, the brain spawns a goroutine (an activation): it loads the system prompt (personality + preloaded skills + soul), concatenates the input, and thinks -- which under the hood means calling `llm.Complete`. The LLM can make tool calls (reply, set alarms, run shell commands), and each result feeds back into the completion loop until the model is done.
 
 One activation = one shot. There are no follow-up turns. When the model returns, it's over. This constraint forces the model to do all its work -- searching, thinking, replying -- in a single burst.
 
@@ -151,8 +151,6 @@ When a message arrives: the WhatsApp adapter normalizes it and calls `ReceiveMes
 Domain packages define tools via `BuildTools()` and register them at startup. The brain makes them available to the LLM during activations. Some tools are privileged (owner-only).
 
 **messaging** -- `message_reply`, `message_react`, `message_set_presence`, `message_update_media_description`
-
-**memory** -- `store_memory`, `search_memory`, `delete_memory`
 
 **shell** -- `shell` (tmux: run, read, send, kill, list)
 
