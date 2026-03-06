@@ -2,21 +2,14 @@ package messaging
 
 import (
 	"context"
-	"time"
 
 	"github.com/kciuffolo/nik/internal/brain"
 	"github.com/kciuffolo/nik/internal/config"
+	"github.com/kciuffolo/nik/internal/db"
 )
 
 type TaskQuerier interface {
-	ActiveConversationTasks(ctx context.Context, conversationID string) ([]TaskInfo, error)
-}
-
-type TaskInfo struct {
-	ID        string
-	Goal      string
-	Status    string
-	CreatedAt time.Time
+	AllActiveTasks(ctx context.Context) ([]db.ActiveTask, error)
 }
 
 type DataSource struct {
@@ -61,12 +54,12 @@ func (d *DataSource) Check(ctx context.Context) ([]brain.DataSourceOutput, error
 		senderLabels := d.svc.SenderLabels(ctx, msgs)
 		session := d.svc.SessionContext(ctx, conv)
 
-		var tasks []TaskInfo
+		var tasks []db.ActiveTask
 		if d.tasks != nil {
-			tasks, _ = d.tasks.ActiveConversationTasks(ctx, conversationID)
+			tasks, _ = d.tasks.AllActiveTasks(ctx)
 		}
 
-		lines := BuildConversationInput(conv, msgs, senderLabels, session, tasks)
+		lines := BuildConversationInput(conversationID, conv, msgs, senderLabels, session, tasks)
 
 		var reactToID string
 		for i := len(msgs) - 1; i >= 0; i-- {

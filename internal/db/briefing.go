@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"time"
 
 	"github.com/kciuffolo/nik/internal/queries"
 )
@@ -53,14 +52,6 @@ func BriefingWritePage(ctx context.Context, db *sql.DB, date, content string) er
 	}
 
 	return nil
-}
-
-type BriefingTopic struct {
-	ID        string
-	Query     string
-	Reason    string
-	ContactID sql.NullString
-	CreatedAt time.Time
 }
 
 func BriefingTopicList(ctx context.Context, db *sql.DB) ([]BriefingTopic, error) {

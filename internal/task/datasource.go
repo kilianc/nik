@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/kciuffolo/nik/internal/brain"
@@ -49,20 +50,25 @@ func (d *DataSource) Check(ctx context.Context) ([]brain.DataSourceOutput, error
 		})
 	}
 
-	reports, err := d.svc.UnreadReports(ctx)
+	items, err := d.svc.TasksNeedingAttention(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("query unread task reports: %w", err)
+		return nil, fmt.Errorf("query tasks needing attention: %w", err)
 	}
 
-	for _, report := range reports {
-		lines := d.formatReport(ctx, report)
-		reportID := report.ID
+	for _, item := range items {
+		lines := d.formatTaskAttention(ctx, item)
+		a := item
 
 		outputs = append(outputs, brain.DataSourceOutput{
 			Lines: lines,
-			Meta:  buildBrainMeta(report.TaskID, report.Meta),
+			Meta:  buildBrainMeta(a.TaskID, a.Meta),
 			Processing: func(ctx context.Context) error {
-				return d.svc.MarkRead(ctx, reportID)
+				if a.ReportIDs != "" {
+					for _, rid := range strings.Split(a.ReportIDs, ",") {
+						d.svc.MarkRead(ctx, rid)
+					}
+				}
+				return d.svc.MarkSeen(ctx, a.TaskID)
 			},
 		})
 	}
@@ -85,6 +91,12 @@ func (d *DataSource) formatStaleTask(ctx context.Context, t db.Task) []string {
 		reason + " Check on it, cancel it, or leave it if you have a reason.",
 	}
 
+	if t.RetryNumber > 0 {
+		lines = append(lines, fmt.Sprintf("Retry: #%d", t.RetryNumber))
+	}
+
+	lines = append(lines, d.retryChainContext(ctx, t.RetryForTaskID, t.RetryNumber)...)
+
 	if convID := t.Meta["conversation_id"]; convID != "" {
 		convLines := d.conversationContext(ctx, convID)
 		if len(convLines) > 0 {
@@ -96,39 +108,71 @@ func (d *DataSource) formatStaleTask(ctx context.Context, t db.Task) []string {
 	return lines
 }
 
-func (d *DataSource) formatReport(ctx context.Context, r db.TaskReport) []string {
-	header := "[Task result]"
-	switch r.Kind {
-	case "error":
-		header = "[Task error]"
-	case "attention":
+func (d *DataSource) formatTaskAttention(ctx context.Context, a db.TaskAttention) []string {
+	var header string
+	switch a.Status {
+	case "failed":
+		header = "[Task failed]"
+	case "completed":
+		header = "[Task completed]"
+	default:
 		header = "[Task needs attention]"
 	}
 
 	lines := []string{
 		header,
-		fmt.Sprintf("Task ID: %s", r.TaskID),
-		fmt.Sprintf("Goal: %s", r.Goal),
-		fmt.Sprintf("Status: %s", r.Status),
-		"",
+		fmt.Sprintf("Task ID: %s", a.TaskID),
+		fmt.Sprintf("Goal: %s", a.Goal),
+		fmt.Sprintf("Status: %s", a.Status),
 	}
 
-	switch r.Kind {
-	case "result":
-		lines = append(lines, "## Result", "")
-	case "error":
-		lines = append(lines, "## Error", "")
-	case "attention":
-		lines = append(lines, "## Note", "")
+	if a.RetryNumber > 0 {
+		lines = append(lines, fmt.Sprintf("Retry: #%d", a.RetryNumber))
 	}
 
-	lines = append(lines, r.Content)
+	if a.Reports != "" {
+		lines = append(lines, "", a.Reports)
+	}
 
-	if convID := r.Meta["conversation_id"]; convID != "" {
+	lines = append(lines, d.retryChainContext(ctx, a.RetryForTaskID, a.RetryNumber)...)
+
+	if convID := a.Meta["conversation_id"]; convID != "" {
 		convLines := d.conversationContext(ctx, convID)
 		if len(convLines) > 0 {
 			lines = append(lines, "")
 			lines = append(lines, convLines...)
+		}
+	}
+
+	return lines
+}
+
+func (d *DataSource) retryChainContext(ctx context.Context, retryForTaskID string, retryNumber int) []string {
+	if retryForTaskID == "" && retryNumber == 0 {
+		return nil
+	}
+
+	rootID := retryForTaskID
+	if rootID == "" {
+		return nil
+	}
+
+	chain, err := d.svc.RetryChain(ctx, rootID)
+	if err != nil {
+		slog.Warn("fetch retry chain for datasource", "pkg", "task", "root_id", rootID, "error", err)
+		return nil
+	}
+
+	if len(chain) <= 1 {
+		return nil
+	}
+
+	var lines []string
+	lines = append(lines, "", "## Previous attempts")
+	for _, entry := range chain {
+		lines = append(lines, fmt.Sprintf("- Attempt #%d (%s): %s", entry.RetryNumber, entry.Status, entry.Goal))
+		if entry.Reports != "" {
+			lines = append(lines, fmt.Sprintf("  Reports: %s", entry.Reports))
 		}
 	}
 

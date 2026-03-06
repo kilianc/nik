@@ -13,6 +13,7 @@ Nik is an autonomous personal AI -- like OpenClaw but with a personality, real m
 - **Highest autonomy** -- nik should be able to do everything on its own without human intervention
 - **Smallest codebase** -- the code should be small enough for one person (or one AI) to fully grok; every line earns its place
 - **Core tools + extensible skills** -- a small set of powerful core tools (exec, read, write, search, etc.) and a growing set of user-defined skills that compose them. Skills are the extension mechanism, not more tools.
+- **Single decision-maker** -- infrastructure (runners, datasources, adapters) moves data and updates state, but never decides on behalf of the LLM. When code auto-generates messages, reports, or actions, it creates invisible actors that confuse the model. Only the LLM decides what to communicate and when.
 
 ### Human-centric async design
 
@@ -232,6 +233,7 @@ Good — `GetContact` already does this (`get_contact.sql` uses `WHERE id = ?1 O
 - Canonical query files use canonical prefixes: `conversation_*`, `message_*`, `media_*`, `message_media_*`, `contact_*`, `alarm_*`, `memory_*`, `journal_*`, `dream_*`, `briefing_*`, `soul_*`
 - Tool names use canonical prefixes by domain (see "Where tools live" table for the full list)
 - Metadata keys use canonical ids: `conversation_id`, `message_id` (platform ids are never exposed to LLM context)
+- FK columns always include the target table name: `<table>_id` for simple references, `<qualifier>_<table>_id` when disambiguation is needed (e.g. `origin_contact_id`, `retry_for_task_id`). Self-references follow the same pattern.
 
 ### Nik's Identity
 
@@ -264,6 +266,7 @@ Tools are defined in their domain package, not in `brain/`:
 | `internal/journal/` | `journal_write` | daily journal synthesis |
 | `internal/dream/` | `dream_write`, `soul_evolve` | nightly dream passes and soul evolution |
 | `internal/briefing/` | `briefing_write`, `briefing_topics` | morning briefing and topic management |
+| `internal/task/` | `task_spawn`, `task_retry`, `task_list`, `task_status`, `task_cancel` | background task orchestration |
 
 Each package exposes a `BuildTools() []llm.Tool` function that returns tool definitions + handlers. `main.go` calls `b.RegisterTools(pkg.BuildTools()...)`.
 

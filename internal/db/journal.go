@@ -55,14 +55,6 @@ func JournalWritePage(ctx context.Context, db *sql.DB, date, content string) err
 	return nil
 }
 
-type JournalConversation struct {
-	ID           string
-	Platform     string
-	Kind         string
-	Title        sql.NullString
-	MessageCount int
-}
-
 func JournalConversationsToday(ctx context.Context, db *sql.DB, dayStart, dayEnd time.Time) ([]JournalConversation, error) {
 	rows, err := db.QueryContext(ctx, queries.JournalConversationsToday, dayStart, dayEnd)
 	if err != nil {
@@ -114,14 +106,6 @@ func JournalMessagesToday(ctx context.Context, db *sql.DB, dayStart, dayEnd time
 	return out, rows.Err()
 }
 
-type JournalContact struct {
-	ID        string
-	Name      string
-	Nicknames []string
-	OneLiner  sql.NullString
-	CreatedAt time.Time
-}
-
 func JournalContactsToday(ctx context.Context, db *sql.DB, dayStart, dayEnd time.Time) ([]JournalContact, error) {
 	rows, err := db.QueryContext(ctx, queries.JournalContactsToday, dayStart, dayEnd)
 	if err != nil {
@@ -156,14 +140,6 @@ func JournalContactsToday(ctx context.Context, db *sql.DB, dayStart, dayEnd time
 	return out, rows.Err()
 }
 
-type JournalCrewHire struct {
-	ID        string
-	Name      string
-	Prompt    string
-	CreatedAt time.Time
-	TaskCount int
-}
-
 func JournalCrewToday(ctx context.Context, db *sql.DB, dayStart, dayEnd time.Time) ([]JournalCrewHire, error) {
 	rows, err := db.QueryContext(ctx, queries.JournalCrewToday, dayStart, dayEnd)
 	if err != nil {
@@ -190,12 +166,6 @@ func JournalCrewToday(ctx context.Context, db *sql.DB, dayStart, dayEnd time.Tim
 	}
 
 	return out, rows.Err()
-}
-
-type JournalMemory struct {
-	ID        string
-	Content   string
-	CreatedAt time.Time
 }
 
 func JournalMemoriesToday(ctx context.Context, db *sql.DB, dayStart, dayEnd time.Time) ([]JournalMemory, error) {

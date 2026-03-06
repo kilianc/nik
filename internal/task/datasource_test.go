@@ -13,12 +13,12 @@ func TestDataSourceCheckReturnsReports(t *testing.T) {
 	ds := NewDataSource(svc, nil)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, "", "test", "", "low", map[string]string{"conversation_id": "conv-1"})
+	task, err := svc.Create(ctx, CreateParams{Goal: "test", Thinking: "low", Meta: map[string]string{"conversation_id": "conv-1"}})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
-	err = svc.InsertReport(ctx, task.ID, "result", "done")
+	err = svc.InsertReport(ctx, task.ID, "done")
 	if err != nil {
 		t.Fatalf("insert report: %v", err)
 	}
@@ -55,7 +55,7 @@ func TestDataSourceStaleDetection(t *testing.T) {
 	svc, conn := testDB(t)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, "", "stale test", "", "low", nil)
+	task, err := svc.Create(ctx, CreateParams{Goal: "stale test", Thinking: "low"})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -89,7 +89,7 @@ func TestDataSourceStaleSurfacedDirectly(t *testing.T) {
 	ds := NewDataSource(svc, nil)
 	ctx := context.Background()
 
-	tk, err := svc.Create(ctx, "", "stale direct", "", "low", map[string]string{"conversation_id": "conv-1"})
+	tk, err := svc.Create(ctx, CreateParams{Goal: "stale direct", Thinking: "low", Meta: map[string]string{"conversation_id": "conv-1"}})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -163,12 +163,12 @@ func TestDataSourceAlarmSourcedWithMeta(t *testing.T) {
 	ctx := context.Background()
 
 	meta := map[string]string{"conversation_id": "conv-from-alarm"}
-	task, err := svc.Create(ctx, "", "alarm task", "", "low", meta)
+	task, err := svc.Create(ctx, CreateParams{Goal: "alarm task", Thinking: "low", Meta: meta})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
-	err = svc.InsertReport(ctx, task.ID, "result", "alarm done")
+	err = svc.InsertReport(ctx, task.ID, "alarm done")
 	if err != nil {
 		t.Fatalf("insert report: %v", err)
 	}
@@ -188,34 +188,32 @@ func TestDataSourceAlarmSourcedWithMeta(t *testing.T) {
 	}
 }
 
-func TestDataSourceFormatReport(t *testing.T) {
+func TestDataSourceFormatTaskAttention(t *testing.T) {
 	ds := &DataSource{}
 
-	r := db.TaskReport{
-		ID:      "rpt-1",
+	a := db.TaskAttention{
 		TaskID:  "task-1",
-		Kind:    "result",
-		Content: "Build succeeded",
 		Goal:    "Run build",
 		Status:  "completed",
+		Reports: "Build succeeded",
 	}
 
-	lines := ds.formatReport(context.Background(), r)
+	lines := ds.formatTaskAttention(context.Background(), a)
 	if len(lines) == 0 {
 		t.Fatal("expected non-empty lines")
 	}
-	if lines[0] != "[Task result]" {
-		t.Fatalf("expected header [Task result], got %q", lines[0])
+	if lines[0] != "[Task completed]" {
+		t.Fatalf("expected header [Task completed], got %q", lines[0])
 	}
 
-	r.Kind = "error"
-	lines = ds.formatReport(context.Background(), r)
-	if lines[0] != "[Task error]" {
-		t.Fatalf("expected header [Task error], got %q", lines[0])
+	a.Status = "failed"
+	lines = ds.formatTaskAttention(context.Background(), a)
+	if lines[0] != "[Task failed]" {
+		t.Fatalf("expected header [Task failed], got %q", lines[0])
 	}
 
-	r.Kind = "attention"
-	lines = ds.formatReport(context.Background(), r)
+	a.Status = "running"
+	lines = ds.formatTaskAttention(context.Background(), a)
 	if lines[0] != "[Task needs attention]" {
 		t.Fatalf("expected header [Task needs attention], got %q", lines[0])
 	}

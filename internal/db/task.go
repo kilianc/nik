@@ -11,14 +11,16 @@ import (
 )
 
 type TaskInsertParams struct {
-	ID           string
-	MetaJSON     string
-	CrewMemberID string
-	Goal         string
-	Plan         string
-	Thinking     string
-	Status       string
-	CreatedAt    time.Time
+	ID             string
+	MetaJSON       string
+	CrewMemberID   string
+	RetryForTaskID string
+	RetryNumber    int
+	Goal           string
+	Plan           string
+	Thinking       string
+	Status         string
+	CreatedAt      time.Time
 }
 
 func TaskGet(ctx context.Context, db *sql.DB, taskID string) (Task, error) {
@@ -38,10 +40,17 @@ func TaskInsert(ctx context.Context, db *sql.DB, p TaskInsertParams) error {
 		memberID = p.CrewMemberID
 	}
 
+	var retryForTaskID any
+	if p.RetryForTaskID != "" {
+		retryForTaskID = p.RetryForTaskID
+	}
+
 	_, err := db.ExecContext(ctx, queries.TaskInsert,
 		p.ID,
 		p.MetaJSON,
 		memberID,
+		retryForTaskID,
+		p.RetryNumber,
 		p.Goal,
 		p.Plan,
 		p.Thinking,
@@ -82,17 +91,32 @@ func TaskActiveTasks(ctx context.Context, db *sql.DB, conversationID string) ([]
 
 	var tasks []ActiveTask
 	for rows.Next() {
-		var t ActiveTask
-
-		err = rows.Scan(&t.ID, &t.Goal, &t.Status, &t.CreatedAt)
-		if err != nil {
-			return nil, fmt.Errorf("scan active task: %w", err)
+		t, scanErr := scanActiveTask(rows)
+		if scanErr != nil {
+			return nil, fmt.Errorf("scan active task: %w", scanErr)
 		}
 
 		tasks = append(tasks, t)
 	}
 
 	return tasks, rows.Err()
+}
+
+func scanActiveTask(sc scanner) (ActiveTask, error) {
+	var t ActiveTask
+	var convID sql.NullString
+
+	err := sc.Scan(
+		&t.ID,
+		&t.Goal,
+		&t.Status,
+		&convID,
+		&t.RetryNumber,
+		&t.CreatedAt,
+	)
+
+	t.ConversationID = convID.String
+	return t, err
 }
 
 // TaskMarkSeen stamps checked_at so the datasource won't resurface this stale alert
@@ -159,13 +183,15 @@ func TaskList(ctx context.Context, db *sql.DB, recency string) ([]TaskListRow, e
 func scanTask(sc scanner) (Task, error) {
 	var t Task
 	var metaJSON string
-	var activationID, crewMemberID sql.NullString
+	var activationID, crewMemberID, retryForTaskID sql.NullString
 
 	err := sc.Scan(
 		&t.ID,
 		&metaJSON,
 		&activationID,
 		&crewMemberID,
+		&retryForTaskID,
+		&t.RetryNumber,
 		&t.Goal,
 		&t.Plan,
 		&t.Thinking,
@@ -181,6 +207,7 @@ func scanTask(sc scanner) (Task, error) {
 	t.Meta = UnmarshalMeta(metaJSON)
 	t.ActivationID = activationID.String
 	t.CrewMemberID = crewMemberID.String
+	t.RetryForTaskID = retryForTaskID.String
 	return t, nil
 }
 

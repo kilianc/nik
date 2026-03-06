@@ -13,7 +13,16 @@ type SessionContext struct {
 	Lines []string
 }
 
-func BuildConversationInput(conv db.Conversation, msgs []db.Message, senderLabels map[string]string, session SessionContext, tasks []TaskInfo) []string {
+func BuildConversationInput(conversationID string, conv db.Conversation, msgs []db.Message, senderLabels map[string]string, session SessionContext, tasks []db.ActiveTask) []string {
+	var currentTasks, otherTasks []db.ActiveTask
+	for _, t := range tasks {
+		if t.ConversationID == conversationID {
+			currentTasks = append(currentTasks, t)
+		} else {
+			otherTasks = append(otherTasks, t)
+		}
+	}
+
 	lines := []string{"## Session", ""}
 
 	if len(session.Lines) == 0 {
@@ -25,15 +34,22 @@ func BuildConversationInput(conv db.Conversation, msgs []db.Message, senderLabel
 		lines = append(lines, session.Lines...)
 	}
 
+	if len(otherTasks) > 0 {
+		lines = append(lines, "", "## Other active tasks", "")
+		for _, t := range otherTasks {
+			lines = append(lines, formatTaskLine(t))
+		}
+	}
+
 	contextMsgs, newMsgs := splitAtReadBoundary(msgs, conv.LastReadAt)
 
 	if len(contextMsgs) > 0 {
 		lines = append(lines, "", "### Context (already handled, do NOT act on these)", "")
-		lines = append(lines, formatTimelineWithDateSeparators(contextMsgs, senderLabels, tasks)...)
+		lines = append(lines, formatTimelineWithDateSeparators(contextMsgs, senderLabels, currentTasks)...)
 	}
 
 	lines = append(lines, "", "### New messages", "")
-	lines = append(lines, formatTimelineWithDateSeparators(newMsgs, senderLabels, tasks)...)
+	lines = append(lines, formatTimelineWithDateSeparators(newMsgs, senderLabels, currentTasks)...)
 
 	return lines
 }
@@ -44,7 +60,7 @@ type timelineEntry struct {
 	line string
 }
 
-func formatTimelineWithDateSeparators(msgs []db.Message, senderLabels map[string]string, tasks []TaskInfo) []string {
+func formatTimelineWithDateSeparators(msgs []db.Message, senderLabels map[string]string, tasks []db.ActiveTask) []string {
 	if len(msgs) == 0 {
 		return nil
 	}
@@ -95,9 +111,13 @@ func formatTimelineWithDateSeparators(msgs []db.Message, senderLabels map[string
 	return lines
 }
 
-func formatTaskLine(t TaskInfo) string {
+func formatTaskLine(t db.ActiveTask) string {
 	ts := t.CreatedAt.Format("15:04:05")
-	return fmt.Sprintf("[%s] ⚙️ task %s — %s (%s)", ts, t.Goal, t.ID, t.Status)
+	retry := ""
+	if t.RetryNumber > 0 {
+		retry = fmt.Sprintf(" (retry %d)", t.RetryNumber)
+	}
+	return fmt.Sprintf("[%s] ⚙️ task %s — %s (%s%s)", ts, t.Goal, t.ID, t.Status, retry)
 }
 
 func sortTimeline(entries []timelineEntry) {

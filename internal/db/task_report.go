@@ -32,38 +32,39 @@ func TaskReportInsert(ctx context.Context, db *sql.DB, p TaskReportInsertParams)
 	return nil
 }
 
-func TaskReportUnread(ctx context.Context, db *sql.DB) ([]TaskReport, error) {
+func TasksNeedingAttention(ctx context.Context, db *sql.DB) ([]TaskAttention, error) {
 	rows, err := db.QueryContext(ctx, queries.TaskReportUnread)
 	if err != nil {
-		return nil, fmt.Errorf("query unread reports: %w", err)
+		return nil, fmt.Errorf("query tasks needing attention: %w", err)
 	}
 	defer rows.Close()
 
-	var reports []TaskReport
+	var items []TaskAttention
 	for rows.Next() {
-		var r TaskReport
+		var a TaskAttention
 		var metaJSON string
+		var retryForTaskID sql.NullString
 
 		err = rows.Scan(
-			&r.ID,
-			&r.TaskID,
-			&r.Kind,
-			&r.Content,
-			&r.ReportedAt,
-			&r.CreatedAt,
+			&a.TaskID,
+			&a.Goal,
+			&a.Status,
 			&metaJSON,
-			&r.Goal,
-			&r.Status,
+			&retryForTaskID,
+			&a.RetryNumber,
+			&a.ReportIDs,
+			&a.Reports,
 		)
 		if err != nil {
-			return nil, fmt.Errorf("scan report: %w", err)
+			return nil, fmt.Errorf("scan task attention: %w", err)
 		}
 
-		r.Meta = UnmarshalMeta(metaJSON)
-		reports = append(reports, r)
+		a.Meta = UnmarshalMeta(metaJSON)
+		a.RetryForTaskID = retryForTaskID.String
+		items = append(items, a)
 	}
 
-	return reports, rows.Err()
+	return items, rows.Err()
 }
 
 func TaskReportMarkRead(ctx context.Context, db *sql.DB, reportID string) error {
