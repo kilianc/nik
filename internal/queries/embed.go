@@ -248,6 +248,15 @@ var TaskActive string
 //go:embed task_stale.sql
 var TaskStale string
 
+//go:embed task_active_retries.sql
+var TaskActiveRetries string
+
+//go:embed task_retry_chain.sql
+var TaskRetryChain string
+
+//go:embed task_all_active.sql
+var TaskAllActive string
+
 //go:embed task_mark_seen.sql
 var TaskMarkSeen string
 

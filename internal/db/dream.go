@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"time"
 
 	"github.com/kciuffolo/nik/internal/queries"
 )
@@ -39,12 +38,6 @@ func DreamWritePass(ctx context.Context, db *sql.DB, date string, pass int, cont
 	}
 
 	return nil
-}
-
-type DreamPass struct {
-	Pass        int
-	Content     string
-	CompletedAt time.Time
 }
 
 func DreamGetPasses(ctx context.Context, db *sql.DB, date string) ([]DreamPass, error) {

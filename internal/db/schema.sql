@@ -199,18 +199,20 @@ CREATE TABLE IF NOT EXISTS crew_member (
 );
 
 CREATE TABLE IF NOT EXISTS task (
-  id             TEXT PRIMARY KEY,
-  meta           TEXT NOT NULL DEFAULT '{}',
-  activation_id  TEXT REFERENCES activation(id),
-  crew_member_id TEXT REFERENCES crew_member(id),
-  goal           TEXT NOT NULL,
-  plan           TEXT NOT NULL DEFAULT '',
-  thinking       TEXT NOT NULL DEFAULT 'low',
-  status         TEXT NOT NULL DEFAULT 'pending',
-  created_at     TIMESTAMP NOT NULL DEFAULT (datetime('now')),
-  started_at     TIMESTAMP,
-  completed_at   TIMESTAMP,
-  checked_at     TIMESTAMP
+  id                TEXT PRIMARY KEY,
+  meta              TEXT NOT NULL DEFAULT '{}',
+  activation_id     TEXT REFERENCES activation(id),
+  crew_member_id    TEXT REFERENCES crew_member(id),
+  retry_for_task_id TEXT REFERENCES task(id),
+  retry_number      INTEGER NOT NULL DEFAULT 0,
+  goal              TEXT NOT NULL,
+  plan              TEXT NOT NULL DEFAULT '',
+  thinking          TEXT NOT NULL DEFAULT 'low',
+  status            TEXT NOT NULL DEFAULT 'pending',
+  created_at        TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+  started_at        TIMESTAMP,
+  completed_at      TIMESTAMP,
+  checked_at        TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS task_report (

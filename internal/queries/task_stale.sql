@@ -3,6 +3,8 @@ SELECT
   t.meta,
   t.activation_id,
   t.crew_member_id,
+  t.retry_for_task_id,
+  t.retry_number,
   t.goal,
   t.plan,
   t.thinking,

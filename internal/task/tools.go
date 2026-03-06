@@ -3,15 +3,23 @@ package task
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/kciuffolo/nik/internal/crew"
+	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/llm"
+)
+
+const (
+	maxActivePerConversation = 5
+	maxRetriesPerGoal        = 3
 )
 
 var spawnToolDef = llm.ToolDef{
 	Name:        "task_spawn",
-	Description: "Delegate heavy or long-running work to a background task. You write the plan, the task executes it. Use for anything that takes more than a few seconds (builds, research, multi-step ops). Returns the task ID.",
+	Description: "Start a new background task. For retrying failed work, use task_retry instead.",
 	Parameters: map[string]any{
 		"type": "object",
 		"properties": map[string]any{
@@ -88,13 +96,13 @@ var cancelToolDef = llm.ToolDef{
 
 var reportToolDef = llm.ToolDef{
 	Name:        "task_report",
-	Description: "Flag a blocker to your manager. Only call this when you're genuinely stuck and need help. Say what you tried and what you need.",
+	Description: "Send an update to your manager. Use for progress, blockers, or your final result. Your manager only sees what you report -- if you don't report, they don't know.",
 	Parameters: map[string]any{
 		"type": "object",
 		"properties": map[string]any{
 			"note": map[string]any{
 				"type":        "string",
-				"description": "What you tried and what you're stuck on.",
+				"description": "What to tell your manager: progress, a blocker, or the final result.",
 			},
 		},
 		"required":             []string{"note"},
@@ -125,9 +133,45 @@ type reportArgs struct {
 	Note string `json:"note"`
 }
 
+var retryToolDef = llm.ToolDef{
+	Name:        "task_retry",
+	Description: "Retry a failed task with a better plan. Use instead of task_spawn for work that already failed.",
+	Parameters: map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"task_id": map[string]any{
+				"type":        "string",
+				"description": "ID of the failed task to retry.",
+			},
+			"goal": map[string]any{
+				"type":        "string",
+				"description": "Updated goal. Empty keeps the original.",
+			},
+			"plan": map[string]any{
+				"type":        "string",
+				"description": "New plan -- what to do differently.",
+			},
+			"member": map[string]any{
+				"type":        "string",
+				"description": "Crew member. Empty = same as original.",
+			},
+		},
+		"required":             []string{"task_id", "goal", "plan", "member"},
+		"additionalProperties": false,
+	},
+}
+
+type retryArgs struct {
+	TaskID string `json:"task_id"`
+	Goal   string `json:"goal"`
+	Plan   string `json:"plan"`
+	Member string `json:"member"`
+}
+
 func BuildTools(svc *Service, runner *Runner, crewSvc *crew.Service) []llm.Tool {
 	return []llm.Tool{
 		{Def: spawnToolDef, Handler: spawnHandler(svc, runner, crewSvc)},
+		{Def: retryToolDef, Handler: retryHandler(svc, runner, crewSvc)},
 		{Def: listToolDef, Handler: listHandler(svc)},
 		{Def: statusToolDef, Handler: statusHandler(svc)},
 		{Def: cancelToolDef, Handler: cancelHandler(svc, runner)},
@@ -188,9 +232,18 @@ func spawnHandler(svc *Service, runner *Runner, crewSvc *crew.Service) llm.ToolE
 					return llm.ToolErrorf("task %s already running with goal %q -- cancel it first or check its status", a.ID, a.Goal), nil
 				}
 			}
+			if len(active) >= maxActivePerConversation {
+				return llm.ToolErrorf("already %d active tasks for this conversation (max %d) -- wait for some to finish or cancel unneeded ones", len(active), maxActivePerConversation), nil
+			}
 		}
 
-		t, err := svc.Create(ctx, crewMemberID, args.Goal, args.Plan, args.Thinking, taskMeta)
+		t, err := svc.Create(ctx, CreateParams{
+			CrewMemberID: crewMemberID,
+			Goal:         args.Goal,
+			Plan:         args.Plan,
+			Thinking:     args.Thinking,
+			Meta:         taskMeta,
+		})
 		if err != nil {
 			return llm.ToolError(err), nil
 		}
@@ -329,6 +382,131 @@ func cancelHandler(svc *Service, runner *Runner) llm.ToolExecutor {
 	}
 }
 
+func retryHandler(svc *Service, runner *Runner, crewSvc *crew.Service) llm.ToolExecutor {
+	return func(ctx context.Context, call llm.ToolCall) (string, error) {
+		var args retryArgs
+
+		err := json.Unmarshal([]byte(call.Arguments), &args)
+		if err != nil {
+			return llm.ToolError(err), nil
+		}
+
+		if args.TaskID == "" {
+			return llm.ToolErrorf("task_id is required"), nil
+		}
+		if args.Plan == "" {
+			return llm.ToolErrorf("plan is required"), nil
+		}
+
+		original, err := svc.Get(ctx, args.TaskID)
+		if err != nil {
+			return llm.ToolErrorf("task %s not found: %v", args.TaskID, err), nil
+		}
+
+		if original.Status == "pending" || original.Status == "running" {
+			runner.Cancel(original.ID)
+			svc.UpdateStatus(ctx, original.ID, "cancelled")
+		}
+
+		root := original.RetryForTaskID
+		if root == "" {
+			root = original.ID
+		}
+
+		retryNumber := original.RetryNumber + 1
+		if retryNumber > maxRetriesPerGoal {
+			return llm.ToolErrorf("retry limit reached (%d attempts) for this task chain -- tell the user what's wrong instead", maxRetriesPerGoal), nil
+		}
+
+		activeRetries, _ := svc.ActiveRetries(ctx, root)
+		if len(activeRetries) > 0 {
+			return llm.ToolErrorf("there is already an active task in this retry chain (%s) -- cancel it first", activeRetries[0].ID), nil
+		}
+
+		brainMeta, _ := ctx.Value("meta").(map[string]string)
+		convID := brainMeta["conversation_id"]
+		if convID != "" {
+			active, _ := svc.ActiveTasks(ctx, convID)
+			if len(active) >= maxActivePerConversation {
+				return llm.ToolErrorf("already %d active tasks (max %d) -- wait for some to finish", len(active), maxActivePerConversation), nil
+			}
+		}
+
+		goal := args.Goal
+		if goal == "" {
+			goal = original.Goal
+		}
+
+		var member *crew.Member
+		crewMemberID := original.CrewMemberID
+
+		if args.Member != "" {
+			m, memberErr := crewSvc.Get(ctx, args.Member)
+			if memberErr != nil {
+				return llm.ToolErrorf("crew member %q not found: %v", args.Member, memberErr), nil
+			}
+			member = &m
+			crewMemberID = m.ID
+		} else if crewMemberID != "" {
+			m, memberErr := crewSvc.Get(ctx, crewMemberID)
+			if memberErr == nil {
+				member = &m
+			}
+		}
+
+		chain, _ := svc.RetryChain(ctx, root)
+		plan := buildRetryPlan(args.Plan, chain)
+
+		t, err := svc.Create(ctx, CreateParams{
+			CrewMemberID:   crewMemberID,
+			RetryForTaskID: root,
+			RetryNumber:    retryNumber,
+			Goal:           goal,
+			Plan:           plan,
+			Thinking:       original.Thinking,
+			Meta:           original.Meta,
+		})
+		if err != nil {
+			return llm.ToolError(err), nil
+		}
+
+		go runner.Run(context.Background(), t, member)
+
+		result := map[string]any{
+			"task_id":      t.ID,
+			"status":       "pending",
+			"goal":         t.Goal,
+			"retry_number": retryNumber,
+		}
+		if member != nil {
+			result["assigned_to"] = member.Name
+		}
+
+		return llm.ToolResult(result), nil
+	}
+}
+
+func buildRetryPlan(newPlan string, chain []db.RetryChainEntry) string {
+	if len(chain) == 0 {
+		return newPlan
+	}
+
+	var b strings.Builder
+	b.WriteString("## Previous attempts\n\n")
+	for _, entry := range chain {
+		fmt.Fprintf(&b, "### Attempt #%d (%s)\n", entry.RetryNumber, entry.Status)
+		fmt.Fprintf(&b, "Goal: %s\n", entry.Goal)
+		if entry.Reports != "" {
+			fmt.Fprintf(&b, "Reports:\n%s\n", entry.Reports)
+		}
+		b.WriteByte('\n')
+	}
+	b.WriteString("---\n\n## New plan\n\n")
+	b.WriteString(newPlan)
+
+	return b.String()
+}
+
 func reportHandler(svc *Service, taskID string) llm.ToolExecutor {
 	return func(ctx context.Context, call llm.ToolCall) (string, error) {
 		var args reportArgs
@@ -338,7 +516,7 @@ func reportHandler(svc *Service, taskID string) llm.ToolExecutor {
 			return llm.ToolError(err), nil
 		}
 
-		err = svc.InsertReport(ctx, taskID, "attention", args.Note)
+		err = svc.InsertReport(ctx, taskID, args.Note)
 		if err != nil {
 			return llm.ToolError(err), nil
 		}

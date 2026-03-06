@@ -9,11 +9,6 @@ import (
 	"github.com/kciuffolo/nik/internal/queries"
 )
 
-type Soul struct {
-	Version int
-	Content string
-}
-
 func SoulCurrent(ctx context.Context, db *sql.DB) (Soul, error) {
 	var s Soul
 

@@ -3,6 +3,8 @@ SELECT
   meta,
   activation_id,
   crew_member_id,
+  retry_for_task_id,
+  retry_number,
   goal,
   plan,
   thinking,

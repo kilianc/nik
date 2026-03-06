@@ -23,7 +23,7 @@ func TestCreateAndGet(t *testing.T) {
 	svc, _ := testDB(t)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, "", "run build", "step 1\nstep 2", "low", nil)
+	task, err := svc.Create(ctx, CreateParams{Goal: "run build", Plan: "step 1\nstep 2", Thinking: "low"})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -57,7 +57,7 @@ func TestStartAndComplete(t *testing.T) {
 	svc, conn := testDB(t)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, "", "test", "", "low", nil)
+	task, err := svc.Create(ctx, CreateParams{Goal: "test", Thinking: "low"})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -110,44 +110,46 @@ func TestReportCRUD(t *testing.T) {
 	svc, _ := testDB(t)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, "", "test", "", "low", nil)
+	task, err := svc.Create(ctx, CreateParams{Goal: "test", Thinking: "low"})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
-	err = svc.InsertReport(ctx, task.ID, "result", "build passed")
+	err = svc.InsertReport(ctx, task.ID, "build passed")
 	if err != nil {
 		t.Fatalf("insert report: %v", err)
 	}
 
-	reports, err := svc.UnreadReports(ctx)
+	items, err := svc.TasksNeedingAttention(ctx)
 	if err != nil {
-		t.Fatalf("unread: %v", err)
+		t.Fatalf("tasks needing attention: %v", err)
 	}
-	if len(reports) != 1 {
-		t.Fatalf("expected 1 report, got %d", len(reports))
+	if len(items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(items))
 	}
-	if reports[0].Kind != "result" {
-		t.Fatalf("expected kind result, got %s", reports[0].Kind)
+	if items[0].Reports != "build passed" {
+		t.Fatalf("expected reports 'build passed', got %q", items[0].Reports)
 	}
-	if reports[0].Content != "build passed" {
-		t.Fatalf("expected content 'build passed', got %q", reports[0].Content)
-	}
-	if reports[0].Goal != "test" {
-		t.Fatalf("expected joined goal 'test', got %q", reports[0].Goal)
+	if items[0].Goal != "test" {
+		t.Fatalf("expected goal 'test', got %q", items[0].Goal)
 	}
 
-	err = svc.MarkRead(ctx, reports[0].ID)
-	if err != nil {
-		t.Fatalf("mark reported: %v", err)
+	ids := items[0].ReportIDs
+	if ids == "" {
+		t.Fatal("expected non-empty report IDs")
 	}
 
-	reports, err = svc.UnreadReports(ctx)
+	err = svc.MarkRead(ctx, ids)
 	if err != nil {
-		t.Fatalf("unread after mark: %v", err)
+		t.Fatalf("mark read: %v", err)
 	}
-	if len(reports) != 0 {
-		t.Fatalf("expected 0 reports after marking, got %d", len(reports))
+
+	items, err = svc.TasksNeedingAttention(ctx)
+	if err != nil {
+		t.Fatalf("attention after mark: %v", err)
+	}
+	if len(items) != 0 {
+		t.Fatalf("expected 0 items after marking, got %d", len(items))
 	}
 }
 
@@ -160,7 +162,7 @@ func TestMetaRoundTrip(t *testing.T) {
 		"contact_id":      "contact-456",
 	}
 
-	task, err := svc.Create(ctx, "", "test meta", "", "low", meta)
+	task, err := svc.Create(ctx, CreateParams{Goal: "test meta", Thinking: "low", Meta: meta})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -180,20 +182,20 @@ func TestMetaRoundTrip(t *testing.T) {
 		t.Fatalf("expected contact_id contact-456 after get, got %q", got.Meta["contact_id"])
 	}
 
-	err = svc.InsertReport(ctx, task.ID, "result", "done")
+	err = svc.InsertReport(ctx, task.ID, "done")
 	if err != nil {
 		t.Fatalf("insert report: %v", err)
 	}
 
-	reports, err := svc.UnreadReports(ctx)
+	items, err := svc.TasksNeedingAttention(ctx)
 	if err != nil {
-		t.Fatalf("unread: %v", err)
+		t.Fatalf("tasks needing attention: %v", err)
 	}
-	if len(reports) != 1 {
-		t.Fatalf("expected 1 report, got %d", len(reports))
+	if len(items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(items))
 	}
-	if reports[0].Meta["conversation_id"] != "conv-123" {
-		t.Fatalf("expected report meta conversation_id conv-123, got %q", reports[0].Meta["conversation_id"])
+	if items[0].Meta["conversation_id"] != "conv-123" {
+		t.Fatalf("expected meta conversation_id conv-123, got %q", items[0].Meta["conversation_id"])
 	}
 }
 
@@ -201,9 +203,9 @@ func TestActiveTasksByConversation(t *testing.T) {
 	svc, _ := testDB(t)
 	ctx := context.Background()
 
-	svc.Create(ctx, "", "task a", "", "low", map[string]string{"conversation_id": "conv-1"})
-	svc.Create(ctx, "", "task b", "", "low", map[string]string{"conversation_id": "conv-1"})
-	svc.Create(ctx, "", "task c", "", "low", map[string]string{"conversation_id": "conv-2"})
+	svc.Create(ctx, CreateParams{Goal: "task a", Thinking: "low", Meta: map[string]string{"conversation_id": "conv-1"}})
+	svc.Create(ctx, CreateParams{Goal: "task b", Thinking: "low", Meta: map[string]string{"conversation_id": "conv-1"}})
+	svc.Create(ctx, CreateParams{Goal: "task c", Thinking: "low", Meta: map[string]string{"conversation_id": "conv-2"}})
 
 	active, err := svc.ActiveTasks(ctx, "conv-1")
 	if err != nil {
@@ -226,7 +228,7 @@ func TestStaleTasks(t *testing.T) {
 	svc, conn := testDB(t)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, "", "stale test", "", "low", nil)
+	task, err := svc.Create(ctx, CreateParams{Goal: "stale test", Thinking: "low"})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -262,7 +264,7 @@ func TestStaleTasksLongRunning(t *testing.T) {
 	svc, conn := testDB(t)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, "", "long running test", "", "low", nil)
+	task, err := svc.Create(ctx, CreateParams{Goal: "long running test", Thinking: "low"})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}

@@ -115,38 +115,28 @@ type AlarmOccurrence struct {
 }
 
 type Task struct {
-	ID           string
-	Meta         map[string]string
-	ActivationID string
-	CrewMemberID string
-	Goal         string
-	Plan         string
-	Thinking     string
-	Status       string
-	CreatedAt    time.Time
-	StartedAt    sql.NullTime
-	CompletedAt  sql.NullTime
-}
-
-type TaskReport struct {
-	ID         string
-	TaskID     string
-	Kind       string
-	Content    string
-	ReportedAt sql.NullTime
-	CreatedAt  time.Time
-
-	// joined from task
-	Meta   map[string]string
-	Goal   string
-	Status string
+	ID             string
+	Meta           map[string]string
+	ActivationID   string
+	CrewMemberID   string
+	RetryForTaskID string
+	RetryNumber    int
+	Goal           string
+	Plan           string
+	Thinking       string
+	Status         string
+	CreatedAt      time.Time
+	StartedAt      sql.NullTime
+	CompletedAt    sql.NullTime
 }
 
 type ActiveTask struct {
-	ID        string
-	Goal      string
-	Status    string
-	CreatedAt time.Time
+	ID             string
+	Goal           string
+	Status         string
+	ConversationID string
+	RetryNumber    int
+	CreatedAt      time.Time
 }
 
 type TaskListRow struct {
@@ -157,6 +147,25 @@ type TaskListRow struct {
 	CreatedAt      time.Time
 	StartedAt      sql.NullTime
 	CompletedAt    sql.NullTime
+}
+
+type RetryChainEntry struct {
+	ID          string
+	RetryNumber int
+	Goal        string
+	Status      string
+	Reports     string
+}
+
+type TaskAttention struct {
+	TaskID         string
+	Goal           string
+	Status         string
+	Meta           map[string]string
+	RetryForTaskID string
+	RetryNumber    int
+	ReportIDs      string
+	Reports        string
 }
 
 type ToolCallInfo struct {
@@ -174,4 +183,64 @@ type Memory struct {
 	SourceID  string
 	CreatedAt time.Time
 	Score     float64
+}
+
+type RandomMemory struct {
+	ID        string
+	Content   string
+	CreatedAt time.Time
+}
+
+type Soul struct {
+	Version int
+	Content string
+}
+
+type ContactSearchResult struct {
+	Contact
+	Score float64
+}
+
+type BriefingTopic struct {
+	ID        string
+	Query     string
+	Reason    string
+	ContactID sql.NullString
+	CreatedAt time.Time
+}
+
+type DreamPass struct {
+	Pass        int
+	Content     string
+	CompletedAt time.Time
+}
+
+type JournalConversation struct {
+	ID           string
+	Platform     string
+	Kind         string
+	Title        sql.NullString
+	MessageCount int
+}
+
+type JournalContact struct {
+	ID        string
+	Name      string
+	Nicknames []string
+	OneLiner  sql.NullString
+	CreatedAt time.Time
+}
+
+type JournalCrewHire struct {
+	ID        string
+	Name      string
+	Prompt    string
+	CreatedAt time.Time
+	TaskCount int
+}
+
+type JournalMemory struct {
+	ID        string
+	Content   string
+	CreatedAt time.Time
 }

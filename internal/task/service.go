@@ -10,7 +10,6 @@ import (
 	"github.com/kciuffolo/nik/internal/brain"
 	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/id"
-	"github.com/kciuffolo/nik/internal/messaging"
 )
 
 type Service struct {
@@ -21,41 +20,55 @@ func NewService(conn *sql.DB) *Service {
 	return &Service{conn: conn}
 }
 
-func (s *Service) Create(ctx context.Context, crewMemberID, goal, plan, thinking string, meta map[string]string) (db.Task, error) {
-	if meta == nil {
-		meta = map[string]string{}
+type CreateParams struct {
+	CrewMemberID   string
+	RetryForTaskID string
+	RetryNumber    int
+	Goal           string
+	Plan           string
+	Thinking       string
+	Meta           map[string]string
+}
+
+func (s *Service) Create(ctx context.Context, p CreateParams) (db.Task, error) {
+	if p.Meta == nil {
+		p.Meta = map[string]string{}
 	}
 
-	metaJSON, err := json.Marshal(meta)
+	metaJSON, err := json.Marshal(p.Meta)
 	if err != nil {
 		return db.Task{}, fmt.Errorf("marshal task meta: %w", err)
 	}
 
-	p := db.TaskInsertParams{
-		ID:           id.V7(),
-		MetaJSON:     string(metaJSON),
-		CrewMemberID: crewMemberID,
-		Goal:         goal,
-		Plan:         plan,
-		Thinking:     thinking,
-		Status:       "pending",
-		CreatedAt:    time.Now().UTC(),
+	ip := db.TaskInsertParams{
+		ID:             id.V7(),
+		MetaJSON:       string(metaJSON),
+		CrewMemberID:   p.CrewMemberID,
+		RetryForTaskID: p.RetryForTaskID,
+		RetryNumber:    p.RetryNumber,
+		Goal:           p.Goal,
+		Plan:           p.Plan,
+		Thinking:       p.Thinking,
+		Status:         "pending",
+		CreatedAt:      time.Now().UTC(),
 	}
 
-	err = db.TaskInsert(ctx, s.conn, p)
+	err = db.TaskInsert(ctx, s.conn, ip)
 	if err != nil {
 		return db.Task{}, err
 	}
 
 	return db.Task{
-		ID:           p.ID,
-		Meta:         meta,
-		CrewMemberID: crewMemberID,
-		Goal:         goal,
-		Plan:         plan,
-		Thinking:     thinking,
-		Status:       p.Status,
-		CreatedAt:    p.CreatedAt,
+		ID:             ip.ID,
+		Meta:           p.Meta,
+		CrewMemberID:   p.CrewMemberID,
+		RetryForTaskID: p.RetryForTaskID,
+		RetryNumber:    p.RetryNumber,
+		Goal:           p.Goal,
+		Plan:           p.Plan,
+		Thinking:       p.Thinking,
+		Status:         ip.Status,
+		CreatedAt:      ip.CreatedAt,
 	}, nil
 }
 
@@ -71,18 +84,18 @@ func (s *Service) UpdateStatus(ctx context.Context, taskID, status string) error
 	return db.TaskUpdateStatus(ctx, s.conn, taskID, status)
 }
 
-func (s *Service) InsertReport(ctx context.Context, taskID, kind, content string) error {
+func (s *Service) InsertReport(ctx context.Context, taskID, content string) error {
 	return db.TaskReportInsert(ctx, s.conn, db.TaskReportInsertParams{
 		ID:        id.V7(),
 		TaskID:    taskID,
-		Kind:      kind,
+		Kind:      "report",
 		Content:   content,
 		CreatedAt: time.Now().UTC(),
 	})
 }
 
-func (s *Service) UnreadReports(ctx context.Context) ([]db.TaskReport, error) {
-	return db.TaskReportUnread(ctx, s.conn)
+func (s *Service) TasksNeedingAttention(ctx context.Context) ([]db.TaskAttention, error) {
+	return db.TasksNeedingAttention(ctx, s.conn)
 }
 
 func (s *Service) MarkRead(ctx context.Context, reportID string) error {
@@ -100,6 +113,18 @@ func (s *Service) List(ctx context.Context, includeRecent bool) ([]db.TaskListRo
 
 func (s *Service) ActiveTasks(ctx context.Context, conversationID string) ([]db.ActiveTask, error) {
 	return db.TaskActiveTasks(ctx, s.conn, conversationID)
+}
+
+func (s *Service) ActiveRetries(ctx context.Context, rootID string) ([]db.ActiveTask, error) {
+	return db.TaskActiveRetries(ctx, s.conn, rootID)
+}
+
+func (s *Service) RetryChain(ctx context.Context, rootID string) ([]db.RetryChainEntry, error) {
+	return db.TaskRetryChain(ctx, s.conn, rootID)
+}
+
+func (s *Service) AllActiveTasks(ctx context.Context) ([]db.ActiveTask, error) {
+	return db.TaskAllActive(ctx, s.conn)
 }
 
 // MarkSeen stamps checked_at so the datasource won't resurface this stale alert
@@ -125,25 +150,6 @@ func (s *Service) ActiveTasksForConversation(ctx context.Context, conversationID
 	out := make([]brain.DebugTaskInfo, len(active))
 	for i, t := range active {
 		out[i] = brain.DebugTaskInfo{
-			ID:        t.ID,
-			Goal:      t.Goal,
-			Status:    t.Status,
-			CreatedAt: t.CreatedAt,
-		}
-	}
-
-	return out, nil
-}
-
-func (s *Service) ActiveConversationTasks(ctx context.Context, conversationID string) ([]messaging.TaskInfo, error) {
-	active, err := s.ActiveTasks(ctx, conversationID)
-	if err != nil {
-		return nil, err
-	}
-
-	out := make([]messaging.TaskInfo, len(active))
-	for i, t := range active {
-		out[i] = messaging.TaskInfo{
 			ID:        t.ID,
 			Goal:      t.Goal,
 			Status:    t.Status,

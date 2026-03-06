@@ -160,23 +160,17 @@ func (r *Runner) Run(ctx context.Context, t db.Task, member *crew.Member) {
 	result := <-ch
 
 	if ctx.Err() != nil {
-		bg := context.Background()
-		if ctx.Err() == context.DeadlineExceeded {
-			r.svc.InsertReport(bg, t.ID, "error", "task timed out")
-		}
-		r.svc.UpdateStatus(bg, t.ID, "cancelled")
+		r.svc.UpdateStatus(context.Background(), t.ID, "cancelled")
 		slog.Info("task cancelled", "pkg", "task", "task_id", t.ID, "reason", ctx.Err())
 		return
 	}
 
 	if result.Err != nil {
-		r.svc.InsertReport(ctx, t.ID, "error", result.Err.Error())
 		r.svc.UpdateStatus(ctx, t.ID, "failed")
 		slog.Info("task failed", "pkg", "task", "task_id", t.ID, "error", result.Err)
 		return
 	}
 
-	r.svc.InsertReport(ctx, t.ID, "result", result.Output)
 	r.svc.UpdateStatus(ctx, t.ID, "completed")
 	slog.Info("task completed", "pkg", "task", "task_id", t.ID, "goal", t.Goal)
 }

@@ -26,7 +26,7 @@ func TestBuildConversationInputIncludesSessionBlock(t *testing.T) {
 		},
 	}
 
-	lines := BuildConversationInput(conv, msgs, map[string]string{"msg-1": "Alice"}, SessionContext{
+	lines := BuildConversationInput("conv-1", conv, msgs, map[string]string{"msg-1": "Alice"}, SessionContext{
 		Lines: []string{
 			"Platform: whatsapp",
 			"Type: dm",
@@ -54,7 +54,7 @@ func TestBuildConversationInputNoCanonicalRefs(t *testing.T) {
 		{ID: "msg-2", Kind: "text", Body: "world", SentAt: time.Now()},
 	}
 	labels := map[string]string{"msg-1": "Alice", "msg-2": "Bob"}
-	lines := BuildConversationInput(conv, msgs, labels, SessionContext{}, nil)
+	lines := BuildConversationInput("conv-1", conv, msgs, labels, SessionContext{}, nil)
 	out := strings.Join(lines, "\n")
 
 	if strings.Contains(out, "Canonical refs") {
@@ -78,7 +78,7 @@ func TestBuildConversationInputUsesSubHeadings(t *testing.T) {
 		{ID: "msg-2", Kind: "text", Body: "new", SentAt: now},
 	}
 	labels := map[string]string{"msg-1": "Alice", "msg-2": "Alice"}
-	lines := BuildConversationInput(conv, msgs, labels, SessionContext{}, nil)
+	lines := BuildConversationInput("conv-1", conv, msgs, labels, SessionContext{}, nil)
 	out := strings.Join(lines, "\n")
 
 	if !strings.Contains(out, "### Context") {
@@ -102,7 +102,7 @@ func TestBuildConversationInputDateSeparators(t *testing.T) {
 		{ID: "msg-2", Kind: "text", Body: "day two", SentAt: day2},
 	}
 	labels := map[string]string{"msg-1": "Alice", "msg-2": "Alice"}
-	lines := BuildConversationInput(conv, msgs, labels, SessionContext{}, nil)
+	lines := BuildConversationInput("conv-1", conv, msgs, labels, SessionContext{}, nil)
 	out := strings.Join(lines, "\n")
 
 	if !strings.Contains(out, "--- Feb 27, 2026 ---") {

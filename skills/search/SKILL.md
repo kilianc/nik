@@ -31,6 +31,7 @@ Run a read-only SQL query against nik's SQLite database. Only `SELECT`,
 | `media` | media cache (describe_text, transcript_text, local_path) |
 | `message_media` | link table (message_id, media_id) |
 | `alarm` | scheduled alarms (goal, fire_at, origin_contact_id, origin_conversation_id) |
+| `alarm_occurrence` | alarm fire history (alarm_id, note, fired_at, next_fire_at_set) |
 | `memory` | stored memories (content, metadata) with vec_memory for embeddings |
 
 All primary keys are UUIDv7 stored as TEXT.

@@ -8,11 +8,6 @@ import (
 	"github.com/kciuffolo/nik/internal/queries"
 )
 
-type ContactSearchResult struct {
-	Contact
-	Score float64
-}
-
 func SearchContact(ctx context.Context, db *sql.DB, query string, threshold float64, limit int) ([]ContactSearchResult, error) {
 	rows, err := db.QueryContext(ctx, queries.SearchContact, query, threshold, limit)
 	if err != nil {

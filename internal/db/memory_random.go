@@ -9,12 +9,6 @@ import (
 	"github.com/kciuffolo/nik/internal/queries"
 )
 
-type RandomMemory struct {
-	ID        string
-	Content   string
-	CreatedAt time.Time
-}
-
 func MemoryRandom(ctx context.Context, db *sql.DB, before time.Time, limit int) ([]RandomMemory, error) {
 	rows, err := db.QueryContext(ctx, queries.MemoryRandom, before, limit)
 	if err != nil {
