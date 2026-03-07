@@ -130,35 +130,6 @@ var MemoryList string
 //go:embed memory_random.sql
 var MemoryRandom string
 
-// journal queries
-
-//go:embed journal_check.sql
-var JournalCheck string
-
-//go:embed journal_start.sql
-var JournalStart string
-
-//go:embed journal_write.sql
-var JournalWrite string
-
-//go:embed journal_conversations_today.sql
-var JournalConversationsToday string
-
-//go:embed journal_messages_today.sql
-var JournalMessagesToday string
-
-//go:embed journal_contacts_today.sql
-var JournalContactsToday string
-
-//go:embed journal_memories_today.sql
-var JournalMemoriesToday string
-
-//go:embed journal_get.sql
-var JournalGet string
-
-//go:embed journal_crew_today.sql
-var JournalCrewToday string
-
 // dream queries
 
 //go:embed dream_check.sql

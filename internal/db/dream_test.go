@@ -167,49 +167,6 @@ func TestSoulVersionAutoIncrements(t *testing.T) {
 	}
 }
 
-func TestJournalGetPageReturnsContent(t *testing.T) {
-	ctx := context.Background()
-
-	conn, err := OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
-
-	err = JournalWritePage(ctx, conn, "2026-02-27", "a thoughtful day")
-	if err != nil {
-		t.Fatalf("write journal: %v", err)
-	}
-
-	content, err := JournalGetPage(ctx, conn, "2026-02-27")
-	if err != nil {
-		t.Fatalf("get journal page: %v", err)
-	}
-
-	if content != "a thoughtful day" {
-		t.Fatalf("unexpected content: %q", content)
-	}
-}
-
-func TestJournalGetPageReturnsEmptyWhenMissing(t *testing.T) {
-	ctx := context.Background()
-
-	conn, err := OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
-
-	content, err := JournalGetPage(ctx, conn, "2026-02-27")
-	if err != nil {
-		t.Fatalf("get journal page: %v", err)
-	}
-
-	if content != "" {
-		t.Fatalf("expected empty, got %q", content)
-	}
-}
-
 func TestMemoryRandomReturnsOlderMemories(t *testing.T) {
 	ctx := context.Background()
 

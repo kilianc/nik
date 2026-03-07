@@ -127,12 +127,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_memory USING vec0(
   embedding float[1536] distance_metric=cosine
 );
 
-CREATE TABLE IF NOT EXISTS journal (
-  date         TEXT PRIMARY KEY,
-  content      TEXT NOT NULL,
-  completed_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
-);
-
 CREATE TABLE IF NOT EXISTS dream (
   date         TEXT NOT NULL,
   pass         INTEGER NOT NULL,

@@ -206,33 +206,3 @@ type DreamPass struct {
 	Content     string
 	CompletedAt time.Time
 }
-
-type JournalConversation struct {
-	ID           string
-	Platform     string
-	Kind         string
-	Title        sql.NullString
-	MessageCount int
-}
-
-type JournalContact struct {
-	ID        string
-	Name      string
-	Nicknames []string
-	OneLiner  sql.NullString
-	CreatedAt time.Time
-}
-
-type JournalCrewHire struct {
-	ID        string
-	Name      string
-	Prompt    string
-	CreatedAt time.Time
-	TaskCount int
-}
-
-type JournalMemory struct {
-	ID        string
-	Content   string
-	CreatedAt time.Time
-}

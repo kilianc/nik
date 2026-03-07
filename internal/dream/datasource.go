@@ -227,16 +227,19 @@ func (d *DataSource) previousPasses(ctx context.Context) []string {
 	return lines
 }
 
-func (d *DataSource) journalEntry(ctx context.Context) string {
+func (d *DataSource) journalEntry(_ context.Context) string {
 	date := d.svc.tonight()
+	path := d.cfg.Home + "/journal/" + date + ".md"
 
-	content, err := db.JournalGetPage(ctx, d.conn, date)
+	data, err := os.ReadFile(path)
 	if err != nil {
-		slog.Warn("dream context: journal", "pkg", "dream", "error", err)
+		if !os.IsNotExist(err) {
+			slog.Warn("dream context: journal", "pkg", "dream", "error", err)
+		}
 		return ""
 	}
 
-	return content
+	return strings.TrimSpace(string(data))
 }
 
 func (d *DataSource) recentMemories(ctx context.Context) []string {
