@@ -130,21 +130,6 @@ func (c Config) JournalAt(now time.Time) time.Time {
 	return time.Date(y, m, d, hour, min, 0, 0, loc)
 }
 
-func (c Config) BriefingAt(now time.Time) time.Time {
-	bt := c.BriefingTime
-	if bt == "" {
-		bt = "08:00"
-	}
-
-	hour, min := 8, 0
-	fmt.Sscanf(bt, "%d:%d", &hour, &min)
-
-	loc := c.TZ()
-	y, m, d := now.In(loc).Date()
-
-	return time.Date(y, m, d, hour, min, 0, 0, loc)
-}
-
 // passes 1-4 are hourly from dream_start; pass 5 (wake) is dream_start + 4h.
 // handles overnight boundaries: at 11pm, returns tomorrow's 2am.
 func (c Config) DreamAt(now time.Time, pass int) time.Time {

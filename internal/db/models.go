@@ -201,14 +201,6 @@ type ContactSearchResult struct {
 	Score float64
 }
 
-type BriefingTopic struct {
-	ID        string
-	Query     string
-	Reason    string
-	ContactID sql.NullString
-	CreatedAt time.Time
-}
-
 type DreamPass struct {
 	Pass        int
 	Content     string

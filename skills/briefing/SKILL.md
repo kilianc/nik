@@ -1,32 +1,92 @@
 ---
 name: briefing
-summary: Manage news feed topics and write morning briefings. Load when someone mentions an interest.
-tools:
-  - briefing_topics
-  - briefing_write
+summary: >
+  Morning news research session and topic management.
+  Load when someone mentions an interest or when a briefing alarm fires.
+tools: [shell, web_search, alarm, store_memory, search_memory, search_contacts]
 ---
 
 # Briefing
 
-Your morning news feed. You maintain a list of topics to follow — some for yourself, some for people you care about.
+Your morning news feed. You maintain a list of topics to follow — some for yourself, some for people you care about. Everything lives on the file system under `briefings/`.
 
-## Tools
+## File layout
 
-- `briefing_topics` — manage your feed
-  - `action: "list"` — see current topics with IDs
-  - `action: "add"`, `query`, `reason`, `contact_id` — follow something new. `contact_id` is empty if it's your own interest.
-  - `action: "remove"`, `id` — stop following a topic
+```
+briefings/
+  topics.md            -- your topic list (you maintain this)
+  2026-03-06.md        -- daily briefing summary
+  2026-03-07.md        -- daily briefing summary
+```
 
-- `briefing_write` — persist your morning briefing summary after you've read the news
+Use `shell` to read and write these files. Create the `briefings/` directory if it doesn't exist.
 
-## When to use
+## Topics
 
-- During any conversation: if you learn someone cares about a topic, add it to your feed right away with `briefing_topics` action `add`. Tag it with their `contact_id` so you know who it's for.
-- During the morning briefing activation: read the news, manage your topics, write the summary.
-- Don't overthink it. If someone mentions they love something, follow it. If a topic goes stale, remove it.
+`briefings/topics.md` is a markdown file you maintain. Each line is a topic:
 
-## Topic examples
+```markdown
+# Briefing Topics
 
-- `query: "F1 racing news"`, `reason: "CT loves F1"`, `contact_id: "<ct_id>"`
-- `query: "news in Rome Italy"`, `reason: "Mamma lives near Rome"`, `contact_id: "<mamma_id>"`
-- `query: "AI startups Bay Area"`, `reason: "Kilian works in AI"`, `contact_id: ""`
+- **F1 racing news** — CT loves F1 (contact: 019...)
+- **news in Rome Italy** — Mamma lives near Rome (contact: 019...)
+- **AI startups Bay Area** — Kilian works in AI
+```
+
+To add a topic, append a line. To remove one, delete the line. Use `shell` to read and edit the file.
+
+### When to update topics
+
+During any conversation — if you learn someone cares about something, add it to `topics.md` right away. Tag it with their contact ID so you know who it's for. If a topic goes stale, remove it. Don't overthink it.
+
+## Scheduling
+
+Maintain a daily recurring alarm for your morning briefing. If you don't have one, create it:
+
+```
+alarm action: "create", label: "Morning briefing — load briefing skill", time: "<your briefing_time>", repeat: "daily"
+```
+
+When the alarm fires, follow the full morning workflow below.
+
+## Morning workflow
+
+### Phase 1 — Recall
+
+Before touching the news, remember who you're reading for.
+
+1. `search_memory` for each person in your life — their interests, hobbies, what they care about. Do at least 3-4 searches.
+2. `search_contacts` to refresh who's in your orbit and what you know about them.
+3. Read yesterday's journal if available.
+
+### Phase 2 — Evolve topics
+
+1. Read `briefings/topics.md` via `shell`.
+2. Compare your topic list against what you recalled:
+   - Does every person you care about have at least one topic? If not, add one.
+   - Are any topics stale (returning the same news for days)? Remove or rephrase them.
+   - Did yesterday's conversations reveal something new someone cares about? Add it.
+   - Is the list diverse? A healthy feed has a mix: people's hobbies, family locations, professional interests, world events.
+3. Write the updated `topics.md` back.
+
+### Phase 3 — Read and research
+
+Use `web_search` to fetch news for each topic.
+
+- For each item: who would care? Is it worth remembering?
+- Use `store_memory` for noteworthy items. Be specific: what happened, who cares, why. One fact per memory.
+- If a headline is interesting but thin, use `web_search` to dig deeper or `load_skill` for `web` to use `link_reader` on full articles.
+- Follow your curiosity. Chase threads that connect to people or recent conversations.
+- Sentiment target: ~45% positive, 45% neutral, 10% negative.
+
+**Do not message people during the briefing** unless it's a genuine emergency.
+
+### Phase 4 — Write summary
+
+Write today's briefing file via `shell`:
+
+```
+shell action: "run", command: "cat > briefings/$(date +%Y-%m-%d).md << 'BRIEFING'\n<your summary>\nBRIEFING"
+```
+
+Include: what you read and stored, topic changes and why, anything to bring up with someone next time you talk to them.
