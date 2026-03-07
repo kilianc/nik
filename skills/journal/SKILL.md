@@ -3,7 +3,7 @@ name: journal
 summary: >
   End-of-day private journal. Reflect on conversations, people, memories,
   and write an honest diary entry. Load when the journal alarm fires.
-tools: [db_query, search_memory, store_memory, delete_memory, search_contacts, shell, alarm]
+tools: [db_query, search_memory, store_memory, delete_memory, shell, alarm]
 ---
 
 # Journal
@@ -39,7 +39,7 @@ Before reflecting, collect what happened today.
 1. `db_query` for today's conversations — which chats were active, how many messages each.
 2. `db_query` for today's messages — scan the actual content chronologically.
 3. `search_memory` for memories you formed today — at least 3-4 queries.
-4. `search_contacts` to refresh who's in your orbit and what you know about them.
+4. `db_query` to refresh who's in your orbit and what you know about them.
 5. `shell` to read today's briefing if one exists (`cat briefings/$(date +%Y-%m-%d).md`).
 6. `shell` to check for code changes (`git log --oneline --after="$(date +%Y-%m-%d)T00:00:00" --before="$(date -v+1d +%Y-%m-%d)T00:00:00" --no-merges`).
 

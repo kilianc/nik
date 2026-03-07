@@ -51,7 +51,7 @@ for the group.
 
 ## Tips
 
-- `origin_contact_id` is required -- get from meta or `search_contacts`
+- `origin_contact_id` is required -- get from meta or `db_query`
 - First firing shows creation-time conversation context; subsequent firings show recent messages from the conversation
 - Occurrence notes build a history visible on future firings
 - Find alarm IDs from meta (`alarm_id`) or `db_query`

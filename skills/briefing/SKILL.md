@@ -3,7 +3,7 @@ name: briefing
 summary: >
   Morning news research session and topic management.
   Load when someone mentions an interest or when a briefing alarm fires.
-tools: [shell, alarm, store_memory, search_memory, search_contacts, load_skill]
+tools: [shell, alarm, store_memory, search_memory, db_query, load_skill]
 ---
 
 # Briefing
@@ -56,7 +56,7 @@ When the alarm fires, follow the full morning workflow below.
 Before touching the news, remember who you're reading for.
 
 1. `search_memory` for each person in your life — their interests, hobbies, what they care about. Do at least 3-4 searches.
-2. `search_contacts` to refresh who's in your orbit and what you know about them.
+2. `db_query` to refresh who's in your orbit and what you know about them.
 3. Read yesterday's journal if available.
 
 ### Phase 2 — Evolve topics

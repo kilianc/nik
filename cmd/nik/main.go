@@ -21,7 +21,6 @@ import (
 	niklog "github.com/kciuffolo/nik/internal/log"
 	"github.com/kciuffolo/nik/internal/memory"
 	"github.com/kciuffolo/nik/internal/messaging"
-	"github.com/kciuffolo/nik/internal/search"
 	"github.com/kciuffolo/nik/internal/shell"
 	"github.com/kciuffolo/nik/internal/skills"
 	"github.com/kciuffolo/nik/internal/stats"
@@ -142,7 +141,6 @@ func main() {
 	llmClient := llm.NewClient(cfg.Model, llmOpts...)
 
 	alarmSvc := alarms.New(conn)
-	searchSvc := search.NewService(conn)
 	memorySvc := memory.NewService(conn, llmClient)
 	taskSvc := task.NewService(conn)
 	crewSvc := crew.NewService(conn)
@@ -151,7 +149,7 @@ func main() {
 	var taskTools []llm.Tool
 	taskTools = append(taskTools, shell.BuildTools(cfg)...)
 	taskTools = append(taskTools, llm.BuildTools(llmClient, cfg.Home)...)
-	taskTools = append(taskTools, search.BuildTools(conn, searchSvc)...)
+	taskTools = append(taskTools, db.BuildTools(conn)...)
 	taskTools = append(taskTools, memory.BuildReadTools(memorySvc)...)
 	taskTools = append(taskTools, skills.BuildTools(cfg)...)
 
@@ -175,7 +173,7 @@ func main() {
 	b.RegisterTools(memory.BuildTools(memorySvc)...)
 	b.RegisterTools(messaging.BuildTools(messagingSvc)...)
 	b.RegisterTools(alarms.BuildTools(alarmSvc)...)
-	b.RegisterTools(search.BuildTools(conn, searchSvc)...)
+	b.RegisterTools(db.BuildTools(conn)...)
 	b.RegisterTools(skills.BuildTools(cfg)...)
 	b.RegisterTools(crew.BuildTools(crewSvc)...)
 	b.RegisterTools(task.BuildTools(taskSvc, taskRunner, crewSvc)...)

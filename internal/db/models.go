@@ -190,8 +190,3 @@ type RandomMemory struct {
 	Content   string
 	CreatedAt time.Time
 }
-
-type ContactSearchResult struct {
-	Contact
-	Score float64
-}

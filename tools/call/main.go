@@ -17,7 +17,6 @@ import (
 	"github.com/kciuffolo/nik/internal/llm"
 	"github.com/kciuffolo/nik/internal/memory"
 	"github.com/kciuffolo/nik/internal/messaging"
-	"github.com/kciuffolo/nik/internal/search"
 	"github.com/kciuffolo/nik/internal/shell"
 	"github.com/kciuffolo/nik/internal/skills"
 	"github.com/kciuffolo/nik/internal/stats"
@@ -102,7 +101,6 @@ func buildTools(cfg *config.Config, llmClient *llm.Client, conn *sql.DB) map[str
 
 		contactsSvc := contacts.NewService(conn)
 		msgSvc := messaging.NewService(&config.Config{}, conn, contactsSvc)
-		searchSvc := search.NewService(conn)
 
 		for _, t := range contacts.BuildTools(conn) {
 			tools[t.Def.Name] = t.Handler
@@ -116,7 +114,7 @@ func buildTools(cfg *config.Config, llmClient *llm.Client, conn *sql.DB) map[str
 			tools[t.Def.Name] = t.Handler
 		}
 
-		for _, t := range search.BuildTools(conn, searchSvc) {
+		for _, t := range db.BuildTools(conn) {
 			tools[t.Def.Name] = t.Handler
 		}
 
@@ -131,11 +129,10 @@ func buildTools(cfg *config.Config, llmClient *llm.Client, conn *sql.DB) map[str
 		}
 
 		taskSvc := task.NewService(conn)
-		searchSvcT := search.NewService(conn)
 		var taskToolList []llm.Tool
 		taskToolList = append(taskToolList, shell.BuildTools(cfg)...)
 		taskToolList = append(taskToolList, llm.BuildTools(llmClient, cfg.Home)...)
-		taskToolList = append(taskToolList, search.BuildTools(conn, searchSvcT)...)
+		taskToolList = append(taskToolList, db.BuildTools(conn)...)
 		taskToolList = append(taskToolList, memory.BuildReadTools(memorySvc)...)
 		taskToolList = append(taskToolList, skills.BuildTools(cfg)...)
 

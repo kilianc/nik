@@ -1,4 +1,4 @@
-package search
+package db
 
 import (
 	"context"
@@ -27,94 +27,13 @@ var queryToolDef = llm.ToolDef{
 	},
 }
 
-var contactSearchToolDef = llm.ToolDef{
-	Name:        "search_contacts",
-	Description: "Search contacts by id, external ids, email, phone, or fuzzy text. Accepts multiple queries at once to reduce round-trips.",
-	Parameters: map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"queries": map[string]any{
-				"type":        "array",
-				"items":       map[string]any{"type": "string"},
-				"description": "One or more search queries.",
-			},
-			"threshold": map[string]any{
-				"type":        "number",
-				"description": "Fuzzy threshold between 0 and 1. Use 0.85 unless needed otherwise.",
-			},
-			"limit": map[string]any{
-				"type":        "integer",
-				"description": "Max rows per query.",
-			},
-		},
-		"required":             []string{"queries", "threshold", "limit"},
-		"additionalProperties": false,
-	},
-}
-
-func BuildTools(conn *sql.DB, svc *Service) []llm.Tool {
+func BuildTools(conn *sql.DB) []llm.Tool {
 	return []llm.Tool{
 		{
 			Def:        queryToolDef,
 			Handler:    queryHandler(conn),
 			Privileged: true,
 		},
-		{
-			Def:     contactSearchToolDef,
-			Handler: contactSearchHandler(svc),
-		},
-	}
-}
-
-func contactSearchHandler(svc *Service) llm.ToolExecutor {
-	return func(ctx context.Context, call llm.ToolCall) (string, error) {
-		var args struct {
-			Queries   []string `json:"queries"`
-			Threshold float64  `json:"threshold"`
-			Limit     int      `json:"limit"`
-		}
-
-		err := json.Unmarshal([]byte(call.Arguments), &args)
-		if err != nil {
-			return llm.ToolError(err), nil
-		}
-
-		if len(args.Queries) == 0 {
-			return `{"error":"empty queries"}`, nil
-		}
-
-		if args.Threshold == 0 {
-			args.Threshold = 0.85
-		}
-		if args.Limit == 0 {
-			args.Limit = 10
-		}
-
-		out := map[string]any{}
-
-		for _, q := range args.Queries {
-			results, err := svc.SearchContacts(ctx, q, args.Threshold, args.Limit)
-			if err != nil {
-				out[q] = map[string]any{"error": err.Error()}
-				continue
-			}
-
-			out[q] = map[string]any{
-				"rows":  results,
-				"count": len(results),
-			}
-		}
-
-		data, err := json.Marshal(map[string]any{
-			"results": out,
-			"limit":   args.Limit,
-			"thresh":  args.Threshold,
-		})
-		if err != nil {
-			return llm.ToolError(err), nil
-		}
-
-		return string(data), nil
 	}
 }
 

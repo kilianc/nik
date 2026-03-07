@@ -1,7 +1,7 @@
 ---
 name: contacts
 summary: Your address book. Search and update contact profiles as you learn about people.
-tools: [update_contact, search_contacts]
+tools: [update_contact]
 ---
 
 # Contacts
@@ -19,31 +19,6 @@ are gaps. Fill them. Don't wait for someone to hand you their timezone --
 figure it out from when they message. Don't wait for a nickname -- listen
 to what people call each other in groups. Every conversation is a chance
 to learn something new about someone.
-
-## search_contacts
-
-Search contacts. Exact match first, fuzzy fallback second.
-
-- `query` -- search term
-- `threshold` -- fuzzy similarity threshold 0-1 (default 0.85). Lower
-  finds more results but with weaker matches.
-- `limit` -- max rows to return
-
-**Always prefer searching by contact_id.** The session context lists
-every participant with their contact_id. When you need to look up or
-update a contact you're already talking to, use that id directly --
-don't fuzzy-search by name when you already have the id.
-
-### Exact match (score = 1.0)
-
-Matches if `query` equals any of: `id`, `emails`, `phone_numbers`,
-`whatsapp_ids`, `telegram_ids`, `slack_ids`.
-
-### Fuzzy match
-
-If no exact match, fuzzy-searches `name`, `nicknames`, `one_liner`,
-and `notes` using `jaro_winkler_similarity`. A name like "Pen" will
-match "Penelope" at typical thresholds.
 
 ## update_contact
 

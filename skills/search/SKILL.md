@@ -13,6 +13,23 @@ Run a read-only SQL query against nik's SQLite database. Only `SELECT`,
 - Returns up to 50 rows. If truncated, the response includes
   `"truncated": true`.
 
+## Start with the schema
+
+Before querying a table, inspect it first:
+
+```sql
+PRAGMA table_info(<table>);
+```
+
+This tells you every column, its type, and defaults. Don't guess column
+names -- look them up.
+
+To list all tables:
+
+```sql
+SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name;
+```
+
 ## SQLite features available
 
 - `jaro_winkler_similarity(a, b)` -- custom function for fuzzy string
@@ -21,26 +38,28 @@ Run a read-only SQL query against nik's SQLite database. Only `SELECT`,
   stored as JSON TEXT
 - Standard SQL CTEs, window functions, aggregations
 
-## Key tables
-
-| Table | Purpose |
-|---|---|
-| `contact` | people nik knows (nicknames, emails, phone_numbers, whatsapp_ids as JSON arrays; one_liner, notes, timezone, location) |
-| `conversation` | nik-owned chat identity + platform reference |
-| `message` | normalized messages (body, contact_id, conversation_id, is_from_me, sent_at) |
-| `media` | media cache (describe_text, transcript_text, local_path) |
-| `message_media` | link table (message_id, media_id) |
-| `alarm` | scheduled alarms (goal, fire_at, origin_contact_id, origin_conversation_id) |
-| `alarm_occurrence` | alarm fire history (alarm_id, note, fired_at, next_fire_at_set) |
-| `memory` | stored memories (content, metadata) with vec_memory for embeddings |
-
-All primary keys are UUIDv7 stored as TEXT.
-
 ## Tips
 
 - This tool is **privileged** (owner-only).
 - Array columns (nicknames, emails, etc.) are JSON arrays in TEXT
   columns. Use `json_each()` to unnest them.
-- Use `PRAGMA table_info(<table>)` to inspect schema when unsure.
-- Combine with `search_contacts` for people lookup -- `db_query` is
-  better for complex joins and aggregations.
+- All primary keys are UUIDv7 stored as TEXT.
+
+### Searching contacts
+
+Use `jaro_winkler_similarity` for fuzzy name lookups:
+
+```sql
+SELECT id, name, one_liner
+FROM contact
+WHERE jaro_winkler_similarity(name, 'Pen') > 0.85
+ORDER BY jaro_winkler_similarity(name, 'Pen') DESC
+LIMIT 5;
+```
+
+For exact matches on array fields (whatsapp_ids, emails, etc.):
+
+```sql
+SELECT id, name FROM contact
+WHERE EXISTS (SELECT 1 FROM json_each(whatsapp_ids) WHERE value = '1234567890');
+```

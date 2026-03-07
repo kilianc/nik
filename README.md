@@ -160,7 +160,7 @@ Domain packages define tools via `BuildTools()` and register them at startup. Th
 
 **contacts** -- `update_contact`
 
-**search** -- `db_query`, `search_contacts`
+**search** -- `db_query`
 
 **llm** -- `describe_media`
 
