@@ -27,7 +27,6 @@ import (
 	"github.com/kciuffolo/nik/internal/skills"
 	"github.com/kciuffolo/nik/internal/stats"
 	"github.com/kciuffolo/nik/internal/task"
-	"github.com/kciuffolo/nik/internal/websearch"
 	"github.com/kciuffolo/nik/internal/whatsapp"
 )
 
@@ -153,7 +152,6 @@ func main() {
 	// task runner tools: subset available to background subagents
 	var taskTools []llm.Tool
 	taskTools = append(taskTools, shell.BuildTools(cfg)...)
-	taskTools = append(taskTools, websearch.BuildTools(cfg)...)
 	taskTools = append(taskTools, llm.BuildTools(llmClient, cfg.Home)...)
 	taskTools = append(taskTools, search.BuildTools(conn, searchSvc)...)
 	taskTools = append(taskTools, memory.BuildReadTools(memorySvc)...)
