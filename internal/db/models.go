@@ -191,18 +191,7 @@ type RandomMemory struct {
 	CreatedAt time.Time
 }
 
-type Soul struct {
-	Version int
-	Content string
-}
-
 type ContactSearchResult struct {
 	Contact
 	Score float64
-}
-
-type DreamPass struct {
-	Pass        int
-	Content     string
-	CompletedAt time.Time
 }

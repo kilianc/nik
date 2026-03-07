@@ -58,6 +58,10 @@ call:
 migrate-briefings:
 	@go run ./tools/migrate-briefings -db $(NIK_HOME)/nik.db -out $(NIK_HOME)/briefings
 
+.PHONY: migrate-dreams
+migrate-dreams:
+	@go run ./tools/migrate-dreams -db $(NIK_HOME)/nik.db -home $(NIK_HOME)
+
 .PHONY: sessions
 sessions:
 	@tmux list-sessions -F '#{session_name} (#{?pane_dead,dead,alive})' 2>/dev/null \

@@ -130,32 +130,10 @@ var MemoryList string
 //go:embed memory_random.sql
 var MemoryRandom string
 
-// dream queries
-
-//go:embed dream_check.sql
-var DreamCheck string
-
-//go:embed dream_start.sql
-var DreamStart string
-
-//go:embed dream_write.sql
-var DreamWrite string
-
-//go:embed dream_passes.sql
-var DreamPasses string
-
 // briefing queries
 
 //go:embed briefing_get.sql
 var BriefingGet string
-
-// soul queries
-
-//go:embed soul_current.sql
-var SoulCurrent string
-
-//go:embed soul_insert.sql
-var SoulInsert string
 
 // activation queries
 

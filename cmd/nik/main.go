@@ -17,7 +17,6 @@ import (
 	"github.com/kciuffolo/nik/internal/contacts"
 	"github.com/kciuffolo/nik/internal/crew"
 	"github.com/kciuffolo/nik/internal/db"
-	"github.com/kciuffolo/nik/internal/dream"
 	"github.com/kciuffolo/nik/internal/llm"
 	niklog "github.com/kciuffolo/nik/internal/log"
 	"github.com/kciuffolo/nik/internal/memory"
@@ -145,7 +144,6 @@ func main() {
 	alarmSvc := alarms.New(conn)
 	searchSvc := search.NewService(conn)
 	memorySvc := memory.NewService(conn, llmClient)
-	dreamSvc := dream.NewService(conn, cfg)
 	taskSvc := task.NewService(conn)
 	crewSvc := crew.NewService(conn)
 
@@ -163,7 +161,6 @@ func main() {
 
 	b := brain.New(cfg, llmClient)
 
-	b.SetSoulReader(dreamSvc.CurrentSoul)
 	b.SetCrewReader(crewSvc.Roster)
 	b.SetToolReactor(toolEmojis, messagingSvc.React)
 	b.SetDebugRecorder(brain.NewDebugRecorder(cfg.DebugPath(), llmClient.Model(), time.Now, taskSvc))
@@ -171,7 +168,6 @@ func main() {
 	b.RegisterDataSource(messaging.NewDataSource(cfg, messagingSvc, taskSvc))
 	b.RegisterDataSource(alarms.NewDataSource(alarmSvc, messagingSvc))
 	b.RegisterDataSource(task.NewDataSource(taskSvc, messagingSvc))
-	b.RegisterDataSource(dream.NewDataSource(dreamSvc, conn, memorySvc, cfg))
 
 	b.RegisterTools(llm.BuildTools(llmClient, cfg.Home)...)
 	b.RegisterTools(config.BuildTools(cfg, conn)...)
@@ -181,7 +177,6 @@ func main() {
 	b.RegisterTools(alarms.BuildTools(alarmSvc)...)
 	b.RegisterTools(search.BuildTools(conn, searchSvc)...)
 	b.RegisterTools(skills.BuildTools(cfg)...)
-	b.RegisterTools(dream.BuildTools(dreamSvc)...)
 	b.RegisterTools(crew.BuildTools(crewSvc)...)
 	b.RegisterTools(task.BuildTools(taskSvc, taskRunner, crewSvc)...)
 

@@ -17,7 +17,6 @@ type Brain struct {
 	toolExec      map[string]llm.ToolExecutor
 	privileged    map[string]bool
 	dataSources   []DataSource
-	soulReader    func(ctx context.Context) (string, error)
 	crewReader    func(ctx context.Context) (string, error)
 	toolReactor   ToolReactor
 	toolEmojis    map[string]string
@@ -36,10 +35,6 @@ func New(cfg *config.Config, llmClient *llm.Client) *Brain {
 		now:        time.Now,
 		claimed:    NewSyncSet(),
 	}
-}
-
-func (b *Brain) SetSoulReader(fn func(ctx context.Context) (string, error)) {
-	b.soulReader = fn
 }
 
 func (b *Brain) SetCrewReader(fn func(ctx context.Context) (string, error)) {
