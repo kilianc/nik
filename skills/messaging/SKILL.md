@@ -4,7 +4,6 @@ preload: true
 summary: Send messages, reactions, typing indicators, and presence across platforms.
 tools:
   - message_reply
-  - message_noop
   - message_react
   - message_set_presence
   - message_update_media_description
@@ -27,14 +26,6 @@ becomes a separate text bubble -- like texting. One thought per message.
 - `conversation_id` -- nik conversation UUID (empty = current)
 - `contact_id` -- contact UUID for starting a new DM (empty = skip)
 - `messages` -- array of `{text, image_path}` objects sent in order
-
-### message_noop
-
-Acknowledge intentional silence. Every activation must produce at least
-one tool call. When you decide not to respond, call this with a reason.
-
-- `conversation_id` -- nik conversation UUID (empty = current)
-- `reason` -- short reason for staying silent
 
 ### message_react
 
@@ -66,8 +57,6 @@ from the message line (same matching as `message_react`).
 
 ## Behavior
 
-- Every turn must end with at least one action tool call. If you say
-  nothing, call `message_noop`.
 - Typing indicators are sent automatically as part of reply -- no need
   to manage them manually.
 - Reactions are cheap and expressive. A single emoji often says more

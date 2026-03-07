@@ -48,26 +48,6 @@ var replyToolDef = llm.ToolDef{
 	},
 }
 
-var noopToolDef = llm.ToolDef{
-	Name:        "message_noop",
-	Description: "Acknowledge intentional silence for this turn without sending anything.",
-	Parameters: map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"conversation_id": map[string]any{
-				"type":        "string",
-				"description": "Nik conversation UUID. Pass empty string to use the current conversation from context.",
-			},
-			"reason": map[string]any{
-				"type":        "string",
-				"description": "Short reason for staying silent.",
-			},
-		},
-		"required":             []string{"conversation_id", "reason"},
-		"additionalProperties": false,
-	},
-}
-
 var reactToolDef = llm.ToolDef{
 	Name:        "message_react",
 	Description: "React to a specific message with one emoji. Identify the message by quoting its text (substring match on the formatted line). Include sender name if ambiguous.",
@@ -135,7 +115,6 @@ var updateMediaDescriptionToolDef = llm.ToolDef{
 func BuildTools(svc *Service) []llm.Tool {
 	return []llm.Tool{
 		{Def: replyToolDef, Handler: replyHandler(svc)},
-		{Def: noopToolDef, Handler: noopHandler()},
 		{Def: reactToolDef, Handler: reactHandler(svc)},
 		{Def: setPresenceToolDef, Handler: setPresenceHandler(svc)},
 		{Def: updateMediaDescriptionToolDef, Handler: updateMediaDescriptionHandler(svc)},
@@ -201,19 +180,6 @@ func replyHandler(svc *Service) llm.ToolExecutor {
 		}
 
 		return result, nil
-	}
-}
-
-func noopHandler() llm.ToolExecutor {
-	return func(ctx context.Context, call llm.ToolCall) (string, error) {
-		var args json.RawMessage
-
-		err := json.Unmarshal([]byte(call.Arguments), &args)
-		if err != nil {
-			return llm.ToolError(err), nil
-		}
-
-		return `{"ok":true,"silent":true}`, nil
 	}
 }
 
