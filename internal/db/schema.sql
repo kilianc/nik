@@ -127,36 +127,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_memory USING vec0(
   embedding float[1536] distance_metric=cosine
 );
 
-CREATE TABLE IF NOT EXISTS dream (
-  date         TEXT NOT NULL,
-  pass         INTEGER NOT NULL,
-  content      TEXT NOT NULL,
-  completed_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
-  PRIMARY KEY (date, pass)
-);
-
-CREATE TABLE IF NOT EXISTS soul (
-  id         TEXT PRIMARY KEY,
-  version    INTEGER NOT NULL,
-  content    TEXT NOT NULL,
-  dream_date TEXT NOT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS briefing (
-  date         TEXT PRIMARY KEY,
-  content      TEXT NOT NULL,
-  completed_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS briefing_topic (
-  id         TEXT PRIMARY KEY,
-  query      TEXT NOT NULL,
-  reason     TEXT NOT NULL DEFAULT '',
-  contact_id TEXT REFERENCES contact(id),
-  created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
-  updated_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
-);
 
 CREATE TABLE IF NOT EXISTS activation (
   id               TEXT PRIMARY KEY,

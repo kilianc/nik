@@ -114,45 +114,6 @@ func (c Config) TZ() *time.Location {
 	return loc
 }
 
-func (c Config) JournalAt(now time.Time) time.Time {
-	jt := c.JournalTime
-	if jt == "" {
-		jt = "00:00"
-	}
-
-	hour, min := 0, 0
-	fmt.Sscanf(jt, "%d:%d", &hour, &min)
-
-	loc := c.TZ()
-	y, m, d := now.In(loc).Date()
-
-	return time.Date(y, m, d, hour, min, 0, 0, loc)
-}
-
-// passes 1-4 are hourly from dream_start; pass 5 (wake) is dream_start + 4h.
-// handles overnight boundaries: at 11pm, returns tomorrow's 2am.
-func (c Config) DreamAt(now time.Time, pass int) time.Time {
-	ds := c.DreamStart
-	if ds == "" {
-		ds = "02:00"
-	}
-
-	hour, min := 2, 0
-	fmt.Sscanf(ds, "%d:%d", &hour, &min)
-
-	loc := c.TZ()
-	y, m, d := now.In(loc).Date()
-	base := time.Date(y, m, d, hour, min, 0, 0, loc)
-
-	if now.Sub(base) > 12*time.Hour {
-		base = base.AddDate(0, 0, 1)
-	}
-
-	offset := time.Duration(pass-1) * time.Hour
-
-	return base.Add(offset)
-}
-
 func (c Config) DebugPath() string {
 	if c.DebugDirValue == "" {
 		return ""

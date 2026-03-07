@@ -124,14 +124,6 @@ var MemoryDelete string
 //go:embed memory_list.sql
 var MemoryList string
 
-//go:embed memory_random.sql
-var MemoryRandom string
-
-// briefing queries
-
-//go:embed briefing_get.sql
-var BriefingGet string
-
 // activation queries
 
 //go:embed activation_insert.sql
