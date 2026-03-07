@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/kciuffolo/nik/internal/alarms"
-	"github.com/kciuffolo/nik/internal/briefing"
 	"github.com/kciuffolo/nik/internal/codex"
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/contacts"
@@ -130,11 +129,6 @@ func buildTools(cfg *config.Config, llmClient *llm.Client, conn *sql.DB) map[str
 
 		dreamSvc := dream.NewService(conn, cfg)
 		for _, t := range dream.BuildTools(dreamSvc) {
-			tools[t.Def.Name] = t.Handler
-		}
-
-		briefingSvc := briefing.NewService(conn, cfg)
-		for _, t := range briefing.BuildTools(briefingSvc) {
 			tools[t.Def.Name] = t.Handler
 		}
 

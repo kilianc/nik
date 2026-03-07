@@ -175,26 +175,8 @@ var DreamPasses string
 
 // briefing queries
 
-//go:embed briefing_check.sql
-var BriefingCheck string
-
-//go:embed briefing_start.sql
-var BriefingStart string
-
-//go:embed briefing_write.sql
-var BriefingWrite string
-
 //go:embed briefing_get.sql
 var BriefingGet string
-
-//go:embed briefing_topic_list.sql
-var BriefingTopicList string
-
-//go:embed briefing_topic_insert.sql
-var BriefingTopicInsert string
-
-//go:embed briefing_topic_delete.sql
-var BriefingTopicDelete string
 
 // soul queries
 
