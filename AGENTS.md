@@ -105,7 +105,6 @@ Entry point: `cmd/nik/main.go`
 | `internal/messaging/` | canonical messaging service, datasource, and tool handlers |
 | `internal/whatsapp/` | WhatsApp platform adapter implementing messaging platform interface |
 | `internal/contacts/` | contact resolution/upsert orchestration + contact update tools |
-| `internal/search/` | search orchestration + read-only query/search tools |
 | `internal/shell/` | tmux-backed persistent shell tool + data source |
 | `internal/alarms/` | alarm/reminder scheduling service, tools, and data source |
 | `internal/memory/` | long-term memory store with vector search (sqlite-vec) |
@@ -252,7 +251,7 @@ Tools are defined in their domain package, not in `brain/`:
 |---------|-------|-----|
 | `internal/messaging/` | `message_reply`, `message_react`, `message_set_presence`, `message_update_media_description` | canonical messaging actions routed by platform |
 | `internal/contacts/` | `update_contact` | contact profile management |
-| `internal/search/` | `db_query`, `search_contacts` | read/search tooling |
+| `internal/db/` | `db_query` | read-only SQL queries against nik's SQLite database |
 | `internal/llm/` | `describe_media` | generic AI capability, wraps LLM methods |
 | `internal/shell/` | `shell` | persistent tmux terminal (run/read/send/kill/list) |
 | `internal/alarms/` | `alarm`, `update_alarm`, `cancel_alarm` | alarm/reminder scheduling |

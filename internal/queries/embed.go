@@ -19,9 +19,6 @@ var GetContact string
 //go:embed list_contacts.sql
 var ListContacts string
 
-//go:embed search_contact.sql
-var SearchContact string
-
 //go:embed update_contact_field.sql
 var UpdateContactField string
 
