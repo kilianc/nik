@@ -28,12 +28,15 @@ type CompletionObserver interface {
 	OnFinish(ctx context.Context, model string, reasoningEffort string, usage Usage, toolCalls int, durationMS int64, isError bool)
 }
 
+const maxConcurrentSessions = 6
+
 type Client struct {
 	codexClient     *openai.Client
 	apiClient       *openai.Client
 	model           shared.ResponsesModel
 	reasoningEffort *string
 	observer        CompletionObserver
+	sem             chan struct{}
 }
 
 func (c *Client) SetObserver(obs CompletionObserver) {
@@ -74,7 +77,11 @@ func NewClient(model string, opts ...ClientOption) *Client {
 		opt(&cfg)
 	}
 
-	c := &Client{model: model, reasoningEffort: cfg.reasoningEffort}
+	c := &Client{
+		model:           model,
+		reasoningEffort: cfg.reasoningEffort,
+		sem:             make(chan struct{}, maxConcurrentSessions),
+	}
 
 	if cfg.apiKey != "" {
 		apiClient := openai.NewClient(option.WithAPIKey(cfg.apiKey))
@@ -214,6 +221,10 @@ func (c *Client) Complete(ctx context.Context, instructions, input string, tools
 
 	go func() {
 		defer close(ch)
+
+		c.sem <- struct{}{}
+		defer func() { <-c.sem }()
+
 		result := c.completeLoop(ctx, client, instructions, input, tools, executor)
 		ch <- result
 	}()
