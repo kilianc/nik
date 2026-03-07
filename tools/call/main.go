@@ -23,7 +23,6 @@ import (
 	"github.com/kciuffolo/nik/internal/skills"
 	"github.com/kciuffolo/nik/internal/stats"
 	"github.com/kciuffolo/nik/internal/task"
-	"github.com/kciuffolo/nik/internal/websearch"
 )
 
 func main() {
@@ -141,7 +140,6 @@ func buildTools(cfg *config.Config, llmClient *llm.Client, conn *sql.DB) map[str
 		searchSvcT := search.NewService(conn)
 		var taskToolList []llm.Tool
 		taskToolList = append(taskToolList, shell.BuildTools(cfg)...)
-		taskToolList = append(taskToolList, websearch.BuildTools(cfg)...)
 		taskToolList = append(taskToolList, llm.BuildTools(llmClient, cfg.Home)...)
 		taskToolList = append(taskToolList, search.BuildTools(conn, searchSvcT)...)
 		taskToolList = append(taskToolList, memory.BuildReadTools(memorySvc)...)
@@ -159,10 +157,6 @@ func buildTools(cfg *config.Config, llmClient *llm.Client, conn *sql.DB) map[str
 	}
 
 	for _, t := range shell.BuildTools(cfg) {
-		tools[t.Def.Name] = t.Handler
-	}
-
-	for _, t := range websearch.BuildTools(cfg) {
 		tools[t.Def.Name] = t.Handler
 	}
 

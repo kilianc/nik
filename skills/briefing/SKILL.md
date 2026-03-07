@@ -3,7 +3,7 @@ name: briefing
 summary: >
   Morning news research session and topic management.
   Load when someone mentions an interest or when a briefing alarm fires.
-tools: [shell, web_search, alarm, store_memory, search_memory, search_contacts]
+tools: [shell, alarm, store_memory, search_memory, search_contacts, load_skill]
 ---
 
 # Briefing
@@ -71,11 +71,11 @@ Before touching the news, remember who you're reading for.
 
 ### Phase 3 — Read and research
 
-Use `web_search` to fetch news for each topic.
+Load the `web_search` skill and use it to fetch news for each topic.
 
 - For each item: who would care? Is it worth remembering?
 - Use `store_memory` for noteworthy items. Be specific: what happened, who cares, why. One fact per memory.
-- If a headline is interesting but thin, use `web_search` to dig deeper or `load_skill` for `web` to use `link_reader` on full articles.
+- If a headline is interesting but thin, search again to dig deeper or `load_skill` for `web` to use `link_reader` on full articles.
 - Follow your curiosity. Chase threads that connect to people or recent conversations.
 - Sentiment target: ~45% positive, 45% neutral, 10% negative.
 
