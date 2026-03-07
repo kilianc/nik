@@ -2,7 +2,6 @@ package brain
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"strings"
 	"time"
@@ -146,8 +145,6 @@ func (b *Brain) activate(ctx context.Context, output DataSourceOutput) {
 	}
 }
 
-const maxThinkAttempts = 2
-
 func (b *Brain) think(ctx context.Context, input []string) (string, llm.Usage, error) {
 	now := b.now
 	if now == nil {
@@ -163,52 +160,29 @@ func (b *Brain) think(ctx context.Context, input []string) (string, llm.Usage, e
 	tools := b.toolsForContext(ctx)
 	executor := b.toolExecutor()
 
-	var totalUsage llm.Usage
-
-	for attempt := range maxThinkAttempts {
-		retry := attempt > 0
-		if retry {
-			slog.Warn("no tool calls produced, retrying", "pkg", "brain", "attempt", attempt)
-		}
-
-		instructions, err := b.loadInstructions(now(), retry)
-		if err != nil {
-			return "", totalUsage, err
-		}
-
-		actID, ch := b.llm.Complete(thinkCtx, instructions, userInput, tools, executor)
-		result := <-ch
-
-		meta["activation_id"] = actID
-
-		if b.debugRecorder != nil {
-			b.debugRecorder(DebugInput{
-				Meta:         meta,
-				Instructions: instructions,
-				UserInput:    userInput,
-				RawOutput:    result.Output,
-				Tools:        tools,
-				ToolCalls:    result.History,
-				Extra:        result.Extra,
-				Usage:        result.Usage,
-				ProcessErr:   result.Err,
-			})
-		}
-
-		totalUsage.InputTokens += result.Usage.InputTokens
-		totalUsage.OutputTokens += result.Usage.OutputTokens
-		totalUsage.TotalTokens += result.Usage.TotalTokens
-		totalUsage.CachedTokens += result.Usage.CachedTokens
-		totalUsage.ReasoningTokens += result.Usage.ReasoningTokens
-
-		if result.Err != nil {
-			return "", totalUsage, result.Err
-		}
-
-		if len(result.History) > 0 {
-			return result.Output, totalUsage, nil
-		}
+	instructions, err := b.loadInstructions(now())
+	if err != nil {
+		return "", llm.Usage{}, err
 	}
 
-	return "", totalUsage, errors.New("no tool calls produced after retries")
+	actID, ch := b.llm.Complete(thinkCtx, instructions, userInput, tools, executor)
+	result := <-ch
+
+	meta["activation_id"] = actID
+
+	if b.debugRecorder != nil {
+		b.debugRecorder(DebugInput{
+			Meta:         meta,
+			Instructions: instructions,
+			UserInput:    userInput,
+			RawOutput:    result.Output,
+			Tools:        tools,
+			ToolCalls:    result.History,
+			Extra:        result.Extra,
+			Usage:        result.Usage,
+			ProcessErr:   result.Err,
+		})
+	}
+
+	return result.Output, result.Usage, result.Err
 }

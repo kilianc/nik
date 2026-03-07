@@ -10,13 +10,12 @@ import (
 
 func TestBuildToolsReturnsExpectedToolNames(t *testing.T) {
 	tools := BuildTools(&Service{})
-	if len(tools) != 5 {
-		t.Fatalf("expected 5 tools, got %d", len(tools))
+	if len(tools) != 4 {
+		t.Fatalf("expected 4 tools, got %d", len(tools))
 	}
 
 	want := []string{
 		"message_reply",
-		"message_noop",
 		"message_react",
 		"message_set_presence",
 		"message_update_media_description",
@@ -88,37 +87,6 @@ func TestReplyHandlerRejectsEmptyMessages(t *testing.T) {
 	}
 	if !strings.Contains(out, "empty") {
 		t.Fatalf("expected empty messages error, got %q", out)
-	}
-}
-
-func TestNoopHandlerRejectsInvalidJSON(t *testing.T) {
-	handler := noopHandler()
-
-	out, err := handler(context.Background(), llm.ToolCall{Arguments: "{"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.Contains(out, `"error"`) {
-		t.Fatalf("expected JSON error response, got %q", out)
-	}
-}
-
-func TestNoopHandlerUsesContextConversationID(t *testing.T) {
-	handler := noopHandler()
-
-	ctx := context.WithValue(
-		context.Background(),
-		"meta",
-		map[string]string{"conversation_id": "conv-123"},
-	)
-	out, err := handler(ctx, llm.ToolCall{
-		Arguments: `{"conversation_id":"","reason":"group thread, staying silent"}`,
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.Contains(out, `"silent":true`) {
-		t.Fatalf("expected silent true response, got %q", out)
 	}
 }
 

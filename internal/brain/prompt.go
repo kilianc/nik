@@ -69,7 +69,7 @@ func shiftHeadings(n int, content string) string {
 	return b.String()
 }
 
-func (b *Brain) loadInstructions(now time.Time, retry bool) (string, error) {
+func (b *Brain) loadInstructions(now time.Time) (string, error) {
 	dir := b.cfg.PromptsPath()
 
 	baseData, err := os.ReadFile(filepath.Join(dir, "00-base.md"))
@@ -104,15 +104,6 @@ func (b *Brain) loadInstructions(now time.Time, retry bool) (string, error) {
 	}
 
 	result := htmlCommentRe.ReplaceAllString(buf.String(), "")
-
-	if retry {
-		nudge, nudgeErr := os.ReadFile(filepath.Join(dir, "05-retry.md"))
-		if nudgeErr != nil {
-			slog.Warn("load retry nudge", "pkg", "brain", "error", nudgeErr)
-		} else {
-			result += "\n\n" + string(nudge)
-		}
-	}
 
 	return result, nil
 }

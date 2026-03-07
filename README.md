@@ -150,7 +150,7 @@ When a message arrives: the WhatsApp adapter normalizes it and calls `ReceiveMes
 
 Domain packages define tools via `BuildTools()` and register them at startup. The brain makes them available to the LLM during activations. Some tools are privileged (owner-only).
 
-**messaging** -- `message_reply`, `message_react`, `message_noop`, `message_set_presence`, `message_update_media_description`
+**messaging** -- `message_reply`, `message_react`, `message_set_presence`, `message_update_media_description`
 
 **memory** -- `store_memory`, `search_memory`, `delete_memory`
 
