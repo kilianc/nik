@@ -102,7 +102,6 @@ Entry point: `cmd/nik/main.go`
 | `internal/codex/` | Codex auth for LLM client (login, token management) |
 | `internal/dream/` | nightly dream passes for soul evolution, tools, and data source |
 | `internal/id/` | UUID generation — `V4()`, `V7()`, `Short(n)` |
-| `internal/journal/` | daily journal synthesis service, tools, and data source |
 | `internal/llm/` | LLM client — `Complete`, `Embed`, `Transcribe`, `Describe`; supports OpenAI and Codex auth |
 | `internal/messaging/` | canonical messaging service, datasource, and tool handlers |
 | `internal/whatsapp/` | WhatsApp platform adapter implementing messaging platform interface |
@@ -151,7 +150,7 @@ Brain.Awake()        -- wake up, start the loop
 
 These run on schedule via data sources — the brain activates them like any other stimulus.
 
-- **Journal**: daily synthesis at `cfg.JournalAt()`. Summarizes the day's conversations, contacts, and memories into a `journal` table entry. Uses `journal.md` prompt template.
+- **Journal**: managed entirely by the `journal` skill. Nik uses a recurring alarm, gathers day context via `db_query`/`search_memory`/`shell`, and writes to `journal/` files. No domain package.
 - **Dream**: nightly multi-pass process at `cfg.DreamAt()`. Five passes (Drift, Weave, Depths, Crystallize, Wake) that process the journal and memories, writing to the `dream` table. The final pass evolves nik's **soul** — a living identity document stored in the `soul` table and loaded into the system prompt on every activation via `dreamSvc.CurrentSoul`.
 - **Briefing**: managed entirely by the `briefing` skill. Nik uses a recurring alarm, `web_search` for news, and writes to `briefings/` files. No domain package.
 
@@ -228,8 +227,8 @@ Good — `GetContact` already does this (`get_contact.sql` uses `WHERE id = ?1 O
 
 ### Naming Conventions
 
-- All table names are **singular**: `contact`, `conversation`, `conversation_participant`, `message`, `media`, `message_media`, `alarm`, `alarm_occurrence`, `memory`, `vec_memory`, `journal`, `dream`, `soul`, `briefing`, `briefing_topic`
-- Canonical query files use canonical prefixes: `conversation_*`, `message_*`, `media_*`, `message_media_*`, `contact_*`, `alarm_*`, `memory_*`, `journal_*`, `dream_*`, `soul_*`
+- All table names are **singular**: `contact`, `conversation`, `conversation_participant`, `message`, `media`, `message_media`, `alarm`, `alarm_occurrence`, `memory`, `vec_memory`, `dream`, `soul`, `briefing`, `briefing_topic`
+- Canonical query files use canonical prefixes: `conversation_*`, `message_*`, `media_*`, `message_media_*`, `contact_*`, `alarm_*`, `memory_*`, `dream_*`, `soul_*`
 - Tool names use canonical prefixes by domain (see "Where tools live" table for the full list)
 - Metadata keys use canonical ids: `conversation_id`, `message_id` (platform ids are never exposed to LLM context)
 - FK columns always include the target table name: `<table>_id` for simple references, `<qualifier>_<table>_id` when disambiguation is needed (e.g. `origin_contact_id`, `retry_for_task_id`). Self-references follow the same pattern.
@@ -262,7 +261,6 @@ Tools are defined in their domain package, not in `brain/`:
 | `internal/websearch/` | `web_search` | web search via Exa API |
 | `internal/skills/` | `load_skill` | load skill definitions from SKILL.md files |
 | `internal/config/` | `update_config` | read and update config values |
-| `internal/journal/` | `journal_write` | daily journal synthesis |
 | `internal/dream/` | `dream_write`, `soul_evolve` | nightly dream passes and soul evolution |
 | `internal/task/` | `task_spawn`, `task_retry`, `task_list`, `task_status`, `task_cancel` | background task orchestration |
 
@@ -270,16 +268,16 @@ Each package exposes a `BuildTools() []llm.Tool` function that returns tool defi
 
 ### Where data sources live
 
-Data sources follow the same pattern. Each domain package that produces context for the brain exposes a `NewDataSource()` function. Currently registered: `messaging` (unread conversations), `alarms` (due alarms), `shell` (active sessions), `journal` (daily journal), `dream` (nightly dream passes).
+Data sources follow the same pattern. Each domain package that produces context for the brain exposes a `NewDataSource()` function. Currently registered: `messaging` (unread conversations), `alarms` (due alarms), `shell` (active sessions), `dream` (nightly dream passes).
 
 ### Registration flow (`main.go`)
 
 1. Load config, open DB, create WhatsApp client and adapter
 2. Register adapter with messaging service, start adapter
 3. Build LLM client (OpenAI key or Codex auth)
-4. Create domain services: `alarms`, `search`, `memory`, `journal`, `dream`
+4. Create domain services: `alarms`, `search`, `memory`, `dream`
 5. Create brain: `b := brain.New(cfg, llmClient)`, set soul reader via `dreamSvc.CurrentSoul`
-6. Register data sources: `messaging`, `alarms`, `shell`, `journal`, `dream`
+6. Register data sources: `messaging`, `alarms`, `shell`, `dream`
 7. Register tools from all domain packages (see tools table above)
 8. `b.Awake(ctx, pollInterval)` starts the main loop
 

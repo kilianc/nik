@@ -18,7 +18,6 @@ import (
 	"github.com/kciuffolo/nik/internal/crew"
 	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/dream"
-	"github.com/kciuffolo/nik/internal/journal"
 	"github.com/kciuffolo/nik/internal/llm"
 	niklog "github.com/kciuffolo/nik/internal/log"
 	"github.com/kciuffolo/nik/internal/memory"
@@ -147,7 +146,6 @@ func main() {
 	alarmSvc := alarms.New(conn)
 	searchSvc := search.NewService(conn)
 	memorySvc := memory.NewService(conn, llmClient)
-	journalSvc := journal.NewService(conn, cfg)
 	dreamSvc := dream.NewService(conn, cfg)
 	taskSvc := task.NewService(conn)
 	crewSvc := crew.NewService(conn)
@@ -175,7 +173,6 @@ func main() {
 	b.RegisterDataSource(messaging.NewDataSource(cfg, messagingSvc, taskSvc))
 	b.RegisterDataSource(alarms.NewDataSource(alarmSvc, messagingSvc))
 	b.RegisterDataSource(task.NewDataSource(taskSvc, messagingSvc))
-	b.RegisterDataSource(journal.NewDataSource(journalSvc, conn, messagingSvc, cfg))
 	b.RegisterDataSource(dream.NewDataSource(dreamSvc, conn, memorySvc, cfg))
 
 	b.RegisterTools(llm.BuildTools(llmClient, cfg.Home)...)
@@ -186,7 +183,6 @@ func main() {
 	b.RegisterTools(alarms.BuildTools(alarmSvc)...)
 	b.RegisterTools(search.BuildTools(conn, searchSvc)...)
 	b.RegisterTools(skills.BuildTools(cfg)...)
-	b.RegisterTools(journal.BuildTools(journalSvc)...)
 	b.RegisterTools(dream.BuildTools(dreamSvc)...)
 	b.RegisterTools(crew.BuildTools(crewSvc)...)
 	b.RegisterTools(task.BuildTools(taskSvc, taskRunner, crewSvc)...)
