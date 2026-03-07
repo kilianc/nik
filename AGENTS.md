@@ -108,7 +108,6 @@ Entry point: `cmd/nik/main.go`
 | `internal/shell/` | tmux-backed persistent shell tool + data source |
 | `internal/alarms/` | alarm/reminder scheduling service, tools, and data source |
 | `internal/memory/` | long-term memory store with vector search (sqlite-vec) |
-| `internal/websearch/` | web search tool via Exa API |
 | `internal/skills/` | skill loader — reads SKILL.md files and registers tools dynamically |
 | `tools/` | codegen/build/debug tools invoked by `make` — no runtime code; each tool has its own README |
 | `prompts/` | system prompt templates loaded at runtime |
@@ -256,7 +255,6 @@ Tools are defined in their domain package, not in `brain/`:
 | `internal/shell/` | `shell` | persistent tmux terminal (run/read/send/kill/list) |
 | `internal/alarms/` | `alarm`, `update_alarm`, `cancel_alarm` | alarm/reminder scheduling |
 | `internal/memory/` | `store_memory`, `search_memory`, `delete_memory` | long-term memory with vector search |
-| `internal/websearch/` | `web_search` | web search via Exa API |
 | `internal/skills/` | `load_skill` | load skill definitions from SKILL.md files |
 | `internal/config/` | `update_config` | read and update config values |
 | `internal/task/` | `task_spawn`, `task_retry`, `task_list`, `task_status`, `task_cancel` | background task orchestration |

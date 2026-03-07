@@ -184,9 +184,3 @@ type Memory struct {
 	CreatedAt time.Time
 	Score     float64
 }
-
-type RandomMemory struct {
-	ID        string
-	Content   string
-	CreatedAt time.Time
-}
