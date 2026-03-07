@@ -14,7 +14,6 @@ import (
 	"github.com/kciuffolo/nik/internal/contacts"
 	"github.com/kciuffolo/nik/internal/crew"
 	"github.com/kciuffolo/nik/internal/db"
-	"github.com/kciuffolo/nik/internal/dream"
 	"github.com/kciuffolo/nik/internal/llm"
 	"github.com/kciuffolo/nik/internal/memory"
 	"github.com/kciuffolo/nik/internal/messaging"
@@ -123,11 +122,6 @@ func buildTools(cfg *config.Config, llmClient *llm.Client, conn *sql.DB) map[str
 
 		memorySvc := memory.NewService(conn, llmClient)
 		for _, t := range memory.BuildTools(memorySvc) {
-			tools[t.Def.Name] = t.Handler
-		}
-
-		dreamSvc := dream.NewService(conn, cfg)
-		for _, t := range dream.BuildTools(dreamSvc) {
 			tools[t.Def.Name] = t.Handler
 		}
 

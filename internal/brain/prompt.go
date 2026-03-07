@@ -127,13 +127,11 @@ func (b *Brain) buildPromptData(now time.Time) promptData {
 		Location: b.cfg.Location,
 	}
 
-	if b.soulReader != nil {
-		soul, err := b.soulReader(context.Background())
-		if err != nil {
-			slog.Warn("load soul", "pkg", "brain", "error", err)
-		} else {
-			data.Soul = soul
-		}
+	soulData, err := os.ReadFile(filepath.Join(b.cfg.Home, "soul", "latest.md"))
+	if err == nil {
+		data.Soul = strings.TrimSpace(string(soulData))
+	} else if !os.IsNotExist(err) {
+		slog.Warn("load soul", "pkg", "brain", "error", err)
 	}
 
 	if b.crewReader != nil {
