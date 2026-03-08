@@ -19,7 +19,7 @@ func TestNewServiceStoresDB(t *testing.T) {
 func TestCreateAlarmRejectsInvalidTimestamp(t *testing.T) {
 	svc := New(nil)
 
-	_, err := svc.CreateAlarm(context.Background(), "kevin", "", "wake up", "", "", "", "not-a-time")
+	_, err := svc.CreateAlarm(context.Background(), "kevin", "", "wake up", "", "not-a-time")
 	if err == nil {
 		t.Fatalf("expected parse error")
 	}

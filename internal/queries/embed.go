@@ -16,9 +16,6 @@ var ContactUpsertSelfWhatsApp string
 //go:embed get_contact.sql
 var GetContact string
 
-//go:embed list_contacts.sql
-var ListContacts string
-
 //go:embed update_contact_field.sql
 var UpdateContactField string
 
@@ -32,9 +29,6 @@ var ConversationUpsert string
 
 //go:embed conversation_get.sql
 var ConversationGet string
-
-//go:embed conversation_poll_unread.sql
-var ConversationPollUnread string
 
 //go:embed conversation_mark_read.sql
 var ConversationMarkRead string
@@ -58,9 +52,6 @@ var MessageGet string
 
 //go:embed message_list.sql
 var MessageList string
-
-//go:embed message_get_around.sql
-var MessageGetAround string
 
 //go:embed message_update_body.sql
 var MessageUpdateBody string
@@ -87,45 +78,25 @@ var DueAlarms string
 //go:embed alarm_claim.sql
 var AlarmClaim string
 
-//go:embed alarm_set_next_fire.sql
-var AlarmSetNextFire string
-
 //go:embed alarm_update.sql
 var AlarmUpdate string
 
 //go:embed alarm_cancel.sql
 var AlarmCancel string
 
+//go:embed alarm_list_created.sql
+var AlarmListCreated string
+
 // alarm occurrence queries
 
 //go:embed alarm_occurrence_insert.sql
 var AlarmOccurrenceInsert string
 
+//go:embed alarm_occurrence_list.sql
+var AlarmOccurrenceList string
+
 //go:embed alarm_occurrence_update_note.sql
 var AlarmOccurrenceUpdateNote string
-
-//go:embed alarm_occurrence_summary.sql
-var AlarmOccurrenceSummary string
-
-// recall queries
-
-//go:embed recall_messages.sql
-var RecallMessages string
-
-//go:embed recall_contacts.sql
-var RecallContacts string
-
-//go:embed recall_alarms.sql
-var RecallAlarms string
-
-//go:embed recall_journals.sql
-var RecallJournals string
-
-//go:embed recall_dreams.sql
-var RecallDreams string
-
-//go:embed recall_briefings.sql
-var RecallBriefings string
 
 // activation queries
 
@@ -165,9 +136,6 @@ var TaskUpdateStatus string
 //go:embed task_start.sql
 var TaskStart string
 
-//go:embed task_active.sql
-var TaskActive string
-
 //go:embed task_stale.sql
 var TaskStale string
 
@@ -177,25 +145,25 @@ var TaskActiveRetries string
 //go:embed task_retry_chain.sql
 var TaskRetryChain string
 
-//go:embed task_all_active.sql
-var TaskAllActive string
-
-//go:embed task_mark_seen.sql
-var TaskMarkSeen string
-
 //go:embed task_list.sql
 var TaskList string
+
+//go:embed task_list_spawned.sql
+var TaskListSpawned string
+
+//go:embed task_list_cancelled.sql
+var TaskListCancelled string
 
 // task report queries
 
 //go:embed task_report_insert.sql
 var TaskReportInsert string
 
-//go:embed task_report_unread.sql
-var TaskReportUnread string
+//go:embed task_report_list.sql
+var TaskReportList string
 
-//go:embed task_report_mark_read.sql
-var TaskReportMarkRead string
+//go:embed task_report_last_status.sql
+var TaskReportLastStatus string
 
 //go:embed task_tool_calls.sql
 var TaskToolCalls string

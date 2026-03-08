@@ -144,31 +144,6 @@ func GetConversation(ctx context.Context, db DBTX, p GetConversationParams) (Con
 	return scanConversation(row)
 }
 
-func PollUnreadConversations(ctx context.Context, db *sql.DB, allowConversationIDs []string) ([]string, error) {
-	rows, err := db.QueryContext(ctx, queries.ConversationPollUnread, MarshalStringSlice(allowConversationIDs))
-	if err != nil {
-		return nil, fmt.Errorf("poll unread conversations: %w", err)
-	}
-	defer rows.Close()
-
-	var ids []string
-	for rows.Next() {
-		var id string
-		err = rows.Scan(&id)
-		if err != nil {
-			return nil, fmt.Errorf("scan unread conversation id: %w", err)
-		}
-		ids = append(ids, id)
-	}
-
-	err = rows.Err()
-	if err != nil {
-		return nil, fmt.Errorf("iterate unread conversations: %w", err)
-	}
-
-	return ids, nil
-}
-
 func MarkConversationsRead(ctx context.Context, db *sql.DB, p MarkConversationsReadParams) error {
 	if p.ConversationID != "" {
 		_, err := db.ExecContext(ctx, queries.ConversationMarkRead, p.ConversationID, p.ReadAt)

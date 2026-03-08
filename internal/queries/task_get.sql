@@ -1,6 +1,7 @@
 SELECT
   id,
-  meta,
+  conversation_id,
+  contact_id,
   activation_id,
   crew_member_id,
   retry_for_task_id,

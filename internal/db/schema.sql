@@ -96,8 +96,6 @@ CREATE TABLE IF NOT EXISTS alarm (
   origin_conversation_id TEXT REFERENCES conversation(id),
   goal                   TEXT NOT NULL,
   recurrence             TEXT,
-  source                 TEXT CHECK(source IN ('message', 'alarm', 'task')),
-  source_id              TEXT,
   next_fire_at           TIMESTAMP,
   last_fired_at          TIMESTAMP,
   cancelled_at           TIMESTAMP,
@@ -114,8 +112,9 @@ CREATE TABLE IF NOT EXISTS alarm_occurrence (
 
 CREATE TABLE IF NOT EXISTS activation (
   id               TEXT PRIMARY KEY,
-  source           TEXT NOT NULL CHECK(source IN ('message', 'alarm', 'task')),
-  source_id        TEXT,
+  conversation_id  TEXT NOT NULL REFERENCES conversation(id),
+  task_id          TEXT REFERENCES task(id),
+  sources          TEXT NOT NULL DEFAULT '[]',
   model            TEXT NOT NULL,
   reasoning_effort TEXT CHECK(reasoning_effort IN ('none', 'minimal', 'low', 'medium', 'high', 'xhigh')),
   input_tokens     INTEGER NOT NULL DEFAULT 0,
@@ -148,7 +147,8 @@ CREATE TABLE IF NOT EXISTS crew_member (
 
 CREATE TABLE IF NOT EXISTS task (
   id                TEXT PRIMARY KEY,
-  meta              TEXT NOT NULL DEFAULT '{}',
+  conversation_id   TEXT REFERENCES conversation(id),
+  contact_id        TEXT REFERENCES contact(id),
   activation_id     TEXT REFERENCES activation(id),
   crew_member_id    TEXT REFERENCES crew_member(id),
   retry_for_task_id TEXT REFERENCES task(id),
@@ -159,15 +159,14 @@ CREATE TABLE IF NOT EXISTS task (
   status            TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),
   created_at        TIMESTAMP NOT NULL DEFAULT (datetime('now')),
   started_at        TIMESTAMP,
-  completed_at      TIMESTAMP,
-  checked_at        TIMESTAMP
+  completed_at      TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS task_report (
   id          TEXT PRIMARY KEY,
   task_id     TEXT NOT NULL REFERENCES task(id),
   kind        TEXT NOT NULL CHECK(kind IN ('report')),
+  status      TEXT NOT NULL DEFAULT 'running' CHECK(status IN ('running', 'completed', 'failed')),
   content     TEXT NOT NULL,
-  reported_at TIMESTAMP,
   created_at  TIMESTAMP NOT NULL DEFAULT (datetime('now'))
 );

@@ -25,6 +25,7 @@ import (
 	"github.com/kciuffolo/nik/internal/skills"
 	"github.com/kciuffolo/nik/internal/stats"
 	"github.com/kciuffolo/nik/internal/task"
+	"github.com/kciuffolo/nik/internal/timeline"
 	"github.com/kciuffolo/nik/internal/whatsapp"
 )
 
@@ -145,15 +146,23 @@ func main() {
 	}
 
 	alarmSvc := alarms.New(conn)
-	recallSvc := recall.NewService(cfg, conn, recallClient)
+	recallSvc := recall.NewService(cfg, recallClient)
 	taskSvc := task.NewService(conn)
 	crewSvc := crew.NewService(conn)
 
+	// worker tools: subset available to background task runners.
+	// workers can execute commands, query the DB, describe media, and load skills.
+	// they cannot message users, manage tasks, or set alarms -- only nik does that.
 	var taskTools []llm.Tool
 	taskTools = append(taskTools, shell.BuildTools(cfg)...)
 	taskTools = append(taskTools, llm.BuildTools(llmClient, cfg.Home)...)
 	taskTools = append(taskTools, db.BuildTools(conn)...)
 	taskTools = append(taskTools, skills.BuildTools(cfg)...)
+
+	var workerToolNames []string
+	for _, t := range taskTools {
+		workerToolNames = append(workerToolNames, t.Def.Name)
+	}
 
 	llmClient.SetObserver(stats.NewRecorder(conn))
 
@@ -161,14 +170,15 @@ func main() {
 
 	b := brain.New(cfg, llmClient)
 
+	b.SetWorkerToolNames(workerToolNames)
 	b.SetCrewReader(crewSvc.Roster)
 	b.SetRecaller(recallSvc.Recall)
 	b.SetToolReactor(toolEmojis, messagingSvc.React)
 	b.SetDebugRecorder(brain.NewDebugRecorder(cfg.DebugPath(), llmClient.Model(), time.Now, taskSvc))
 
-	b.RegisterDataSource(messaging.NewDataSource(cfg, messagingSvc, taskSvc))
-	b.RegisterDataSource(alarms.NewDataSource(alarmSvc, messagingSvc))
-	b.RegisterDataSource(task.NewDataSource(taskSvc, messagingSvc))
+	b.RegisterReflex(taskSvc.CheckStale)
+	b.RegisterReflex(alarmSvc.FireDueAlarms)
+	b.SetSensor(timeline.New(cfg, messagingSvc, taskSvc, alarmSvc))
 
 	b.RegisterTools(llm.BuildTools(llmClient, cfg.Home)...)
 	b.RegisterTools(config.BuildTools(cfg, conn)...)

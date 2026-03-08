@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"time"
 
 	"github.com/kciuffolo/nik/internal/queries"
 )
@@ -97,32 +96,61 @@ func GetMessagesByConversation(ctx context.Context, db *sql.DB, conversationID, 
 	return out, nil
 }
 
-func GetMessagesAround(ctx context.Context, db *sql.DB, conversationID string, pivot time.Time, limit int) ([]Message, error) {
-	if limit <= 0 {
-		limit = 10
-	}
+type InsertMessageParams struct {
+	ID                     string
+	ConversationID         string
+	ContactID              string
+	Platform               string
+	ExternalConversationID string
+	ExternalMessageID      string
+	ExternalSenderID       string
+	SentAt                 any
+	IsFromMe               bool
+	IsGroup                bool
+	Kind                   string
+	Body                   string
+	MimeType               any
+	IsEdit                 bool
+	EditTargetMessageID    any
+	ContextStanzaID        any
+	ContextParticipant     any
+	ContextIsForwarded     bool
+	ContextForwardingScore any
+	ContextMentionedIDs    any
+	IsEphemeral            bool
+	IsViewOnce             bool
+}
 
-	rows, err := db.QueryContext(ctx, queries.MessageGetAround, conversationID, pivot, limit)
+func InsertMessage(ctx context.Context, db DBTX, p InsertMessageParams) error {
+	_, err := db.ExecContext(ctx, queries.MessageInsert,
+		p.ID,
+		p.ConversationID,
+		p.ContactID,
+		p.Platform,
+		p.ExternalConversationID,
+		p.ExternalMessageID,
+		p.ExternalSenderID,
+		p.SentAt,
+		p.IsFromMe,
+		p.IsGroup,
+		p.Kind,
+		p.Body,
+		p.MimeType,
+		p.IsEdit,
+		p.EditTargetMessageID,
+		p.ContextStanzaID,
+		p.ContextParticipant,
+		p.ContextIsForwarded,
+		p.ContextForwardingScore,
+		p.ContextMentionedIDs,
+		p.IsEphemeral,
+		p.IsViewOnce,
+	)
 	if err != nil {
-		return nil, fmt.Errorf("get messages around %s: %w", conversationID, err)
-	}
-	defer rows.Close()
-
-	var out []Message
-	for rows.Next() {
-		m, scanErr := scanMessage(rows)
-		if scanErr != nil {
-			return nil, scanErr
-		}
-		out = append(out, m)
+		return fmt.Errorf("insert message %s/%s: %w", p.Platform, p.ExternalMessageID, err)
 	}
 
-	err = rows.Err()
-	if err != nil {
-		return nil, err
-	}
-
-	return out, nil
+	return nil
 }
 
 func UpdateMessageBody(ctx context.Context, db *sql.DB, messageID, body string) error {

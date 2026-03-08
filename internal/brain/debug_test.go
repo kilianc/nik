@@ -25,8 +25,7 @@ func TestWriteDebugMarkdownProducesExpectedSections(t *testing.T) {
 		Timestamp: time.Date(2026, 2, 28, 10, 25, 58, 0, time.UTC).Format(time.RFC3339),
 		Model:     "gpt-5.2-codex",
 		Trigger: map[string]string{
-			"source":    "shell",
-			"source_id": "abc123",
+			"conversation_id": "conv-abc123",
 		},
 		Input: debugInput{
 			Instructions: "You are nik.",
@@ -75,7 +74,7 @@ func TestWriteDebugMarkdownProducesExpectedSections(t *testing.T) {
 	}{
 		{"header", "# Session: 2026-02-28T10:25:58Z"},
 		{"model", "**Model:** gpt-5.2-codex"},
-		{"trigger", "**Trigger:** shell (`abc123`)"},
+		{"trigger", "**Trigger:** conversation (`conv-abc123`)"},
 		{"cost table header", "| | Tokens | Rate | Cost |"},
 		{"input row", "| Input | 400 |"},
 		{"cached row", "| Cached | 600 |"},

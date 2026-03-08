@@ -1,26 +1,8 @@
-SELECT
-  t.id,
-  t.meta,
-  t.activation_id,
-  t.crew_member_id,
-  t.retry_for_task_id,
-  t.retry_number,
-  t.goal,
-  t.plan,
-  t.thinking,
-  t.status,
-  t.created_at,
-  t.started_at,
-  t.completed_at
+SELECT t.id
 FROM task t
 WHERE t.status = 'running'
-  AND t.activation_id IS NOT NULL
-  AND (t.checked_at IS NULL OR t.checked_at < ?1)
+  AND t.started_at < ?1
   AND (
-    (SELECT MAX(tc.created_at) FROM tool_call tc WHERE tc.activation_id = t.activation_id) < ?1
-    OR (
-      NOT EXISTS (SELECT 1 FROM tool_call tc WHERE tc.activation_id = t.activation_id)
-      AND t.started_at < ?1
-    )
-    OR t.started_at < ?2
+    NOT EXISTS (SELECT 1 FROM task_report tr WHERE tr.task_id = t.id)
+    OR (SELECT MAX(tr.created_at) FROM task_report tr WHERE tr.task_id = t.id) < ?1
   )

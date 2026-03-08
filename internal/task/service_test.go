@@ -4,10 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"testing"
-	"time"
 
 	"github.com/kciuffolo/nik/internal/db"
 )
+
+const testConvID = "test-conv-001"
 
 func testDB(t *testing.T) (*Service, *sql.DB) {
 	t.Helper()
@@ -16,6 +17,14 @@ func testDB(t *testing.T) (*Service, *sql.DB) {
 		t.Fatalf("open test db: %v", err)
 	}
 	t.Cleanup(func() { conn.Close() })
+
+	_, err = conn.ExecContext(context.Background(),
+		"INSERT INTO conversation (id, platform, external_conversation_id) VALUES (?, 'whatsapp', 'ext-test')",
+		testConvID)
+	if err != nil {
+		t.Fatalf("seed conversation: %v", err)
+	}
+
 	return NewService(conn), conn
 }
 
@@ -23,7 +32,7 @@ func TestCreateAndGet(t *testing.T) {
 	svc, _ := testDB(t)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, CreateParams{Goal: "run build", Plan: "step 1\nstep 2", Thinking: "low"})
+	task, err := svc.Create(ctx, createParams{Goal: "run build", Plan: "step 1\nstep 2", Thinking: "low"})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -57,15 +66,15 @@ func TestStartAndComplete(t *testing.T) {
 	svc, conn := testDB(t)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, CreateParams{Goal: "test", Thinking: "low"})
+	task, err := svc.Create(ctx, createParams{Goal: "test", Thinking: "low"})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
 	actID := "act-start-test"
 	_, execErr := conn.ExecContext(ctx,
-		"INSERT INTO activation (id, source, source_id, model, created_at) VALUES (?, 'task', ?, 'test', datetime('now'))",
-		actID, task.ID)
+		"INSERT INTO activation (id, conversation_id, sources, model, created_at) VALUES (?, ?, '[]', 'test', datetime('now'))",
+		actID, testConvID)
 	if execErr != nil {
 		t.Fatalf("insert dummy activation: %v", execErr)
 	}
@@ -106,211 +115,94 @@ func TestStartAndComplete(t *testing.T) {
 	}
 }
 
-func TestReportCRUD(t *testing.T) {
+func TestReportInsertAndList(t *testing.T) {
 	svc, _ := testDB(t)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, CreateParams{Goal: "test", Thinking: "low"})
+	task, err := svc.Create(ctx, createParams{
+		Goal:           "test",
+		Thinking:       "low",
+		ConversationID: testConvID,
+	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
-	err = svc.InsertReport(ctx, task.ID, "build passed")
+	err = svc.InsertReport(ctx, task.ID, "running", "build passed")
 	if err != nil {
 		t.Fatalf("insert report: %v", err)
 	}
 
-	items, err := svc.TasksNeedingAttention(ctx)
+	reports, err := svc.ListReports(ctx, testConvID, task.CreatedAt)
 	if err != nil {
-		t.Fatalf("tasks needing attention: %v", err)
+		t.Fatalf("reports: %v", err)
 	}
-	if len(items) != 1 {
-		t.Fatalf("expected 1 item, got %d", len(items))
+	if len(reports) != 1 {
+		t.Fatalf("expected 1 report, got %d", len(reports))
 	}
-	if items[0].Reports != "build passed" {
-		t.Fatalf("expected reports 'build passed', got %q", items[0].Reports)
+	if reports[0].Content != "build passed" {
+		t.Fatalf("expected content 'build passed', got %q", reports[0].Content)
 	}
-	if items[0].Goal != "test" {
-		t.Fatalf("expected goal 'test', got %q", items[0].Goal)
-	}
-
-	ids := items[0].ReportIDs
-	if ids == "" {
-		t.Fatal("expected non-empty report IDs")
-	}
-
-	err = svc.MarkRead(ctx, ids)
-	if err != nil {
-		t.Fatalf("mark read: %v", err)
-	}
-
-	items, err = svc.TasksNeedingAttention(ctx)
-	if err != nil {
-		t.Fatalf("attention after mark: %v", err)
-	}
-	if len(items) != 0 {
-		t.Fatalf("expected 0 items after marking, got %d", len(items))
+	if reports[0].Goal != "test" {
+		t.Fatalf("expected goal 'test', got %q", reports[0].Goal)
 	}
 }
 
-func TestMetaRoundTrip(t *testing.T) {
+func TestConversationIDRoundTrip(t *testing.T) {
 	svc, _ := testDB(t)
 	ctx := context.Background()
 
-	meta := map[string]string{
-		"conversation_id": "conv-123",
-		"contact_id":      "contact-456",
-	}
-
-	task, err := svc.Create(ctx, CreateParams{Goal: "test meta", Thinking: "low", Meta: meta})
+	task, err := svc.Create(ctx, createParams{
+		Goal:           "test meta",
+		Thinking:       "low",
+		ConversationID: testConvID,
+	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
-	if task.Meta["conversation_id"] != "conv-123" {
-		t.Fatalf("expected conversation_id conv-123, got %q", task.Meta["conversation_id"])
+	if task.ConversationID != testConvID {
+		t.Fatalf("expected conversation_id %s, got %q", testConvID, task.ConversationID)
 	}
 
 	got, err := svc.Get(ctx, task.ID)
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	if got.Meta["conversation_id"] != "conv-123" {
-		t.Fatalf("expected conversation_id conv-123 after get, got %q", got.Meta["conversation_id"])
-	}
-	if got.Meta["contact_id"] != "contact-456" {
-		t.Fatalf("expected contact_id contact-456 after get, got %q", got.Meta["contact_id"])
-	}
-
-	err = svc.InsertReport(ctx, task.ID, "done")
-	if err != nil {
-		t.Fatalf("insert report: %v", err)
-	}
-
-	items, err := svc.TasksNeedingAttention(ctx)
-	if err != nil {
-		t.Fatalf("tasks needing attention: %v", err)
-	}
-	if len(items) != 1 {
-		t.Fatalf("expected 1 item, got %d", len(items))
-	}
-	if items[0].Meta["conversation_id"] != "conv-123" {
-		t.Fatalf("expected meta conversation_id conv-123, got %q", items[0].Meta["conversation_id"])
+	if got.ConversationID != testConvID {
+		t.Fatalf("expected conversation_id %s after get, got %q", testConvID, got.ConversationID)
 	}
 }
 
-func TestActiveTasksByConversation(t *testing.T) {
-	svc, _ := testDB(t)
-	ctx := context.Background()
-
-	svc.Create(ctx, CreateParams{Goal: "task a", Thinking: "low", Meta: map[string]string{"conversation_id": "conv-1"}})
-	svc.Create(ctx, CreateParams{Goal: "task b", Thinking: "low", Meta: map[string]string{"conversation_id": "conv-1"}})
-	svc.Create(ctx, CreateParams{Goal: "task c", Thinking: "low", Meta: map[string]string{"conversation_id": "conv-2"}})
-
-	active, err := svc.ActiveTasks(ctx, "conv-1")
-	if err != nil {
-		t.Fatalf("active tasks: %v", err)
-	}
-	if len(active) != 2 {
-		t.Fatalf("expected 2 active tasks for conv-1, got %d", len(active))
-	}
-
-	active, err = svc.ActiveTasks(ctx, "conv-2")
-	if err != nil {
-		t.Fatalf("active tasks: %v", err)
-	}
-	if len(active) != 1 {
-		t.Fatalf("expected 1 active task for conv-2, got %d", len(active))
-	}
-}
-
-func TestStaleTasks(t *testing.T) {
+func TestListTasksByConversation(t *testing.T) {
 	svc, conn := testDB(t)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, CreateParams{Goal: "stale test", Thinking: "low"})
+	conv2 := "test-conv-002"
+	_, err := conn.ExecContext(ctx,
+		"INSERT INTO conversation (id, platform, external_conversation_id) VALUES (?, 'whatsapp', 'ext-test-2')",
+		conv2)
 	if err != nil {
-		t.Fatalf("create: %v", err)
+		t.Fatalf("seed second conversation: %v", err)
 	}
 
-	dummyActID := "act-stale-test"
-	_, execErr := conn.ExecContext(ctx,
-		"INSERT INTO activation (id, source, source_id, model, created_at) VALUES (?, 'task', ?, 'test', datetime('now'))",
-		dummyActID, task.ID)
-	if execErr != nil {
-		t.Fatalf("insert dummy activation: %v", execErr)
-	}
+	svc.Create(ctx, createParams{Goal: "task a", Thinking: "low", ConversationID: testConvID})
+	svc.Create(ctx, createParams{Goal: "task b", Thinking: "low", ConversationID: testConvID})
+	svc.Create(ctx, createParams{Goal: "task c", Thinking: "low", ConversationID: conv2})
 
-	err = svc.Start(ctx, task.ID, dummyActID)
+	tasks, err := svc.ListTasks(ctx, db.TaskListParams{ConversationID: testConvID})
 	if err != nil {
-		t.Fatalf("start: %v", err)
+		t.Fatalf("list tasks: %v", err)
+	}
+	if len(tasks) != 2 {
+		t.Fatalf("expected 2 tasks for conv-1, got %d", len(tasks))
 	}
 
-	// now it should be stale (no tool_calls, started_at is recent but threshold is tiny)
-	time.Sleep(5 * time.Millisecond)
-	stale, err := svc.StaleTasks(ctx, 1*time.Millisecond, 10*time.Minute)
+	tasks, err = svc.ListTasks(ctx, db.TaskListParams{ConversationID: conv2})
 	if err != nil {
-		t.Fatalf("stale tasks: %v", err)
+		t.Fatalf("list tasks: %v", err)
 	}
-	if len(stale) != 1 {
-		t.Fatalf("expected 1 stale task, got %d", len(stale))
-	}
-	if stale[0].ID != task.ID {
-		t.Fatalf("expected stale task %s, got %s", task.ID, stale[0].ID)
-	}
-}
-
-func TestStaleTasksLongRunning(t *testing.T) {
-	svc, conn := testDB(t)
-	ctx := context.Background()
-
-	task, err := svc.Create(ctx, CreateParams{Goal: "long running test", Thinking: "low"})
-	if err != nil {
-		t.Fatalf("create: %v", err)
-	}
-
-	dummyActID := "act-long-running"
-	_, execErr := conn.ExecContext(ctx,
-		"INSERT INTO activation (id, source, source_id, model, created_at) VALUES (?, 'task', ?, 'test', datetime('now'))",
-		dummyActID, task.ID)
-	if execErr != nil {
-		t.Fatalf("insert dummy activation: %v", execErr)
-	}
-
-	err = svc.Start(ctx, task.ID, dummyActID)
-	if err != nil {
-		t.Fatalf("start: %v", err)
-	}
-
-	// add a recent tool call so it's NOT stale by activity
-	_, err = conn.ExecContext(ctx,
-		"INSERT INTO tool_call (id, activation_id, name, created_at) VALUES ('tc-lr', ?, 'shell', datetime('now'))",
-		dummyActID)
-	if err != nil {
-		t.Fatalf("insert tool call: %v", err)
-	}
-
-	// should NOT be stale with a large stale threshold and large max running
-	stale, err := svc.StaleTasks(ctx, 10*time.Minute, 10*time.Minute)
-	if err != nil {
-		t.Fatalf("stale tasks: %v", err)
-	}
-	if len(stale) != 0 {
-		t.Fatalf("expected 0 stale tasks, got %d", len(stale))
-	}
-
-	// backdate started_at so it exceeds maxRunning threshold
-	_, err = conn.ExecContext(ctx, "UPDATE task SET started_at = datetime('now', '-15 minutes') WHERE id = ?", task.ID)
-	if err != nil {
-		t.Fatalf("backdate started_at: %v", err)
-	}
-
-	// now should appear because started_at is 15 min ago and maxRunning is 10 min
-	stale, err = svc.StaleTasks(ctx, 10*time.Minute, 10*time.Minute)
-	if err != nil {
-		t.Fatalf("stale tasks: %v", err)
-	}
-	if len(stale) != 1 {
-		t.Fatalf("expected 1 stale task via long-running trigger, got %d", len(stale))
+	if len(tasks) != 1 {
+		t.Fatalf("expected 1 task for conv-2, got %d", len(tasks))
 	}
 }

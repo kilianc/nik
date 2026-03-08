@@ -20,7 +20,10 @@ func TestNewInitializesInternalState(t *testing.T) {
 	if b.claimed == nil {
 		t.Fatalf("expected sync set to be initialized")
 	}
-	if len(b.toolDefs) != 0 || len(b.dataSources) != 0 {
-		t.Fatalf("expected no tools or data sources on startup")
+	if len(b.toolDefs) != 0 {
+		t.Fatalf("expected no tools on startup")
+	}
+	if b.sensor != nil {
+		t.Fatalf("expected sensor to be nil on startup")
 	}
 }

@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-var DescribeMediaDef = ToolDef{
+var describeMediaDef = ToolDef{
 	Name:        "describe_media",
 	Description: "Describe or transcribe a media file on disk. For audio, returns a transcript. For images, documents, and stickers, returns a visual/content description. Does not support video files. Returns the description text.",
 	Parameters: map[string]any{
@@ -28,7 +28,7 @@ var DescribeMediaDef = ToolDef{
 	},
 }
 
-func DescribeMediaHandler(client *Client, home string) ToolExecutor {
+func describeMediaHandler(client *Client, home string) ToolExecutor {
 	return func(ctx context.Context, call ToolCall) (string, error) {
 		return describeMedia(ctx, call, client, home)
 	}
@@ -37,8 +37,8 @@ func DescribeMediaHandler(client *Client, home string) ToolExecutor {
 func BuildTools(client *Client, home string) []Tool {
 	return []Tool{
 		{
-			Def:     DescribeMediaDef,
-			Handler: DescribeMediaHandler(client, home),
+			Def:     describeMediaDef,
+			Handler: describeMediaHandler(client, home),
 		},
 	}
 }

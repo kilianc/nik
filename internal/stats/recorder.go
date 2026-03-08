@@ -26,11 +26,12 @@ func (r *Recorder) OnStart(ctx context.Context, model string) {
 	}
 
 	err := db.ActivationInsert(ctx, r.conn, db.ActivationRow{
-		ID:        actID,
-		Source:    meta["source"],
-		SourceID:  meta["source_id"],
-		Model:     model,
-		CreatedAt: time.Now().UTC(),
+		ID:             actID,
+		ConversationID: meta["conversation_id"],
+		TaskID:         meta["task_id"],
+		Sources:        meta["sources"],
+		Model:          model,
+		CreatedAt:      time.Now().UTC(),
 	})
 	if err != nil {
 		slog.Warn("create activation", "pkg", "stats", "activation_id", actID, "error", err)

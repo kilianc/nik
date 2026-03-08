@@ -195,10 +195,14 @@ const (
 	loopThreshold = 4
 )
 
-// Complete starts an LLM completion. It generates an activation ID, records
-// the activation via the observer, then runs the LLM loop in a goroutine.
-// Returns the activation ID and a channel that receives exactly one result.
-func (c *Client) Complete(ctx context.Context, instructions, input string, tools []ToolDef, executor ToolExecutor) (string, <-chan CompletionResult) {
+func StaticInput(s string) func() string {
+	return func() string { return s }
+}
+
+// Complete starts an LLM completion. getInput is called at the top of every
+// round; its return replaces the user message (items[0]). Returns the
+// activation ID and a channel that receives exactly one result.
+func (c *Client) Complete(ctx context.Context, instructions string, getInput func() string, tools []ToolDef, executor ToolExecutor) (string, <-chan CompletionResult) {
 	ch := make(chan CompletionResult, 1)
 
 	client := c.apiClient
@@ -225,7 +229,7 @@ func (c *Client) Complete(ctx context.Context, instructions, input string, tools
 		c.sem <- struct{}{}
 		defer func() { <-c.sem }()
 
-		result := c.completeLoop(ctx, client, instructions, input, tools, executor)
+		result := c.completeLoop(ctx, client, instructions, getInput, tools, executor)
 		ch <- result
 	}()
 
@@ -242,7 +246,7 @@ func augmentCtxMeta(ctx context.Context, key, value string) context.Context {
 	return context.WithValue(ctx, "meta", m)
 }
 
-func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instructions, input string, tools []ToolDef, executor ToolExecutor) CompletionResult {
+func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instructions string, getInput func() string, tools []ToolDef, executor ToolExecutor) CompletionResult {
 	total := Usage{}
 	extra := CompletionExtra{}
 
@@ -256,9 +260,7 @@ func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instru
 		}()
 	}
 
-	items := responses.ResponseInputParam{
-		responses.ResponseInputItemParamOfMessage(input, responses.EasyInputMessageRoleUser),
-	}
+	var items responses.ResponseInputParam
 
 	params := responses.ResponseNewParams{
 		Model:        c.model,
@@ -288,6 +290,16 @@ func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instru
 	var consecutiveRepeats int
 
 	for round := 0; ; round++ {
+		if getInput != nil {
+			content := getInput()
+			msg := responses.ResponseInputItemParamOfMessage(content, responses.EasyInputMessageRoleUser)
+			if round == 0 {
+				items = append(items, msg)
+			} else {
+				items[0] = msg
+			}
+		}
+
 		if round >= maxRounds {
 			slog.Warn("max rounds reached", "pkg", "llm", "rounds", round)
 			retErr = fmt.Errorf("max rounds (%d) reached without final response", maxRounds)
@@ -377,7 +389,7 @@ func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instru
 		for _, call := range calls {
 			items = append(items, responses.ResponseInputItemParamOfFunctionCall(call.Arguments, call.CallID, call.Name))
 
-			slog.Info("tool call", toolCallAttrs(call.Name, round, call.Arguments)...)
+			slog.Info("tool call", toolCallAttrs(ctx, call.Name, round, call.Arguments)...)
 
 			start := time.Now()
 			result, err := executor(ctx, call)
@@ -523,8 +535,17 @@ func buildToolParams(tools []ToolDef) []responses.ToolUnionParam {
 	return params
 }
 
-func toolCallAttrs(name string, round int, raw string) []any {
+func toolCallAttrs(ctx context.Context, name string, round int, raw string) []any {
 	attrs := []any{"pkg", "llm", "tool", name, "round", round}
+
+	if meta, ok := ctx.Value("meta").(map[string]string); ok {
+		if v := meta["activation_id"]; v != "" {
+			attrs = append(attrs, "activation_id", v)
+		}
+		if v := meta["task_id"]; v != "" {
+			attrs = append(attrs, "task_id", v)
+		}
+	}
 
 	var parsed map[string]any
 	err := json.Unmarshal([]byte(raw), &parsed)

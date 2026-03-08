@@ -80,43 +80,37 @@ type Message struct {
 	CreatedAt              time.Time
 }
 
-type Media struct {
-	ID             string
-	MimeType       string
-	SizeBytes      sql.NullInt64
-	LocalPath      sql.NullString
-	DescribeText   sql.NullString
-	TranscriptText sql.NullString
-	DescribedAt    sql.NullTime
-	TranscribedAt  sql.NullTime
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
-}
-
 type Alarm struct {
 	ID                   string
 	OriginContactID      sql.NullString
 	OriginConversationID sql.NullString
 	Goal                 string
 	Recurrence           sql.NullString
-	Source               sql.NullString
-	SourceID             sql.NullString
 	NextFireAt           sql.NullTime
 	LastFiredAt          sql.NullTime
 	CreatedAt            time.Time
 }
 
 type AlarmOccurrence struct {
-	ID            string
-	AlarmID       string
-	Note          sql.NullString
-	NextFireAtSet sql.NullTime
-	FiredAt       time.Time
+	ID         string
+	AlarmID    string
+	Note       sql.NullString
+	FiredAt    time.Time
+	Goal       string
+	Recurrence sql.NullString
+}
+
+type CrewMember struct {
+	ID        string
+	Name      string
+	Prompt    string
+	CreatedAt time.Time
 }
 
 type Task struct {
 	ID             string
-	Meta           map[string]string
+	ConversationID string
+	ContactID      string
 	ActivationID   string
 	CrewMemberID   string
 	RetryForTaskID string
@@ -150,8 +144,8 @@ type TaskListRow struct {
 }
 
 type RetryChainReport struct {
-	Content    string
-	ReportedAt sql.NullTime
+	Content   string
+	CreatedAt sql.NullTime
 }
 
 type RetryChainEntry struct {
@@ -162,15 +156,28 @@ type RetryChainEntry struct {
 	Reports     []RetryChainReport
 }
 
-type TaskAttention struct {
-	TaskID         string
+type TaskReport struct {
+	ID        string
+	TaskID    string
+	Content   string
+	CreatedAt time.Time
+	Goal      string
+	Status    string
+}
+
+type TaskSpawned struct {
+	ID             string
 	Goal           string
-	Status         string
-	Meta           map[string]string
-	RetryForTaskID string
+	RetryForTaskID sql.NullString
 	RetryNumber    int
-	ReportIDs      string
-	Reports        string
+	CrewMemberName sql.NullString
+	CreatedAt      time.Time
+}
+
+type TaskCancelled struct {
+	ID          string
+	Goal        string
+	CompletedAt time.Time
 }
 
 type ToolCallInfo struct {
@@ -178,49 +185,4 @@ type ToolCallInfo struct {
 	DurationMS int64
 	Error      bool
 	At         time.Time
-}
-
-type RecallMessage struct {
-	Body              string
-	SentAt            time.Time
-	IsFromMe          bool
-	SenderName        string
-	ConversationTitle string
-	ConversationKind  string
-}
-
-type RecallContact struct {
-	Name         string
-	Nicknames    []string
-	Emails       []string
-	PhoneNumbers []string
-	WhatsappIDs  []string
-	Timezone     sql.NullString
-	Location     sql.NullString
-	OneLiner     sql.NullString
-	Notes        sql.NullString
-}
-
-type RecallAlarm struct {
-	Goal        string
-	Recurrence  sql.NullString
-	NextFireAt  sql.NullTime
-	CancelledAt sql.NullTime
-	CreatedAt   time.Time
-}
-
-type RecallJournal struct {
-	Date    string
-	Content string
-}
-
-type RecallDream struct {
-	Date    string
-	Pass    int
-	Content string
-}
-
-type RecallBriefing struct {
-	Date    string
-	Content string
 }

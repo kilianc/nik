@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/kciuffolo/nik/internal/config"
-	"github.com/kciuffolo/nik/internal/crew"
 	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/llm"
 	"github.com/kciuffolo/nik/internal/skills"
@@ -45,7 +44,7 @@ func NewRunner(cfg *config.Config, llmClient *llm.Client, svc *Service, tools []
 	}
 }
 
-func (r *Runner) renderPrompt(t db.Task, tools []llm.ToolDef, member *crew.Member) string {
+func (r *Runner) renderPrompt(t db.Task, tools []llm.ToolDef, member *db.CrewMember) string {
 	tmplPath := filepath.Join(r.cfg.PromptsPath(), "task.md")
 
 	raw, err := os.ReadFile(tmplPath)
@@ -131,15 +130,16 @@ func buildSkillDocs(cfg *config.Config) string {
 	return b.String()
 }
 
-func (r *Runner) Run(ctx context.Context, t db.Task, member *crew.Member) {
+func (r *Runner) Run(ctx context.Context, t db.Task, member *db.CrewMember) {
 	ctx, cancel := context.WithTimeout(ctx, runnerTimeout)
 	r.cancels.Store(t.ID, cancel)
 	defer r.cancels.Delete(t.ID)
 	defer cancel()
 
 	ctx = context.WithValue(ctx, "meta", map[string]string{
-		"source":    "task",
-		"source_id": t.ID,
+		"conversation_id": t.ConversationID,
+		"task_id":         t.ID,
+		"sources":         `["task"]`,
 	})
 
 	reportTool := BuildReportTool(r.svc, t.ID)
@@ -147,7 +147,7 @@ func (r *Runner) Run(ctx context.Context, t db.Task, member *crew.Member) {
 	defs, exec := llm.SplitTools(allTools)
 
 	instructions := r.renderPrompt(t, defs, member)
-	actID, ch := r.llm.Complete(ctx, instructions, "", defs, exec)
+	actID, ch := r.llm.Complete(ctx, instructions, llm.StaticInput(""), defs, exec)
 
 	err := r.svc.Start(ctx, t.ID, actID)
 	if err != nil {
@@ -171,8 +171,14 @@ func (r *Runner) Run(ctx context.Context, t db.Task, member *crew.Member) {
 		return
 	}
 
-	r.svc.UpdateStatus(ctx, t.ID, "completed")
-	slog.Info("task completed", "pkg", "task", "task_id", t.ID, "goal", t.Goal)
+	finalStatus := "completed"
+	reportStatus, err := r.svc.LastReportStatus(ctx, t.ID)
+	if err == nil && (reportStatus == "completed" || reportStatus == "failed") {
+		finalStatus = reportStatus
+	}
+
+	r.svc.UpdateStatus(ctx, t.ID, finalStatus)
+	slog.Info("task "+finalStatus, "pkg", "task", "task_id", t.ID, "goal", t.Goal)
 }
 
 func (r *Runner) Cancel(taskID string) bool {

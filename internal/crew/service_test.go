@@ -2,23 +2,24 @@ package crew
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 
 	"github.com/kciuffolo/nik/internal/db"
 )
 
-func testDB(t *testing.T) *Service {
+func testSetup(t *testing.T) (*Service, *sql.DB) {
 	t.Helper()
-	conn, err := db.Open(":memory:")
+	conn, err := db.OpenInMemory()
 	if err != nil {
 		t.Fatalf("open test db: %v", err)
 	}
 	t.Cleanup(func() { conn.Close() })
-	return NewService(conn)
+	return NewService(conn), conn
 }
 
 func TestHireAndGet(t *testing.T) {
-	svc := testDB(t)
+	svc, _ := testSetup(t)
 	ctx := context.Background()
 
 	m, err := svc.Hire(ctx, "Byte", "systems engineer, good at shell commands and debugging")
@@ -54,7 +55,7 @@ func TestHireAndGet(t *testing.T) {
 }
 
 func TestHireDuplicateName(t *testing.T) {
-	svc := testDB(t)
+	svc, _ := testSetup(t)
 	ctx := context.Background()
 
 	_, err := svc.Hire(ctx, "Byte", "first prompt")
@@ -69,14 +70,14 @@ func TestHireDuplicateName(t *testing.T) {
 }
 
 func TestList(t *testing.T) {
-	svc := testDB(t)
+	svc, conn := testSetup(t)
 	ctx := context.Background()
 
 	svc.Hire(ctx, "Byte", "engineer")
 	svc.Hire(ctx, "Scout", "researcher")
 	svc.Hire(ctx, "Pixel", "designer")
 
-	members, err := svc.List(ctx)
+	members, err := db.CrewMemberList(ctx, conn)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -93,7 +94,7 @@ func TestList(t *testing.T) {
 }
 
 func TestGetNotFound(t *testing.T) {
-	svc := testDB(t)
+	svc, _ := testSetup(t)
 	ctx := context.Background()
 
 	_, err := svc.Get(ctx, "nonexistent")

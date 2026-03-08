@@ -109,18 +109,17 @@ func handleLoad(dirs []string, name string) (string, error) {
 	return llm.ToolErrorf("skill %q not found", name), nil
 }
 
-// later directories override earlier ones when skills share a name.
-func ListSkills(dirs ...string) ([]skillSummary, error) {
-	seen := map[string]int{}
-	var summaries []skillSummary
-
+// walkSkillDirs iterates skill directories, parses frontmatter from each
+// SKILL.md, and calls fn for each unique skill. Later directories override
+// earlier ones when skills share a name.
+func walkSkillDirs(dirs []string, fn func(path string, s skillSummary)) error {
 	for _, dir := range dirs {
 		entries, err := os.ReadDir(dir)
 		if err != nil {
 			if os.IsNotExist(err) {
 				continue
 			}
-			return nil, fmt.Errorf("read skills dir %s: %w", dir, err)
+			return fmt.Errorf("read skills dir %s: %w", dir, err)
 		}
 
 		for _, entry := range entries {
@@ -135,16 +134,28 @@ func ListSkills(dirs ...string) ([]skillSummary, error) {
 				continue
 			}
 
-			if idx, ok := seen[s.Name]; ok {
-				summaries[idx] = s
-			} else {
-				seen[s.Name] = len(summaries)
-				summaries = append(summaries, s)
-			}
+			fn(path, s)
 		}
 	}
 
-	return summaries, nil
+	return nil
+}
+
+// later directories override earlier ones when skills share a name.
+func ListSkills(dirs ...string) ([]skillSummary, error) {
+	seen := map[string]int{}
+	var summaries []skillSummary
+
+	err := walkSkillDirs(dirs, func(_ string, s skillSummary) {
+		if idx, ok := seen[s.Name]; ok {
+			summaries[idx] = s
+		} else {
+			seen[s.Name] = len(summaries)
+			summaries = append(summaries, s)
+		}
+	})
+
+	return summaries, err
 }
 
 // parseFrontmatter extracts name, summary, and tools from YAML frontmatter.
@@ -261,49 +272,32 @@ func PreloadedSkills(dirs ...string) ([]PreloadedSkill, error) {
 	seen := map[string]int{}
 	var result []PreloadedSkill
 
-	for _, dir := range dirs {
-		entries, err := os.ReadDir(dir)
-		if err != nil {
-			if os.IsNotExist(err) {
-				continue
-			}
-			return nil, fmt.Errorf("read skills dir %s: %w", dir, err)
+	err := walkSkillDirs(dirs, func(path string, s skillSummary) {
+		if !s.Preload {
+			return
 		}
 
-		for _, entry := range entries {
-			if !entry.IsDir() {
-				continue
-			}
-
-			path := filepath.Join(dir, entry.Name(), "SKILL.md")
-
-			s, err := parseFrontmatter(path)
-			if err != nil || !s.Preload {
-				continue
-			}
-
-			data, err := os.ReadFile(path)
-			if err != nil {
-				continue
-			}
-
-			body := stripFrontmatter(string(data))
-			if body == "" {
-				continue
-			}
-
-			ps := PreloadedSkill{Name: s.Name, Content: body}
-
-			if idx, ok := seen[s.Name]; ok {
-				result[idx] = ps
-			} else {
-				seen[s.Name] = len(result)
-				result = append(result, ps)
-			}
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return
 		}
-	}
 
-	return result, nil
+		body := stripFrontmatter(string(data))
+		if body == "" {
+			return
+		}
+
+		ps := PreloadedSkill{Name: s.Name, Content: body}
+
+		if idx, ok := seen[s.Name]; ok {
+			result[idx] = ps
+		} else {
+			seen[s.Name] = len(result)
+			result = append(result, ps)
+		}
+	})
+
+	return result, err
 }
 
 // stripFrontmatter removes the YAML frontmatter block (--- ... ---) and

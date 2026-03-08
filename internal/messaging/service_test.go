@@ -114,7 +114,7 @@ func TestReceiveMessageFailsWhenContactResolutionFails(t *testing.T) {
 	}
 }
 
-func TestBuildConversationInputRendersResolvedContactName(t *testing.T) {
+func TestSenderLabelsResolvesContactName(t *testing.T) {
 	ctx := context.Background()
 
 	conn, err := db.OpenInMemory()
@@ -158,16 +158,15 @@ func TestBuildConversationInputRendersResolvedContactName(t *testing.T) {
 		t.Fatalf("get message: %v", err)
 	}
 
-	conv, msgs, err := svc.ConversationWithMessages(ctx, msg.ConversationID, 10)
+	_, msgs, err := svc.ConversationWithMessages(ctx, msg.ConversationID, 10)
 	if err != nil {
 		t.Fatalf("conversation with messages: %v", err)
 	}
 
 	labels := svc.SenderLabels(ctx, msgs)
-	lines := BuildConversationInput(conv.ID, conv, msgs, labels, svc.SessionContext(ctx, conv), nil)
-	out := strings.Join(lines, "\n")
-	if !strings.Contains(out, "Alice: hello") {
-		t.Fatalf("expected resolved contact name in output, got %q", out)
+	line := formatMessageLine(msgs[0], labels[msgs[0].ID])
+	if !strings.Contains(line, "Alice: hello") {
+		t.Fatalf("expected resolved contact name in output, got %q", line)
 	}
 }
 
@@ -196,8 +195,10 @@ func (m *mockPlatform) SendImage(_ context.Context, _ string, _ string, _ string
 	m.sendImageCalls++
 	return m.imageOutbound, nil
 }
-func (m *mockPlatform) React(_ context.Context, _, _, _, _ string) error { return nil }
-func (m *mockPlatform) SetPresence(_ context.Context, _ bool) error      { return nil }
+func (m *mockPlatform) React(_ context.Context, _, _, _, _ string) (OutboundMessage, error) {
+	return OutboundMessage{}, nil
+}
+func (m *mockPlatform) SetPresence(_ context.Context, _ bool) error { return nil }
 func (m *mockPlatform) StartTyping(_ context.Context, _ string) error {
 	m.startTypingCalls++
 	return nil
@@ -395,10 +396,14 @@ func TestMarkReadCapsAtReadUpTo(t *testing.T) {
 	sendInboundMessageForReadTest(t, ctx, svc, externalConversationID, externalSenderID, "in-2", "second", t2)
 	sendInboundMessageForReadTest(t, ctx, svc, externalConversationID, externalSenderID, "in-3", "third", t3)
 
-	conversationID, err := svc.ConversationIDFromExternal(ctx, "whatsapp", externalConversationID)
+	conv, err := db.GetConversation(ctx, conn, db.GetConversationParams{
+		Platform:               "whatsapp",
+		ExternalConversationID: externalConversationID,
+	})
 	if err != nil {
-		t.Fatalf("conversation id from external: %v", err)
+		t.Fatalf("get conversation: %v", err)
 	}
+	conversationID := conv.ID
 
 	err = svc.MarkRead(ctx, conversationID, t2)
 	if err != nil {
@@ -418,7 +423,7 @@ func TestMarkReadCapsAtReadUpTo(t *testing.T) {
 		}
 	}
 
-	conv, err := db.GetConversation(ctx, conn, db.GetConversationParams{ID: conversationID})
+	conv, err = db.GetConversation(ctx, conn, db.GetConversationParams{ID: conversationID})
 	if err != nil {
 		t.Fatalf("get conversation: %v", err)
 	}
@@ -466,10 +471,14 @@ func TestMarkReadSkipsZeroReadUpTo(t *testing.T) {
 
 	sendInboundMessageForReadTest(t, ctx, svc, externalConversationID, externalSenderID, "in-1", "first", t1)
 
-	conversationID, err := svc.ConversationIDFromExternal(ctx, "whatsapp", externalConversationID)
+	conv, err := db.GetConversation(ctx, conn, db.GetConversationParams{
+		Platform:               "whatsapp",
+		ExternalConversationID: externalConversationID,
+	})
 	if err != nil {
-		t.Fatalf("conversation id from external: %v", err)
+		t.Fatalf("get conversation: %v", err)
 	}
+	conversationID := conv.ID
 
 	err = svc.MarkRead(ctx, conversationID, time.Time{})
 	if err != nil {
@@ -514,10 +523,14 @@ func TestMarkReadPicksUpMessagesAfterOutbound(t *testing.T) {
 
 	sendInboundMessageForReadTest(t, ctx, svc, externalConversationID, externalSenderID, "in-1", "hello", t1)
 
-	conversationID, err := svc.ConversationIDFromExternal(ctx, "whatsapp", externalConversationID)
+	conv, err := db.GetConversation(ctx, conn, db.GetConversationParams{
+		Platform:               "whatsapp",
+		ExternalConversationID: externalConversationID,
+	})
 	if err != nil {
-		t.Fatalf("conversation id from external: %v", err)
+		t.Fatalf("get conversation: %v", err)
 	}
+	conversationID := conv.ID
 
 	err = svc.MarkRead(ctx, conversationID, t1)
 	if err != nil {
@@ -537,7 +550,7 @@ func TestMarkReadPicksUpMessagesAfterOutbound(t *testing.T) {
 		t.Fatalf("reply: %v", err)
 	}
 
-	conv, err := db.GetConversation(ctx, conn, db.GetConversationParams{ID: conversationID})
+	conv, err = db.GetConversation(ctx, conn, db.GetConversationParams{ID: conversationID})
 	if err != nil {
 		t.Fatalf("get conversation after reply: %v", err)
 	}
@@ -699,7 +712,7 @@ func TestFindMessageIdenticalPicksMostRecent(t *testing.T) {
 	}
 }
 
-func TestSessionContextUnifiedDM(t *testing.T) {
+func TestConversationHeaderUnifiedDM(t *testing.T) {
 	ctx := context.Background()
 	conn, err := db.OpenInMemory()
 	if err != nil {
@@ -720,7 +733,7 @@ func TestSessionContextUnifiedDM(t *testing.T) {
 		t.Fatalf("get conversation: %v", err)
 	}
 
-	session := svc.SessionContext(ctx, conv)
+	session := svc.ConversationHeader(ctx, conv)
 	out := strings.Join(session.Lines, "\n")
 
 	if !strings.Contains(out, "Conversation: "+conv.ID) {

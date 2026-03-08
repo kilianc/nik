@@ -119,7 +119,6 @@ func handleRun(ctx context.Context, args shellArgs, home string) (string, error)
 		Command:        args.Command,
 		Description:    args.Description,
 		ConversationID: ctxMeta["conversation_id"],
-		MessageID:      ctxMeta["message_id"],
 		ActivationID:   ctxMeta["activation_id"],
 		StartedAt:      now,
 	}

@@ -7,75 +7,36 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/id"
-	"github.com/kciuffolo/nik/internal/queries"
 )
 
-type Member struct {
-	ID        string
-	Name      string
-	Prompt    string
-	CreatedAt time.Time
-}
-
 type Service struct {
-	db *sql.DB
+	conn *sql.DB
 }
 
-func NewService(db *sql.DB) *Service {
-	return &Service{db: db}
+func NewService(conn *sql.DB) *Service {
+	return &Service{conn: conn}
 }
 
-func (s *Service) Hire(ctx context.Context, name, prompt string) (Member, error) {
-	m := Member{
+func (s *Service) Hire(ctx context.Context, name, prompt string) (db.CrewMember, error) {
+	m := db.CrewMember{
 		ID:        id.V7(),
 		Name:      name,
 		Prompt:    prompt,
 		CreatedAt: time.Now().UTC(),
 	}
 
-	_, err := s.db.ExecContext(ctx, queries.CrewMemberInsert,
-		m.ID,
-		m.Name,
-		m.Prompt,
-		m.CreatedAt,
-	)
+	err := db.CrewMemberInsert(ctx, s.conn, m)
 	if err != nil {
-		return Member{}, fmt.Errorf("insert crew member %s: %w", m.Name, err)
+		return db.CrewMember{}, err
 	}
 
 	return m, nil
 }
 
-func (s *Service) List(ctx context.Context) ([]Member, error) {
-	rows, err := s.db.QueryContext(ctx, queries.CrewMemberList)
-	if err != nil {
-		return nil, fmt.Errorf("list crew members: %w", err)
-	}
-	defer rows.Close()
-
-	var members []Member
-	for rows.Next() {
-		var m Member
-
-		err = rows.Scan(
-			&m.ID,
-			&m.Name,
-			&m.Prompt,
-			&m.CreatedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("scan crew member: %w", err)
-		}
-
-		members = append(members, m)
-	}
-
-	return members, rows.Err()
-}
-
 func (s *Service) Roster(ctx context.Context) (string, error) {
-	members, err := s.List(ctx)
+	members, err := db.CrewMemberList(ctx, s.conn)
 	if err != nil {
 		return "", err
 	}
@@ -96,20 +57,6 @@ func (s *Service) Roster(ctx context.Context) (string, error) {
 	return b.String(), nil
 }
 
-func (s *Service) Get(ctx context.Context, idOrName string) (Member, error) {
-	row := s.db.QueryRowContext(ctx, queries.CrewMemberGet, idOrName)
-
-	var m Member
-
-	err := row.Scan(
-		&m.ID,
-		&m.Name,
-		&m.Prompt,
-		&m.CreatedAt,
-	)
-	if err != nil {
-		return Member{}, fmt.Errorf("get crew member %s: %w", idOrName, err)
-	}
-
-	return m, nil
+func (s *Service) Get(ctx context.Context, idOrName string) (db.CrewMember, error) {
+	return db.CrewMemberGet(ctx, s.conn, idOrName)
 }

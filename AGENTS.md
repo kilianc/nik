@@ -13,7 +13,7 @@ Nik is an autonomous personal AI -- like OpenClaw but with a personality, real m
 - **Highest autonomy** -- nik should be able to do everything on its own without human intervention
 - **Smallest codebase** -- the code should be small enough for one person (or one AI) to fully grok; every line earns its place
 - **Core tools + extensible skills** -- a small set of powerful core tools (exec, read, write, search, etc.) and a growing set of user-defined skills that compose them. Skills are the extension mechanism, not more tools.
-- **Single decision-maker** -- infrastructure (runners, datasources, adapters) moves data and updates state, but never decides on behalf of the LLM. When code auto-generates messages, reports, or actions, it creates invisible actors that confuse the model. Only the LLM decides what to communicate and when.
+- **Single decision-maker** -- infrastructure (runners, adapters, reflexes) moves data and updates state, but never decides on behalf of the LLM. When code auto-generates messages, reports, or actions, it creates invisible actors that confuse the model. Only the LLM decides what to communicate and when.
 
 ### Human-centric async design
 
@@ -22,7 +22,7 @@ Nik interacts with long-running tasks the way a human does:
 - **Staring**: synchronous watching with polling. Kick off a command, watch for output, catch when it finishes. Fast commands return immediately.
 - **Checking in**: asynchronous reminders. Walk away, set a mental note to come back later, glance at the screen, decide what to do.
 
-The model drives the cadence -- it decides how long to stare, when to come back, whether to report to a user, and whether to keep watching or walk away. The data source is just a calendar reminder.
+The model drives the cadence -- it decides how long to stare, when to come back, whether to report to a user, and whether to keep watching or walk away. The alarm is just a calendar reminder.
 
 **Invariant**: every alive session always has a scheduled check-in. The only way to stop is to kill it. No orphans.
 
@@ -98,16 +98,17 @@ Entry point: `cmd/nik/main.go`
 | `internal/config/` | `Config` struct + `Load(home)` from `config.yaml` in home dir |
 | `internal/db/` | SQLite open/schema, models, one Go file per query function |
 | `internal/queries/` | embedded `.sql` files for canonical entities (`conversation_*`, `message_*`, `media_*`, etc.) |
-| `internal/brain/` | main loop, data source + tool registration, prompt loading, debug output |
+| `internal/brain/` | main loop, sense + reflex + tool registration, prompt loading, debug output |
 | `internal/codex/` | Codex auth for LLM client (login, token management) |
 | `internal/id/` | UUID generation — `V4()`, `V7()`, `Short(n)` |
 | `internal/llm/` | LLM client — `Complete`, `Transcribe`, `Describe`; supports OpenAI and Codex auth |
-| `internal/messaging/` | canonical messaging service, datasource, and tool handlers |
+| `internal/messaging/` | canonical messaging service and tool handlers |
 | `internal/whatsapp/` | WhatsApp platform adapter implementing messaging platform interface |
 | `internal/contacts/` | contact resolution/upsert orchestration + contact update tools |
-| `internal/shell/` | tmux-backed persistent shell tool + data source |
-| `internal/alarms/` | alarm/reminder scheduling service, tools, and data source |
+| `internal/shell/` | tmux-backed persistent shell tool |
+| `internal/alarms/` | alarm/reminder scheduling service, tools, and reflex |
 | `internal/recall/` | pre-activation recall — reads MEMORIES.md + structured data, LLM filters for relevance |
+| `internal/timeline/` | unified Sense implementation — reads messages, task reports, alarm occurrences and maps them to Stimulus |
 | `internal/skills/` | skill loader — reads SKILL.md files and registers tools dynamically |
 | `tools/` | codegen/build/debug tools invoked by `make` — no runtime code; each tool has its own README |
 | `prompts/` | system prompt templates loaded at runtime |
@@ -131,25 +132,55 @@ Each prompt file has one job. Don't duplicate rules across files.
 
 **Rule of thumb**: if a rule is about *who nik is*, it goes in `01-identity.md`. If it's about *how nik thinks or acts*, it goes in `04-brain.md`. If it's a hard constraint, `00-base.md`. If it's about *how workers execute*, `task.md`. Never say the same thing in two files.
 
+**Workspace skills are runtime knowledge.** Base prompts (`prompts/`) must never reference specific workspace skills by name. Workspace skills teach through their summaries in the available skills index; base prompts stay generic.
+
 ### Brain activation model
 
 The brain uses cognitive metaphors; the LLM client uses transport/mechanical ones.
 
 ```
 Brain.Awake()        -- wake up, start the loop
-  Brain.perceive()   -- scan senses (data sources) for new stimuli
+  reflexes           -- unconscious side effects (check stale tasks, fire due alarms)
+  Brain.perceive()   -- scan sense for new stimuli
     Brain.activate() -- one stimulus triggers one activation
       Brain.think()  -- form thoughts (calls llm.Complete under the hood)
         llm.Complete() -- send request, get completion (transport)
 ```
 
+- **Reflex** (`func(ctx context.Context)`): unconscious, automatic, side-effect-producing function. Runs every tick *before* perception. Examples: `task.CheckStale` (inserts stale reports), `alarms.FireDueAlarms` (creates occurrences and claims alarms).
+- **Sense** (`interface { Scan(ctx) ([]Stimulus, error) }`): the brain's single, unified perception. Strictly read-only — no side effects. Returns `[]Stimulus`, one per conversation with new events.
+- **Stimulus**: structured perception output (`Preamble`, `Timeline []TimelineEntry`, `ReadLine`, `Meta`, `LiveInput`, `Processed`). The timeline is a chronological mix of messages, task reports, and alarm occurrences.
+
 ### Autonomous systems
 
-These run on schedule via data sources — the brain activates them like any other stimulus.
+These run on schedule via alarms — the brain activates them like any other stimulus.
 
 - **Journal**: managed entirely by the `journal` skill. Nik uses a recurring alarm, gathers day context via `db_query`/`shell`, and writes to `journal/` files. No domain package.
 - **Dream**: managed entirely by the `dream` skill. Nik uses 5 recurring alarms (one per dream pass), processes the journal and memories, and writes to `dreams/` files. The final pass (Wake) evolves nik's **soul** — a living identity document stored in `soul/latest.md` and loaded into the system prompt on every activation. Dated snapshots in `soul/YYYY-MM-DD.md` preserve history. No domain package.
 - **Briefing**: managed entirely by the `briefing` skill. Nik uses a recurring alarm, `web_search` for news, and writes to `briefings/` files. No domain package.
+
+### Tasks and the timeline
+
+**Principle:** when things happen, they appear in the timeline. If making an event appear is hard, the data model is wrong.
+
+**Notification model:** the timeline is a notification feed. Task and alarm entries use structured key: value format with 11-space padding on continuation lines (width of `[HH:MM:SS] `). Report content is truncated to 200 chars with `[truncated]` marker. `task_status` provides the full picture: plan, complete report content, tool calls, retry chain.
+
+**Two actors:**
+
+- Workers produce `task_report` rows with a `status` field (`running`, `completed`, `failed`). The runner reads the last report's status to set `task.status`.
+- The system produces lifecycle entries from the `task` table (spawned, cancelled, retried).
+
+| Event        | Who produces it                    | Timeline entry                        | Separate system entry?               |
+| ------------ | ---------------------------------- | ------------------------------------- | ------------------------------------ |
+| Task created | nik calls `task_spawn`             | `[Task spawned]`                      | Yes — introduces the task_id         |
+| Progress     | worker writes report               | `[Task report] ... status: running`   | No                                   |
+| Completed    | worker writes final report         | `[Task report] ... status: completed` | No — the report IS the event         |
+| Failed       | worker writes final report         | `[Task report] ... status: failed`    | No — the report IS the event         |
+| Cancelled    | nik calls `task_cancel`            | `[Task cancelled]`                    | Yes — no report covers this          |
+| Retried      | nik calls `task_retry`             | `[Task retry #N spawned]`             | Yes — introduces the new task_id     |
+| Stale        | `CheckStale` reflex inserts report | `[Task report] ... stale`             | No — stale detection writes a report |
+
+`task_status` is for drill-down, not discovery.
 
 ### Scripts and Tools
 
@@ -198,6 +229,8 @@ All queries live in `internal/queries/*.sql` files with exact executable SQL (po
 
 All primary keys are **UUIDv7** (time-ordered), generated in Go via `id.V7()` from `internal/id/` (`github.com/google/uuid`). `id.V4()` for random UUIDs, `id.Short(n)` for short hex IDs (e.g. shell session names). Stored as plain `TEXT` in SQLite.
 
+**Short IDs in the timeline:** `id.Shorten(uuid)` extracts the last 12 hex chars (random portion) of a UUID for display. All entity IDs in the timeline (`task_id:`, `alarm_id:`) use short forms to save tokens. Disambiguation: short ID + context (timestamp, goal, entry type) is unique — same principle as message text matching. Tools resolve short IDs by suffix match via `db.ResolveShortID` (`WHERE id LIKE '%' || ?1`).
+
 ### SQLite Go Driver Conventions
 
 Using `mattn/go-sqlite3`:
@@ -214,7 +247,7 @@ Good — `GetContact` already does this (`get_contact.sql` uses `WHERE id = ?1 O
 
 ### DB / service layering
 
-`db/` is the only package that touches `internal/queries`. It owns model types (`db/models.go`), scan helpers, and query functions. Domain packages (`internal/<name>/`) hold services, tools, and data sources — they call `db.*` functions for all persistence.
+`db/` is the only package that touches `internal/queries`. It owns model types (`db/models.go`), scan helpers, and query functions. Domain packages (`internal/<name>/`) hold services, tools, and reflexes — they call `db.*` functions for all persistence.
 
 - model types (plain data structs, no methods) go in `db/models.go`
 - query functions are standalone: `func TaskGet(ctx, db, taskID) (Task, error)`
@@ -229,6 +262,8 @@ Good — `GetContact` already does this (`get_contact.sql` uses `WHERE id = ?1 O
 - Tool names use canonical prefixes by domain (see "Where tools live" table for the full list)
 - Metadata keys use canonical ids: `conversation_id`, `message_id` (platform ids are never exposed to LLM context)
 - FK columns always include the target table name: `<table>_id` for simple references, `<qualifier>_<table>_id` when disambiguation is needed (e.g. `origin_contact_id`, `retry_for_task_id`). Self-references follow the same pattern.
+- Service method names: `Get` for single entity by ID, `List<Plural>` for returning slices (e.g. `ListTasks`, `ListReports`, `ListOccurrences`). Avoid bare `List()` — include the entity name.
+- DB function names follow the same pattern with entity prefix: `TaskGet`, `TaskList`, `TaskReportList`.
 
 ### Nik's Identity
 
@@ -238,9 +273,9 @@ Nik is an independent entity with its own WhatsApp phone number. `is_from_me` me
 
 OpenAI's API requires `required` to list **every** key in `properties`. Optional parameters must still appear in `required`; use `"description"` to indicate they can be empty/null.
 
-## Brain tools and data sources
+## Brain tools, sense, and reflexes
 
-The `brain` package provides registration machinery (`Tool`, `ToolDeps`, `ToolHandler`, `DataSource`) but **never defines tools or data sources itself**. Each domain package defines its own tools and data sources, and `main.go` wires them in.
+The `brain` package provides registration machinery (`Tool`, `ToolDeps`, `ToolHandler`, `Sense`, `Reflex`) but **never defines tools, sense, or reflexes itself**. Each domain package defines its own pieces, and `main.go` wires them in.
 
 ### Where tools live
 
@@ -248,7 +283,7 @@ Tools are defined in their domain package, not in `brain/`:
 
 | Package | Tools | Why |
 |---------|-------|-----|
-| `internal/messaging/` | `message_reply`, `message_react`, `message_set_presence`, `message_update_media_description` | canonical messaging actions routed by platform |
+| `internal/messaging/` | `message_reply`, `message_noop`, `message_react`, `message_set_presence`, `message_update_media_description` | canonical messaging actions routed by platform |
 | `internal/contacts/` | `update_contact` | contact profile management |
 | `internal/db/` | `db_query` | read-only SQL queries against nik's SQLite database |
 | `internal/llm/` | `describe_media` | generic AI capability, wraps LLM methods |
@@ -260,9 +295,10 @@ Tools are defined in their domain package, not in `brain/`:
 
 Each package exposes a `BuildTools() []llm.Tool` function that returns tool definitions + handlers. `main.go` calls `b.RegisterTools(pkg.BuildTools()...)`.
 
-### Where data sources live
+### Where sense and reflexes live
 
-Data sources follow the same pattern. Each domain package that produces context for the brain exposes a `NewDataSource()` function. Currently registered: `messaging` (unread conversations), `alarms` (due alarms), `task` (background tasks).
+- **Sense**: `internal/timeline/` — single `Sense` implementation that iterates `AllowConversationIDs`, fetches messages/reports/occurrences, and maps them to `Stimulus`. Centrally owns all timeline formatting.
+- **Reflexes**: defined in domain packages — `task.Service.CheckStale`, `alarms.Service.FireDueAlarms`. Registered in `main.go` via `b.RegisterReflex(...)`.
 
 ### Registration flow (`main.go`)
 
@@ -271,9 +307,10 @@ Data sources follow the same pattern. Each domain package that produces context 
 3. Build LLM client (OpenAI key or Codex auth)
 4. Create domain services: `alarms`, `recall`
 5. Create brain: `b := brain.New(cfg, llmClient)` (soul loaded from `soul/latest.md` automatically)
-6. Register data sources: `messaging`, `alarms`, `task`
-7. Register tools from all domain packages (see tools table above)
-8. `b.Awake(ctx, pollInterval)` starts the main loop
+6. Register reflexes: `taskSvc.CheckStale`, `alarmSvc.FireDueAlarms`
+7. Set sense: `timeline.NewSense(cfg, messagingSvc, taskSvc, alarmSvc)`
+8. Register tools from all domain packages (see tools table above)
+9. `b.Awake(ctx, pollInterval)` starts the main loop
 
 ### Adding a new tool
 
