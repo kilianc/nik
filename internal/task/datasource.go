@@ -171,8 +171,12 @@ func (d *DataSource) retryChainContext(ctx context.Context, retryForTaskID strin
 	lines = append(lines, "", "## Previous attempts")
 	for _, entry := range chain {
 		lines = append(lines, fmt.Sprintf("- Attempt #%d (%s): %s", entry.RetryNumber, entry.Status, entry.Goal))
-		if entry.Reports != "" {
-			lines = append(lines, fmt.Sprintf("  Reports: %s", entry.Reports))
+		for _, r := range entry.Reports {
+			prefix := ""
+			if r.ReportedAt.Valid {
+				prefix = "[already read] "
+			}
+			lines = append(lines, fmt.Sprintf("  Report: %s%s", prefix, r.Content))
 		}
 	}
 

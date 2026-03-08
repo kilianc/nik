@@ -496,8 +496,8 @@ func buildRetryPlan(newPlan string, chain []db.RetryChainEntry) string {
 	for _, entry := range chain {
 		fmt.Fprintf(&b, "### Attempt #%d (%s)\n", entry.RetryNumber, entry.Status)
 		fmt.Fprintf(&b, "Goal: %s\n", entry.Goal)
-		if entry.Reports != "" {
-			fmt.Fprintf(&b, "Reports:\n%s\n", entry.Reports)
+		for _, r := range entry.Reports {
+			fmt.Fprintf(&b, "Report: %s\n", r.Content)
 		}
 		b.WriteByte('\n')
 	}

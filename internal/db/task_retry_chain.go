@@ -15,22 +15,42 @@ func TaskRetryChain(ctx context.Context, db *sql.DB, rootID string) ([]RetryChai
 	}
 	defer rows.Close()
 
+	idx := map[string]int{}
 	var entries []RetryChainEntry
-	for rows.Next() {
-		var e RetryChainEntry
 
-		err = rows.Scan(
-			&e.ID,
-			&e.RetryNumber,
-			&e.Goal,
-			&e.Status,
-			&e.Reports,
+	for rows.Next() {
+		var (
+			id          string
+			retryNumber int
+			goal        string
+			status      string
+			content     string
+			reportedAt  sql.NullTime
 		)
+
+		err = rows.Scan(&id, &retryNumber, &goal, &status, &content, &reportedAt)
 		if err != nil {
-			return nil, fmt.Errorf("scan retry chain entry: %w", err)
+			return nil, fmt.Errorf("scan retry chain row: %w", err)
 		}
 
-		entries = append(entries, e)
+		i, exists := idx[id]
+		if !exists {
+			i = len(entries)
+			idx[id] = i
+			entries = append(entries, RetryChainEntry{
+				ID:          id,
+				RetryNumber: retryNumber,
+				Goal:        goal,
+				Status:      status,
+			})
+		}
+
+		if content != "" {
+			entries[i].Reports = append(entries[i].Reports, RetryChainReport{
+				Content:    content,
+				ReportedAt: reportedAt,
+			})
+		}
 	}
 
 	return entries, rows.Err()
