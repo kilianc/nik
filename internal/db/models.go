@@ -149,12 +149,17 @@ type TaskListRow struct {
 	CompletedAt    sql.NullTime
 }
 
+type RetryChainReport struct {
+	Content    string
+	ReportedAt sql.NullTime
+}
+
 type RetryChainEntry struct {
 	ID          string
 	RetryNumber int
 	Goal        string
 	Status      string
-	Reports     string
+	Reports     []RetryChainReport
 }
 
 type TaskAttention struct {
