@@ -20,7 +20,7 @@ func TestActivationInsertPersistsRow(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	row := ActivationRow{
 		ID:              id.V7(),
-		Source:          "messaging",
+		Source:          "message",
 		SourceID:        "conv-123",
 		Model:           "gpt-5",
 		ReasoningEffort: "medium",
@@ -60,8 +60,8 @@ func TestActivationInsertPersistsRow(t *testing.T) {
 	if got.id != row.ID {
 		t.Fatalf("expected id %q, got %q", row.ID, got.id)
 	}
-	if got.source != "messaging" {
-		t.Fatalf("expected source messaging, got %q", got.source)
+	if got.source != "message" {
+		t.Fatalf("expected source message, got %q", got.source)
 	}
 	if got.tokens != 1500 {
 		t.Fatalf("expected 1500 total_tokens, got %d", got.tokens)
@@ -82,7 +82,7 @@ func TestActivationInsertWithError(t *testing.T) {
 
 	row := ActivationRow{
 		ID:        id.V7(),
-		Source:    "alarms",
+		Source:    "alarm",
 		Model:     "gpt-5",
 		Error:     true,
 		CreatedAt: time.Now().UTC(),

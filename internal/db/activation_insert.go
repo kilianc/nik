@@ -32,12 +32,17 @@ func ActivationInsert(ctx context.Context, db DBTX, row ActivationRow) error {
 		errFlag = 1
 	}
 
+	var effort any
+	if row.ReasoningEffort != "" {
+		effort = row.ReasoningEffort
+	}
+
 	_, err := db.ExecContext(ctx, queries.ActivationInsert,
 		row.ID,
 		row.Source,
 		row.SourceID,
 		row.Model,
-		row.ReasoningEffort,
+		effort,
 		row.InputTokens,
 		row.OutputTokens,
 		row.TotalTokens,
