@@ -23,6 +23,10 @@ var spawnToolDef = llm.ToolDef{
 	Parameters: map[string]any{
 		"type": "object",
 		"properties": map[string]any{
+			"contact_id": map[string]any{
+				"type":        "string",
+				"description": "Canonical contact_id for who requested the task.",
+			},
 			"goal": map[string]any{
 				"type":        "string",
 				"description": "Short label for the task (shown in status).",
@@ -41,7 +45,7 @@ var spawnToolDef = llm.ToolDef{
 				"description": "Name of the crew member to assign this to. Omit to run unassigned.",
 			},
 		},
-		"required":             []string{"goal", "plan", "thinking", "member"},
+		"required":             []string{"contact_id", "goal", "plan", "thinking", "member"},
 		"additionalProperties": false,
 	},
 }
@@ -100,21 +104,27 @@ var reportToolDef = llm.ToolDef{
 	Parameters: map[string]any{
 		"type": "object",
 		"properties": map[string]any{
+			"status": map[string]any{
+				"type":        "string",
+				"enum":        []string{"running", "completed", "failed"},
+				"description": "running = progress update, completed = task done successfully, failed = task cannot be completed.",
+			},
 			"note": map[string]any{
 				"type":        "string",
 				"description": "What to tell your manager: progress, a blocker, or the final result.",
 			},
 		},
-		"required":             []string{"note"},
+		"required":             []string{"status", "note"},
 		"additionalProperties": false,
 	},
 }
 
 type spawnArgs struct {
-	Goal     string `json:"goal"`
-	Plan     string `json:"plan"`
-	Thinking string `json:"thinking"`
-	Member   string `json:"member"`
+	ContactID string `json:"contact_id"`
+	Goal      string `json:"goal"`
+	Plan      string `json:"plan"`
+	Thinking  string `json:"thinking"`
+	Member    string `json:"member"`
 }
 
 type statusArgs struct {
@@ -130,7 +140,8 @@ type cancelArgs struct {
 }
 
 type reportArgs struct {
-	Note string `json:"note"`
+	Status string `json:"status"`
+	Note   string `json:"note"`
 }
 
 var retryToolDef = llm.ToolDef{
@@ -201,7 +212,7 @@ func spawnHandler(svc *Service, runner *Runner, crewSvc *crew.Service) llm.ToolE
 			return llm.ToolErrorf("plan is required"), nil
 		}
 
-		var member *crew.Member
+		var member *db.CrewMember
 		var crewMemberID string
 
 		if args.Member != "" {
@@ -216,17 +227,10 @@ func spawnHandler(svc *Service, runner *Runner, crewSvc *crew.Service) llm.ToolE
 
 		brainMeta, _ := ctx.Value("meta").(map[string]string)
 
-		taskMeta := map[string]string{}
-		if v := brainMeta["conversation_id"]; v != "" {
-			taskMeta["conversation_id"] = v
-		}
-		if v := brainMeta["contact_id"]; v != "" {
-			taskMeta["contact_id"] = v
-		}
+		convID := brainMeta["conversation_id"]
 
-		convID := taskMeta["conversation_id"]
 		if convID != "" {
-			active, _ := svc.ActiveTasks(ctx, convID)
+			active, _ := svc.ListTasks(ctx, db.TaskListParams{ConversationID: convID})
 			for _, a := range active {
 				if a.Goal == args.Goal {
 					return llm.ToolErrorf("task %s already running with goal %q -- cancel it first or check its status", a.ID, a.Goal), nil
@@ -237,12 +241,13 @@ func spawnHandler(svc *Service, runner *Runner, crewSvc *crew.Service) llm.ToolE
 			}
 		}
 
-		t, err := svc.Create(ctx, CreateParams{
-			CrewMemberID: crewMemberID,
-			Goal:         args.Goal,
-			Plan:         args.Plan,
-			Thinking:     args.Thinking,
-			Meta:         taskMeta,
+		t, err := svc.Create(ctx, createParams{
+			ConversationID: convID,
+			ContactID:      args.ContactID,
+			CrewMemberID:   crewMemberID,
+			Goal:           args.Goal,
+			Plan:           args.Plan,
+			Thinking:       args.Thinking,
 		})
 		if err != nil {
 			return llm.ToolError(err), nil
@@ -272,7 +277,7 @@ func listHandler(svc *Service) llm.ToolExecutor {
 			return llm.ToolError(err), nil
 		}
 
-		tasks, err := svc.List(ctx, args.IncludeRecent)
+		tasks, err := svc.ListTasks(ctx, db.TaskListParams{IncludeRecent: args.IncludeRecent})
 		if err != nil {
 			return llm.ToolError(err), nil
 		}
@@ -318,7 +323,12 @@ func statusHandler(svc *Service) llm.ToolExecutor {
 			return llm.ToolError(err), nil
 		}
 
-		t, err := svc.Get(ctx, args.TaskID)
+		taskID, err := svc.ResolveTaskID(ctx, args.TaskID)
+		if err != nil {
+			return llm.ToolError(err), nil
+		}
+
+		t, err := svc.Get(ctx, taskID)
 		if err != nil {
 			return llm.ToolError(err), nil
 		}
@@ -366,17 +376,22 @@ func cancelHandler(svc *Service, runner *Runner) llm.ToolExecutor {
 			return llm.ToolError(err), nil
 		}
 
-		cancelled := runner.Cancel(args.TaskID)
+		taskID, err := svc.ResolveTaskID(ctx, args.TaskID)
+		if err != nil {
+			return llm.ToolError(err), nil
+		}
+
+		cancelled := runner.Cancel(taskID)
 
 		if !cancelled {
-			err = svc.UpdateStatus(ctx, args.TaskID, "cancelled")
+			err = svc.UpdateStatus(ctx, taskID, "cancelled")
 			if err != nil {
 				return llm.ToolError(err), nil
 			}
 		}
 
 		return llm.ToolResult(map[string]any{
-			"task_id":   args.TaskID,
+			"task_id":   taskID,
 			"cancelled": true,
 		}), nil
 	}
@@ -398,7 +413,12 @@ func retryHandler(svc *Service, runner *Runner, crewSvc *crew.Service) llm.ToolE
 			return llm.ToolErrorf("plan is required"), nil
 		}
 
-		original, err := svc.Get(ctx, args.TaskID)
+		taskID, err := svc.ResolveTaskID(ctx, args.TaskID)
+		if err != nil {
+			return llm.ToolError(err), nil
+		}
+
+		original, err := svc.Get(ctx, taskID)
 		if err != nil {
 			return llm.ToolErrorf("task %s not found: %v", args.TaskID, err), nil
 		}
@@ -423,10 +443,9 @@ func retryHandler(svc *Service, runner *Runner, crewSvc *crew.Service) llm.ToolE
 			return llm.ToolErrorf("there is already an active task in this retry chain (%s) -- cancel it first", activeRetries[0].ID), nil
 		}
 
-		brainMeta, _ := ctx.Value("meta").(map[string]string)
-		convID := brainMeta["conversation_id"]
+		convID := original.ConversationID
 		if convID != "" {
-			active, _ := svc.ActiveTasks(ctx, convID)
+			active, _ := svc.ListTasks(ctx, db.TaskListParams{ConversationID: convID})
 			if len(active) >= maxActivePerConversation {
 				return llm.ToolErrorf("already %d active tasks (max %d) -- wait for some to finish", len(active), maxActivePerConversation), nil
 			}
@@ -437,7 +456,7 @@ func retryHandler(svc *Service, runner *Runner, crewSvc *crew.Service) llm.ToolE
 			goal = original.Goal
 		}
 
-		var member *crew.Member
+		var member *db.CrewMember
 		crewMemberID := original.CrewMemberID
 
 		if args.Member != "" {
@@ -457,14 +476,15 @@ func retryHandler(svc *Service, runner *Runner, crewSvc *crew.Service) llm.ToolE
 		chain, _ := svc.RetryChain(ctx, root)
 		plan := buildRetryPlan(args.Plan, chain)
 
-		t, err := svc.Create(ctx, CreateParams{
+		t, err := svc.Create(ctx, createParams{
+			ConversationID: original.ConversationID,
+			ContactID:      original.ContactID,
 			CrewMemberID:   crewMemberID,
 			RetryForTaskID: root,
 			RetryNumber:    retryNumber,
 			Goal:           goal,
 			Plan:           plan,
 			Thinking:       original.Thinking,
-			Meta:           original.Meta,
 		})
 		if err != nil {
 			return llm.ToolError(err), nil
@@ -516,7 +536,7 @@ func reportHandler(svc *Service, taskID string) llm.ToolExecutor {
 			return llm.ToolError(err), nil
 		}
 
-		err = svc.InsertReport(ctx, taskID, args.Note)
+		err = svc.InsertReport(ctx, taskID, args.Status, args.Note)
 		if err != nil {
 			return llm.ToolError(err), nil
 		}

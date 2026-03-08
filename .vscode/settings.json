@@ -4,6 +4,7 @@
   },
   "markdown.validate.enabled": false,
   "cSpell.words": [
+    "backticked",
     "Ciuffolo",
     "duckdb",
     "jids",
@@ -13,7 +14,9 @@
     "pjid",
     "qrterminal",
     "respawn",
+    "senser",
     "sqlstore",
+    "tmpl",
     "Wapp",
     "whatsmeow"
   ],

@@ -10,7 +10,6 @@ type SessionMeta struct {
 	Command        string    `json:"command"`
 	Description    string    `json:"description"`
 	ConversationID string    `json:"conversation_id,omitempty"`
-	MessageID      string    `json:"message_id,omitempty"`
 	ActivationID   string    `json:"activation_id"`
 	StartedAt      time.Time `json:"started_at"`
 }

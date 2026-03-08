@@ -1,7 +1,8 @@
 INSERT OR IGNORE INTO activation (
   id,
-  source,
-  source_id,
+  conversation_id,
+  task_id,
+  sources,
   model,
   reasoning_effort,
   input_tokens,
@@ -15,4 +16,4 @@ INSERT OR IGNORE INTO activation (
   error,
   created_at
 )
-VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)

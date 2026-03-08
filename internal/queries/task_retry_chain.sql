@@ -4,7 +4,7 @@ SELECT
   t.goal,
   t.status,
   COALESCE(tr.content, '') AS report_content,
-  tr.reported_at
+  tr.created_at
 FROM task t
 LEFT JOIN task_report tr ON tr.task_id = t.id
 WHERE t.retry_for_task_id = ?1 OR t.id = ?1

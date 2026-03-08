@@ -6,7 +6,6 @@ func TestModelZeroValues(t *testing.T) {
 	var contact Contact
 	var conversation Conversation
 	var message Message
-	var media Media
 	var alarm Alarm
 
 	if contact.ID != "" {
@@ -17,9 +16,6 @@ func TestModelZeroValues(t *testing.T) {
 	}
 	if message.ExternalMessageID != "" {
 		t.Fatalf("expected zero external message id")
-	}
-	if media.ID != "" {
-		t.Fatalf("expected zero media id")
 	}
 	if alarm.Goal != "" {
 		t.Fatalf("expected zero alarm goal")

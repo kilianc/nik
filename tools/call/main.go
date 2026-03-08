@@ -106,7 +106,7 @@ func buildTools(cfg *config.Config, llmClient *llm.Client, conn *sql.DB) map[str
 		}
 
 		for _, t := range messaging.BuildTools(msgSvc) {
-			if t.Def.Name != "message_update_media_description" {
+			if t.Def.Name != "message_update_media_description" && t.Def.Name != "message_noop" {
 				continue
 			}
 

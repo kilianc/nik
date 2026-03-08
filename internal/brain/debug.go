@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/llm"
 )
 
@@ -33,19 +34,11 @@ func (b *Brain) SetDebugRecorder(fn DebugRecorder) {
 	b.debugRecorder = fn
 }
 
-type DebugTaskInfo struct {
-	ID        string
-	Goal      string
-	Status    string
-	CreatedAt time.Time
+type DebugTaskLister interface {
+	ListTasks(ctx context.Context, p db.TaskListParams) ([]db.TaskListRow, error)
 }
 
-type DebugTaskQuerier interface {
-	ActiveTasksForConversation(ctx context.Context, conversationID string) ([]DebugTaskInfo, error)
-}
-
-// all debug state (paths, model, task querier) is captured in the closure.
-func NewDebugRecorder(debugPath, model string, now func() time.Time, tasks DebugTaskQuerier) DebugRecorder {
+func NewDebugRecorder(debugPath, model string, now func() time.Time, tasks DebugTaskLister) DebugRecorder {
 	return func(input DebugInput) {
 		if debugPath == "" {
 			return
@@ -71,7 +64,7 @@ func NewDebugRecorder(debugPath, model string, now func() time.Time, tasks Debug
 		if tasks != nil {
 			convID := input.Meta["conversation_id"]
 			if convID != "" {
-				found, qErr := tasks.ActiveTasksForConversation(context.Background(), convID)
+				found, qErr := tasks.ListTasks(context.Background(), db.TaskListParams{ConversationID: convID})
 				if qErr == nil {
 					for _, t := range found {
 						activeTasks = append(activeTasks, debugTaskInfo{
@@ -218,12 +211,11 @@ func writeDebugMarkdown(path string, rec debugRecord) error {
 		fmt.Fprintf(&w, "**Model:** %s\n\n", rec.Model)
 	}
 
-	if source := rec.Trigger["source"]; source != "" {
-		detail := rec.Trigger["source_id"]
-		if detail != "" {
-			fmt.Fprintf(&w, "**Trigger:** %s (`%s`)\n\n", source, detail)
+	if convID := rec.Trigger["conversation_id"]; convID != "" {
+		if taskID := rec.Trigger["task_id"]; taskID != "" {
+			fmt.Fprintf(&w, "**Trigger:** task (`%s`) in conversation `%s`\n\n", taskID, convID)
 		} else {
-			fmt.Fprintf(&w, "**Trigger:** %s\n\n", source)
+			fmt.Fprintf(&w, "**Trigger:** conversation (`%s`)\n\n", convID)
 		}
 	}
 

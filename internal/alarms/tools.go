@@ -125,14 +125,12 @@ func alarmHandler(svc *Service) llm.ToolExecutor {
 			return `{"error":"empty fire_at"}`, nil
 		}
 
-		var originConversationID, source, sourceID string
+		var originConversationID string
 		if meta, ok := ctx.Value("meta").(map[string]string); ok {
 			originConversationID = meta["conversation_id"]
-			source = meta["source"]
-			sourceID = meta["source_id"]
 		}
 
-		alarm, err := svc.CreateAlarm(ctx, args.OriginContactID, originConversationID, args.Goal, args.Recurrence, source, sourceID, args.FireAt)
+		alarm, err := svc.CreateAlarm(ctx, args.OriginContactID, originConversationID, args.Goal, args.Recurrence, args.FireAt)
 		if err != nil {
 			return llm.ToolError(err), nil
 		}
@@ -170,6 +168,11 @@ func updateAlarmHandler(svc *Service) llm.ToolExecutor {
 			return `{"error":"empty alarm_id"}`, nil
 		}
 
+		alarmID, err := svc.ResolveAlarmID(ctx, args.AlarmID)
+		if err != nil {
+			return llm.ToolError(err), nil
+		}
+
 		hasUpdate := args.Goal != "" || args.Recurrence != "" || args.NextFireAt != ""
 		if hasUpdate {
 			p := db.AlarmUpdateParams{}
@@ -187,22 +190,16 @@ func updateAlarmHandler(svc *Service) llm.ToolExecutor {
 				p.NextFireAt = t
 			}
 
-			err = svc.UpdateAlarm(ctx, args.AlarmID, p)
+			err = svc.UpdateAlarm(ctx, alarmID, p)
 			if err != nil {
 				return llm.ToolError(err), nil
 			}
 		}
 
 		if args.OccurrenceNote != "" {
-			occurrenceID := ""
-			if meta, ok := ctx.Value("meta").(map[string]string); ok {
-				occurrenceID = meta["occurrence_id"]
-			}
-			if occurrenceID != "" {
-				err = svc.UpdateOccurrenceNote(ctx, occurrenceID, args.OccurrenceNote)
-				if err != nil {
-					return llm.ToolError(err), nil
-				}
+			err = svc.UpdateLatestOccurrenceNote(ctx, alarmID, args.OccurrenceNote)
+			if err != nil {
+				return llm.ToolError(err), nil
 			}
 		}
 
@@ -224,7 +221,12 @@ func cancelAlarmHandler(svc *Service) llm.ToolExecutor {
 			return `{"error":"empty alarm_id"}`, nil
 		}
 
-		err = svc.Cancel(ctx, args.AlarmID)
+		alarmID, err := svc.ResolveAlarmID(ctx, args.AlarmID)
+		if err != nil {
+			return llm.ToolError(err), nil
+		}
+
+		err = svc.Cancel(ctx, alarmID)
 		if err != nil {
 			return llm.ToolError(err), nil
 		}

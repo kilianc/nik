@@ -2,8 +2,8 @@ package brain
 
 import (
 	"context"
+	"errors"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/kciuffolo/nik/internal/config"
@@ -11,18 +11,20 @@ import (
 )
 
 type Brain struct {
-	cfg           *config.Config
-	llm           *llm.Client
-	toolDefs      []llm.ToolDef
-	toolExec      map[string]llm.ToolExecutor
-	privileged    map[string]bool
-	dataSources   []DataSource
-	crewReader    func(ctx context.Context) (string, error)
-	recaller      func(ctx context.Context, stimulus string) string
-	toolReactor   ToolReactor
-	toolEmojis    map[string]string
-	debugRecorder DebugRecorder
-	now           func() time.Time
+	cfg             *config.Config
+	llm             *llm.Client
+	toolDefs        []llm.ToolDef
+	toolExec        map[string]llm.ToolExecutor
+	privileged      map[string]bool
+	sensor          Sensor
+	reflexes        []Reflex
+	crewReader      func(ctx context.Context) (string, error)
+	recaller        func(ctx context.Context, stimulus string) string
+	toolReactor     ToolReactor
+	toolEmojis      map[string]string
+	workerToolNames []string
+	debugRecorder   DebugRecorder
+	now             func() time.Time
 
 	claimed *SyncSet
 }
@@ -40,6 +42,10 @@ func New(cfg *config.Config, llmClient *llm.Client) *Brain {
 
 func (b *Brain) SetCrewReader(fn func(ctx context.Context) (string, error)) {
 	b.crewReader = fn
+}
+
+func (b *Brain) SetWorkerToolNames(names []string) {
+	b.workerToolNames = names
 }
 
 func (b *Brain) SetRecaller(fn func(ctx context.Context, stimulus string) string) {
@@ -60,7 +66,7 @@ func (b *Brain) Awake(ctx context.Context, pollInterval time.Duration) {
 		pollInterval = 2 * time.Second
 	}
 
-	slog.Info("brain awake", "pkg", "brain", "data_sources", len(b.dataSources), "poll", pollInterval)
+	slog.Info("brain awake", "pkg", "brain", "poll", pollInterval)
 
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
@@ -76,41 +82,49 @@ func (b *Brain) Awake(ctx context.Context, pollInterval time.Duration) {
 	}
 }
 
+// perceive runs reflexes then polls the sensor for new stimuli; each stimulus is handed to activate.
 func (b *Brain) perceive(ctx context.Context) {
-	var outputs []DataSourceOutput
-
-	for _, source := range b.dataSources {
-		output, err := source.Check(ctx)
-		if err != nil {
-			slog.Error("check data source failed", "pkg", "brain", "error", err)
-			continue
-		}
-		outputs = append(outputs, output...)
+	for _, r := range b.reflexes {
+		r(ctx)
 	}
 
-	for _, output := range outputs {
-		sourceID := output.Meta["source_id"]
-		if sourceID != "" {
-			key := output.Meta["source"] + ":" + sourceID
-			if !b.claimed.TrySet(key) {
-				continue
-			}
+	if b.sensor == nil {
+		return
+	}
+
+	stimuli, err := b.sensor.Check(ctx)
+	if err != nil {
+		slog.Error("sensor check failed", "pkg", "brain", "error", err)
+		return
+	}
+
+	for _, s := range stimuli {
+		convID := s.Meta["conversation_id"]
+		if convID == "" {
+			panic("stimulus with empty conversation_id")
 		}
 
-		go b.activate(ctx, output)
+		if !b.claimed.TrySet("conversation:" + convID) {
+			continue
+		}
+
+		go b.activate(ctx, s)
 	}
 }
 
-func (b *Brain) activate(ctx context.Context, output DataSourceOutput) {
+// activate consumes a single stimulus from perceive and runs the think loop against it.
+func (b *Brain) activate(ctx context.Context, output Stimulus) {
+	start := time.Now()
+
 	if output.Meta == nil {
 		output.Meta = make(map[string]string)
 	}
 
-	sourceID := output.Meta["source_id"]
-	if sourceID != "" {
-		key := output.Meta["source"] + ":" + sourceID
-		defer b.claimed.Delete(key)
-	}
+	convID := output.Meta["conversation_id"]
+	defer b.claimed.Delete("conversation:" + convID)
+
+	sources := output.Meta["sources"]
+	slog.Info("activation starting", "pkg", "brain", "conversation_id", convID, "sources", sources)
 
 	ctx = context.WithValue(ctx, "meta", output.Meta)
 
@@ -123,35 +137,30 @@ func (b *Brain) activate(ctx context.Context, output DataSourceOutput) {
 		}
 	}
 
-	if output.Processing != nil {
-		err := output.Processing(ctx)
-		if err != nil {
-			slog.Error("processing callback failed", "pkg", "brain", "error", err)
-		}
-	}
+	_, usage, err := b.think(ctx, func() string {
+		return b.sensor.Get(ctx, convID)
+	})
+	elapsed := time.Since(start)
 
-	_, _, err := b.think(ctx, output.Lines)
 	if err != nil {
-		// think errors are logged but never block Processed -- datasources
-		// must always run their cleanup (mark-read, release locks, etc.)
-		slog.Error("think failed", "pkg", "brain", "error", err)
+		slog.Error("activation failed", "pkg", "brain", "conversation_id", convID, "sources", sources, "elapsed", elapsed, "error", err)
+		return
 	}
 
-	if output.Processed != nil {
-		err = output.Processed(ctx)
-		if err != nil {
-			slog.Error("processed callback failed", "pkg", "brain", "error", err)
-		}
-	}
+	slog.Info("activation completed", "pkg", "brain",
+		"conversation_id", convID,
+		"sources", sources,
+		"elapsed", elapsed,
+		"input_tokens", usage.InputTokens,
+		"output_tokens", usage.OutputTokens,
+		"reasoning_tokens", usage.ReasoningTokens,
+	)
 }
 
-func (b *Brain) think(ctx context.Context, input []string) (string, llm.Usage, error) {
-	now := b.now
-	if now == nil {
-		now = time.Now
-	}
+const maxThinkAttempts = 2
 
-	userInput := strings.Join(input, "\n")
+func (b *Brain) think(ctx context.Context, getInput func() string) (string, llm.Usage, error) {
+	userInput := getInput()
 
 	var recall, debugRecall string
 	if b.recaller != nil {
@@ -170,30 +179,53 @@ func (b *Brain) think(ctx context.Context, input []string) (string, llm.Usage, e
 	tools := b.toolsForContext(ctx)
 	executor := b.toolExecutor()
 
-	instructions, err := b.loadInstructions(now(), recall)
-	if err != nil {
-		return "", llm.Usage{}, err
+	var totalUsage llm.Usage
+
+	for attempt := range maxThinkAttempts {
+		retry := attempt > 0
+		if retry {
+			slog.Warn("no tool calls produced, retrying", "pkg", "brain", "attempt", attempt)
+		}
+
+		instructions, err := b.loadInstructions(b.now(), recall, retry)
+		if err != nil {
+			return "", totalUsage, err
+		}
+
+		actID, ch := b.llm.Complete(thinkCtx, instructions, getInput, tools, executor)
+		result := <-ch
+
+		meta["activation_id"] = actID
+
+		if b.debugRecorder != nil {
+			b.debugRecorder(DebugInput{
+				Meta:         meta,
+				Recall:       debugRecall,
+				Instructions: instructions,
+				UserInput:    userInput,
+				RawOutput:    result.Output,
+				Tools:        tools,
+				ToolCalls:    result.History,
+				Extra:        result.Extra,
+				Usage:        result.Usage,
+				ProcessErr:   result.Err,
+			})
+		}
+
+		totalUsage.InputTokens += result.Usage.InputTokens
+		totalUsage.OutputTokens += result.Usage.OutputTokens
+		totalUsage.TotalTokens += result.Usage.TotalTokens
+		totalUsage.CachedTokens += result.Usage.CachedTokens
+		totalUsage.ReasoningTokens += result.Usage.ReasoningTokens
+
+		if result.Err != nil {
+			return "", totalUsage, result.Err
+		}
+
+		if len(result.History) > 0 {
+			return result.Output, totalUsage, nil
+		}
 	}
 
-	actID, ch := b.llm.Complete(thinkCtx, instructions, userInput, tools, executor)
-	result := <-ch
-
-	meta["activation_id"] = actID
-
-	if b.debugRecorder != nil {
-		b.debugRecorder(DebugInput{
-			Meta:         meta,
-			Recall:       debugRecall,
-			Instructions: instructions,
-			UserInput:    userInput,
-			RawOutput:    result.Output,
-			Tools:        tools,
-			ToolCalls:    result.History,
-			Extra:        result.Extra,
-			Usage:        result.Usage,
-			ProcessErr:   result.Err,
-		})
-	}
-
-	return result.Output, result.Usage, result.Err
+	return "", totalUsage, errors.New("no tool calls produced after retries")
 }

@@ -3,11 +3,10 @@ package task
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
+	"log/slog"
 	"time"
 
-	"github.com/kciuffolo/nik/internal/brain"
 	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/id"
 )
@@ -20,29 +19,22 @@ func NewService(conn *sql.DB) *Service {
 	return &Service{conn: conn}
 }
 
-type CreateParams struct {
+type createParams struct {
+	ConversationID string
+	ContactID      string
 	CrewMemberID   string
 	RetryForTaskID string
 	RetryNumber    int
 	Goal           string
 	Plan           string
 	Thinking       string
-	Meta           map[string]string
 }
 
-func (s *Service) Create(ctx context.Context, p CreateParams) (db.Task, error) {
-	if p.Meta == nil {
-		p.Meta = map[string]string{}
-	}
-
-	metaJSON, err := json.Marshal(p.Meta)
-	if err != nil {
-		return db.Task{}, fmt.Errorf("marshal task meta: %w", err)
-	}
-
+func (s *Service) Create(ctx context.Context, p createParams) (db.Task, error) {
 	ip := db.TaskInsertParams{
 		ID:             id.V7(),
-		MetaJSON:       string(metaJSON),
+		ConversationID: p.ConversationID,
+		ContactID:      p.ContactID,
 		CrewMemberID:   p.CrewMemberID,
 		RetryForTaskID: p.RetryForTaskID,
 		RetryNumber:    p.RetryNumber,
@@ -53,14 +45,15 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (db.Task, error) {
 		CreatedAt:      time.Now().UTC(),
 	}
 
-	err = db.TaskInsert(ctx, s.conn, ip)
+	err := db.TaskInsert(ctx, s.conn, ip)
 	if err != nil {
 		return db.Task{}, err
 	}
 
 	return db.Task{
 		ID:             ip.ID,
-		Meta:           p.Meta,
+		ConversationID: p.ConversationID,
+		ContactID:      p.ContactID,
 		CrewMemberID:   p.CrewMemberID,
 		RetryForTaskID: p.RetryForTaskID,
 		RetryNumber:    p.RetryNumber,
@@ -76,6 +69,10 @@ func (s *Service) Get(ctx context.Context, taskID string) (db.Task, error) {
 	return db.TaskGet(ctx, s.conn, taskID)
 }
 
+func (s *Service) ResolveTaskID(ctx context.Context, shortID string) (string, error) {
+	return db.ResolveShortID(ctx, s.conn, "task", shortID)
+}
+
 func (s *Service) Start(ctx context.Context, taskID, activationID string) error {
 	return db.TaskStart(ctx, s.conn, taskID, activationID)
 }
@@ -84,35 +81,38 @@ func (s *Service) UpdateStatus(ctx context.Context, taskID, status string) error
 	return db.TaskUpdateStatus(ctx, s.conn, taskID, status)
 }
 
-func (s *Service) InsertReport(ctx context.Context, taskID, content string) error {
+func (s *Service) InsertReport(ctx context.Context, taskID, status, content string) error {
+	if status == "" {
+		status = "running"
+	}
 	return db.TaskReportInsert(ctx, s.conn, db.TaskReportInsertParams{
 		ID:        id.V7(),
 		TaskID:    taskID,
 		Kind:      "report",
+		Status:    status,
 		Content:   content,
 		CreatedAt: time.Now().UTC(),
 	})
 }
 
-func (s *Service) TasksNeedingAttention(ctx context.Context) ([]db.TaskAttention, error) {
-	return db.TasksNeedingAttention(ctx, s.conn)
+func (s *Service) LastReportStatus(ctx context.Context, taskID string) (string, error) {
+	return db.TaskReportLastStatus(ctx, s.conn, taskID)
 }
 
-func (s *Service) MarkRead(ctx context.Context, reportID string) error {
-	return db.TaskReportMarkRead(ctx, s.conn, reportID)
+func (s *Service) ListReports(ctx context.Context, conversationID string, since time.Time) ([]db.TaskReport, error) {
+	return db.TaskReportList(ctx, s.conn, conversationID, since)
 }
 
-func (s *Service) List(ctx context.Context, includeRecent bool) ([]db.TaskListRow, error) {
-	recency := "-0 seconds"
-	if includeRecent {
-		recency = "-1 hour"
-	}
-
-	return db.TaskList(ctx, s.conn, recency)
+func (s *Service) ListSpawned(ctx context.Context, conversationID string, since time.Time) ([]db.TaskSpawned, error) {
+	return db.TaskListSpawned(ctx, s.conn, conversationID, since)
 }
 
-func (s *Service) ActiveTasks(ctx context.Context, conversationID string) ([]db.ActiveTask, error) {
-	return db.TaskActiveTasks(ctx, s.conn, conversationID)
+func (s *Service) ListCancelled(ctx context.Context, conversationID string, since time.Time) ([]db.TaskCancelled, error) {
+	return db.TaskListCancelled(ctx, s.conn, conversationID, since)
+}
+
+func (s *Service) ListTasks(ctx context.Context, p db.TaskListParams) ([]db.TaskListRow, error) {
+	return db.TaskList(ctx, s.conn, p)
 }
 
 func (s *Service) ActiveRetries(ctx context.Context, rootID string) ([]db.ActiveTask, error) {
@@ -123,41 +123,24 @@ func (s *Service) RetryChain(ctx context.Context, rootID string) ([]db.RetryChai
 	return db.TaskRetryChain(ctx, s.conn, rootID)
 }
 
-func (s *Service) AllActiveTasks(ctx context.Context) ([]db.ActiveTask, error) {
-	return db.TaskAllActive(ctx, s.conn)
-}
+const staleThreshold = 2 * time.Minute
 
-// MarkSeen stamps checked_at so the datasource won't resurface this stale alert
-// until the task goes idle again.
-func (s *Service) MarkSeen(ctx context.Context, taskID string) error {
-	return db.TaskMarkSeen(ctx, s.conn, taskID)
-}
+func (s *Service) CheckStale(ctx context.Context) {
+	staleCutoff := time.Now().UTC().Add(-staleThreshold)
 
-func (s *Service) StaleTasks(ctx context.Context, staleThreshold, maxRunning time.Duration) ([]db.Task, error) {
-	now := time.Now().UTC()
-	staleCutoff := now.Add(-staleThreshold)
-	maxCutoff := now.Add(-maxRunning)
-
-	return db.TaskStaleTasks(ctx, s.conn, staleCutoff, maxCutoff)
-}
-
-func (s *Service) ActiveTasksForConversation(ctx context.Context, conversationID string) ([]brain.DebugTaskInfo, error) {
-	active, err := s.ActiveTasks(ctx, conversationID)
+	staleIDs, err := db.TaskStaleIDs(ctx, s.conn, staleCutoff)
 	if err != nil {
-		return nil, err
+		slog.Warn("check stale tasks", "pkg", "task", "error", err)
+		return
 	}
 
-	out := make([]brain.DebugTaskInfo, len(active))
-	for i, t := range active {
-		out[i] = brain.DebugTaskInfo{
-			ID:        t.ID,
-			Goal:      t.Goal,
-			Status:    t.Status,
-			CreatedAt: t.CreatedAt,
+	for _, taskID := range staleIDs {
+		msg := fmt.Sprintf("No activity for %s. Task may be stuck.", staleThreshold)
+		err = s.InsertReport(ctx, taskID, "running", msg)
+		if err != nil {
+			slog.Warn("insert stale report", "pkg", "task", "task_id", taskID, "error", err)
 		}
 	}
-
-	return out, nil
 }
 
 // RecentToolCalls returns the latest tool calls for a task activation,

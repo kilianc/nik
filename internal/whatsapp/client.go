@@ -224,20 +224,31 @@ func (c *Client) SendImage(ctx context.Context, conversationJID, imagePath, capt
 	}, nil
 }
 
-func (c *Client) React(ctx context.Context, conversationJID, msgID, senderJID, emoji string) error {
+func (c *Client) React(ctx context.Context, conversationJID, msgID, senderJID, emoji string) (messaging.OutboundMessage, error) {
 	conversation, err := types.ParseJID(conversationJID)
 	if err != nil {
-		return fmt.Errorf("parse conversation jid: %w", err)
+		return messaging.OutboundMessage{}, fmt.Errorf("parse conversation jid: %w", err)
 	}
 
 	sender, _ := types.ParseJID(senderJID)
 	msg := c.wm.BuildReaction(conversation, sender, types.MessageID(msgID), emoji)
-	_, err = c.wm.SendMessage(ctx, conversation, msg)
+	resp, err := c.wm.SendMessage(ctx, conversation, msg)
 	if err != nil {
-		return fmt.Errorf("send reaction: %w", err)
+		return messaging.OutboundMessage{}, fmt.Errorf("send reaction: %w", err)
 	}
 
-	return nil
+	externalSenderID := resp.Sender.String()
+	if externalSenderID == "" {
+		externalSenderID = c.SelfJID()
+	}
+
+	return messaging.OutboundMessage{
+		ExternalMessageID: string(resp.ID),
+		ExternalSenderID:  externalSenderID,
+		SentAt:            resp.Timestamp,
+		Kind:              "reaction",
+		Body:              emoji,
+	}, nil
 }
 
 func (c *Client) StartTyping(ctx context.Context, conversationJID string) error {

@@ -21,6 +21,8 @@ type promptData struct {
 	Soul            string
 	Crew            string
 	Recall          string
+	WorkerTools     string
+	BrainOnlyTools  string
 	PreloadedSkills []skills.PreloadedSkill
 	AvailableSkills []skillSummaryData
 }
@@ -70,7 +72,7 @@ func shiftHeadings(n int, content string) string {
 	return b.String()
 }
 
-func (b *Brain) loadInstructions(now time.Time, recall string) (string, error) {
+func (b *Brain) loadInstructions(now time.Time, recall string, retry bool) (string, error) {
 	dir := b.cfg.PromptsPath()
 
 	baseData, err := os.ReadFile(filepath.Join(dir, "00-base.md"))
@@ -106,12 +108,41 @@ func (b *Brain) loadInstructions(now time.Time, recall string) (string, error) {
 
 	result := htmlCommentRe.ReplaceAllString(buf.String(), "")
 
+	if retry {
+		nudge, nudgeErr := os.ReadFile(filepath.Join(dir, "05-retry.md"))
+		if nudgeErr != nil {
+			slog.Warn("load retry nudge", "pkg", "brain", "error", nudgeErr)
+		} else {
+			result += "\n\n" + string(nudge)
+		}
+	}
+
 	return result, nil
 }
 
 func (b *Brain) buildPromptData(now time.Time, recall string) promptData {
 	var data promptData
 	data.Recall = recall
+
+	if len(b.workerToolNames) > 0 {
+		workerSet := make(map[string]bool, len(b.workerToolNames))
+		backticked := make([]string, len(b.workerToolNames))
+		for i, name := range b.workerToolNames {
+			backticked[i] = "`" + name + "`"
+			workerSet[name] = true
+		}
+		data.WorkerTools = strings.Join(backticked, ", ")
+
+		var brainOnly []string
+		for _, def := range b.toolDefs {
+			if !workerSet[def.Name] {
+				brainOnly = append(brainOnly, "`"+def.Name+"`")
+			}
+		}
+		if len(brainOnly) > 0 {
+			data.BrainOnlyTools = strings.Join(brainOnly, ", ")
+		}
+	}
 
 	loc := b.cfg.TZ()
 	t := now.In(loc)

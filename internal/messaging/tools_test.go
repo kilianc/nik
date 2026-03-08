@@ -10,12 +10,13 @@ import (
 
 func TestBuildToolsReturnsExpectedToolNames(t *testing.T) {
 	tools := BuildTools(&Service{})
-	if len(tools) != 4 {
-		t.Fatalf("expected 4 tools, got %d", len(tools))
+	if len(tools) != 5 {
+		t.Fatalf("expected 5 tools, got %d", len(tools))
 	}
 
 	want := []string{
 		"message_reply",
+		"message_noop",
 		"message_react",
 		"message_set_presence",
 		"message_update_media_description",

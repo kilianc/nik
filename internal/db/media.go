@@ -43,6 +43,15 @@ func UpsertMedia(ctx context.Context, db DBTX, p UpsertMediaParams) error {
 	return nil
 }
 
+func UpdateMediaDescription(ctx context.Context, db DBTX, mediaID, description string, describedAt time.Time) (int64, error) {
+	result, err := db.ExecContext(ctx, queries.MediaUpdateDescription, description, describedAt, mediaID)
+	if err != nil {
+		return 0, fmt.Errorf("update media description %s: %w", mediaID, err)
+	}
+
+	return result.RowsAffected()
+}
+
 func UpsertMessageMedia(ctx context.Context, db DBTX, messageID, mediaID string) error {
 	_, err := db.ExecContext(ctx, queries.MessageMediaUpsert, messageID, mediaID)
 	if err != nil {

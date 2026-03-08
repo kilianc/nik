@@ -12,7 +12,11 @@ func TestReportHandler(t *testing.T) {
 	svc, _ := testDB(t)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, CreateParams{Goal: "test goal", Thinking: "low"})
+	task, err := svc.Create(ctx, createParams{
+		Goal:           "test goal",
+		Thinking:       "low",
+		ConversationID: testConvID,
+	})
 	if err != nil {
 		t.Fatalf("create task: %v", err)
 	}
@@ -36,15 +40,15 @@ func TestReportHandler(t *testing.T) {
 		t.Fatal("expected non-empty result")
 	}
 
-	items, err := svc.TasksNeedingAttention(ctx)
+	reports, err := svc.ListReports(ctx, testConvID, task.CreatedAt)
 	if err != nil {
-		t.Fatalf("tasks needing attention: %v", err)
+		t.Fatalf("reports: %v", err)
 	}
-	if len(items) != 1 {
-		t.Fatalf("expected 1 item, got %d", len(items))
+	if len(reports) != 1 {
+		t.Fatalf("expected 1 report, got %d", len(reports))
 	}
-	if items[0].Reports != "need config file" {
-		t.Fatalf("expected report content 'need config file', got %q", items[0].Reports)
+	if reports[0].Content != "need config file" {
+		t.Fatalf("expected report content 'need config file', got %q", reports[0].Content)
 	}
 }
 
@@ -52,7 +56,7 @@ func TestCancelHandlerNoRunner(t *testing.T) {
 	svc, _ := testDB(t)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, CreateParams{Goal: "test goal", Thinking: "low"})
+	task, err := svc.Create(ctx, createParams{Goal: "test goal", Thinking: "low"})
 	if err != nil {
 		t.Fatalf("create task: %v", err)
 	}

@@ -46,7 +46,7 @@ func (a *Adapter) SendImage(ctx context.Context, externalConversationID string, 
 	return a.client.SendImage(ctx, externalConversationID, imagePath, caption)
 }
 
-func (a *Adapter) React(ctx context.Context, externalConversationID string, externalMessageID string, externalSenderID string, emoji string) error {
+func (a *Adapter) React(ctx context.Context, externalConversationID string, externalMessageID string, externalSenderID string, emoji string) (messaging.OutboundMessage, error) {
 	return a.client.React(ctx, externalConversationID, externalMessageID, externalSenderID, emoji)
 }
 

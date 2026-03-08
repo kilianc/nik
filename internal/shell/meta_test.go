@@ -21,7 +21,6 @@ func TestSaveAndLoadMeta(t *testing.T) {
 		Command:        "sleep 60",
 		Description:    "test command",
 		ConversationID: "conv-123",
-		MessageID:      "msg-456",
 		ActivationID:   "run-789",
 		StartedAt:      now,
 	}
@@ -44,9 +43,6 @@ func TestSaveAndLoadMeta(t *testing.T) {
 	}
 	if got.ConversationID != want.ConversationID {
 		t.Fatalf("conversation_id: got %q, want %q", got.ConversationID, want.ConversationID)
-	}
-	if got.MessageID != want.MessageID {
-		t.Fatalf("message_id: got %q, want %q", got.MessageID, want.MessageID)
 	}
 	if got.ActivationID != want.ActivationID {
 		t.Fatalf("activation_id: got %q, want %q", got.ActivationID, want.ActivationID)

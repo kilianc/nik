@@ -16,7 +16,6 @@ import (
 	"github.com/kciuffolo/nik/internal/contacts"
 	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/id"
-	"github.com/kciuffolo/nik/internal/queries"
 )
 
 type ContactService interface {
@@ -152,34 +151,32 @@ func (s *Service) ReceiveMessage(ctx context.Context, msg InboundMessage) error 
 	}
 	slog.Info("receive inbound message", logAttrs...)
 
-	_, err = tx.ExecContext(
-		ctx,
-		queries.MessageInsert,
-		msgID,
-		conversationID,
-		contactID,
-		msg.Platform,
-		msg.ExternalConversationID,
-		msg.ExternalMessageID,
-		msg.ExternalSenderID,
-		sentAt,
-		msg.IsFromMe,
-		msg.IsGroup,
-		kind,
-		msg.Body,
-		mimeType,
-		msg.IsEdit,
-		editTarget,
-		contextStanza,
-		contextParticipant,
-		msg.ContextIsForwarded,
-		msg.ContextForwardingScore,
-		db.MarshalStringSlice(msg.ContextMentionedIDs),
-		msg.IsEphemeral,
-		msg.IsViewOnce,
-	)
+	err = db.InsertMessage(ctx, tx, db.InsertMessageParams{
+		ID:                     msgID,
+		ConversationID:         conversationID,
+		ContactID:              contactID,
+		Platform:               msg.Platform,
+		ExternalConversationID: msg.ExternalConversationID,
+		ExternalMessageID:      msg.ExternalMessageID,
+		ExternalSenderID:       msg.ExternalSenderID,
+		SentAt:                 sentAt,
+		IsFromMe:               msg.IsFromMe,
+		IsGroup:                msg.IsGroup,
+		Kind:                   kind,
+		Body:                   msg.Body,
+		MimeType:               mimeType,
+		IsEdit:                 msg.IsEdit,
+		EditTargetMessageID:    editTarget,
+		ContextStanzaID:        contextStanza,
+		ContextParticipant:     contextParticipant,
+		ContextIsForwarded:     msg.ContextIsForwarded,
+		ContextForwardingScore: msg.ContextForwardingScore,
+		ContextMentionedIDs:    db.MarshalStringSlice(msg.ContextMentionedIDs),
+		IsEphemeral:            msg.IsEphemeral,
+		IsViewOnce:             msg.IsViewOnce,
+	})
 	if err != nil {
-		return fmt.Errorf("insert message %s/%s: %w", msg.Platform, msg.ExternalMessageID, err)
+		return err
 	}
 
 	err = db.UpsertConversationParticipant(ctx, tx, conversationID, contactID, nil)
@@ -370,12 +367,41 @@ func (s *Service) React(ctx context.Context, messageID string, emoji string) err
 		return err
 	}
 
+	conv, err := db.GetConversation(ctx, s.db, db.GetConversationParams{ID: msg.ConversationID})
+	if err != nil {
+		return err
+	}
+
 	platform, err := s.registry.Get(msg.Platform)
 	if err != nil {
 		return err
 	}
 
-	return platform.React(ctx, msg.ExternalConversationID, msg.ExternalMessageID, msg.ExternalSenderID, emoji)
+	outbound, err := platform.React(ctx, msg.ExternalConversationID, msg.ExternalMessageID, msg.ExternalSenderID, emoji)
+	if err != nil {
+		return err
+	}
+
+	if outbound.ExternalMessageID == "" {
+		return nil
+	}
+
+	sentAt := outbound.SentAt
+	if sentAt.IsZero() {
+		sentAt = time.Now()
+	}
+
+	return s.ReceiveMessage(ctx, InboundMessage{
+		Platform:               conv.Platform,
+		ExternalConversationID: conv.ExternalConversationID,
+		ExternalMessageID:      outbound.ExternalMessageID,
+		ExternalSenderID:       outbound.ExternalSenderID,
+		Kind:                   "reaction",
+		Body:                   emoji,
+		SentAt:                 sentAt,
+		IsFromMe:               true,
+		IsGroup:                conv.Kind == "group",
+	})
 }
 
 func (s *Service) SetPresence(ctx context.Context, platformName string, available bool) error {
@@ -440,12 +466,7 @@ func (s *Service) MarkRead(ctx context.Context, conversationID string, readAt ti
 		return err
 	}
 
-	err = platform.MarkRead(ctx, unread)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return platform.MarkRead(ctx, unread)
 }
 
 func (s *Service) UpdateMediaDescription(ctx context.Context, messageID, description, body string) error {
@@ -462,15 +483,9 @@ func (s *Service) UpdateMediaDescription(ctx context.Context, messageID, descrip
 		return fmt.Errorf("message %s has no media", messageID)
 	}
 
-	now := time.Now()
-	result, err := s.db.ExecContext(ctx, queries.MediaUpdateDescription, description, now, msg.MediaID.String)
+	rows, err := db.UpdateMediaDescription(ctx, s.db, msg.MediaID.String, description, time.Now())
 	if err != nil {
-		return fmt.Errorf("update media description %s: %w", msg.MediaID.String, err)
-	}
-
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("rows affected for media %s: %w", msg.MediaID.String, err)
+		return err
 	}
 	if rows == 0 {
 		return fmt.Errorf("media %s not found", msg.MediaID.String)
@@ -486,10 +501,6 @@ func (s *Service) UpdateMediaDescription(ctx context.Context, messageID, descrip
 	return nil
 }
 
-func (s *Service) PollUnreadConversationIDs(ctx context.Context) ([]string, error) {
-	return db.PollUnreadConversations(ctx, s.db, s.cfg.AllowConversationIDs)
-}
-
 func (s *Service) ConversationWithMessages(ctx context.Context, conversationID string, maxHistory int) (db.Conversation, []db.Message, error) {
 	conv, err := db.GetConversation(ctx, s.db, db.GetConversationParams{ID: conversationID})
 	if err != nil {
@@ -503,10 +514,6 @@ func (s *Service) ConversationWithMessages(ctx context.Context, conversationID s
 
 	reverseMessages(msgs)
 	return conv, msgs, nil
-}
-
-func (s *Service) MessagesAround(ctx context.Context, conversationID string, pivot time.Time, limit int) ([]db.Message, error) {
-	return db.GetMessagesAround(ctx, s.db, conversationID, pivot, limit)
 }
 
 func (s *Service) ResolveConversation(ctx context.Context, contactID string) (string, error) {
@@ -547,19 +554,7 @@ func (s *Service) ResolveConversation(ctx context.Context, contactID string) (st
 	return conv.ID, nil
 }
 
-func (s *Service) ConversationIDFromExternal(ctx context.Context, platform, externalConversationID string) (string, error) {
-	conversation, err := db.GetConversation(ctx, s.db, db.GetConversationParams{
-		Platform:               platform,
-		ExternalConversationID: externalConversationID,
-	})
-	if err != nil {
-		return "", err
-	}
-
-	return conversation.ID, nil
-}
-
-func (s *Service) SessionContext(ctx context.Context, conv db.Conversation) SessionContext {
+func (s *Service) ConversationHeader(ctx context.Context, conv db.Conversation) ConversationHeader {
 	participants, err := db.GetConversationParticipants(ctx, s.db, conv.ID)
 	if err != nil || len(participants) == 0 {
 		participants = nil
@@ -567,7 +562,7 @@ func (s *Service) SessionContext(ctx context.Context, conv db.Conversation) Sess
 
 	title := sessionTitle(conv, participants)
 
-	session := SessionContext{
+	session := ConversationHeader{
 		Lines: []string{
 			fmt.Sprintf("Conversation: %s", conv.ID),
 			fmt.Sprintf("Title: %s", title),
@@ -667,7 +662,7 @@ func (s *Service) SenderLabels(ctx context.Context, msgs []db.Message) map[strin
 
 		label, ok := byContactID[msg.ContactID]
 		if !ok {
-			label = s.ContactLabel(ctx, msg.ContactID)
+			label = s.contactLabel(ctx, msg.ContactID)
 			if label == "" {
 				if msg.IsFromMe {
 					label = "nik"
@@ -685,7 +680,7 @@ func (s *Service) SenderLabels(ctx context.Context, msgs []db.Message) map[strin
 	return byMessageID
 }
 
-func (s *Service) ContactLabel(ctx context.Context, contactID string) string {
+func (s *Service) contactLabel(ctx context.Context, contactID string) string {
 	if strings.TrimSpace(contactID) == "" {
 		return ""
 	}
@@ -762,20 +757,6 @@ func participantName(p db.ConversationParticipant, fallback string) string {
 	return fallback
 }
 
-func previewForLog(s string, maxRunes int) string {
-	trimmed := strings.TrimSpace(s)
-	if trimmed == "" || maxRunes <= 0 {
-		return ""
-	}
-
-	if utf8.RuneCountInString(trimmed) <= maxRunes {
-		return trimmed
-	}
-
-	runes := []rune(trimmed)
-	return string(runes[:maxRunes])
-}
-
 // the snippet is matched against formatted message lines (the same lines
 // the LLM sees in the prompt), so any substring the LLM copies will match.
 func (s *Service) FindMessage(ctx context.Context, conversationID, text string) (db.Message, error) {
@@ -788,7 +769,7 @@ func (s *Service) FindMessage(ctx context.Context, conversationID, text string) 
 
 	var matches []db.Message
 	for _, msg := range msgs {
-		line := FormatMessageLine(msg, labels[msg.ID])
+		line := formatMessageLine(msg, labels[msg.ID])
 		if strings.Contains(line, text) {
 			matches = append(matches, msg)
 		}
@@ -805,9 +786,9 @@ func (s *Service) FindMessage(ctx context.Context, conversationID, text string) 
 	// second, same text), pick the most recent -- they are indistinguishable
 	// to the LLM and the target doesn't matter
 	allSame := true
-	firstLine := FormatMessageLine(matches[0], labels[matches[0].ID])
+	firstLine := formatMessageLine(matches[0], labels[matches[0].ID])
 	for _, m := range matches[1:] {
-		if FormatMessageLine(m, labels[m.ID]) != firstLine {
+		if formatMessageLine(m, labels[m.ID]) != firstLine {
 			allSame = false
 			break
 		}

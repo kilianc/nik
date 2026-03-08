@@ -2,7 +2,7 @@ SELECT
   id,
   goal,
   status,
-  json_extract(meta, '$.conversation_id') AS conversation_id,
+  conversation_id,
   retry_number,
   created_at
 FROM task

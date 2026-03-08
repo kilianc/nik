@@ -46,9 +46,9 @@ db-check:
 wapp-history-dump:
 	@go run ./tools/wapp-history-dump $(ARGS)
 
-.PHONY: findmsg
-findmsg:
-	@go run ./tools/findmsg --home $(NIK_HOME)
+.PHONY: timeline
+timeline:
+	@go run ./tools/timeline -home $(NIK_HOME) $(ARGS)
 
 .PHONY: call
 call:
