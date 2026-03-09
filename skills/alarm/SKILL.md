@@ -55,3 +55,17 @@ for the group.
 - First firing shows creation-time conversation context; subsequent firings show recent messages from the conversation
 - Occurrence notes build a history visible on future firings
 - Find alarm IDs from meta (`alarm_id`) or `db_query`
+
+## Behavior
+
+- For automated/background alarms, act silently -- don't message the
+  user unless there's something to report. If you do message, say
+  what you did, never send vague updates.
+- One-off alarms: do the goal, then `cancel_alarm`.
+
+## Late alarms
+
+If a recurring alarm fires more than 3 hours late (compare current
+time vs recurrence pattern), skip the action. Reschedule to the next
+normal time and log it: `occurrence_note: "skipped -- Xh late"`.
+One-off alarms always run regardless of lateness.
