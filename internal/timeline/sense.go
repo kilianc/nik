@@ -438,9 +438,6 @@ func taskSpawnedEntry(s db.TaskSpawned) entry {
 		"task_id: " + id.Shorten(s.ID),
 		"goal: " + s.Goal,
 	}
-	if s.CrewMemberName.Valid {
-		lines = append(lines, "assigned: "+s.CrewMemberName.String)
-	}
 
 	return entry{
 		at:   s.CreatedAt,
@@ -455,9 +452,6 @@ func taskRetryEntry(s db.TaskSpawned) entry {
 		"task_id: " + id.Shorten(s.ID),
 		"retry_of: " + id.Shorten(s.RetryForTaskID.String),
 		"goal: " + s.Goal,
-	}
-	if s.CrewMemberName.Valid {
-		lines = append(lines, "assigned: "+s.CrewMemberName.String)
 	}
 
 	return entry{

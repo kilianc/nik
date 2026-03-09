@@ -21,7 +21,6 @@ const runnerTimeout = 20 * time.Minute
 
 type taskPromptData struct {
 	Now      string
-	Member   string
 	ToolDocs string
 	Skills   string
 	Plan     string
@@ -44,7 +43,7 @@ func NewRunner(cfg *config.Config, llmClient *llm.Client, svc *Service, tools []
 	}
 }
 
-func (r *Runner) renderPrompt(t db.Task, tools []llm.ToolDef, member *db.CrewMember) string {
+func (r *Runner) renderPrompt(t db.Task, tools []llm.ToolDef) string {
 	tmplPath := filepath.Join(r.cfg.PromptsPath(), "task.md")
 
 	raw, err := os.ReadFile(tmplPath)
@@ -62,14 +61,8 @@ func (r *Runner) renderPrompt(t db.Task, tools []llm.ToolDef, member *db.CrewMem
 	loc := r.cfg.TZ()
 	now := time.Now().In(loc).Format("Monday, January 2, 2006 3:04 PM")
 
-	var memberPrompt string
-	if member != nil {
-		memberPrompt = member.Prompt
-	}
-
 	data := taskPromptData{
 		Now:      now,
-		Member:   memberPrompt,
 		ToolDocs: buildToolDocs(tools),
 		Skills:   buildSkillDocs(r.cfg),
 		Plan:     t.Plan,
@@ -130,7 +123,7 @@ func buildSkillDocs(cfg *config.Config) string {
 	return b.String()
 }
 
-func (r *Runner) Run(ctx context.Context, t db.Task, member *db.CrewMember) {
+func (r *Runner) Run(ctx context.Context, t db.Task) {
 	ctx, cancel := context.WithTimeout(ctx, runnerTimeout)
 	r.cancels.Store(t.ID, cancel)
 	defer r.cancels.Delete(t.ID)
@@ -146,7 +139,7 @@ func (r *Runner) Run(ctx context.Context, t db.Task, member *db.CrewMember) {
 	allTools := append(r.tools, reportTool)
 	defs, exec := llm.SplitTools(allTools)
 
-	instructions := r.renderPrompt(t, defs, member)
+	instructions := r.renderPrompt(t, defs)
 	actID, ch := r.llm.Complete(ctx, instructions, llm.StaticInput(""), defs, exec)
 
 	err := r.svc.Start(ctx, t.ID, actID)

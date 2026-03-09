@@ -12,7 +12,6 @@ import (
 	"github.com/kciuffolo/nik/internal/codex"
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/contacts"
-	"github.com/kciuffolo/nik/internal/crew"
 	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/llm"
 	"github.com/kciuffolo/nik/internal/messaging"
@@ -129,13 +128,8 @@ func buildTools(cfg *config.Config, llmClient *llm.Client, conn *sql.DB) map[str
 		taskToolList = append(taskToolList, db.BuildTools(conn)...)
 		taskToolList = append(taskToolList, skills.BuildTools(cfg)...)
 
-		crewSvc := crew.NewService(conn)
-		for _, t := range crew.BuildTools(crewSvc) {
-			tools[t.Def.Name] = t.Handler
-		}
-
 		taskRunner := task.NewRunner(cfg, llmClient, taskSvc, taskToolList)
-		for _, t := range task.BuildTools(taskSvc, taskRunner, crewSvc) {
+		for _, t := range task.BuildTools(taskSvc, taskRunner) {
 			tools[t.Def.Name] = t.Handler
 		}
 	}

@@ -100,19 +100,11 @@ type AlarmOccurrence struct {
 	Recurrence sql.NullString
 }
 
-type CrewMember struct {
-	ID        string
-	Name      string
-	Prompt    string
-	CreatedAt time.Time
-}
-
 type Task struct {
 	ID             string
 	ConversationID string
 	ContactID      string
 	ActivationID   string
-	CrewMemberID   string
 	RetryForTaskID string
 	RetryNumber    int
 	Goal           string
@@ -170,7 +162,6 @@ type TaskSpawned struct {
 	Goal           string
 	RetryForTaskID sql.NullString
 	RetryNumber    int
-	CrewMemberName sql.NullString
 	CreatedAt      time.Time
 }
 
