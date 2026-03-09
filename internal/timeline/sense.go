@@ -197,8 +197,13 @@ type entry struct {
 func (t *Timeline) buildEntries(ctx context.Context, convID string, since time.Time, msgs []db.Message, senderLabels map[string]string) []entry {
 	var entries []entry
 
+	extIDToMsg := make(map[string]db.Message, len(msgs))
 	for _, msg := range msgs {
-		entries = append(entries, messageEntry(msg, senderLabels[msg.ID]))
+		extIDToMsg[msg.ExternalMessageID] = msg
+	}
+
+	for _, msg := range msgs {
+		entries = append(entries, messageEntry(msg, senderLabels[msg.ID], extIDToMsg))
 	}
 
 	reports, err := t.taskSvc.ListReports(ctx, convID, since)
@@ -312,17 +317,44 @@ func renderEntries(entries []entry, loc *time.Location) []string {
 	return lines
 }
 
-func messageEntry(msg db.Message, sender string) entry {
+func messageEntry(msg db.Message, sender string, extIDToMsg map[string]db.Message) entry {
 	if msg.IsFromMe {
 		sender = "YOU"
 	} else if sender == "" {
 		panic("message " + msg.ID + " has no sender label")
 	}
+
+	text := messaging.FormatMessageText(msg)
+
+	if msg.Kind == "reaction" && msg.ContextStanzaID.Valid {
+		if target, ok := extIDToMsg[msg.ContextStanzaID.String]; ok {
+			text += " to " + reactionTargetSnippet(target)
+		}
+	}
+
 	return entry{
 		at:   msg.SentAt,
 		from: sender,
-		text: messaging.FormatMessageText(msg),
+		text: text,
 	}
+}
+
+const reactionTargetTruncateLen = 50
+
+func reactionTargetSnippet(msg db.Message) string {
+	body := strings.TrimSpace(msg.Body)
+
+	label := id.Shorten(msg.ID)
+
+	if body == "" {
+		return label + " (" + msg.Kind + ")"
+	}
+
+	if len(body) > reactionTargetTruncateLen {
+		body = body[:reactionTargetTruncateLen] + "…"
+	}
+
+	return label + ` "` + body + `"`
 }
 
 const (
