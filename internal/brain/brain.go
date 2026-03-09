@@ -184,7 +184,7 @@ func (b *Brain) think(ctx context.Context, getInput func() string) (string, llm.
 	for attempt := range maxThinkAttempts {
 		retry := attempt > 0
 		if retry {
-			slog.Warn("no tool calls produced, retrying", "pkg", "brain", "attempt", attempt)
+			slog.Warn("no terminal tool call, retrying", "pkg", "brain", "attempt", attempt)
 		}
 
 		instructions, err := b.loadInstructions(b.now(), recall, retry)
@@ -222,10 +222,25 @@ func (b *Brain) think(ctx context.Context, getInput func() string) (string, llm.
 			return "", totalUsage, result.Err
 		}
 
-		if len(result.History) > 0 {
+		if hasTerminalCall(result.History) {
 			return result.Output, totalUsage, nil
 		}
 	}
 
-	return "", totalUsage, errors.New("no tool calls produced after retries")
+	return "", totalUsage, errors.New("no terminal tool call after retries")
+}
+
+var terminalTools = map[string]bool{
+	"message_reply": true,
+	"message_noop":  true,
+	"message_react": true,
+}
+
+func hasTerminalCall(history []llm.ToolCallRecord) bool {
+	for _, h := range history {
+		if terminalTools[h.Name] {
+			return true
+		}
+	}
+	return false
 }
