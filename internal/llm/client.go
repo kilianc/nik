@@ -35,6 +35,7 @@ type Client struct {
 	apiClient       *openai.Client
 	model           shared.ResponsesModel
 	reasoningEffort *string
+	verbosity       *string
 	observer        CompletionObserver
 	sem             chan struct{}
 }
@@ -47,6 +48,7 @@ type clientConfig struct {
 	apiKey          string
 	codexAuth       *codex.Auth
 	reasoningEffort *string
+	verbosity       *string
 }
 
 type ClientOption func(*clientConfig)
@@ -71,6 +73,12 @@ func WithReasoningEffort(effort *string) ClientOption {
 	}
 }
 
+func WithVerbosity(v *string) ClientOption {
+	return func(c *clientConfig) {
+		c.verbosity = v
+	}
+}
+
 func NewClient(model string, opts ...ClientOption) *Client {
 	var cfg clientConfig
 	for _, opt := range opts {
@@ -80,6 +88,7 @@ func NewClient(model string, opts ...ClientOption) *Client {
 	c := &Client{
 		model:           model,
 		reasoningEffort: cfg.reasoningEffort,
+		verbosity:       cfg.verbosity,
 		sem:             make(chan struct{}, maxConcurrentSessions),
 	}
 
@@ -275,9 +284,16 @@ func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instru
 		params.Reasoning.Effort = shared.ReasoningEffort(*c.reasoningEffort)
 	}
 
+	if c.verbosity != nil && *c.verbosity != "" {
+		params.Text = responses.ResponseTextConfigParam{
+			Verbosity: responses.ResponseTextConfigVerbosity(*c.verbosity),
+		}
+	}
+
 	m := string(c.model)
 	if strings.Contains(m, "spark") || strings.Contains(m, "nano") || strings.Contains(m, "4.1-mini") {
 		params.Reasoning = shared.ReasoningParam{}
+		params.Text = responses.ResponseTextConfigParam{}
 	}
 
 	if c.codexClient != nil {
