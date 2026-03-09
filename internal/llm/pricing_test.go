@@ -60,6 +60,16 @@ func TestModelRatesKnownModel(t *testing.T) {
 	}
 }
 
+func TestComputeCostGPT54Codex(t *testing.T) {
+	cost := ComputeCost("gpt-5.4-codex", 100000, 1000, 80000)
+
+	// 20k uncached * 2.50e-6 + 80k cached * 0.25e-6 + 1k output * 15.0e-6
+	want := 20000*2.50e-6 + 80000*0.25e-6 + 1000*15.0e-6
+	if math.Abs(cost-want) > 1e-9 {
+		t.Fatalf("expected $%.6f, got $%.6f", want, cost)
+	}
+}
+
 func TestModelRatesUnknownModel(t *testing.T) {
 	_, ok := ModelRates("nonexistent")
 	if ok {
