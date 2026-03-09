@@ -12,7 +12,7 @@ const testConvID = "test-conv-001"
 
 func testDB(t *testing.T) (*Service, *sql.DB) {
 	t.Helper()
-	conn, err := db.Open(":memory:")
+	conn, err := db.OpenInMemory()
 	if err != nil {
 		t.Fatalf("open test db: %v", err)
 	}

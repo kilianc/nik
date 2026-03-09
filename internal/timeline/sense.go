@@ -81,7 +81,7 @@ func (t *Timeline) Get(ctx context.Context, convID string) string {
 	var lines []string
 	lines = append(lines, "## Session", "")
 	lines = append(lines, session.Lines...)
-	lines = append(lines, renderTimeline(entries, readLine, t.cfg.TZ())...)
+	lines = append(lines, renderTimeline(entries, readLine)...)
 
 	return strings.Join(lines, "\n")
 }
@@ -108,7 +108,7 @@ func (t *Timeline) Render(ctx context.Context, convID string) (session []string,
 	header := t.msgSvc.ConversationHeader(ctx, conv)
 	entries := t.buildEntries(ctx, convID, since, msgs, senderLabels)
 
-	return header.Lines, renderTimeline(entries, readLine, t.cfg.TZ()), nil
+	return header.Lines, renderTimeline(entries, readLine), nil
 }
 
 // check determines whether a conversation has new events worth activating on.
@@ -246,20 +246,16 @@ func (t *Timeline) buildEntries(ctx context.Context, convID string, since time.T
 	if err != nil {
 		slog.Warn("alarm created", "pkg", "timeline", "conversation_id", convID, "error", err)
 	}
-	loc := t.cfg.TZ()
 	for _, a := range createdAlarms {
-		entries = append(entries, alarmCreatedEntry(a, loc))
+		entries = append(entries, alarmCreatedEntry(a))
 	}
 
 	return entries
 }
 
-func renderTimeline(entries []entry, readLine time.Time, loc *time.Location) []string {
+func renderTimeline(entries []entry, readLine time.Time) []string {
 	if len(entries) == 0 {
 		return nil
-	}
-	if loc == nil {
-		loc = time.UTC
 	}
 
 	sorted := make([]entry, len(entries))
@@ -288,30 +284,29 @@ func renderTimeline(entries []entry, readLine time.Time, loc *time.Location) []s
 
 	if len(handled) > 0 {
 		lines = append(lines, "### Already handled", "")
-		lines = append(lines, renderEntries(handled, loc)...)
+		lines = append(lines, renderEntries(handled)...)
 		lines = append(lines, "")
 	}
 
 	if len(fresh) > 0 {
 		lines = append(lines, "### New", "")
-		lines = append(lines, renderEntries(fresh, loc)...)
+		lines = append(lines, renderEntries(fresh)...)
 	}
 
 	return lines
 }
 
-func renderEntries(entries []entry, loc *time.Location) []string {
+func renderEntries(entries []entry) []string {
 	var lines []string
 	lastDate := ""
 
 	for _, e := range entries {
-		local := e.at.In(loc)
-		date := local.Format("Jan 2, 2006")
+		date := e.at.Format("Jan 2, 2006")
 		if date != lastDate {
 			lines = append(lines, fmt.Sprintf("--- %s ---", date))
 			lastDate = date
 		}
-		lines = append(lines, fmt.Sprintf("[%s] %s: %s", local.Format("15:04:05"), e.from, e.text))
+		lines = append(lines, fmt.Sprintf("[%s] %s: %s", e.at.Format("15:04:05"), e.from, e.text))
 	}
 
 	return lines
@@ -479,7 +474,7 @@ func taskCancelledEntry(c db.TaskCancelled) entry {
 	}
 }
 
-func alarmCreatedEntry(a db.Alarm, loc *time.Location) entry {
+func alarmCreatedEntry(a db.Alarm) entry {
 	recurring := a.Recurrence.Valid && a.Recurrence.String != ""
 
 	lines := []string{
@@ -491,7 +486,7 @@ func alarmCreatedEntry(a db.Alarm, loc *time.Location) entry {
 		lines = append(lines, "recurrence: "+a.Recurrence.String)
 	}
 	if a.NextFireAt.Valid {
-		lines = append(lines, "fires_at: "+a.NextFireAt.Time.In(loc).Format("Jan 2, 2006 3:04 PM"))
+		lines = append(lines, "fires_at: "+a.NextFireAt.Time.Format("Jan 2, 2006 3:04 PM"))
 	}
 
 	return entry{

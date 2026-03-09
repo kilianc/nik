@@ -125,7 +125,7 @@ func TestOpenCreatesDatabasePath(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "nested", "nik.db")
 
-	conn, err := Open(path)
+	conn, err := Open(path, nil)
 	if err != nil {
 		t.Fatalf("open db file: %v", err)
 	}
