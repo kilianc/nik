@@ -423,7 +423,7 @@ func occurrenceEntry(o db.AlarmOccurrence) entry {
 		lines = append(lines, "last_time: "+o.Note.String)
 	}
 
-	lines = append(lines, "MANDATORY: load the alarm skill if you haven't already, then follow all instructions meticulously.")
+	lines = append(lines, "MANDATORY: if you already handled this alarm, move on. If you are handling this alarm now, load the alarm skill and follow all instructions meticulously.")
 
 	return entry{
 		at:   o.FiredAt,
