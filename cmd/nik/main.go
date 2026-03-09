@@ -85,7 +85,7 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
-	conn, err := db.Open(cfg.DBPath())
+	conn, err := db.Open(cfg.DBPath(), cfg.TZ())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)

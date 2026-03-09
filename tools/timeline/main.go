@@ -34,7 +34,7 @@ func main() {
 	}
 	cfg.MaxHistory = *n
 
-	conn, err := db.Open(cfg.DBPath())
+	conn, err := db.Open(cfg.DBPath(), cfg.TZ())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "open db: %v\n", err)
 		os.Exit(1)
