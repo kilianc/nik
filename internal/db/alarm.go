@@ -26,17 +26,12 @@ func CreateAlarm(ctx context.Context, db *sql.DB, p CreateAlarmParams) (Alarm, e
 		contactID = p.OriginContactID
 	}
 
-	conversationID := any(nil)
-	if p.OriginConversationID != "" {
-		conversationID = p.OriginConversationID
-	}
-
 	rec := any(nil)
 	if p.Recurrence != "" {
 		rec = p.Recurrence
 	}
 
-	_, err := db.ExecContext(ctx, queries.CreateAlarm, newID, contactID, conversationID, p.Goal, rec, p.NextFireAt, now)
+	_, err := db.ExecContext(ctx, queries.CreateAlarm, newID, contactID, p.OriginConversationID, p.Goal, rec, p.NextFireAt, now)
 	if err != nil {
 		return Alarm{}, err
 	}
@@ -44,7 +39,7 @@ func CreateAlarm(ctx context.Context, db *sql.DB, p CreateAlarmParams) (Alarm, e
 	return Alarm{
 		ID:                   newID,
 		OriginContactID:      sql.NullString{String: p.OriginContactID, Valid: p.OriginContactID != ""},
-		OriginConversationID: sql.NullString{String: p.OriginConversationID, Valid: p.OriginConversationID != ""},
+		OriginConversationID: sql.NullString{String: p.OriginConversationID, Valid: true},
 		Goal:                 p.Goal,
 		Recurrence:           sql.NullString{String: p.Recurrence, Valid: p.Recurrence != ""},
 		NextFireAt:           sql.NullTime{Time: p.NextFireAt, Valid: true},

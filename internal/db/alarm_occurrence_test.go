@@ -15,10 +15,12 @@ func TestAlarmOccurrenceInsertPersistsRow(t *testing.T) {
 	}
 	defer conn.Close()
 
+	convID := seedConversation(t, ctx, conn, "whatsapp", "occ-test@g.us", "group")
 	now := time.Now().UTC().Truncate(time.Second)
 	alarm, err := CreateAlarm(ctx, conn, CreateAlarmParams{
-		Goal:       "test",
-		NextFireAt: now.Add(-time.Minute),
+		OriginConversationID: convID,
+		Goal:                 "test",
+		NextFireAt:           now.Add(-time.Minute),
 	})
 	if err != nil {
 		t.Fatalf("create alarm: %v", err)

@@ -89,11 +89,14 @@ func TestCreateAlarmWithRecurrence(t *testing.T) {
 	}
 	defer conn.Close()
 
+	convID := seedConversation(t, ctx, conn, "whatsapp", "rec-alarm@g.us", "group")
+
 	fireAt := time.Now().Add(2 * time.Minute).UTC().Truncate(time.Second)
 	alarm, err := CreateAlarm(ctx, conn, CreateAlarmParams{
-		Goal:       "check in",
-		Recurrence: "every Sunday at 7pm",
-		NextFireAt: fireAt,
+		OriginConversationID: convID,
+		Goal:                 "check in",
+		Recurrence:           "every Sunday at 7pm",
+		NextFireAt:           fireAt,
 	})
 	if err != nil {
 		t.Fatalf("create alarm: %v", err)
@@ -104,7 +107,7 @@ func TestCreateAlarmWithRecurrence(t *testing.T) {
 	}
 }
 
-func TestCreateAlarmWithNullFKs(t *testing.T) {
+func TestCreateAlarmRejectsEmptyConversationID(t *testing.T) {
 	ctx := context.Background()
 
 	conn, err := OpenInMemory()
@@ -114,19 +117,12 @@ func TestCreateAlarmWithNullFKs(t *testing.T) {
 	defer conn.Close()
 
 	fireAt := time.Now().Add(2 * time.Minute).UTC().Truncate(time.Second)
-	alarm, err := CreateAlarm(ctx, conn, CreateAlarmParams{
+	_, err = CreateAlarm(ctx, conn, CreateAlarmParams{
 		Goal:       "reminder",
 		NextFireAt: fireAt,
 	})
-	if err != nil {
-		t.Fatalf("create alarm with null FKs: %v", err)
-	}
-
-	if alarm.OriginContactID.Valid {
-		t.Fatalf("expected null origin_contact_id")
-	}
-	if alarm.OriginConversationID.Valid {
-		t.Fatalf("expected null origin_conversation_id")
+	if err == nil {
+		t.Fatalf("expected error for empty origin_conversation_id")
 	}
 }
 
@@ -139,19 +135,22 @@ func TestDueAlarmsReturnsOnlyActiveAndDue(t *testing.T) {
 	}
 	defer conn.Close()
 
+	convID := seedConversation(t, ctx, conn, "whatsapp", "due-alarms@g.us", "group")
 	now := time.Now().UTC().Truncate(time.Second)
 
 	dueAlarm, err := CreateAlarm(ctx, conn, CreateAlarmParams{
-		Goal:       "due",
-		NextFireAt: now.Add(-1 * time.Minute),
+		OriginConversationID: convID,
+		Goal:                 "due",
+		NextFireAt:           now.Add(-1 * time.Minute),
 	})
 	if err != nil {
 		t.Fatalf("create due alarm: %v", err)
 	}
 
 	cancelledAlarm, err := CreateAlarm(ctx, conn, CreateAlarmParams{
-		Goal:       "cancelled",
-		NextFireAt: now.Add(-30 * time.Second),
+		OriginConversationID: convID,
+		Goal:                 "cancelled",
+		NextFireAt:           now.Add(-30 * time.Second),
 	})
 	if err != nil {
 		t.Fatalf("create cancelled alarm: %v", err)
@@ -163,8 +162,9 @@ func TestDueAlarmsReturnsOnlyActiveAndDue(t *testing.T) {
 	}
 
 	_, err = CreateAlarm(ctx, conn, CreateAlarmParams{
-		Goal:       "future",
-		NextFireAt: now.Add(5 * time.Minute),
+		OriginConversationID: convID,
+		Goal:                 "future",
+		NextFireAt:           now.Add(5 * time.Minute),
 	})
 	if err != nil {
 		t.Fatalf("create future alarm: %v", err)
@@ -192,11 +192,13 @@ func TestDueAlarmsExcludesClaimedAlarms(t *testing.T) {
 	}
 	defer conn.Close()
 
+	convID := seedConversation(t, ctx, conn, "whatsapp", "claimed-alarms@g.us", "group")
 	now := time.Now().UTC().Truncate(time.Second)
 
 	alarm, err := CreateAlarm(ctx, conn, CreateAlarmParams{
-		Goal:       "claimed",
-		NextFireAt: now.Add(-1 * time.Minute),
+		OriginConversationID: convID,
+		Goal:                 "claimed",
+		NextFireAt:           now.Add(-1 * time.Minute),
 	})
 	if err != nil {
 		t.Fatalf("create alarm: %v", err)
@@ -226,10 +228,12 @@ func TestAlarmCancelRemovesFromDueList(t *testing.T) {
 	}
 	defer conn.Close()
 
+	convID := seedConversation(t, ctx, conn, "whatsapp", "cancel-alarms@g.us", "group")
 	now := time.Now().UTC().Truncate(time.Second)
 	alarm, err := CreateAlarm(ctx, conn, CreateAlarmParams{
-		Goal:       "cancel me",
-		NextFireAt: now.Add(-time.Minute),
+		OriginConversationID: convID,
+		Goal:                 "cancel me",
+		NextFireAt:           now.Add(-time.Minute),
 	})
 	if err != nil {
 		t.Fatalf("create alarm: %v", err)
@@ -266,11 +270,13 @@ func TestAlarmClaimSetsLastFiredAtAndKeepsNextFireAt(t *testing.T) {
 	}
 	defer conn.Close()
 
+	convID := seedConversation(t, ctx, conn, "whatsapp", "claim-alarm@g.us", "group")
 	now := time.Now().UTC().Truncate(time.Second)
 	fireAt := now.Add(-time.Minute)
 	alarm, err := CreateAlarm(ctx, conn, CreateAlarmParams{
-		Goal:       "test",
-		NextFireAt: fireAt,
+		OriginConversationID: convID,
+		Goal:                 "test",
+		NextFireAt:           fireAt,
 	})
 	if err != nil {
 		t.Fatalf("create alarm: %v", err)
@@ -310,10 +316,12 @@ func TestAlarmUpdateGoal(t *testing.T) {
 	}
 	defer conn.Close()
 
+	convID := seedConversation(t, ctx, conn, "whatsapp", "update-goal@g.us", "group")
 	now := time.Now().UTC().Truncate(time.Second)
 	alarm, err := CreateAlarm(ctx, conn, CreateAlarmParams{
-		Goal:       "old goal",
-		NextFireAt: now,
+		OriginConversationID: convID,
+		Goal:                 "old goal",
+		NextFireAt:           now,
 	})
 	if err != nil {
 		t.Fatalf("create alarm: %v", err)
@@ -344,11 +352,13 @@ func TestAlarmUpdateRecurrence(t *testing.T) {
 	}
 	defer conn.Close()
 
+	convID := seedConversation(t, ctx, conn, "whatsapp", "update-rec@g.us", "group")
 	now := time.Now().UTC().Truncate(time.Second)
 	alarm, err := CreateAlarm(ctx, conn, CreateAlarmParams{
-		Goal:       "test",
-		Recurrence: "every day",
-		NextFireAt: now,
+		OriginConversationID: convID,
+		Goal:                 "test",
+		Recurrence:           "every day",
+		NextFireAt:           now,
 	})
 	if err != nil {
 		t.Fatalf("create alarm: %v", err)

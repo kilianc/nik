@@ -93,7 +93,7 @@ CREATE TABLE IF NOT EXISTS message_media (
 CREATE TABLE IF NOT EXISTS alarm (
   id                     TEXT PRIMARY KEY,
   origin_contact_id      TEXT REFERENCES contact(id),
-  origin_conversation_id TEXT REFERENCES conversation(id),
+  origin_conversation_id TEXT NOT NULL REFERENCES conversation(id),
   goal                   TEXT NOT NULL,
   recurrence             TEXT,
   next_fire_at           TIMESTAMP,
