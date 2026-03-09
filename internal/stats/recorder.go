@@ -63,6 +63,9 @@ func (r *Recorder) OnFinish(ctx context.Context, model, reasoningEffort string, 
 		return
 	}
 
+	// detach so the write completes even if the activation context is canceled
+	ctx = context.WithoutCancel(ctx)
+
 	err := db.ActivationUpdateStats(ctx, r.conn, actID, db.ActivationStatsUpdate{
 		ReasoningEffort: reasoningEffort,
 		InputTokens:     usage.InputTokens,

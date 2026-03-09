@@ -10,6 +10,23 @@ Set alarms to wake yourself up later and do something. When an alarm
 fires you receive the goal, conversation context, occurrence history,
 and can use any of your tools.
 
+## Hard rule -- recurring alarms MUST be rescheduled
+
+Every recurring alarm activation MUST end with an `update_alarm` call
+that sets `next_fire_at`. If you don't, the alarm is dead forever --
+it will never fire again. There are no exceptions to this rule.
+
+This applies in every scenario:
+
+- **Normal execution**: act on the goal, then reschedule.
+- **Late alarm (skipped)**: skip the action, still reschedule.
+- **Error or failure during goal**: still reschedule. A failed action
+  must never kill the alarm.
+- **Nothing to report**: still reschedule.
+
+Before finishing any recurring alarm activation, verify you called
+`update_alarm` with `next_fire_at`. If you didn't, do it now.
+
 ## Tools
 
 ### `alarm` -- create
@@ -32,9 +49,25 @@ and can use any of your tools.
 
 1. Create with `fire_at` + `recurrence`
 2. When it fires, act on the goal
-3. Call `update_alarm` with `occurrence_note` and the system computes
-   `next_fire_at` from the recurrence
+3. Call `update_alarm` with:
+   - `occurrence_note` summarizing what you did
+   - `next_fire_at` set to the next occurrence based on the recurrence
+     pattern -- you must compute the next time yourself
 4. To stop, `cancel_alarm`
+
+Step 3 is mandatory. Skipping it kills the alarm permanently.
+
+## One-shot flow
+
+1. When it fires, act on the goal
+2. Call `cancel_alarm` to dismiss it
+
+## Late alarms
+
+If a recurring alarm fires more than 3 hours late (compare current
+time vs recurrence pattern), skip the action. Reschedule to the next
+normal time and log it: `occurrence_note: "skipped -- Xh late"`.
+One-off alarms always run regardless of lateness.
 
 ## Delivery
 
@@ -52,7 +85,8 @@ for the group.
 ## Tips
 
 - `origin_contact_id` is required -- get from meta or `db_query`
-- First firing shows creation-time conversation context; subsequent firings show recent messages from the conversation
+- First firing shows creation-time conversation context; subsequent
+  firings show recent messages from the conversation
 - Occurrence notes build a history visible on future firings
 - Find alarm IDs from meta (`alarm_id`) or `db_query`
 
@@ -61,11 +95,3 @@ for the group.
 - For automated/background alarms, act silently -- don't message the
   user unless there's something to report. If you do message, say
   what you did, never send vague updates.
-- One-off alarms: do the goal, then `cancel_alarm`.
-
-## Late alarms
-
-If a recurring alarm fires more than 3 hours late (compare current
-time vs recurrence pattern), skip the action. Reschedule to the next
-normal time and log it: `occurrence_note: "skipped -- Xh late"`.
-One-off alarms always run regardless of lateness.

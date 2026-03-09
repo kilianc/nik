@@ -32,7 +32,7 @@ alarm action: "create", label: "Memory extract — load memory skill", repeat: "
 alarm action: "create", label: "Memory compact — load memory skill", time: "<30 min before journal_time>", repeat: "daily"
 ```
 
-When an alarm fires, check the label to know which mode to run.
+When an alarm fires, check the label to know which mode to run. Both modes are silent -- do not message anyone about the run.
 
 ---
 
