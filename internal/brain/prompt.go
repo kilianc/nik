@@ -22,7 +22,7 @@ type promptData struct {
 	Crew            string
 	Recall          string
 	WorkerTools     string
-	BrainOnlyTools  string
+	NikTools        string
 	PreloadedSkills []skills.PreloadedSkill
 	AvailableSkills []skillSummaryData
 }
@@ -133,14 +133,14 @@ func (b *Brain) buildPromptData(now time.Time, recall string) promptData {
 		}
 		data.WorkerTools = strings.Join(backticked, ", ")
 
-		var brainOnly []string
+		var nikOnly []string
 		for _, def := range b.toolDefs {
 			if !workerSet[def.Name] {
-				brainOnly = append(brainOnly, "`"+def.Name+"`")
+				nikOnly = append(nikOnly, "`"+def.Name+"`")
 			}
 		}
-		if len(brainOnly) > 0 {
-			data.BrainOnlyTools = strings.Join(brainOnly, ", ")
+		if len(nikOnly) > 0 {
+			data.NikTools = strings.Join(nikOnly, ", ")
 		}
 	}
 
