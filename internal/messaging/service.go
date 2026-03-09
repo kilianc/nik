@@ -99,6 +99,14 @@ func (s *Service) ReceiveMessage(ctx context.Context, msg InboundMessage) error 
 		return fmt.Errorf("resolve contact: empty contact id")
 	}
 
+	var dmRecipientID string
+	if !msg.IsGroup && msg.ExternalConversationID != "" {
+		recipient, err := db.GetContact(ctx, s.db, msg.ExternalConversationID)
+		if err == nil && recipient.ID != contactID {
+			dmRecipientID = recipient.ID
+		}
+	}
+
 	mimeType := nullable(msg.MimeType)
 	editTarget := nullable(msg.EditTargetMessageID)
 	contextStanza := nullable(msg.ContextStanzaID)
@@ -182,6 +190,13 @@ func (s *Service) ReceiveMessage(ctx context.Context, msg InboundMessage) error 
 	err = db.UpsertConversationParticipant(ctx, tx, conversationID, contactID, nil)
 	if err != nil {
 		return err
+	}
+
+	if dmRecipientID != "" {
+		err = db.UpsertConversationParticipant(ctx, tx, conversationID, dmRecipientID, nil)
+		if err != nil {
+			return err
+		}
 	}
 
 	if msg.MediaHash != "" {
