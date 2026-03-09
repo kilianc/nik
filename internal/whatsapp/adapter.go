@@ -132,12 +132,14 @@ func (a *Adapter) handleMessage(evt *events.Message) error {
 		return nil
 	}
 
+	chatJID := normalizeJID(evt.Info.Chat.String())
+
 	slog.Debug(
 		"whatsapp inbound message",
 		"pkg",
 		"whatsapp",
 		"chat_jid",
-		evt.Info.Chat.String(),
+		chatJID,
 		"sender_jid",
 		evt.Info.Sender.String(),
 		"message_id",
@@ -160,7 +162,7 @@ func (a *Adapter) handleMessage(evt *events.Message) error {
 
 	conversation := messaging.Conversation{
 		Platform:               "whatsapp",
-		ExternalConversationID: evt.Info.Chat.String(),
+		ExternalConversationID: chatJID,
 		Kind:                   inferKind(evt.Info.IsGroup),
 		LastMessageAt:          evt.Info.Timestamp,
 	}
@@ -170,9 +172,9 @@ func (a *Adapter) handleMessage(evt *events.Message) error {
 	}
 
 	if evt.Info.IsGroup {
-		err = a.syncGroupMetadata(context.Background(), evt.Info.Chat.String(), evt.Info.Timestamp)
+		err = a.syncGroupMetadata(context.Background(), chatJID, evt.Info.Timestamp)
 		if err != nil {
-			slog.Warn("sync group metadata", "pkg", "whatsapp", "conversation", evt.Info.Chat.String(), "error", err)
+			slog.Warn("sync group metadata", "pkg", "whatsapp", "conversation", chatJID, "error", err)
 		}
 	}
 
@@ -192,7 +194,7 @@ func (a *Adapter) handleMessage(evt *events.Message) error {
 
 	msg := messaging.InboundMessage{
 		Platform:               "whatsapp",
-		ExternalConversationID: evt.Info.Chat.String(),
+		ExternalConversationID: chatJID,
 		ExternalMessageID:      string(evt.Info.ID),
 		ExternalSenderID:       senderJID,
 		ExternalSenderIDs:      senderIDs,
@@ -221,7 +223,7 @@ func (a *Adapter) handleMessage(evt *events.Message) error {
 
 	if msg.IsFromMe {
 		if jid := a.client.SelfJID(); jid != "" {
-			msg.ExternalSenderID = jid
+			msg.ExternalSenderID = normalizeJID(jid)
 		}
 	}
 	if msg.ExternalSenderID == "" {
@@ -238,15 +240,17 @@ func (a *Adapter) handleHistorySync(evt *events.HistorySync) error {
 
 	conversations := evt.Data.GetConversations()
 	for _, conv := range conversations {
-		conversationJID := conv.GetID()
-		if conversationJID == "" {
+		rawJID := conv.GetID()
+		if rawJID == "" {
 			continue
 		}
 
-		parsedJID, err := types.ParseJID(conversationJID)
+		parsedJID, err := types.ParseJID(rawJID)
 		if err != nil {
 			continue
 		}
+
+		conversationJID := normalizeJID(rawJID)
 
 		if parsedJID.Server == types.GroupServer {
 			metaErr := a.syncGroupMetadata(context.Background(), conversationJID, time.Now())
@@ -281,7 +285,7 @@ func (a *Adapter) handleGroupInfo(evt *events.GroupInfo) error {
 		return nil
 	}
 
-	return a.syncGroupMetadata(context.Background(), evt.JID.String(), evt.Timestamp)
+	return a.syncGroupMetadata(context.Background(), normalizeJID(evt.JID.String()), evt.Timestamp)
 }
 
 func (a *Adapter) syncGroupMetadata(ctx context.Context, conversationJID string, at time.Time) error {
@@ -318,6 +322,7 @@ func (a *Adapter) syncGroupMetadata(ctx context.Context, conversationJID string,
 			if s == "" {
 				continue
 			}
+			s = normalizeJID(s)
 			if _, ok := seen[s]; ok {
 				continue
 			}
