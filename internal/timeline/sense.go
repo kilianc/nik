@@ -2,6 +2,8 @@ package timeline
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -39,6 +41,9 @@ func (t *Timeline) Check(ctx context.Context) ([]brain.Stimulus, error) {
 
 	for _, convID := range t.cfg.AllowConversationIDs {
 		s, ok, err := t.check(ctx, convID)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
 		if err != nil {
 			slog.Warn("check stimulus", "pkg", "timeline", "conversation_id", convID, "error", err)
 			continue
@@ -417,6 +422,8 @@ func occurrenceEntry(o db.AlarmOccurrence) entry {
 	if o.Note.Valid && o.Note.String != "" {
 		lines = append(lines, "last_time: "+o.Note.String)
 	}
+
+	lines = append(lines, "MANDATORY: load the alarm skill if you haven't already, then follow all instructions meticulously.")
 
 	return entry{
 		at:   o.FiredAt,
