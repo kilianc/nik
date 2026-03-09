@@ -137,6 +137,7 @@ func main() {
 		slog.Info("codex auth ready", "account_id", auth.AccountID)
 	}
 	llmOpts = append(llmOpts, llm.WithReasoningEffort(&cfg.ReasoningEffort))
+	llmOpts = append(llmOpts, llm.WithVerbosity(&cfg.Verbosity))
 	llmClient := llm.NewClient(cfg.Model, llmOpts...)
 
 	var recallClient *llm.Client
