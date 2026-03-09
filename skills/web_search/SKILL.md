@@ -10,13 +10,14 @@ Search the web using the Exa API via `curl`.
 
 ## API key
 
-Read from `config.yaml`:
+Read from config:
 
 ```
-shell action: "run", command: "grep exa_api_key config.yaml | awk '{print $2}'"
+config action: "get"
 ```
 
-Store the result and pass it as the `x-api-key` header in every request.
+Extract the `exa_api_key` field from the JSON response and pass it as
+the `x-api-key` header in every request.
 
 ## Search
 

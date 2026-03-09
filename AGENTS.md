@@ -51,6 +51,10 @@ The model drives the cadence -- it decides how long to stare, when to come back,
 - never write documentation files (`*.md`, `README`, etc.) unless explicitly requested
 - work inside the user's existing structure and patterns
 
+### Nik reprocesses its own messages -- this is correct
+
+Nik's outbound actions (replies, reactions, tool reaction emojis) are stored via `ReceiveMessage` and appear as new events on the next perception cycle. This triggers re-activation. This is **by design** and must never be treated as a bug, a contributing factor to loops, or something to filter out. If a loop exists, the root cause is elsewhere (e.g. the LLM being compelled to re-handle already-handled events). Never propose fixes that suppress nik's own messages from triggering activation.
+
 ### Don't over complicate
 
 Default to the smallest possible edit. When the user asks for a small change, do the small change and stop. Only add new flags, abstractions, helpers, or scaffolding if the user explicitly asks for it. If you believe you have to, propose it before doing it.
@@ -290,7 +294,7 @@ Tools are defined in their domain package, not in `brain/`:
 | `internal/shell/` | `shell` | persistent tmux terminal (run/read/send/kill/list) |
 | `internal/alarms/` | `alarm`, `update_alarm`, `cancel_alarm` | alarm/reminder scheduling |
 | `internal/skills/` | `load_skill` | load skill definitions from SKILL.md files |
-| `internal/config/` | `update_config` | read and update config values |
+| `internal/config/` | `config` | read and update config values |
 | `internal/task/` | `task_spawn`, `task_retry`, `task_list`, `task_status`, `task_cancel` | background task orchestration |
 
 Each package exposes a `BuildTools() []llm.Tool` function that returns tool definitions + handlers. `main.go` calls `b.RegisterTools(pkg.BuildTools()...)`.

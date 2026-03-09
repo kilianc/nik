@@ -166,7 +166,7 @@ Domain packages define tools via `BuildTools()` and register them at startup. Th
 
 **skills** -- `load_skill`
 
-**config** -- `update_config`
+**config** -- `config`
 
 **journal** -- `journal_write`
 
