@@ -4,6 +4,7 @@ preload: true
 summary: Send messages, reactions, typing indicators, and presence across platforms.
 tools:
   - message_reply
+  - message_noop
   - message_react
   - message_set_presence
   - message_update_media_description
@@ -38,6 +39,14 @@ quoting text from the message line (substring match).
   `"[09:32:10] Kilian Ciuffolo: ok"`.
 - `emoji` -- reaction emoji
 
+### message_noop
+
+Acknowledge intentional silence for this turn without sending anything.
+Use when you've processed the input and decided there's nothing to say.
+
+- `reason` -- why you're staying silent
+- `conversation_id` -- nik conversation UUID (empty = current)
+
 ### message_set_presence
 
 Set account-level presence for a platform.
@@ -57,6 +66,11 @@ from the message line (same matching as `message_react`).
 
 ## Behavior
 
+- Every activation must end with `message_reply`, `message_react`, or
+  `message_noop`. These are the only terminal actions -- everything else
+  (tool lookups, skill loads, task spawns) is intermediate work. If you
+  don't close with one of these three, your response is swallowed and
+  the user sees nothing.
 - Typing indicators are sent automatically as part of reply -- no need
   to manage them manually.
 - Reactions are cheap and expressive. A single emoji often says more
