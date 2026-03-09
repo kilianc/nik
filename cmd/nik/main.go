@@ -15,7 +15,6 @@ import (
 	"github.com/kciuffolo/nik/internal/codex"
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/contacts"
-	"github.com/kciuffolo/nik/internal/crew"
 	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/llm"
 	niklog "github.com/kciuffolo/nik/internal/log"
@@ -149,7 +148,6 @@ func main() {
 	alarmSvc := alarms.New(conn)
 	recallSvc := recall.NewService(cfg, recallClient)
 	taskSvc := task.NewService(conn)
-	crewSvc := crew.NewService(conn)
 
 	// worker tools: subset available to background task runners.
 	// workers can execute commands, query the DB, describe media, and load skills.
@@ -172,7 +170,6 @@ func main() {
 	b := brain.New(cfg, llmClient)
 
 	b.SetWorkerToolNames(workerToolNames)
-	b.SetCrewReader(crewSvc.Roster)
 	b.SetRecaller(recallSvc.Recall)
 	b.SetToolReactor(toolEmojis, messagingSvc.React)
 	b.SetDebugRecorder(brain.NewDebugRecorder(cfg.DebugPath(), llmClient.Model(), time.Now, taskSvc))
@@ -188,8 +185,7 @@ func main() {
 	b.RegisterTools(alarms.BuildTools(alarmSvc)...)
 	b.RegisterTools(db.BuildTools(conn)...)
 	b.RegisterTools(skills.BuildTools(cfg)...)
-	b.RegisterTools(crew.BuildTools(crewSvc)...)
-	b.RegisterTools(task.BuildTools(taskSvc, taskRunner, crewSvc)...)
+	b.RegisterTools(task.BuildTools(taskSvc, taskRunner)...)
 
 	go b.Awake(ctx, 2*time.Second)
 

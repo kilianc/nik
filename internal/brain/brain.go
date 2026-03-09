@@ -18,7 +18,6 @@ type Brain struct {
 	privileged      map[string]bool
 	sensor          Sensor
 	reflexes        []Reflex
-	crewReader      func(ctx context.Context) (string, error)
 	recaller        func(ctx context.Context, stimulus string) string
 	toolReactor     ToolReactor
 	toolEmojis      map[string]string
@@ -38,10 +37,6 @@ func New(cfg *config.Config, llmClient *llm.Client) *Brain {
 		now:        time.Now,
 		claimed:    NewSyncSet(),
 	}
-}
-
-func (b *Brain) SetCrewReader(fn func(ctx context.Context) (string, error)) {
-	b.crewReader = fn
 }
 
 func (b *Brain) SetWorkerToolNames(names []string) {

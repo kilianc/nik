@@ -1,7 +1,6 @@
 package brain
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -19,7 +18,6 @@ var htmlCommentRe = regexp.MustCompile(`(?s)<!--.*?-->\n?`)
 type promptData struct {
 	Now             nowData
 	Soul            string
-	Crew            string
 	Recall          string
 	WorkerTools     string
 	NikTools        string
@@ -165,15 +163,6 @@ func (b *Brain) buildPromptData(now time.Time, recall string) promptData {
 		data.Soul = strings.TrimSpace(string(soulData))
 	} else if !os.IsNotExist(err) {
 		slog.Warn("load soul", "pkg", "brain", "error", err)
-	}
-
-	if b.crewReader != nil {
-		roster, err := b.crewReader(context.Background())
-		if err != nil {
-			slog.Warn("load crew", "pkg", "brain", "error", err)
-		} else {
-			data.Crew = roster
-		}
 	}
 
 	dirs := []string{b.cfg.SkillsPath(), b.cfg.WorkspaceSkillsPath()}

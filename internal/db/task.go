@@ -13,7 +13,6 @@ type TaskInsertParams struct {
 	ID             string
 	ConversationID string
 	ContactID      string
-	CrewMemberID   string
 	RetryForTaskID string
 	RetryNumber    int
 	Goal           string
@@ -45,11 +44,6 @@ func TaskInsert(ctx context.Context, db *sql.DB, p TaskInsertParams) error {
 		contactID = p.ContactID
 	}
 
-	var memberID any
-	if p.CrewMemberID != "" {
-		memberID = p.CrewMemberID
-	}
-
 	var retryForTaskID any
 	if p.RetryForTaskID != "" {
 		retryForTaskID = p.RetryForTaskID
@@ -59,7 +53,6 @@ func TaskInsert(ctx context.Context, db *sql.DB, p TaskInsertParams) error {
 		p.ID,
 		convID,
 		contactID,
-		memberID,
 		retryForTaskID,
 		p.RetryNumber,
 		p.Goal,
@@ -229,7 +222,6 @@ func TaskListSpawned(ctx context.Context, db *sql.DB, conversationID string, sin
 			&t.Goal,
 			&t.RetryForTaskID,
 			&t.RetryNumber,
-			&t.CrewMemberName,
 			&t.CreatedAt,
 		)
 		if err != nil {
@@ -267,14 +259,13 @@ func TaskListCancelled(ctx context.Context, db *sql.DB, conversationID string, s
 
 func scanTask(sc scanner) (Task, error) {
 	var t Task
-	var convID, contactID, activationID, crewMemberID, retryForTaskID sql.NullString
+	var convID, contactID, activationID, retryForTaskID sql.NullString
 
 	err := sc.Scan(
 		&t.ID,
 		&convID,
 		&contactID,
 		&activationID,
-		&crewMemberID,
 		&retryForTaskID,
 		&t.RetryNumber,
 		&t.Goal,
@@ -292,7 +283,6 @@ func scanTask(sc scanner) (Task, error) {
 	t.ConversationID = convID.String
 	t.ContactID = contactID.String
 	t.ActivationID = activationID.String
-	t.CrewMemberID = crewMemberID.String
 	t.RetryForTaskID = retryForTaskID.String
 	return t, nil
 }

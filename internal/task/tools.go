@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kciuffolo/nik/internal/crew"
 	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/llm"
 )
@@ -40,12 +39,8 @@ var spawnToolDef = llm.ToolDef{
 				"enum":        []string{"low", "medium", "high"},
 				"description": "Reasoning effort for the task. low for simple commands, high for complex research.",
 			},
-			"member": map[string]any{
-				"type":        "string",
-				"description": "Name of the crew member to assign this to. Omit to run unassigned.",
-			},
 		},
-		"required":             []string{"contact_id", "goal", "plan", "thinking", "member"},
+		"required":             []string{"contact_id", "goal", "plan", "thinking"},
 		"additionalProperties": false,
 	},
 }
@@ -124,7 +119,6 @@ type spawnArgs struct {
 	Goal      string `json:"goal"`
 	Plan      string `json:"plan"`
 	Thinking  string `json:"thinking"`
-	Member    string `json:"member"`
 }
 
 type statusArgs struct {
@@ -162,12 +156,8 @@ var retryToolDef = llm.ToolDef{
 				"type":        "string",
 				"description": "New plan -- what to do differently.",
 			},
-			"member": map[string]any{
-				"type":        "string",
-				"description": "Crew member. Empty = same as original.",
-			},
 		},
-		"required":             []string{"task_id", "goal", "plan", "member"},
+		"required":             []string{"task_id", "goal", "plan"},
 		"additionalProperties": false,
 	},
 }
@@ -176,13 +166,12 @@ type retryArgs struct {
 	TaskID string `json:"task_id"`
 	Goal   string `json:"goal"`
 	Plan   string `json:"plan"`
-	Member string `json:"member"`
 }
 
-func BuildTools(svc *Service, runner *Runner, crewSvc *crew.Service) []llm.Tool {
+func BuildTools(svc *Service, runner *Runner) []llm.Tool {
 	return []llm.Tool{
-		{Def: spawnToolDef, Handler: spawnHandler(svc, runner, crewSvc)},
-		{Def: retryToolDef, Handler: retryHandler(svc, runner, crewSvc)},
+		{Def: spawnToolDef, Handler: spawnHandler(svc, runner)},
+		{Def: retryToolDef, Handler: retryHandler(svc, runner)},
 		{Def: listToolDef, Handler: listHandler(svc)},
 		{Def: statusToolDef, Handler: statusHandler(svc)},
 		{Def: cancelToolDef, Handler: cancelHandler(svc, runner)},
@@ -196,7 +185,7 @@ func BuildReportTool(svc *Service, taskID string) llm.Tool {
 	}
 }
 
-func spawnHandler(svc *Service, runner *Runner, crewSvc *crew.Service) llm.ToolExecutor {
+func spawnHandler(svc *Service, runner *Runner) llm.ToolExecutor {
 	return func(ctx context.Context, call llm.ToolCall) (string, error) {
 		var args spawnArgs
 
@@ -210,19 +199,6 @@ func spawnHandler(svc *Service, runner *Runner, crewSvc *crew.Service) llm.ToolE
 		}
 		if args.Plan == "" {
 			return llm.ToolErrorf("plan is required"), nil
-		}
-
-		var member *db.CrewMember
-		var crewMemberID string
-
-		if args.Member != "" {
-			m, memberErr := crewSvc.Get(ctx, args.Member)
-			if memberErr != nil {
-				return llm.ToolErrorf("crew member %q not found: %v", args.Member, memberErr), nil
-			}
-
-			member = &m
-			crewMemberID = m.ID
 		}
 
 		brainMeta, _ := ctx.Value("meta").(map[string]string)
@@ -244,7 +220,6 @@ func spawnHandler(svc *Service, runner *Runner, crewSvc *crew.Service) llm.ToolE
 		t, err := svc.Create(ctx, createParams{
 			ConversationID: convID,
 			ContactID:      args.ContactID,
-			CrewMemberID:   crewMemberID,
 			Goal:           args.Goal,
 			Plan:           args.Plan,
 			Thinking:       args.Thinking,
@@ -253,18 +228,13 @@ func spawnHandler(svc *Service, runner *Runner, crewSvc *crew.Service) llm.ToolE
 			return llm.ToolError(err), nil
 		}
 
-		go runner.Run(context.Background(), t, member)
+		go runner.Run(context.Background(), t)
 
-		result := map[string]any{
+		return llm.ToolResult(map[string]any{
 			"task_id": t.ID,
 			"status":  "pending",
 			"goal":    t.Goal,
-		}
-		if member != nil {
-			result["assigned_to"] = member.Name
-		}
-
-		return llm.ToolResult(result), nil
+		}), nil
 	}
 }
 
@@ -397,7 +367,7 @@ func cancelHandler(svc *Service, runner *Runner) llm.ToolExecutor {
 	}
 }
 
-func retryHandler(svc *Service, runner *Runner, crewSvc *crew.Service) llm.ToolExecutor {
+func retryHandler(svc *Service, runner *Runner) llm.ToolExecutor {
 	return func(ctx context.Context, call llm.ToolCall) (string, error) {
 		var args retryArgs
 
@@ -456,30 +426,12 @@ func retryHandler(svc *Service, runner *Runner, crewSvc *crew.Service) llm.ToolE
 			goal = original.Goal
 		}
 
-		var member *db.CrewMember
-		crewMemberID := original.CrewMemberID
-
-		if args.Member != "" {
-			m, memberErr := crewSvc.Get(ctx, args.Member)
-			if memberErr != nil {
-				return llm.ToolErrorf("crew member %q not found: %v", args.Member, memberErr), nil
-			}
-			member = &m
-			crewMemberID = m.ID
-		} else if crewMemberID != "" {
-			m, memberErr := crewSvc.Get(ctx, crewMemberID)
-			if memberErr == nil {
-				member = &m
-			}
-		}
-
 		chain, _ := svc.RetryChain(ctx, root)
 		plan := buildRetryPlan(args.Plan, chain)
 
 		t, err := svc.Create(ctx, createParams{
 			ConversationID: original.ConversationID,
 			ContactID:      original.ContactID,
-			CrewMemberID:   crewMemberID,
 			RetryForTaskID: root,
 			RetryNumber:    retryNumber,
 			Goal:           goal,
@@ -490,19 +442,14 @@ func retryHandler(svc *Service, runner *Runner, crewSvc *crew.Service) llm.ToolE
 			return llm.ToolError(err), nil
 		}
 
-		go runner.Run(context.Background(), t, member)
+		go runner.Run(context.Background(), t)
 
-		result := map[string]any{
+		return llm.ToolResult(map[string]any{
 			"task_id":      t.ID,
 			"status":       "pending",
 			"goal":         t.Goal,
 			"retry_number": retryNumber,
-		}
-		if member != nil {
-			result["assigned_to"] = member.Name
-		}
-
-		return llm.ToolResult(result), nil
+		}), nil
 	}
 }
 

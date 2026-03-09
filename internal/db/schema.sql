@@ -138,19 +138,11 @@ CREATE TABLE IF NOT EXISTS tool_call (
   created_at    TIMESTAMP NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE TABLE IF NOT EXISTS crew_member (
-  id         TEXT PRIMARY KEY,
-  name       TEXT NOT NULL UNIQUE,
-  prompt     TEXT NOT NULL DEFAULT '',
-  created_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
-);
-
 CREATE TABLE IF NOT EXISTS task (
   id                TEXT PRIMARY KEY,
   conversation_id   TEXT REFERENCES conversation(id),
   contact_id        TEXT REFERENCES contact(id),
   activation_id     TEXT REFERENCES activation(id),
-  crew_member_id    TEXT REFERENCES crew_member(id),
   retry_for_task_id TEXT REFERENCES task(id),
   retry_number      INTEGER NOT NULL DEFAULT 0,
   goal              TEXT NOT NULL,

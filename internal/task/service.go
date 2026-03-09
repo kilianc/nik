@@ -22,7 +22,6 @@ func NewService(conn *sql.DB) *Service {
 type createParams struct {
 	ConversationID string
 	ContactID      string
-	CrewMemberID   string
 	RetryForTaskID string
 	RetryNumber    int
 	Goal           string
@@ -35,7 +34,6 @@ func (s *Service) Create(ctx context.Context, p createParams) (db.Task, error) {
 		ID:             id.V7(),
 		ConversationID: p.ConversationID,
 		ContactID:      p.ContactID,
-		CrewMemberID:   p.CrewMemberID,
 		RetryForTaskID: p.RetryForTaskID,
 		RetryNumber:    p.RetryNumber,
 		Goal:           p.Goal,
@@ -54,7 +52,6 @@ func (s *Service) Create(ctx context.Context, p createParams) (db.Task, error) {
 		ID:             ip.ID,
 		ConversationID: p.ConversationID,
 		ContactID:      p.ContactID,
-		CrewMemberID:   p.CrewMemberID,
 		RetryForTaskID: p.RetryForTaskID,
 		RetryNumber:    p.RetryNumber,
 		Goal:           p.Goal,
