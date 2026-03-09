@@ -38,7 +38,7 @@ var toolEmojis = map[string]string{
 	"update_contact": "📇",
 	"load_skill":     "📚",
 	"task_spawn":     "🛠️",
-	"update_config":  "⚙️",
+	"config":         "⚙️",
 	"describe_media": "👁️",
 }
 

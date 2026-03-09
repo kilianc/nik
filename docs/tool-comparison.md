@@ -148,7 +148,7 @@ Every tool registered in each product, grouped by category. Sources:
 | ------------------ | --------- | -------- | ---------------- | ---------------------------- |
 | Database queries   | --        | --       | --               | `db_query` (privileged)      |
 | Contact management | --        | --       | --               | `update_contact`             |
-| Config management  | --        | --       | `gateway` config | `update_config` (privileged) |
+| Config management  | --        | --       | `gateway` config | `config` (privileged) |
 
 ---
 
@@ -356,7 +356,7 @@ Execution modes: `isolated` (dedicated agent turn) or `main` (enqueue on next he
 - **WhatsApp**: `wapp_reply`, `wapp_react`, `wapp_set_presence`, `wapp_send_composing`, `wapp_send_paused`, `wapp_update_media_description`
 - **AI**: `describe_media`
 - **Schedule**: `alarm`
-- **Data (privileged)**: `db_query`, `update_config`
+- **Data (privileged)**: `db_query`, `config`
 - **CRM**: `update_contact`
 
 ## Already Planned

@@ -12,8 +12,8 @@ import (
 	"github.com/kciuffolo/nik/internal/llm"
 )
 
-var updateConfigDef = llm.ToolDef{
-	Name:        "update_config",
+var configDef = llm.ToolDef{
+	Name:        "config",
 	Description: "Read or update nik's runtime configuration. Use action 'get' to see current config, 'set' to change a field, or allow_add/allow_remove/allow_reload to manage the conversation allow list.",
 	Parameters: map[string]any{
 		"type": "object",
@@ -40,14 +40,14 @@ var updateConfigDef = llm.ToolDef{
 func BuildTools(cfg *Config, conn *sql.DB) []llm.Tool {
 	return []llm.Tool{
 		{
-			Def:        updateConfigDef,
-			Handler:    updateConfigHandler(cfg, conn),
+			Def:        configDef,
+			Handler:    configHandler(cfg, conn),
 			Privileged: true,
 		},
 	}
 }
 
-func updateConfigHandler(cfg *Config, conn *sql.DB) llm.ToolExecutor {
+func configHandler(cfg *Config, conn *sql.DB) llm.ToolExecutor {
 	return func(ctx context.Context, call llm.ToolCall) (string, error) {
 		var args struct {
 			Action string `json:"action"`
@@ -81,6 +81,7 @@ func configGet(cfg *Config) (string, error) {
 	out := map[string]any{
 		"model":                       cfg.Model,
 		"reasoning_effort":            cfg.ReasoningEffort,
+		"exa_api_key":                 cfg.ExaAPIKey,
 		"debug_dir":                   cfg.DebugDirValue,
 		"media_dir":                   cfg.MediaDirValue,
 		"max_history":                 cfg.MaxHistory,

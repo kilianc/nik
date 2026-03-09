@@ -1,19 +1,19 @@
 ---
 name: config
 summary: Read and update nik's runtime config and conversation allow list. Owner-only.
-tools: [update_config]
+tools: [config]
 ---
 
 # Config
 
-## update_config
+## config
 
 Read or change nik's runtime configuration.
 
 ### Actions
 
 - `get` -- returns the current config (model, timezone, location,
-  media_dir, debug_dir, max_history, allow list, owner)
+  exa_api_key, media_dir, debug_dir, max_history, allow list, owner)
 - `set` -- update a writable field
 - `allow_add` -- add a conversation_id to the allow list
 - `allow_remove` -- remove a conversation_id from the allow list

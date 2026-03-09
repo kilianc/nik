@@ -16,6 +16,7 @@ type Config struct {
 
 	OpenAIKey       string `yaml:"openai_key"`
 	UseCodex        bool   `yaml:"use_codex"`
+	ExaAPIKey       string `yaml:"exa_api_key"`
 	Model           string `yaml:"model"`
 	ReasoningEffort string `yaml:"reasoning_effort"`
 	Verbosity       string `yaml:"verbosity"`
