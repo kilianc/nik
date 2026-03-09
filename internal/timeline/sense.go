@@ -166,7 +166,7 @@ func (t *Timeline) check(ctx context.Context, convID string) (brain.Stimulus, bo
 		switch e.from {
 		case "task":
 			hasTasks = true
-		case "system":
+		case "alarm":
 			hasAlarms = true
 		}
 	}
@@ -427,7 +427,7 @@ func occurrenceEntry(o db.AlarmOccurrence) entry {
 
 	return entry{
 		at:   o.FiredAt,
-		from: "system",
+		from: "alarm",
 		text: padLines(lines),
 	}
 }
