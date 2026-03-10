@@ -79,6 +79,11 @@ func (b *Brain) Awake(ctx context.Context, pollInterval time.Duration) {
 
 // perceive runs reflexes then polls the sensor for new stimuli; each stimulus is handed to activate.
 func (b *Brain) perceive(ctx context.Context) {
+	_, err := b.cfg.ReloadIfChanged()
+	if err != nil {
+		slog.Warn("config reload failed", "pkg", "brain", "error", err)
+	}
+
 	for _, r := range b.reflexes {
 		r(ctx)
 	}

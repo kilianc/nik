@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -12,7 +13,8 @@ import (
 )
 
 type Config struct {
-	Home string `yaml:"-"`
+	Home        string    `yaml:"-"`
+	lastModTime time.Time `yaml:"-"`
 
 	OpenAIKey       string `yaml:"openai_key"`
 	UseCodex        bool   `yaml:"use_codex"`
@@ -176,6 +178,11 @@ func Load(home string) (*Config, error) {
 
 	cfg.Home = home
 
+	info, err := os.Stat(path)
+	if err == nil {
+		cfg.lastModTime = info.ModTime()
+	}
+
 	for _, pid := range cfg.PrivilegedConversationIDs {
 		if !slices.Contains(cfg.AllowConversationIDs, pid) {
 			cfg.AllowConversationIDs = append(cfg.AllowConversationIDs, pid)
@@ -187,4 +194,54 @@ func Load(home string) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+func (c *Config) ReloadIfChanged() (bool, error) {
+	info, err := os.Stat(c.ConfigPath())
+	if err != nil {
+		return false, fmt.Errorf("stat config: %w", err)
+	}
+
+	if !info.ModTime().After(c.lastModTime) {
+		return false, nil
+	}
+
+	err = c.reload()
+	if err != nil {
+		return false, err
+	}
+
+	c.lastModTime = info.ModTime()
+	slog.Info("config reloaded", "pkg", "config")
+
+	return true, nil
+}
+
+func (c *Config) reload() error {
+	path := c.ConfigPath()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read %s: %w", path, err)
+	}
+
+	var fresh Config
+	err = yaml.Unmarshal(data, &fresh)
+	if err != nil {
+		return fmt.Errorf("parse %s: %w", path, err)
+	}
+
+	home := c.Home
+	modTime := c.lastModTime
+	*c = fresh
+	c.Home = home
+	c.lastModTime = modTime
+
+	for _, pid := range c.PrivilegedConversationIDs {
+		if !slices.Contains(c.AllowConversationIDs, pid) {
+			c.AllowConversationIDs = append(c.AllowConversationIDs, pid)
+		}
+	}
+
+	return nil
 }

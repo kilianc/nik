@@ -137,11 +137,11 @@ func main() {
 	}
 	llmOpts = append(llmOpts, llm.WithReasoningEffort(&cfg.ReasoningEffort))
 	llmOpts = append(llmOpts, llm.WithVerbosity(&cfg.Verbosity))
-	llmClient := llm.NewClient(cfg.Model, llmOpts...)
+	llmClient := llm.NewClient(&cfg.Model, llmOpts...)
 
 	var recallClient *llm.Client
 	if cfg.RecallModel != "" && cfg.OpenAIKey != "" {
-		recallClient = llm.NewClient(cfg.RecallModel, llm.WithAPIKey(cfg.OpenAIKey))
+		recallClient = llm.NewClient(&cfg.RecallModel, llm.WithAPIKey(cfg.OpenAIKey))
 		slog.Info("recall client ready", "model", cfg.RecallModel)
 	}
 
@@ -172,7 +172,7 @@ func main() {
 	b.SetWorkerToolNames(workerToolNames)
 	b.SetRecaller(recallSvc.Recall)
 	b.SetToolReactor(toolEmojis, messagingSvc.React)
-	b.SetDebugRecorder(brain.NewDebugRecorder(cfg.DebugPath(), llmClient.Model(), time.Now, taskSvc))
+	b.SetDebugRecorder(brain.NewDebugRecorder(cfg.DebugPath, llmClient.Model, time.Now, taskSvc))
 
 	b.RegisterReflex(taskSvc.CheckStale)
 	b.RegisterReflex(alarmSvc.FireDueAlarms)

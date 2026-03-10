@@ -33,7 +33,7 @@ const maxConcurrentSessions = 6
 type Client struct {
 	codexClient     *openai.Client
 	apiClient       *openai.Client
-	model           shared.ResponsesModel
+	model           *string
 	reasoningEffort *string
 	verbosity       *string
 	observer        CompletionObserver
@@ -79,7 +79,7 @@ func WithVerbosity(v *string) ClientOption {
 	}
 }
 
-func NewClient(model string, opts ...ClientOption) *Client {
+func NewClient(model *string, opts ...ClientOption) *Client {
 	var cfg clientConfig
 	for _, opt := range opts {
 		opt(&cfg)
@@ -126,7 +126,7 @@ func NewClient(model string, opts ...ClientOption) *Client {
 }
 
 func (c *Client) Model() string {
-	return string(c.model)
+	return *c.model
 }
 
 type ToolDef struct {
@@ -229,7 +229,7 @@ func (c *Client) Complete(ctx context.Context, instructions string, getInput fun
 	ctx = augmentCtxMeta(ctx, "activation_id", actID)
 
 	if c.observer != nil {
-		c.observer.OnStart(ctx, string(c.model))
+		c.observer.OnStart(ctx, *c.model)
 	}
 
 	go func() {
@@ -265,14 +265,14 @@ func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instru
 
 	if c.observer != nil {
 		defer func() {
-			c.observer.OnFinish(ctx, string(c.model), extra.ReasoningEffort, total, len(history), time.Since(completeStart).Milliseconds(), retErr != nil)
+			c.observer.OnFinish(ctx, *c.model, extra.ReasoningEffort, total, len(history), time.Since(completeStart).Milliseconds(), retErr != nil)
 		}()
 	}
 
 	var items responses.ResponseInputParam
 
 	params := responses.ResponseNewParams{
-		Model:        c.model,
+		Model:        shared.ResponsesModel(*c.model),
 		Instructions: openai.String(instructions),
 		Tools:        buildToolParams(tools),
 		Reasoning: shared.ReasoningParam{
@@ -290,7 +290,7 @@ func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instru
 		}
 	}
 
-	m := string(c.model)
+	m := *c.model
 	if strings.Contains(m, "spark") || strings.Contains(m, "nano") || strings.Contains(m, "4.1-mini") {
 		params.Reasoning = shared.ReasoningParam{}
 		params.Text = responses.ResponseTextConfigParam{}
