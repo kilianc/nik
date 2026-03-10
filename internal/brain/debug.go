@@ -38,9 +38,10 @@ type DebugTaskLister interface {
 	ListTasks(ctx context.Context, p db.TaskListParams) ([]db.TaskListRow, error)
 }
 
-func NewDebugRecorder(debugPath, model string, now func() time.Time, tasks DebugTaskLister) DebugRecorder {
+func NewDebugRecorder(debugPath, model func() string, now func() time.Time, tasks DebugTaskLister) DebugRecorder {
 	return func(input DebugInput) {
-		if debugPath == "" {
+		dp := debugPath()
+		if dp == "" {
 			return
 		}
 
@@ -49,7 +50,7 @@ func NewDebugRecorder(debugPath, model string, now func() time.Time, tasks Debug
 		}
 		timestamp := now()
 
-		debugFile, err := createDebugFilePath(debugPath, input.UserInput, timestamp)
+		debugFile, err := createDebugFilePath(dp, input.UserInput, timestamp)
 		if err != nil {
 			slog.Warn("create debug path failed", "pkg", "brain", "error", err)
 			return
@@ -78,9 +79,11 @@ func NewDebugRecorder(debugPath, model string, now func() time.Time, tasks Debug
 			}
 		}
 
+		m := model()
+
 		record := debugRecord{
 			Timestamp:       timestamp.Format(time.RFC3339),
-			Model:           model,
+			Model:           m,
 			ReasoningEffort: input.Extra.ReasoningEffort,
 			Trigger:         input.Meta,
 			ActiveTasks:     activeTasks,
@@ -100,7 +103,7 @@ func NewDebugRecorder(debugPath, model string, now func() time.Time, tasks Debug
 				TotalTokens:     input.Usage.TotalTokens,
 				CachedTokens:    input.Usage.CachedTokens,
 				ReasoningTokens: input.Usage.ReasoningTokens,
-				CostUSD:         llm.ComputeCost(model, input.Usage.InputTokens, input.Usage.OutputTokens, input.Usage.CachedTokens),
+				CostUSD:         llm.ComputeCost(m, input.Usage.InputTokens, input.Usage.OutputTokens, input.Usage.CachedTokens),
 			},
 		}
 

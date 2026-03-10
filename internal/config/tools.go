@@ -14,13 +14,13 @@ import (
 
 var configDef = llm.ToolDef{
 	Name:        "config",
-	Description: "Read or update nik's runtime configuration. Use action 'get' to see current config, 'set' to change a field, or allow_add/allow_remove/allow_reload to manage the conversation allow list.",
+	Description: "Read or update nik's runtime configuration. Use action 'get' to see current config, 'set' to change a field, or allow_add/allow_remove to manage the conversation allow list. Config is live-reloaded from disk automatically.",
 	Parameters: map[string]any{
 		"type": "object",
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"enum":        []any{"get", "set", "allow_add", "allow_remove", "allow_reload"},
+				"enum":        []any{"get", "set", "allow_add", "allow_remove"},
 				"description": "The action to perform.",
 			},
 			"field": map[string]any{
@@ -69,8 +69,6 @@ func configHandler(cfg *Config, conn *sql.DB) llm.ToolExecutor {
 			return allowlistAdd(ctx, cfg, conn, args.Value)
 		case "allow_remove":
 			return allowlistRemove(cfg, args.Value)
-		case "allow_reload":
-			return allowlistReload(cfg)
 		default:
 			return llm.ToolErrorf("unknown action %q", args.Action), nil
 		}
@@ -176,19 +174,6 @@ func allowlistAdd(ctx context.Context, cfg *Config, conn *sql.DB, conversationID
 	}
 
 	slog.Info("allowlist add", "pkg", "config", "conversation_id", conversationID)
-
-	return `{"ok":true}`, nil
-}
-
-func allowlistReload(cfg *Config) (string, error) {
-	fresh, err := Load(cfg.Home)
-	if err != nil {
-		return llm.ToolError(err), nil
-	}
-
-	cfg.AllowConversationIDs = append([]string(nil), fresh.AllowConversationIDs...)
-
-	slog.Info("allowlist reload", "pkg", "config", "count", len(cfg.AllowConversationIDs))
 
 	return `{"ok":true}`, nil
 }
