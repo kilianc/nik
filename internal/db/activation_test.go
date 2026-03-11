@@ -115,6 +115,55 @@ func TestActivationInsertWithError(t *testing.T) {
 	}
 }
 
+func TestActivationUpdateStatsPersistsOutput(t *testing.T) {
+	ctx := context.Background()
+
+	conn, err := OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	convID := seedActivationConv(t, conn)
+	actID := id.V7()
+
+	err = ActivationInsert(ctx, conn, ActivationRow{
+		ID:             actID,
+		ConversationID: convID,
+		Sources:        `["message"]`,
+		Model:          "gpt-5",
+		CreatedAt:      time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("insert activation: %v", err)
+	}
+
+	output := "replied to kevin about weather\n\n- **Perceive**: kevin asking about weather"
+
+	err = ActivationUpdateStats(ctx, conn, actID, ActivationStatsUpdate{
+		InputTokens:  1000,
+		OutputTokens: 200,
+		TotalTokens:  1200,
+		DurationMS:   500,
+		Output:       output,
+	})
+	if err != nil {
+		t.Fatalf("update stats: %v", err)
+	}
+
+	var got string
+	err = conn.QueryRowContext(ctx,
+		"SELECT output FROM activation WHERE id = ?1", actID,
+	).Scan(&got)
+	if err != nil {
+		t.Fatalf("query output: %v", err)
+	}
+
+	if got != output {
+		t.Fatalf("expected output %q, got %q", output, got)
+	}
+}
+
 func seedActivationConv(t *testing.T, conn DBTX) string {
 	t.Helper()
 	convID := id.V7()

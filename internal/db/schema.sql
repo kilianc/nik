@@ -126,6 +126,7 @@ CREATE TABLE IF NOT EXISTS activation (
   tool_call_count  INTEGER NOT NULL DEFAULT 0,
   duration_ms      INTEGER NOT NULL DEFAULT 0,
   error            INTEGER NOT NULL DEFAULT 0,
+  output           TEXT NOT NULL DEFAULT '',
   created_at       TIMESTAMP NOT NULL DEFAULT (datetime('now'))
 );
 

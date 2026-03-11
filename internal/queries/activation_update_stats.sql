@@ -8,5 +8,6 @@ SET reasoning_effort = COALESCE(NULLIF(?2, ''), reasoning_effort),
     cost_usd = cost_usd + ?8,
     tool_call_count = tool_call_count + ?9,
     duration_ms = duration_ms + ?10,
-    error = ?11
+    error = ?11,
+    output = ?12
 WHERE id = ?1

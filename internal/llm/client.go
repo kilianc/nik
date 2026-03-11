@@ -25,7 +25,7 @@ import (
 type CompletionObserver interface {
 	OnStart(ctx context.Context, model string)
 	OnToolCall(ctx context.Context, name string, args string, result string, duration time.Duration, isError bool)
-	OnFinish(ctx context.Context, model string, reasoningEffort string, usage Usage, toolCalls int, durationMS int64, isError bool)
+	OnFinish(ctx context.Context, model string, reasoningEffort string, usage Usage, toolCalls int, durationMS int64, output string, isError bool)
 }
 
 const maxConcurrentSessions = 6
@@ -261,11 +261,12 @@ func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instru
 
 	completeStart := time.Now()
 	var retErr error
+	var retOutput string
 	var history []ToolCallRecord
 
 	if c.observer != nil {
 		defer func() {
-			c.observer.OnFinish(ctx, *c.model, extra.ReasoningEffort, total, len(history), time.Since(completeStart).Milliseconds(), retErr != nil)
+			c.observer.OnFinish(ctx, *c.model, extra.ReasoningEffort, total, len(history), time.Since(completeStart).Milliseconds(), retOutput, retErr != nil)
 		}()
 	}
 
@@ -386,7 +387,8 @@ func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instru
 		}
 
 		if len(calls) == 0 {
-			return CompletionResult{Output: resp.OutputText(), Usage: total, History: history, Extra: extra}
+			retOutput = resp.OutputText()
+			return CompletionResult{Output: retOutput, Usage: total, History: history, Extra: extra}
 		}
 
 		sig := roundSignature(calls)
