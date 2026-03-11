@@ -58,7 +58,7 @@ func (r *Recorder) OnToolCall(ctx context.Context, name string, args string, res
 	}
 }
 
-func (r *Recorder) OnFinish(ctx context.Context, model, reasoningEffort string, usage llm.Usage, toolCalls int, durationMS int64, isError bool) {
+func (r *Recorder) OnFinish(ctx context.Context, model, reasoningEffort string, usage llm.Usage, toolCalls int, durationMS int64, output string, isError bool) {
 	meta := metaFromCtx(ctx)
 	actID := meta["activation_id"]
 	if actID == "" {
@@ -79,6 +79,7 @@ func (r *Recorder) OnFinish(ctx context.Context, model, reasoningEffort string, 
 		ToolCallCount:   toolCalls,
 		DurationMS:      durationMS,
 		IsError:         isError,
+		Output:          output,
 	})
 	if err != nil {
 		slog.Warn("update activation stats", "pkg", "stats", "activation_id", actID, "error", err)

@@ -24,6 +24,7 @@ type ActivationRow struct {
 	ToolCallCount   int
 	DurationMS      int64
 	Error           bool
+	Output          string
 	CreatedAt       time.Time
 }
 
@@ -84,6 +85,7 @@ type ActivationStatsUpdate struct {
 	ToolCallCount   int
 	DurationMS      int64
 	IsError         bool
+	Output          string
 }
 
 func ActivationUpdateStats(ctx context.Context, db DBTX, id string, s ActivationStatsUpdate) error {
@@ -104,6 +106,7 @@ func ActivationUpdateStats(ctx context.Context, db DBTX, id string, s Activation
 		s.ToolCallCount,
 		s.DurationMS,
 		errFlag,
+		s.Output,
 	)
 	if err != nil {
 		return fmt.Errorf("update activation stats %s: %w", id, err)
