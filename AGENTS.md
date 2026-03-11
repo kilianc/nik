@@ -344,6 +344,8 @@ Before applying any migration to the live DB:
 
 `.gitignore` uses ignore-all approach: `*` ignores everything, then specific patterns are un-ignored (`!*.go`, `!go.mod`, `!go.sum`, `!*.sql`, `!*.yaml`, `!*.md`, `!Makefile`, `!.gitignore`, `!.config.example.yaml`). `workspace/` is blanket-ignored (contains runtime artifacts and secrets). Use `git add -f` if a new file type needs tracking.
 
+**No PII in the repo.** Never commit personally identifiable information — real names, emails, phone numbers, hostnames, addresses, or any other data that identifies a specific person or device. Use placeholders or derive values at runtime (e.g. `$(hostname)`).
+
 ## Style
 
 - Always use `TEXT`, never `VARCHAR`
@@ -351,6 +353,7 @@ Before applying any migration to the live DB:
 - **One column per line** in SELECT lists and one field per line in Go `Scan()` calls -- never pack multiple columns/fields onto a single line
 - In every `CREATE TABLE`, keep all `*_at` timestamp columns grouped at the bottom of the column list
 - Go follows standard gofmt conventions
+- Bash/shell scripts use two-space indentation
 - One Go file per query function, one test file per query function
 
 ## Fin
