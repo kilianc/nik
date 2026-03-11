@@ -173,6 +173,8 @@ type TaskCancelled struct {
 
 type ToolCallInfo struct {
 	Name       string
+	Input      string
+	Output     string
 	DurationMS int64
 	Error      bool
 	At         time.Time

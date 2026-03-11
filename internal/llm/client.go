@@ -24,7 +24,7 @@ import (
 
 type CompletionObserver interface {
 	OnStart(ctx context.Context, model string)
-	OnToolCall(ctx context.Context, name string, duration time.Duration, isError bool)
+	OnToolCall(ctx context.Context, name string, args string, result string, duration time.Duration, isError bool)
 	OnFinish(ctx context.Context, model string, reasoningEffort string, usage Usage, toolCalls int, durationMS int64, isError bool)
 }
 
@@ -426,7 +426,7 @@ func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instru
 			history = append(history, rec)
 
 			if c.observer != nil {
-				c.observer.OnToolCall(ctx, rec.Name, elapsed, rec.Error)
+				c.observer.OnToolCall(ctx, rec.Name, rec.Args, rec.Result, elapsed, rec.Error)
 			}
 
 			items = append(items, responses.ResponseInputItemParamOfFunctionCallOutput(call.CallID, result))

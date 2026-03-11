@@ -324,6 +324,8 @@ func statusHandler(svc *Service) llm.ToolExecutor {
 				for i, tc := range toolCalls {
 					formatted[i] = map[string]any{
 						"name":        tc.Name,
+						"input":       tc.Input,
+						"output":      tc.Output,
 						"duration_ms": tc.DurationMS,
 						"error":       tc.Error,
 						"at":          tc.At.Format("15:04:05"),

@@ -195,7 +195,7 @@ func TaskRecentToolCalls(ctx context.Context, db *sql.DB, activationID string) (
 		var tc ToolCallInfo
 		var errFlag int
 
-		err = rows.Scan(&tc.Name, &tc.DurationMS, &errFlag, &tc.At)
+		err = rows.Scan(&tc.Name, &tc.Input, &tc.Output, &tc.DurationMS, &errFlag, &tc.At)
 		if err != nil {
 			return nil, fmt.Errorf("scan tool call: %w", err)
 		}
