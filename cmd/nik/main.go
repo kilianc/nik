@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/kciuffolo/nik/internal/alarms"
@@ -81,7 +82,7 @@ func main() {
 	fmt.Println(motd)
 	fmt.Println()
 
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 	defer cancel()
 
 	conn, err := db.Open(cfg.DBPath(), cfg.TZ())

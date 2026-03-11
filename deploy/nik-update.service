@@ -1,0 +1,9 @@
+[Unit]
+Description=Nik self-update check
+
+[Service]
+Type=oneshot
+User=nik
+ExecStart=%h/git/deploy/update.sh
+Environment=PATH=/usr/local/go/bin:/usr/bin:/bin
+Environment=HOME=%h

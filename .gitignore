@@ -22,6 +22,11 @@
 !.gitignore
 !.config.example.yaml
 
+# Track deploy files
+!*.sh
+!*.service
+!*.timer
+
 # Always ignore
 .cursor/
 TODO.md

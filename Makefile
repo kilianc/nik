@@ -2,6 +2,10 @@ export CGO_CFLAGS = -w
 
 NIK_HOME ?= workspace
 
+.PHONY: build
+build:
+	CGO_ENABLED=1 go build -o nik ./cmd/nik/
+
 .PHONY: lint
 lint:
 	gofmt -w .
@@ -17,8 +21,8 @@ coverage: lint
 	go tool cover -func=coverage.out
 
 .PHONY: run
-run:
-	cd $(NIK_HOME) && go run ../cmd/nik/main.go
+run: build
+	cd $(NIK_HOME) && exec ../nik
 
 .PHONY: run-loop
 run-loop:
@@ -53,6 +57,22 @@ timeline:
 .PHONY: call
 call:
 	@cd $(NIK_HOME) && go run ../tools/call $(ARGS)
+
+PI ?= nik@localhost
+PI_NIK_HOME ?= /home/nik
+
+.PHONY: deploy
+deploy:
+	rsync -az --delete \
+		--exclude workspace/ --exclude .git/ --exclude nik \
+		. $(PI):/tmp/nik-deploy/
+	ssh $(PI) '\
+		sudo rsync -a --delete /tmp/nik-deploy/ $(PI_NIK_HOME)/git/ \
+		&& sudo chown -R nik:nik $(PI_NIK_HOME)/git/ \
+		&& sudo -u nik bash -c "cd ~/git && CGO_ENABLED=1 /usr/local/go/bin/go build -o nik ./cmd/nik/" \
+		&& sudo systemctl restart nik \
+		&& rm -rf /tmp/nik-deploy \
+		&& echo "deployed $$(sudo -u nik git -C $(PI_NIK_HOME)/git rev-parse --short HEAD)"'
 
 .PHONY: sessions
 sessions:
