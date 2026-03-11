@@ -13,6 +13,8 @@ import (
 type ToolCallInsertParams struct {
 	ActivationID string
 	Name         string
+	Input        string
+	Output       string
 	Duration     time.Duration
 	IsError      bool
 }
@@ -27,6 +29,8 @@ func ToolCallInsertOne(ctx context.Context, db *sql.DB, p ToolCallInsertParams) 
 		id.V7(),
 		p.ActivationID,
 		p.Name,
+		p.Input,
+		p.Output,
 		p.Duration.Milliseconds(),
 		errFlag,
 		time.Now().UTC(),

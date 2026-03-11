@@ -133,6 +133,8 @@ CREATE TABLE IF NOT EXISTS tool_call (
   id            TEXT PRIMARY KEY,
   activation_id TEXT NOT NULL REFERENCES activation(id),
   name          TEXT NOT NULL,
+  input         TEXT NOT NULL DEFAULT '',
+  output        TEXT NOT NULL DEFAULT '',
   duration_ms   INTEGER NOT NULL DEFAULT 0,
   error         INTEGER NOT NULL DEFAULT 0,
   created_at    TIMESTAMP NOT NULL DEFAULT (datetime('now'))

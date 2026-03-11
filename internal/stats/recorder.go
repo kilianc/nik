@@ -38,7 +38,7 @@ func (r *Recorder) OnStart(ctx context.Context, model string) {
 	}
 }
 
-func (r *Recorder) OnToolCall(ctx context.Context, name string, duration time.Duration, isError bool) {
+func (r *Recorder) OnToolCall(ctx context.Context, name string, args string, result string, duration time.Duration, isError bool) {
 	meta := metaFromCtx(ctx)
 	actID := meta["activation_id"]
 	if actID == "" {
@@ -48,6 +48,8 @@ func (r *Recorder) OnToolCall(ctx context.Context, name string, duration time.Du
 	err := db.ToolCallInsertOne(ctx, r.conn, db.ToolCallInsertParams{
 		ActivationID: actID,
 		Name:         name,
+		Input:        args,
+		Output:       result,
 		Duration:     duration,
 		IsError:      isError,
 	})

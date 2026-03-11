@@ -1,5 +1,7 @@
 SELECT
   tc.name,
+  tc.input,
+  tc.output,
   tc.duration_ms,
   tc.error,
   tc.created_at
