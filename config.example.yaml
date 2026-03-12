@@ -28,3 +28,4 @@ location: New York, NY
 journal_time: "00:00"        # nightly journal pass
 dream_start: "02:00"         # first dream pass (4 hourly passes follow)
 briefing_time: "08:00"       # morning briefing
+diagnostic_time: "08:00"     # daily system diagnostic

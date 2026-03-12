@@ -22,10 +22,10 @@ Use `shell` to read and write these files. Create the `journal/` directory if it
 
 ## Scheduling
 
-Maintain a daily recurring alarm for your evening journal. If you don't have one, create it:
+Core alarm `[NIK_JOURNAL]` is enforced automatically. If missing, recreate it:
 
 ```
-alarm action: "create", label: "End of day journal — load journal skill", time: "<your journal_time>", repeat: "daily"
+alarm action: "create", label: "[NIK_JOURNAL] End of day journal -- load journal skill", time: "<your journal_time>", repeat: "daily"
 ```
 
 When the alarm fires, follow the full workflow below.

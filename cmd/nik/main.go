@@ -177,6 +177,7 @@ func main() {
 
 	b.RegisterReflex(taskSvc.CheckStale)
 	b.RegisterReflex(alarmSvc.FireDueAlarms)
+	b.RegisterReflex(alarmSvc.CoreAlarmEnforcer(cfg))
 	b.SetSensor(timeline.New(cfg, messagingSvc, taskSvc, alarmSvc))
 
 	b.RegisterTools(llm.BuildTools(llmClient, cfg.Home)...)

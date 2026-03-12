@@ -41,10 +41,10 @@ During any conversation — if you learn someone cares about something, add it t
 
 ## Scheduling
 
-Maintain a daily recurring alarm for your morning briefing. If you don't have one, create it:
+Core alarm `[NIK_BRIEFING]` is enforced automatically. If missing, recreate it:
 
 ```
-alarm action: "create", label: "Morning briefing — load briefing skill", time: "<your briefing_time>", repeat: "daily"
+alarm action: "create", label: "[NIK_BRIEFING] Morning briefing -- load briefing skill", time: "<your briefing_time>", repeat: "daily"
 ```
 
 When the alarm fires, follow the full morning workflow below.
