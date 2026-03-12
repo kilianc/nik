@@ -12,10 +12,11 @@ import (
 var sessionPrefix = "nik-"
 
 const (
-	maxOutputBytes = 16 * 1024
-	historyLimit   = 10000
-	windowWidth    = 200
-	windowHeight   = 50
+	maxCaptureBytes = 512 * 1024
+	maxContextBytes = 160 * 1024
+	historyLimit    = 50000
+	windowWidth     = 200
+	windowHeight    = 50
 )
 
 var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
@@ -70,7 +71,9 @@ func newSession(id, command, cwd string) error {
 	}
 
 	if command != "" {
-		_, err = tmux("respawn-pane", "-k", "-t", name, "sh", "-c", command)
+		ch := name + "-done"
+		wrapped := fmt.Sprintf("(%s); __ec=$?; tmux wait-for -S %s; exit $__ec", command, ch)
+		_, err = tmux("respawn-pane", "-k", "-t", name, "sh", "-c", wrapped)
 		if err != nil {
 			return fmt.Errorf("respawn pane %s: %w", id, err)
 		}
@@ -123,8 +126,8 @@ func capturePane(id string) (string, error) {
 	out = ansiRe.ReplaceAllString(out, "")
 	out = strings.TrimRight(out, "\n ")
 
-	if len(out) > maxOutputBytes {
-		out = out[len(out)-maxOutputBytes:]
+	if len(out) > maxCaptureBytes {
+		out = out[len(out)-maxCaptureBytes:]
 	}
 
 	return out, nil
@@ -197,41 +200,54 @@ func listSessions() ([]SessionInfo, error) {
 	return sessions, nil
 }
 
-func stare(ctx context.Context, id string, maxWait int, watchFor string) (output string, alive bool, exitCode int) {
-	return stareWith(ctx, id, maxWait, watchFor, 0)
+func waitForChannel(id string) string {
+	return sessionName(id) + "-done"
 }
 
-func stareWith(ctx context.Context, id string, maxWait int, watchFor string, baseline int) (output string, alive bool, exitCode int) {
-	deadline := time.Now().Add(time.Duration(maxWait) * time.Second)
+func stare(ctx context.Context, id string, maxWait int) (output string, alive bool, exitCode int) {
+	stareCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	doneCh := make(chan struct{})
+	go func() {
+		defer close(doneCh)
+		exec.CommandContext(stareCtx, "tmux", "wait-for", waitForChannel(id)).Run()
+	}()
+
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	deadline := time.After(time.Duration(maxWait) * time.Second)
 
 	for {
-		if !isAlive(id) {
+		select {
+		case <-doneCh:
 			out, _ := capturePane(id)
 			c, _ := getExitCode(id)
 			return out, false, c
-		}
 
-		if watchFor != "" {
+		case <-deadline:
 			out, _ := capturePane(id)
-			newContent := ""
-			if baseline < len(out) {
-				newContent = out[baseline:]
+			if !isAlive(id) {
+				c, _ := getExitCode(id)
+				return out, false, c
 			}
-			if strings.Contains(newContent, watchFor) {
-				return out, true, 0
-			}
-		}
-
-		if time.Now().After(deadline) {
-			out, _ := capturePane(id)
 			return out, true, 0
-		}
 
-		select {
 		case <-ctx.Done():
 			out, _ := capturePane(id)
+			if !isAlive(id) {
+				c, _ := getExitCode(id)
+				return out, false, c
+			}
 			return out, true, 0
-		case <-time.After(500 * time.Millisecond):
+
+		case <-ticker.C:
+			if !isAlive(id) {
+				out, _ := capturePane(id)
+				c, _ := getExitCode(id)
+				return out, false, c
+			}
 		}
 	}
 }

@@ -122,8 +122,9 @@ func buildTools(cfg *config.Config, llmClient *llm.Client, conn *sql.DB) map[str
 		}
 
 		taskSvc := task.NewService(conn)
+		shellSvc := shell.NewService(conn, cfg.Home)
 		var taskToolList []llm.Tool
-		taskToolList = append(taskToolList, shell.BuildTools(cfg)...)
+		taskToolList = append(taskToolList, shellSvc.BuildTools()...)
 		taskToolList = append(taskToolList, llm.BuildTools(llmClient, cfg.Home)...)
 		taskToolList = append(taskToolList, db.BuildTools(conn)...)
 		taskToolList = append(taskToolList, skills.BuildTools(cfg)...)
@@ -134,7 +135,7 @@ func buildTools(cfg *config.Config, llmClient *llm.Client, conn *sql.DB) map[str
 		}
 	}
 
-	for _, t := range shell.BuildTools(cfg) {
+	for _, t := range shell.NewService(conn, cfg.Home).BuildTools() {
 		tools[t.Def.Name] = t.Handler
 	}
 

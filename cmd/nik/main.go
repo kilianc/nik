@@ -149,12 +149,13 @@ func main() {
 	alarmSvc := alarms.New(conn)
 	recallSvc := recall.NewService(cfg, recallClient)
 	taskSvc := task.NewService(conn)
+	shellSvc := shell.NewService(conn, cfg.Home)
 
 	// worker tools: subset available to background task runners.
 	// workers can execute commands, query the DB, describe media, and load skills.
 	// they cannot message users, manage tasks, or set alarms -- only nik does that.
 	var taskTools []llm.Tool
-	taskTools = append(taskTools, shell.BuildTools(cfg)...)
+	taskTools = append(taskTools, shellSvc.BuildTools()...)
 	taskTools = append(taskTools, llm.BuildTools(llmClient, cfg.Home)...)
 	taskTools = append(taskTools, db.BuildTools(conn)...)
 	taskTools = append(taskTools, skills.BuildTools(cfg)...)
@@ -178,6 +179,7 @@ func main() {
 	b.RegisterReflex(taskSvc.CheckStale)
 	b.RegisterReflex(alarmSvc.FireDueAlarms)
 	b.RegisterReflex(alarmSvc.CoreAlarmEnforcer(cfg))
+	b.RegisterReflex(shellSvc.CheckSessions)
 	b.SetSensor(timeline.New(cfg, messagingSvc, taskSvc, alarmSvc))
 
 	b.RegisterTools(llm.BuildTools(llmClient, cfg.Home)...)
