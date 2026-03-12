@@ -79,7 +79,7 @@ func TestFastCommand(t *testing.T) {
 		t.Fatalf("newSession: %v", err)
 	}
 
-	output, alive, code := stare(context.Background(), id, 5, "")
+	output, alive, code := stare(context.Background(), id, 5)
 
 	if alive {
 		t.Fatal("expected command to have exited")
@@ -104,7 +104,7 @@ func TestStare(t *testing.T) {
 	}
 
 	start := time.Now()
-	_, alive, _ := stare(context.Background(), id, 2, "")
+	_, alive, _ := stare(context.Background(), id, 2)
 	elapsed := time.Since(start)
 
 	if !alive {
@@ -181,19 +181,19 @@ func TestOutputTruncation(t *testing.T) {
 	id := "test-trunc"
 	defer cleanup(t, id)
 
-	err := newSession(id, "seq 1 50000", "")
+	err := newSession(id, "seq 1 500000", "")
 	if err != nil {
 		t.Fatalf("newSession: %v", err)
 	}
 
-	stare(context.Background(), id, 5, "")
+	stare(context.Background(), id, 10)
 
 	output, err := capturePane(id)
 	if err != nil {
 		t.Fatalf("captureOutput: %v", err)
 	}
 
-	if len(output) > maxOutputBytes+100 {
+	if len(output) > maxCaptureBytes+100 {
 		t.Fatalf("output not truncated: %d bytes", len(output))
 	}
 }
@@ -209,7 +209,7 @@ func TestExitCode(t *testing.T) {
 		t.Fatalf("newSession: %v", err)
 	}
 
-	_, alive, code := stare(context.Background(), id, 5, "")
+	_, alive, code := stare(context.Background(), id, 5)
 
 	if alive {
 		t.Fatal("expected command to have exited")
@@ -234,66 +234,38 @@ func TestStareMissingSession(t *testing.T) {
 		t.Fatalf("killSession: %v", err)
 	}
 
-	_, alive, _ := stare(context.Background(), id, 2, "")
+	_, alive, _ := stare(context.Background(), id, 2)
 	if alive {
 		t.Fatal("stare reported alive for a killed session")
 	}
 }
 
-func TestStareWatchFor(t *testing.T) {
+func TestWaitForInstantReturn(t *testing.T) {
 	requireTmux(t)
 
-	id := "test-watchfor"
+	id := "test-waitfor-instant"
 	defer cleanup(t, id)
 
-	err := newSession(id, `sh -c 'sleep 1; echo MARKER_READY; cat'`, "")
+	err := newSession(id, "echo done", "")
 	if err != nil {
 		t.Fatalf("newSession: %v", err)
 	}
 
 	start := time.Now()
-	output, alive, _ := stare(context.Background(), id, 10, "MARKER_READY")
+	output, alive, code := stare(context.Background(), id, 30)
 	elapsed := time.Since(start)
 
-	if !alive {
-		t.Fatal("expected session to still be alive")
+	if alive {
+		t.Fatal("expected command to have exited")
 	}
-	if !strings.Contains(output, "MARKER_READY") {
-		t.Fatalf("expected output to contain MARKER_READY, got: %s", output)
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d", code)
 	}
-	if elapsed > 5*time.Second {
-		t.Fatalf("watch_for should have returned early, took %v", elapsed)
+	if !strings.Contains(output, "done") {
+		t.Fatalf("expected output to contain 'done', got: %s", output)
 	}
-}
-
-func TestStareWatchForBaseline(t *testing.T) {
-	requireTmux(t)
-
-	id := "test-watchfor-baseline"
-	defer cleanup(t, id)
-
-	err := newSession(id, `sh -c 'echo OLD_MARKER; cat'`, "")
-	if err != nil {
-		t.Fatalf("newSession: %v", err)
-	}
-
-	time.Sleep(500 * time.Millisecond)
-
-	// capture baseline that already contains OLD_MARKER
-	baseline, _ := capturePane(id)
-	baselineLen := len(baseline)
-
-	// stare with watchFor looking for OLD_MARKER should NOT match early
-	// because it only appears before the baseline
-	start := time.Now()
-	_, alive, _ := stareWith(context.Background(), id, 2, "OLD_MARKER", baselineLen)
-	elapsed := time.Since(start)
-
-	if !alive {
-		t.Fatal("expected session to still be alive")
-	}
-	if elapsed < time.Second {
-		t.Fatalf("stare with baseline should not have matched old content, returned in %v", elapsed)
+	if elapsed > 3*time.Second {
+		t.Fatalf("wait-for should have returned near-instantly, took %v", elapsed)
 	}
 }
 

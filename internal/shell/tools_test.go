@@ -9,7 +9,8 @@ import (
 )
 
 func TestHandleRunValidatesRequiredFields(t *testing.T) {
-	out, err := handleRun(context.Background(), shellArgs{}, t.TempDir())
+	svc := &Service{home: t.TempDir()}
+	out, err := svc.handleRun(context.Background(), shellArgs{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -33,7 +34,8 @@ func TestHandleReadMissingSession(t *testing.T) {
 		t.Fatalf("killSession: %v", err)
 	}
 
-	result, err := handleInteract(context.Background(), shellArgs{SessionID: id, MaxWait: 2})
+	svc := &Service{}
+	result, err := svc.handleInteract(context.Background(), shellArgs{SessionID: id, MaxWait: 2})
 	if err != nil {
 		t.Fatalf("handleInteract: %v", err)
 	}

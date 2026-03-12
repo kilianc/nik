@@ -159,3 +159,11 @@ var TaskReportLastStatus string
 
 //go:embed task_tool_calls.sql
 var TaskToolCalls string
+
+// shell output queries
+
+//go:embed shell_output_upsert.sql
+var ShellOutputUpsert string
+
+//go:embed shell_output_alive.sql
+var ShellOutputAlive string

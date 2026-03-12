@@ -6,14 +6,14 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/kciuffolo/nik/internal/config"
+	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/id"
 	"github.com/kciuffolo/nik/internal/llm"
 )
 
 var shellToolDef = llm.ToolDef{
 	Name:        "shell",
-	Description: "Run a shell command in a persistent tmux session.\n\nActions: run (start + watch), read (look at terminal), send (type + Enter and watch), kill (destroy).\n\nUse non-interactive flags (-y) when possible. For interactive prompts, use send.",
+	Description: "Run a shell command in a persistent tmux session.\n\nActions: run (start + watch), read (look at terminal), send (type + Enter and watch), kill (destroy).\n\nReturns early if the command finishes before max_wait. For long-running processes, use a short max_wait then check back with read.\n\nUse non-interactive flags (-y) when possible. For interactive prompts, use send.",
 	Parameters: map[string]any{
 		"type": "object",
 		"properties": map[string]any{
@@ -40,14 +40,10 @@ var shellToolDef = llm.ToolDef{
 			},
 			"max_wait": map[string]any{
 				"type":        "integer",
-				"description": "Seconds to watch the terminal. Polls for completion -- returns early if the command finishes. Default 10.",
-			},
-			"watch_for": map[string]any{
-				"type":        "string",
-				"description": "String to watch for in terminal output. Returns early when found instead of waiting full max_wait.",
+				"description": "Seconds to watch the terminal. Returns early if the command finishes. Default 10.",
 			},
 		},
-		"required":             []string{"action", "command", "description", "session_id", "input", "max_wait", "watch_for"},
+		"required":             []string{"action", "command", "description", "session_id", "input", "max_wait"},
 		"additionalProperties": false,
 	},
 }
@@ -59,10 +55,9 @@ type shellArgs struct {
 	SessionID   string `json:"session_id"`
 	Input       string `json:"input"`
 	MaxWait     int    `json:"max_wait"`
-	WatchFor    string `json:"watch_for"`
 }
 
-func BuildTools(cfg *config.Config) []llm.Tool {
+func (s *Service) BuildTools() []llm.Tool {
 	err := ensureTmux()
 	if err != nil {
 		slog.Warn("shell tool disabled", "pkg", "shell", "error", err)
@@ -72,13 +67,13 @@ func BuildTools(cfg *config.Config) []llm.Tool {
 	return []llm.Tool{
 		{
 			Def:        shellToolDef,
-			Handler:    shellHandler(cfg.Home),
+			Handler:    s.shellHandler(),
 			Privileged: true,
 		},
 	}
 }
 
-func shellHandler(home string) llm.ToolExecutor {
+func (s *Service) shellHandler() llm.ToolExecutor {
 	return func(ctx context.Context, call llm.ToolCall) (string, error) {
 		var args shellArgs
 
@@ -89,9 +84,9 @@ func shellHandler(home string) llm.ToolExecutor {
 
 		switch args.Action {
 		case "run":
-			return handleRun(ctx, args, home)
+			return s.handleRun(ctx, args)
 		case "read", "send":
-			return handleInteract(ctx, args)
+			return s.handleInteract(ctx, args)
 		case "kill":
 			return handleKill(args)
 		default:
@@ -100,14 +95,14 @@ func shellHandler(home string) llm.ToolExecutor {
 	}
 }
 
-func handleRun(ctx context.Context, args shellArgs, home string) (string, error) {
+func (s *Service) handleRun(ctx context.Context, args shellArgs) (string, error) {
 	if args.Command == "" {
 		return `{"error":"empty command"}`, nil
 	}
 
 	sid := id.Short(4)
 
-	err := newSession(sid, args.Command, home)
+	err := newSession(sid, args.Command, s.home)
 	if err != nil {
 		return llm.ToolError(err), nil
 	}
@@ -140,27 +135,21 @@ func handleRun(ctx context.Context, args shellArgs, home string) (string, error)
 		maxWait = 10
 	}
 
-	output, alive, code := stare(ctx, sid, maxWait, args.WatchFor)
+	output, alive, code := stare(ctx, sid, maxWait)
+
+	s.persistOutput(ctx, sid, args.Command, args.Description, output, alive, code)
 
 	if !alive {
 		killSession(sid)
-		return llm.ToolResult(map[string]any{"status": "exited", "exit_code": code, "output": output}), nil
+		return shellResult(sid, output, alive, code), nil
 	}
 
-	return llm.ToolResult(map[string]any{"status": "running", "session_id": sid, "output": output}), nil
+	return shellResult(sid, output, alive, code), nil
 }
 
-func handleInteract(ctx context.Context, args shellArgs) (string, error) {
+func (s *Service) handleInteract(ctx context.Context, args shellArgs) (string, error) {
 	if args.SessionID == "" {
 		return `{"error":"empty session_id"}`, nil
-	}
-
-	// capture baseline before sending input so watch_for only matches new output
-	var baseline int
-	if args.WatchFor != "" {
-		if out, err := capturePane(args.SessionID); err == nil {
-			baseline = len(out)
-		}
 	}
 
 	if args.Input != "" {
@@ -170,14 +159,28 @@ func handleInteract(ctx context.Context, args shellArgs) (string, error) {
 		}
 	}
 
-	output, alive, code := stareWith(ctx, args.SessionID, args.MaxWait, args.WatchFor, baseline)
+	if !isAlive(args.SessionID) {
+		out, _ := capturePane(args.SessionID)
+		code, _ := getExitCode(args.SessionID)
+		killSession(args.SessionID)
+		s.persistOutput(ctx, args.SessionID, "", "", out, false, code)
+		return shellResult(args.SessionID, out, false, code), nil
+	}
+
+	maxWait := args.MaxWait
+	if maxWait == 0 {
+		maxWait = 10
+	}
+
+	output, alive, code := stare(ctx, args.SessionID, maxWait)
+
+	s.persistOutput(ctx, args.SessionID, "", "", output, alive, code)
 
 	if !alive {
 		killSession(args.SessionID)
-		return llm.ToolResult(map[string]any{"status": "exited", "exit_code": code, "output": output}), nil
 	}
 
-	return llm.ToolResult(map[string]any{"status": "running", "session_id": args.SessionID, "output": output}), nil
+	return shellResult(args.SessionID, output, alive, code), nil
 }
 
 func handleKill(args shellArgs) (string, error) {
@@ -191,4 +194,54 @@ func handleKill(args shellArgs) (string, error) {
 	}
 
 	return `{"ok":true}`, nil
+}
+
+func (s *Service) persistOutput(ctx context.Context, sid, command, description, output string, alive bool, exitCode int) {
+	if s.conn == nil {
+		return
+	}
+
+	var codePtr *int
+	if !alive {
+		codePtr = &exitCode
+	}
+
+	err := db.ShellOutputUpsert(ctx, s.conn, db.ShellOutputUpsertParams{
+		SessionID:   sid,
+		Command:     command,
+		Description: description,
+		Output:      output,
+		ExitCode:    codePtr,
+		Alive:       alive,
+	})
+	if err != nil {
+		slog.Warn("persist shell output", "pkg", "shell", "session_id", sid, "error", err)
+	}
+}
+
+func shellResult(sid, output string, alive bool, exitCode int) string {
+	truncated := len(output) > maxContextBytes
+	contextOutput := output
+	if truncated {
+		contextOutput = output[len(output)-maxContextBytes:]
+	}
+
+	result := map[string]any{
+		"output": contextOutput,
+	}
+
+	if truncated {
+		result["truncated"] = true
+		result["total_bytes"] = len(output)
+	}
+
+	if alive {
+		result["status"] = "running"
+		result["session_id"] = sid
+	} else {
+		result["status"] = "exited"
+		result["exit_code"] = exitCode
+	}
+
+	return llm.ToolResult(result)
 }
