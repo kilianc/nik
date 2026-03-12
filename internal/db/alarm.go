@@ -116,6 +116,21 @@ func AlarmListCreated(ctx context.Context, db *sql.DB, conversationID string, si
 	return alarms, rows.Err()
 }
 
+// AlarmGet looks up a single active alarm by ID or goal prefix.
+func AlarmGet(ctx context.Context, db *sql.DB, identifier string) (Alarm, bool, error) {
+	row := db.QueryRowContext(ctx, queries.AlarmGet, identifier)
+
+	a, err := scanAlarm(row)
+	if err == sql.ErrNoRows {
+		return Alarm{}, false, nil
+	}
+	if err != nil {
+		return Alarm{}, false, err
+	}
+
+	return a, true, nil
+}
+
 func AlarmClaim(ctx context.Context, db *sql.DB, id string, now time.Time) error {
 	_, err := db.ExecContext(ctx, queries.AlarmClaim, id, now)
 	return err

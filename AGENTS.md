@@ -151,17 +151,18 @@ Brain.Awake()        -- wake up, start the loop
         llm.Complete() -- send request, get completion (transport)
 ```
 
-- **Reflex** (`func(ctx context.Context)`): unconscious, automatic, side-effect-producing function. Runs every tick *before* perception. Examples: `task.CheckStale` (inserts stale reports), `alarms.FireDueAlarms` (creates occurrences and claims alarms).
+- **Reflex** (`func(ctx context.Context)`): unconscious, automatic, side-effect-producing function. Runs every tick *before* perception. Examples: `task.CheckStale` (inserts stale reports), `alarms.FireDueAlarms` (creates occurrences and claims alarms), `alarms.CoreAlarmEnforcer` (ensures core alarms exist and are healthy, throttled to 30 min).
 - **Sense** (`interface { Scan(ctx) ([]Stimulus, error) }`): the brain's single, unified perception. Strictly read-only — no side effects. Returns `[]Stimulus`, one per conversation with new events.
 - **Stimulus**: structured perception output (`Preamble`, `Timeline []TimelineEntry`, `ReadLine`, `Meta`, `LiveInput`, `Processed`). The timeline is a chronological mix of messages, task reports, and alarm occurrences.
 
 ### Autonomous systems
 
-These run on schedule via alarms — the brain activates them like any other stimulus.
+These run on schedule via alarms — the brain activates them like any other stimulus. Core alarms use `[NIK_XXX]` goal prefixes (e.g. `[NIK_JOURNAL]`, `[NIK_DREAM_1]`) and are enforced by the `CoreAlarmEnforcer` reflex in `internal/alarms/core.go`. The reflex creates missing alarms and heals dead ones (null/past `next_fire_at`) using schedule times from config. Skills still document the alarm format as a fallback.
 
 - **Journal**: managed entirely by the `journal` skill. Nik uses a recurring alarm, gathers day context via `db_query`/`shell`, and writes to `journal/` files. No domain package.
 - **Dream**: managed entirely by the `dream` skill. Nik uses 5 recurring alarms (one per dream pass), processes the journal and memories, and writes to `dreams/` files. The final pass (Wake) evolves nik's **soul** — a living identity document stored in `soul/latest.md` and loaded into the system prompt on every activation. Dated snapshots in `soul/YYYY-MM-DD.md` preserve history. No domain package.
 - **Briefing**: managed entirely by the `briefing` skill. Nik uses a recurring alarm, `web_search` for news, and writes to `briefings/` files. No domain package.
+- **Diagnostic**: managed entirely by the `diagnostic` skill. Nik uses a recurring alarm, discovers skills/services, tests auth, verifies alarm chains and skill outputs, checks data integrity and spending. Writes to `diagnostics/` files. No domain package.
 
 ### Tasks and the timeline
 
@@ -302,7 +303,7 @@ Each package exposes a `BuildTools() []llm.Tool` function that returns tool defi
 ### Where sense and reflexes live
 
 - **Sense**: `internal/timeline/` — single `Sense` implementation that iterates `AllowConversationIDs`, fetches messages/reports/occurrences, and maps them to `Stimulus`. Centrally owns all timeline formatting.
-- **Reflexes**: defined in domain packages — `task.Service.CheckStale`, `alarms.Service.FireDueAlarms`. Registered in `main.go` via `b.RegisterReflex(...)`.
+- **Reflexes**: defined in domain packages — `task.Service.CheckStale`, `alarms.Service.FireDueAlarms`, `alarms.Service.CoreAlarmEnforcer`. Registered in `main.go` via `b.RegisterReflex(...)`.
 
 ### Registration flow (`main.go`)
 
@@ -311,7 +312,7 @@ Each package exposes a `BuildTools() []llm.Tool` function that returns tool defi
 3. Build LLM client (OpenAI key or Codex auth)
 4. Create domain services: `alarms`, `recall`
 5. Create brain: `b := brain.New(cfg, llmClient)` (soul loaded from `soul/latest.md` automatically)
-6. Register reflexes: `taskSvc.CheckStale`, `alarmSvc.FireDueAlarms`
+6. Register reflexes: `taskSvc.CheckStale`, `alarmSvc.FireDueAlarms`, `alarmSvc.CoreAlarmEnforcer(cfg)`
 7. Set sense: `timeline.NewSense(cfg, messagingSvc, taskSvc, alarmSvc)`
 8. Register tools from all domain packages (see tools table above)
 9. `b.Awake(ctx, pollInterval)` starts the main loop

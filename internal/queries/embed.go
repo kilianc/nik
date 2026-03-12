@@ -87,6 +87,9 @@ var AlarmCancel string
 //go:embed alarm_list_created.sql
 var AlarmListCreated string
 
+//go:embed alarm_get.sql
+var AlarmGet string
+
 // alarm occurrence queries
 
 //go:embed alarm_occurrence_insert.sql

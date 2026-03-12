@@ -24,11 +24,10 @@ Use `shell` to write these files. Create the directory if it doesn't exist.
 
 ## Scheduling
 
-Maintain a daily recurring alarm for the nightly diagnostic. If you
-don't have one, create it:
+Core alarm `[NIK_DIAGNOSTIC]` is enforced automatically. If missing, recreate it:
 
 ```
-alarm goal: "Nightly system diagnostic — load diagnostic skill", fire_at: <late night>, recurrence: "every day"
+alarm action: "create", label: "[NIK_DIAGNOSTIC] System diagnostic -- load diagnostic skill", time: "<your diagnostic_time>", repeat: "daily"
 ```
 
 When the alarm fires, follow the full workflow below.

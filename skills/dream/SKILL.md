@@ -27,14 +27,14 @@ Use `shell` to read and write these files. Create directories if they don't exis
 
 ## Scheduling
 
-Maintain five daily recurring alarms, one per dream pass. If you don't have them, create them:
+Five core alarms `[NIK_DREAM_1]` through `[NIK_DREAM_5]` are enforced automatically. If missing, recreate them:
 
 ```
-alarm action: "create", label: "Dream Pass 1: Drift — load dream skill", time: "<dream_start>", repeat: "daily"
-alarm action: "create", label: "Dream Pass 2: Weave — load dream skill", time: "<dream_start + 1h>", repeat: "daily"
-alarm action: "create", label: "Dream Pass 3: Depths — load dream skill", time: "<dream_start + 2h>", repeat: "daily"
-alarm action: "create", label: "Dream Pass 4: Crystallize — load dream skill", time: "<dream_start + 3h>", repeat: "daily"
-alarm action: "create", label: "Wake — load dream skill", time: "<dream_start + 4h>", repeat: "daily"
+alarm action: "create", label: "[NIK_DREAM_1] Drift -- load dream skill", time: "<dream_start>", repeat: "daily"
+alarm action: "create", label: "[NIK_DREAM_2] Weave -- load dream skill", time: "<dream_start + 1h>", repeat: "daily"
+alarm action: "create", label: "[NIK_DREAM_3] Depths -- load dream skill", time: "<dream_start + 2h>", repeat: "daily"
+alarm action: "create", label: "[NIK_DREAM_4] Crystallize -- load dream skill", time: "<dream_start + 3h>", repeat: "daily"
+alarm action: "create", label: "[NIK_DREAM_5] Wake -- load dream skill", time: "<dream_start + 4h>", repeat: "daily"
 ```
 
 When an alarm fires, check the label to know which pass you're on.
