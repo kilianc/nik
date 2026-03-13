@@ -12,7 +12,7 @@ import (
 
 type Brain struct {
 	cfg             *config.Config
-	llm             *llm.Client
+	llm             llm.Completer
 	toolDefs        []llm.ToolDef
 	toolExec        map[string]llm.ToolExecutor
 	privileged      map[string]bool
@@ -27,7 +27,7 @@ type Brain struct {
 	claimed *SyncSet
 }
 
-func New(cfg *config.Config, llmClient *llm.Client) *Brain {
+func New(cfg *config.Config, llmClient llm.Completer) *Brain {
 	return &Brain{
 		cfg:        cfg,
 		llm:        llmClient,

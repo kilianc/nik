@@ -29,6 +29,10 @@ type CompletionObserver interface {
 	OnDetail(ctx context.Context, instructions string, userInput string, tools []string, reasoningSummaries []string)
 }
 
+type Completer interface {
+	Complete(ctx context.Context, instructions string, getInput func() string, tools []ToolDef, executor ToolExecutor) (string, <-chan CompletionResult)
+}
+
 const maxConcurrentSessions = 6
 
 type Client struct {
