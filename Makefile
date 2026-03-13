@@ -1,6 +1,7 @@
 export CGO_CFLAGS = -w
 
 NIK_HOME ?= workspace
+NIK_CONTAINER ?= nik
 
 .PHONY: build
 build:
@@ -57,6 +58,40 @@ timeline:
 .PHONY: call
 call:
 	@cd $(NIK_HOME) && go run ../tools/call $(ARGS)
+
+.PHONY: docker
+docker:
+	docker build -t nik:base .
+
+.PHONY: docker-run
+docker-run: docker
+	@if docker inspect $(NIK_CONTAINER) >/dev/null 2>&1; then \
+		docker start $(NIK_CONTAINER) 2>/dev/null || true; \
+	else \
+		image=$$(docker image inspect nik:latest >/dev/null 2>&1 && echo "nik:latest" || echo "nik:base"); \
+		docker run -dit --name $(NIK_CONTAINER) --restart unless-stopped \
+			-v "$(PWD):/app" -v /var/run/docker.sock:/var/run/docker.sock \
+			$$image; \
+	fi
+	docker attach $(NIK_CONTAINER)
+
+.PHONY: docker-stop
+docker-stop:
+	docker update --restart no $(NIK_CONTAINER)
+	docker stop $(NIK_CONTAINER)
+
+.PHONY: docker-commit
+docker-commit:
+	docker commit $(NIK_CONTAINER) nik:latest
+
+.PHONY: docker-rebuild
+docker-rebuild: docker
+	docker update --restart no $(NIK_CONTAINER) 2>/dev/null || true
+	docker rm -f $(NIK_CONTAINER) 2>/dev/null || true
+	docker run -dit --name $(NIK_CONTAINER) --restart unless-stopped \
+		-v "$(PWD):/app" -v /var/run/docker.sock:/var/run/docker.sock \
+		nik:base
+	docker attach $(NIK_CONTAINER)
 
 PI ?= nik@localhost
 PI_NIK_HOME ?= /home/nik
