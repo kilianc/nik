@@ -22,7 +22,6 @@ type Config struct {
 	Model           string `yaml:"model"`
 	ReasoningEffort string `yaml:"reasoning_effort"`
 	Verbosity       string `yaml:"verbosity"`
-	DebugDirValue   string `yaml:"debug_dir"`
 	MediaDirValue   string `yaml:"media_dir"`
 	PromptsDirValue string `yaml:"prompts_dir"`
 	SkillsDirValue  string `yaml:"skills_dir"`
@@ -123,18 +122,6 @@ func (c Config) TZ() *time.Location {
 
 func (c Config) MemoriesPath() string {
 	return filepath.Join(c.Home, "memories", "latest.md")
-}
-
-func (c Config) DebugPath() string {
-	if c.DebugDirValue == "" {
-		return ""
-	}
-
-	if filepath.IsAbs(c.DebugDirValue) {
-		return c.DebugDirValue
-	}
-
-	return filepath.Join(c.Home, c.DebugDirValue)
 }
 
 func (c *Config) Save(path string) error {

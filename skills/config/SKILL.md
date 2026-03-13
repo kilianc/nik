@@ -13,7 +13,7 @@ Read or change nik's runtime configuration.
 ### Actions
 
 - `get` -- returns the current config (model, timezone, location,
-  exa_api_key, media_dir, debug_dir, max_history, allow list, owner)
+  exa_api_key, media_dir, max_history, allow list, owner)
 - `set` -- update a writable field
 - `allow_add` -- add a conversation_id to the allow list
 - `allow_remove` -- remove a conversation_id from the allow list
@@ -23,7 +23,7 @@ Read or change nik's runtime configuration.
 
 - `action` -- one of: get, set, allow_add, allow_remove, allow_reload
 - `field` -- config field name (for `set`). Writable: `timezone`,
-  `location`, `model`, `debug_dir`, `media_dir`, `max_history`.
+  `location`, `model`, `media_dir`, `max_history`.
 - `value` -- new value (for `set`), or conversation_id (for
   allow_add / allow_remove)
 

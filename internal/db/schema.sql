@@ -176,3 +176,11 @@ CREATE TABLE IF NOT EXISTS shell_output (
   created_at  TIMESTAMP NOT NULL DEFAULT (datetime('now')),
   updated_at  TIMESTAMP NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS activation_detail (
+  activation_id       TEXT PRIMARY KEY REFERENCES activation(id),
+  instructions        TEXT NOT NULL DEFAULT '',
+  user_input          TEXT NOT NULL DEFAULT '',
+  tools               TEXT NOT NULL DEFAULT '[]',
+  reasoning_summaries TEXT NOT NULL DEFAULT '[]'
+);

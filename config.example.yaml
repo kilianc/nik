@@ -8,7 +8,6 @@ reasoning_effort: ""     # none, minimal, low, medium, high, xhigh (empty = mode
 exa_api_key: ""          # Exa web search API key
 
 # paths (relative to home dir)
-debug_dir: debug
 media_dir: media
 prompts_dir: ../prompts
 skills_dir: ../skills
