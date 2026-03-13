@@ -35,8 +35,8 @@ quoting text from the message line (substring match).
 
 - `text` -- quote from the message to target. For unique content, just
   the body works: `"hey fam"`. For repeated text, include sender:
-  `"Kilian Ciuffolo: ok"`. For same-sender same-text, include time:
-  `"[09:32:10] Kilian Ciuffolo: ok"`.
+  `"Jane Doe: ok"`. For same-sender same-text, include time:
+  `"[09:32:10] Jane Doe: ok"`.
 - `emoji` -- reaction emoji
 
 ### message_noop

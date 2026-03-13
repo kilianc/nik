@@ -26,7 +26,7 @@ commands in tmux/screen/nohup/bg yourself.
 |---|---|---|
 | `action` | all | run, read, send, kill, list |
 | `command` | run | the shell command to execute |
-| `description` | run | what this does and who asked (e.g. "database backup for Kevin") |
+| `description` | run | what this does and who asked (e.g. "database backup for Alice") |
 | `session_id` | read, send, kill | target session |
 | `input` | send | text to type + Enter |
 | `max_wait` | run, read, send | seconds to watch the terminal (polls for exit, returns early). Default 10 for run, 0 for read/send. |

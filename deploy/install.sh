@@ -5,7 +5,7 @@
 #
 set -euo pipefail
 
-REPO="${NIK_REPO:-git@github.com:kciuffolo/nik.git}"
+REPO="${NIK_REPO:-git@github.com:<GITHUB_USER>/nik.git}"
 BRANCH="${NIK_BRANCH:-main}"
 INSTALL_DIR=""
 NIK_USER="nik"
@@ -52,7 +52,7 @@ if [[ ! -f "$NIK_SSH/id_ed25519" ]]; then
   echo ""
   echo "  ============================================"
   echo "  add this deploy key to your GitHub repo:"
-  echo "  https://github.com/kciuffolo/nik/settings/keys"
+  echo "  https://github.com/<GITHUB_USER>/nik/settings/keys"
   echo "  ============================================"
   echo ""
   cat "$NIK_SSH/id_ed25519.pub"
