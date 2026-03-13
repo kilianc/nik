@@ -1,16 +1,7 @@
-{{ .Now }}
-
 {{ template "identity" . }}
 
 ---
-{{if .Recall}}
 
-## What you remember
-
-{{.Recall}}
-
----
-{{end}}
 ## Rules
 
 Hard constraints.
@@ -25,8 +16,6 @@ Hard constraints.
 ---
 
 {{ template "conversation" . }}
-
-{{ template "skills" . }}
 
 {{ template "brain" . }}
 
@@ -43,3 +32,17 @@ Your text output is internal trace — the user never sees it. First line is a t
 - **Plan**: ...
 - **Check**: ...
 - **Respond**: ...
+
+---
+
+{{ template "skills" . }}
+
+{{ .Now }}
+{{if .Recall}}
+
+---
+
+## What you remember
+
+{{.Recall}}
+{{end}}
