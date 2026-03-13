@@ -72,10 +72,10 @@ Your memories are already in your recall context — use what you remember about
 
 ### Phase 3 — Read and research
 
-Load the `web_search` skill and use it to fetch news for each topic.
+Load the `web` skill and use it to search for news and read articles for each topic.
 
 - For each item: who would care? Is it worth including?
-- If a headline is interesting but thin, search again to dig deeper or `load_skill` for `web` to use `link_reader` on full articles.
+- If a headline is interesting but thin, search again to dig deeper or use fetch on full articles.
 - Follow your curiosity. Chase threads that connect to people or recent conversations.
 - Sentiment target: ~45% positive, 45% neutral, 10% negative.
 
