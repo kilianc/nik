@@ -189,6 +189,13 @@ func replyHandler(svc *Service) llm.ToolExecutor {
 		}
 
 		for _, msg := range args.Messages {
+			err = svc.checkBannedWords(msg.Text)
+			if err != nil {
+				return llm.ToolError(err), nil
+			}
+		}
+
+		for _, msg := range args.Messages {
 			switch {
 			case msg.Voice:
 				if svc.speechFn == nil {
