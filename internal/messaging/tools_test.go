@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/llm"
 )
 
@@ -138,6 +139,33 @@ func TestReplyToolDefHasVoiceField(t *testing.T) {
 
 	if voiceProp["type"] != "boolean" {
 		t.Fatalf("expected voice type boolean, got %v", voiceProp["type"])
+	}
+}
+
+func TestReplyHandlerBannedWordPrevalidation(t *testing.T) {
+	cfg := &config.Config{
+		BannedWords: []string{"goblin"},
+	}
+	svc := &Service{cfg: cfg}
+	handler := replyHandler(svc)
+
+	ctx := context.WithValue(
+		context.Background(),
+		"meta",
+		map[string]string{"conversation_id": "conv-123"},
+	)
+
+	out, err := handler(ctx, llm.ToolCall{
+		Arguments: `{"conversation_id":"conv-123","contact_id":"","messages":[` +
+			`{"text":"first message is fine","image_path":"","voice":false},` +
+			`{"text":"second has goblin in it","image_path":"","voice":false}]}`,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(out, "banned word") {
+		t.Fatalf("expected banned word error, got %q", out)
 	}
 }
 

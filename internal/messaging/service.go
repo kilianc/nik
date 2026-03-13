@@ -242,7 +242,7 @@ func (s *Service) OnHistorySyncComplete(ctx context.Context, platform string) er
 }
 
 func (s *Service) checkBannedWords(text string) error {
-	if len(s.cfg.BannedWords) == 0 {
+	if s.cfg == nil || len(s.cfg.BannedWords) == 0 {
 		return nil
 	}
 
