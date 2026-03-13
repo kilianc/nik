@@ -176,10 +176,10 @@ func main() {
 	b.SetToolReactor(toolEmojis, messagingSvc.React)
 	b.SetDebugRecorder(brain.NewDebugRecorder(cfg.DebugPath, llmClient.Model, time.Now, taskSvc))
 
-	b.RegisterReflex(taskSvc.CheckStale)
-	b.RegisterReflex(alarmSvc.FireDueAlarms)
-	b.RegisterReflex(alarmSvc.CoreAlarmEnforcer(cfg))
-	b.RegisterReflex(shellSvc.CheckSessions)
+	b.RegisterReflex(0, taskSvc.CheckStale)
+	b.RegisterReflex(0, alarmSvc.FireDueAlarms)
+	b.RegisterReflex(30*time.Minute, alarmSvc.CoreAlarmEnforcer(cfg))
+	b.RegisterReflex(10*time.Second, shellSvc.CheckSessions)
 	b.SetSensor(timeline.New(cfg, messagingSvc, taskSvc, alarmSvc))
 
 	b.RegisterTools(llm.BuildTools(llmClient, cfg.Home)...)

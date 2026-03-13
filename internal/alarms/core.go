@@ -31,17 +31,8 @@ var coreSchedules = []coreSchedule{
 	{prefix: "[NIK_DIAGNOSTIC]", goal: "[NIK_DIAGNOSTIC] System diagnostic -- load diagnostic skill", recurrence: "every day", configTime: func(c *config.Config) string { return c.DiagnosticTime }},
 }
 
-const enforceCooldown = 30 * time.Minute
-
-// CoreAlarmEnforcer returns a reflex that ensures all core alarms exist and
-// are healthy. Throttled to run at most once per enforceCooldown.
 func (s *Service) CoreAlarmEnforcer(cfg *config.Config) func(ctx context.Context) {
-	var lastRun time.Time
 	return func(ctx context.Context) {
-		if time.Since(lastRun) < enforceCooldown {
-			return
-		}
-		lastRun = time.Now()
 		s.ensureCoreAlarms(ctx, cfg)
 	}
 }
