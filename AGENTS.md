@@ -218,6 +218,8 @@ Platform-agnostic. Stores identifiers from all platforms in JSON array columns (
 
 SQLite, single file at `$NIK_HOME/nik.db`. Schema applied on startup via `db.Open()`. Foreign keys are enabled via `_foreign_keys=1` pragma. WAL mode is on for concurrent reads.
 
+**Never use the `sqlite3` CLI to mutate nik.db.** The CLI defaults to `PRAGMA foreign_keys = OFF`, which silently bypasses FK constraints and creates orphaned rows. All writes must go through `db.Open()` (which enforces FKs) or, if the CLI is unavoidable, start every session with `PRAGMA foreign_keys = ON;` before any mutation.
+
 ### No sqlc
 
 All queries live in `internal/queries/*.sql` files with exact executable SQL (positional `?1`/`?2` params). The `queries` Go package (`internal/queries/embed.go`) embeds every `.sql` file as an exported string var. The `db` package imports it as `"github.com/kciuffolo/nik/internal/queries"` and passes the embedded SQL to `database/sql` calls. Schema DDL lives in `internal/db/schema.sql`, embedded directly by the `db` package. **No inline SQL in Go files.**
@@ -354,6 +356,7 @@ Before applying any migration to the live DB:
 - **One column per line** in SELECT lists and one field per line in Go `Scan()` calls -- never pack multiple columns/fields onto a single line
 - In every `CREATE TABLE`, keep all `*_at` timestamp columns grouped at the bottom of the column list
 - Go follows standard gofmt conventions
+- YAML uses two-space indentation
 - Bash/shell scripts use two-space indentation
 - One Go file per query function, one test file per query function
 
