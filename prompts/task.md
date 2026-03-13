@@ -33,6 +33,8 @@ Work through the plan step by step.
 - If a command fails, read the error and try a different approach.
 - If you need credentials or config, check the workspace, use the vault skill, check environment variables.
 
+**Workspace files are immutable.** Skill-managed files (journals, briefings, diagnostics, dreams, memories, soul) are final once written. You may create or update them only if the current task plan is the scheduled skill execution that owns them. Never edit a file written by a previous run.
+
 ## Tools
 
 {{ .ToolDocs }}
