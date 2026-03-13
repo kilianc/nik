@@ -3,6 +3,7 @@ package brain
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/kciuffolo/nik/internal/config"
 )
@@ -30,5 +31,48 @@ func TestSetSensorStores(t *testing.T) {
 	b.SetSensor(stubSensor{})
 	if b.sensor == nil {
 		t.Fatalf("expected sensor to be set")
+	}
+}
+
+func TestRegisterReflexEveryThrottles(t *testing.T) {
+	b := New(&config.Config{}, nil)
+
+	calls := 0
+	b.RegisterReflex(50*time.Millisecond, func(ctx context.Context) {
+		calls++
+	})
+
+	ctx := context.Background()
+	for range 5 {
+		b.reflexes[0](ctx)
+	}
+
+	if calls != 1 {
+		t.Fatalf("expected 1 call during throttle window, got %d", calls)
+	}
+
+	time.Sleep(60 * time.Millisecond)
+	b.reflexes[0](ctx)
+
+	if calls != 2 {
+		t.Fatalf("expected 2 calls after interval elapsed, got %d", calls)
+	}
+}
+
+func TestRegisterReflexZeroRunsEveryTick(t *testing.T) {
+	b := New(&config.Config{}, nil)
+
+	calls := 0
+	b.RegisterReflex(0, func(ctx context.Context) {
+		calls++
+	})
+
+	ctx := context.Background()
+	for range 5 {
+		b.reflexes[0](ctx)
+	}
+
+	if calls != 5 {
+		t.Fatalf("expected 5 calls with zero interval, got %d", calls)
 	}
 }

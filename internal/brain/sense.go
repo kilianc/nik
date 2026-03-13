@@ -1,6 +1,9 @@
 package brain
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 type Stimulus struct {
 	Meta map[string]string
@@ -20,6 +23,18 @@ func (b *Brain) SetSensor(s Sensor) {
 
 type Reflex func(ctx context.Context)
 
-func (b *Brain) RegisterReflex(r Reflex) {
+func (b *Brain) RegisterReflex(every time.Duration, r Reflex) {
+	if every > 0 {
+		var last time.Time
+		orig := r
+		r = func(ctx context.Context) {
+			if time.Since(last) < every {
+				return
+			}
+			last = time.Now()
+			orig(ctx)
+		}
+	}
+
 	b.reflexes = append(b.reflexes, r)
 }
