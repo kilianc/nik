@@ -8,7 +8,7 @@ tools: [db_query, shell]
 
 # Memory
 
-Your long-term memory lives in `memories/latest.md`. It's loaded into your context on every activation via recall. This skill has two modes: **extract** (append new facts) and **compact** (deduplicate and prune).
+Your long-term memory lives in `memories/latest.md`. It's loaded into your context on every activation via recall. This skill has two modes: **extract** (append new facts) and **compact** (deduplicate and prune). If someone asks you to forget something, ack and move on — extraction will record the retraction and compaction will clean it up.
 
 ## File layout
 
@@ -77,7 +77,7 @@ For each fact, write a table row:
 | date | type | entity | memory | conversation |
 ```
 
-**Types**: `preference`, `personal_fact`, `standing_decision`, `open_loop`, `relationship_fact`, `procedure`
+**Types**: `preference`, `personal_fact`, `standing_decision`, `open_loop`, `relationship_fact`, `procedure`, `retraction`
 
 **Entity**: the person's name (never "user", never "Nik")
 
@@ -106,6 +106,12 @@ Good memories (specific, durable, actionable):
 - Vague or one-time observations
 
 Only extract facts you would tell a colleague taking over this relationship.
+
+**Retractions**: if a message asks to forget, remove, or stop remembering something, append a `retraction` row instead of a normal fact. The memory column should reference the original fact being retracted, prefixed with `retract:`. Do not remove or modify existing rows — extraction is append-only. Compaction will resolve the retraction later.
+
+```
+| 2026-03-12 | retraction | Kilian Ciuffolo | retract: prefers a goofier tone | [DM](019c...) |
+```
 
 ### Step 4. Write facts and save cursor
 
@@ -173,6 +179,7 @@ Go through every row and apply:
 - **Dedup**: same entity + same type + substantially same content — keep the row with the newer date, drop the older.
 - **Contradictions**: same entity + same type + conflicting content — newer date wins, drop the older row.
 - **Resolved open loops**: an `open_loop` that later facts show is resolved (e.g., "looking for apartment" then "moved to new place") — drop the open_loop row.
+- **Retractions**: a `retraction` row targets an existing row (same entity, content matches the referenced fact) — drop both the original and the retraction.
 - **Stale**: facts that are clearly expired or no longer relevant — drop.
 
 Keep the header row and separator. Preserve every row that isn't a duplicate, contradiction, or stale.
