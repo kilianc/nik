@@ -23,17 +23,12 @@ type ActivationRow struct {
 	CostUSD         float64
 	ToolCallCount   int
 	DurationMS      int64
-	Error           bool
+	Error           string
 	Output          string
 	CreatedAt       time.Time
 }
 
 func ActivationInsert(ctx context.Context, db DBTX, row ActivationRow) error {
-	errFlag := 0
-	if row.Error {
-		errFlag = 1
-	}
-
 	var effort any
 	if row.ReasoningEffort != "" {
 		effort = row.ReasoningEffort
@@ -64,7 +59,7 @@ func ActivationInsert(ctx context.Context, db DBTX, row ActivationRow) error {
 		row.CostUSD,
 		row.ToolCallCount,
 		row.DurationMS,
-		errFlag,
+		row.Error,
 		row.CreatedAt,
 	)
 	if err != nil {
@@ -84,16 +79,11 @@ type ActivationStatsUpdate struct {
 	CostUSD         float64
 	ToolCallCount   int
 	DurationMS      int64
-	IsError         bool
+	Error           string
 	Output          string
 }
 
 func ActivationUpdateStats(ctx context.Context, db DBTX, id string, s ActivationStatsUpdate) error {
-	errFlag := 0
-	if s.IsError {
-		errFlag = 1
-	}
-
 	_, err := db.ExecContext(ctx, queries.ActivationUpdateStats,
 		id,
 		s.ReasoningEffort,
@@ -105,7 +95,7 @@ func ActivationUpdateStats(ctx context.Context, db DBTX, id string, s Activation
 		s.CostUSD,
 		s.ToolCallCount,
 		s.DurationMS,
-		errFlag,
+		s.Error,
 		s.Output,
 	)
 	if err != nil {

@@ -34,7 +34,6 @@ func TestActivationInsertPersistsRow(t *testing.T) {
 		CostUSD:         0.0042,
 		ToolCallCount:   3,
 		DurationMS:      1234,
-		Error:           false,
 		CreatedAt:       now,
 	}
 
@@ -49,13 +48,13 @@ func TestActivationInsertPersistsRow(t *testing.T) {
 		sources string
 		model   string
 		tokens  int64
-		errFlg  int
+		errStr  string
 	}
 
 	err = conn.QueryRowContext(ctx,
 		"SELECT id, conversation_id, sources, model, total_tokens, error FROM activation WHERE id = ?1",
 		row.ID,
-	).Scan(&got.id, &got.convID, &got.sources, &got.model, &got.tokens, &got.errFlg)
+	).Scan(&got.id, &got.convID, &got.sources, &got.model, &got.tokens, &got.errStr)
 	if err != nil {
 		t.Fatalf("query activation: %v", err)
 	}
@@ -72,8 +71,8 @@ func TestActivationInsertPersistsRow(t *testing.T) {
 	if got.tokens != 1500 {
 		t.Fatalf("expected 1500 total_tokens, got %d", got.tokens)
 	}
-	if got.errFlg != 0 {
-		t.Fatalf("expected error=0, got %d", got.errFlg)
+	if got.errStr != "" {
+		t.Fatalf("expected empty error, got %q", got.errStr)
 	}
 }
 
@@ -93,7 +92,7 @@ func TestActivationInsertWithError(t *testing.T) {
 		ConversationID: convID,
 		Sources:        `["alarm"]`,
 		Model:          "gpt-5",
-		Error:          true,
+		Error:          "max rounds (75) reached without final response",
 		CreatedAt:      time.Now().UTC(),
 	}
 
@@ -102,16 +101,16 @@ func TestActivationInsertWithError(t *testing.T) {
 		t.Fatalf("insert activation: %v", err)
 	}
 
-	var errFlg int
+	var errStr string
 	err = conn.QueryRowContext(ctx,
 		"SELECT error FROM activation WHERE id = ?1", row.ID,
-	).Scan(&errFlg)
+	).Scan(&errStr)
 	if err != nil {
 		t.Fatalf("query activation: %v", err)
 	}
 
-	if errFlg != 1 {
-		t.Fatalf("expected error=1, got %d", errFlg)
+	if errStr != row.Error {
+		t.Fatalf("expected error %q, got %q", row.Error, errStr)
 	}
 }
 
@@ -151,16 +150,68 @@ func TestActivationUpdateStatsPersistsOutput(t *testing.T) {
 		t.Fatalf("update stats: %v", err)
 	}
 
-	var got string
+	var gotOutput, gotErr string
 	err = conn.QueryRowContext(ctx,
-		"SELECT output FROM activation WHERE id = ?1", actID,
-	).Scan(&got)
+		"SELECT output, error FROM activation WHERE id = ?1", actID,
+	).Scan(&gotOutput, &gotErr)
 	if err != nil {
 		t.Fatalf("query output: %v", err)
 	}
 
-	if got != output {
-		t.Fatalf("expected output %q, got %q", output, got)
+	if gotOutput != output {
+		t.Fatalf("expected output %q, got %q", output, gotOutput)
+	}
+	if gotErr != "" {
+		t.Fatalf("expected empty error, got %q", gotErr)
+	}
+}
+
+func TestActivationUpdateStatsPersistsError(t *testing.T) {
+	ctx := context.Background()
+
+	conn, err := OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	convID := seedActivationConv(t, conn)
+	actID := id.V7()
+
+	err = ActivationInsert(ctx, conn, ActivationRow{
+		ID:             actID,
+		ConversationID: convID,
+		Sources:        `["message"]`,
+		Model:          "gpt-5",
+		CreatedAt:      time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("insert activation: %v", err)
+	}
+
+	errText := "complete round 3: context deadline exceeded"
+
+	err = ActivationUpdateStats(ctx, conn, actID, ActivationStatsUpdate{
+		InputTokens:  500,
+		OutputTokens: 0,
+		TotalTokens:  500,
+		DurationMS:   20000,
+		Error:        errText,
+	})
+	if err != nil {
+		t.Fatalf("update stats: %v", err)
+	}
+
+	var gotErr string
+	err = conn.QueryRowContext(ctx,
+		"SELECT error FROM activation WHERE id = ?1", actID,
+	).Scan(&gotErr)
+	if err != nil {
+		t.Fatalf("query error: %v", err)
+	}
+
+	if gotErr != errText {
+		t.Fatalf("expected error %q, got %q", errText, gotErr)
 	}
 }
 

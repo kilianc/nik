@@ -25,7 +25,7 @@ import (
 type CompletionObserver interface {
 	OnStart(ctx context.Context, model string)
 	OnToolCall(ctx context.Context, name string, args string, result string, duration time.Duration, isError bool)
-	OnFinish(ctx context.Context, model string, reasoningEffort string, usage Usage, toolCalls int, durationMS int64, output string, isError bool)
+	OnFinish(ctx context.Context, model string, reasoningEffort string, usage Usage, toolCalls int, durationMS int64, output string, processErr error)
 }
 
 const maxConcurrentSessions = 6
@@ -266,7 +266,7 @@ func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instru
 
 	if c.observer != nil {
 		defer func() {
-			c.observer.OnFinish(ctx, *c.model, extra.ReasoningEffort, total, len(history), time.Since(completeStart).Milliseconds(), retOutput, retErr != nil)
+			c.observer.OnFinish(ctx, *c.model, extra.ReasoningEffort, total, len(history), time.Since(completeStart).Milliseconds(), retOutput, retErr)
 		}()
 	}
 

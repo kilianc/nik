@@ -125,7 +125,7 @@ CREATE TABLE IF NOT EXISTS activation (
   cost_usd         REAL NOT NULL DEFAULT 0,
   tool_call_count  INTEGER NOT NULL DEFAULT 0,
   duration_ms      INTEGER NOT NULL DEFAULT 0,
-  error            INTEGER NOT NULL DEFAULT 0,
+  error            TEXT NOT NULL DEFAULT '',
   output           TEXT NOT NULL DEFAULT '',
   created_at       TIMESTAMP NOT NULL DEFAULT (datetime('now'))
 );
