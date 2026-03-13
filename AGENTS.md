@@ -36,6 +36,7 @@ The model drives the cadence -- it decides how long to stare, when to come back,
 
 - runtime logs are in `workspace/nik.log`
 - never run `make run` on your own, ask me to do it if you need me to
+- never send signals to nik's process (kill, SIGQUIT, SIGTERM, etc.) -- if nik needs a restart, ask me
 - do not override GOPROXY, I need a VPN when it fails, tell me to connect to it and wait
 - activation detail (instructions, user input, tools, reasoning) is stored in the `activation_detail` DB table, queryable via `db_query`
 - after completing Go changes, do this in order:
