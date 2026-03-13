@@ -10,14 +10,9 @@ Search the web using the Exa API via `curl`.
 
 ## API key
 
-Read from config:
-
-```
-config action: "get"
-```
-
-Extract the `exa_api_key` field from the JSON response and pass it as
-the `x-api-key` header in every request.
+The Exa API key is stored in `config.yaml` (home directory) under
+`exa_api_key`. Read it before making any request and pass it as the
+`x-api-key` header.
 
 ## Search
 
