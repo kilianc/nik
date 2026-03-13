@@ -29,6 +29,36 @@ func TestHTMLCommentStripping(t *testing.T) {
 	}
 }
 
+func TestBuildPromptDataBannedWords(t *testing.T) {
+	b := &Brain{
+		cfg: &config.Config{
+			Timezone:    "UTC",
+			BannedWords: []string{"forbidden", "blocked"},
+		},
+	}
+
+	data := b.buildPromptData(time.Now(), "")
+	if len(data.BannedWords) != 2 {
+		t.Fatalf("expected 2 banned words, got %d", len(data.BannedWords))
+	}
+	if data.BannedWords[0] != "forbidden" || data.BannedWords[1] != "blocked" {
+		t.Fatalf("unexpected banned words: %v", data.BannedWords)
+	}
+}
+
+func TestBuildPromptDataBannedWordsEmpty(t *testing.T) {
+	b := &Brain{
+		cfg: &config.Config{
+			Timezone: "UTC",
+		},
+	}
+
+	data := b.buildPromptData(time.Now(), "")
+	if len(data.BannedWords) != 0 {
+		t.Fatalf("expected 0 banned words, got %d", len(data.BannedWords))
+	}
+}
+
 func TestBuildPromptDataNow(t *testing.T) {
 	b := &Brain{
 		cfg: &config.Config{

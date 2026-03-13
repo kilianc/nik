@@ -236,7 +236,27 @@ func (s *Service) OnHistorySyncComplete(ctx context.Context, platform string) er
 	})
 }
 
+func (s *Service) checkBannedWords(text string) error {
+	if len(s.cfg.BannedWords) == 0 {
+		return nil
+	}
+
+	lower := strings.ToLower(text)
+	for _, word := range s.cfg.BannedWords {
+		if strings.Contains(lower, strings.ToLower(word)) {
+			return fmt.Errorf("message contains banned word, rephrase without it")
+		}
+	}
+
+	return nil
+}
+
 func (s *Service) Reply(ctx context.Context, conversationID string, body string) error {
+	err := s.checkBannedWords(body)
+	if err != nil {
+		return err
+	}
+
 	conv, err := db.GetConversation(ctx, s.db, db.GetConversationParams{ID: conversationID})
 	if err != nil {
 		return err
@@ -309,6 +329,11 @@ func (s *Service) Reply(ctx context.Context, conversationID string, body string)
 }
 
 func (s *Service) SendImage(ctx context.Context, conversationID string, imagePath string, caption string) error {
+	err := s.checkBannedWords(caption)
+	if err != nil {
+		return err
+	}
+
 	conv, err := db.GetConversation(ctx, s.db, db.GetConversationParams{ID: conversationID})
 	if err != nil {
 		return err
