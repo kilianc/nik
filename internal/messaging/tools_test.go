@@ -91,6 +91,56 @@ func TestReplyHandlerRejectsEmptyMessages(t *testing.T) {
 	}
 }
 
+func TestReplyHandlerVoiceWithoutSpeechFnReturnsError(t *testing.T) {
+	handler := replyHandler(&Service{})
+
+	ctx := context.WithValue(
+		context.Background(),
+		"meta",
+		map[string]string{"conversation_id": "conv-123"},
+	)
+	out, err := handler(ctx, llm.ToolCall{
+		Arguments: `{"conversation_id":"conv-123","contact_id":"","messages":[{"text":"hello","image_path":"","voice":true}]}`,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "not configured") {
+		t.Fatalf("expected 'not configured' error, got %q", out)
+	}
+}
+
+func TestReplyToolDefHasVoiceField(t *testing.T) {
+	props, ok := replyToolDef.Parameters["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected properties map")
+	}
+
+	msgsProp, ok := props["messages"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected 'messages' parameter")
+	}
+
+	items, ok := msgsProp["items"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected 'items' in messages")
+	}
+
+	itemProps, ok := items["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected 'properties' in items")
+	}
+
+	voiceProp, ok := itemProps["voice"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected 'voice' in message properties")
+	}
+
+	if voiceProp["type"] != "boolean" {
+		t.Fatalf("expected voice type boolean, got %v", voiceProp["type"])
+	}
+}
+
 func TestReactHandlerRejectsEmptyText(t *testing.T) {
 	handler := reactHandler(&Service{})
 

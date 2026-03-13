@@ -40,6 +40,10 @@ type Config struct {
 	DiagnosticTime string `yaml:"diagnostic_time"`
 
 	BannedWords []string `yaml:"banned_words"`
+
+	TTSVoice        string  `yaml:"tts_voice"`
+	TTSInstructions string  `yaml:"tts_instructions"`
+	TTSSpeed        float64 `yaml:"tts_speed"`
 }
 
 func (c Config) LogPath() string {
@@ -120,6 +124,20 @@ func (c Config) TZ() *time.Location {
 	}
 
 	return loc
+}
+
+func (c Config) TTSVoiceOrDefault() string {
+	if c.TTSVoice == "" {
+		return "ash"
+	}
+	return c.TTSVoice
+}
+
+func (c Config) TTSSpeedOrDefault() float64 {
+	if c.TTSSpeed == 0 {
+		return 1.0
+	}
+	return c.TTSSpeed
 }
 
 func (c Config) MemoriesPath() string {

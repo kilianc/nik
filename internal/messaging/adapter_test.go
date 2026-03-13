@@ -27,6 +27,9 @@ func (f *fakePlatformAdapter) Reply(context.Context, string, string) (OutboundMe
 func (f *fakePlatformAdapter) SendImage(context.Context, string, string, string) (OutboundMessage, error) {
 	return OutboundMessage{}, nil
 }
+func (f *fakePlatformAdapter) SendAudio(context.Context, string, string, bool) (OutboundMessage, error) {
+	return OutboundMessage{}, nil
+}
 func (f *fakePlatformAdapter) React(_ context.Context, _, _, _, _ string) (OutboundMessage, error) {
 	return OutboundMessage{}, nil
 }

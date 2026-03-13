@@ -224,6 +224,56 @@ func (c *Client) SendImage(ctx context.Context, conversationJID, imagePath, capt
 	}, nil
 }
 
+func (c *Client) SendAudio(ctx context.Context, conversationJID, audioPath string, voiceNote bool) (messaging.OutboundMessage, error) {
+	jid, err := types.ParseJID(conversationJID)
+	if err != nil {
+		return messaging.OutboundMessage{}, fmt.Errorf("parse conversation jid: %w", err)
+	}
+
+	data, err := os.ReadFile(audioPath)
+	if err != nil {
+		return messaging.OutboundMessage{}, fmt.Errorf("read audio file: %w", err)
+	}
+
+	resp, err := c.wm.Upload(ctx, data, whatsmeow.MediaAudio)
+	if err != nil {
+		return messaging.OutboundMessage{}, fmt.Errorf("upload audio: %w", err)
+	}
+
+	audioMsg := &waProto.AudioMessage{
+		Mimetype:      proto.String("audio/ogg; codecs=opus"),
+		URL:           &resp.URL,
+		DirectPath:    &resp.DirectPath,
+		MediaKey:      resp.MediaKey,
+		FileEncSHA256: resp.FileEncSHA256,
+		FileSHA256:    resp.FileSHA256,
+		FileLength:    &resp.FileLength,
+		PTT:           proto.Bool(voiceNote),
+	}
+
+	sendResp, err := c.wm.SendMessage(ctx, jid, &waProto.Message{AudioMessage: audioMsg})
+	if err != nil {
+		return messaging.OutboundMessage{}, fmt.Errorf("send audio: %w", err)
+	}
+
+	externalSenderID := sendResp.Sender.String()
+	if externalSenderID == "" {
+		externalSenderID = c.SelfJID()
+	}
+
+	sum := sha256.Sum256(data)
+	hash := hex.EncodeToString(sum[:])
+
+	return messaging.OutboundMessage{
+		ExternalMessageID: string(sendResp.ID),
+		ExternalSenderID:  externalSenderID,
+		SentAt:            sendResp.Timestamp,
+		Kind:              "audio",
+		MimeType:          "audio/ogg; codecs=opus",
+		LocalPath:         hash + ".ogg",
+	}, nil
+}
+
 func (c *Client) React(ctx context.Context, conversationJID, msgID, senderJID, emoji string) (messaging.OutboundMessage, error) {
 	conversation, err := types.ParseJID(conversationJID)
 	if err != nil {
