@@ -36,8 +36,12 @@ var replyToolDef = llm.ToolDef{
 							"type":        "string",
 							"description": "Absolute path to an image file to send. Omit or pass empty string for text-only.",
 						},
+						"voice": map[string]any{
+							"type":        "boolean",
+							"description": "When true, the message text is converted to a voice note via TTS instead of sent as text.",
+						},
 					},
-					"required":             []string{"text", "image_path"},
+					"required":             []string{"text", "image_path", "voice"},
 					"additionalProperties": false,
 				},
 				"description": "Array of messages to send, in order. Each becomes a separate bubble.",
@@ -145,6 +149,7 @@ func BuildTools(svc *Service) []llm.Tool {
 type replyMessage struct {
 	Text      string `json:"text"`
 	ImagePath string `json:"image_path"`
+	Voice     bool   `json:"voice"`
 }
 
 func replyHandler(svc *Service) llm.ToolExecutor {
@@ -184,9 +189,19 @@ func replyHandler(svc *Service) llm.ToolExecutor {
 		}
 
 		for _, msg := range args.Messages {
-			if strings.TrimSpace(msg.ImagePath) != "" {
+			switch {
+			case msg.Voice:
+				if svc.speechFn == nil {
+					return `{"error":"voice messages not configured"}`, nil
+				}
+				audioPath, speechErr := svc.speechFn(ctx, msg.Text)
+				if speechErr != nil {
+					return llm.ToolError(speechErr), nil
+				}
+				err = svc.SendAudio(ctx, args.ConversationID, audioPath, true)
+			case strings.TrimSpace(msg.ImagePath) != "":
 				err = svc.SendImage(ctx, args.ConversationID, msg.ImagePath, msg.Text)
-			} else {
+			default:
 				err = svc.Reply(ctx, args.ConversationID, msg.Text)
 			}
 

@@ -34,6 +34,18 @@ func TestRoundSignature(t *testing.T) {
 	}
 }
 
+func TestSpeechRequiresAPIKey(t *testing.T) {
+	client := &Client{}
+
+	_, err := client.Speech(t.Context(), "hello", "ash", "", 1.0)
+	if err == nil {
+		t.Fatalf("expected error when apiClient is nil")
+	}
+	if err.Error() != "speech: requires api key" {
+		t.Fatalf("expected 'requires api key' error, got %v", err)
+	}
+}
+
 func TestBuildToolParamsIncludesDefinitions(t *testing.T) {
 	params := buildToolParams([]ToolDef{
 		{

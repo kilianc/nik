@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -474,6 +475,44 @@ func completeStreaming(ctx context.Context, client *openai.Client, params respon
 	}
 
 	return final, nil
+}
+
+func (c *Client) Speech(ctx context.Context, text string, voice string, instructions string, speed float64) (string, error) {
+	if c.apiClient == nil {
+		return "", fmt.Errorf("speech: requires api key")
+	}
+
+	params := openai.AudioSpeechNewParams{
+		Input:          text,
+		Model:          openai.SpeechModelGPT4oMiniTTS,
+		Voice:          openai.AudioSpeechNewParamsVoice(voice),
+		ResponseFormat: openai.AudioSpeechNewParamsResponseFormatOpus,
+		Speed:          openai.Float(speed),
+	}
+	if instructions != "" {
+		params.Instructions = openai.String(instructions)
+	}
+
+	resp, err := c.apiClient.Audio.Speech.New(ctx, params)
+	if err != nil {
+		return "", fmt.Errorf("speech tts: %w", err)
+	}
+	defer resp.Body.Close()
+
+	outPath := filepath.Join(os.TempDir(), fmt.Sprintf("tts-%s.ogg", id.Short(6)))
+
+	f, err := os.Create(outPath)
+	if err != nil {
+		return "", fmt.Errorf("create speech file: %w", err)
+	}
+	defer f.Close()
+
+	_, err = io.Copy(f, resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("write speech file: %w", err)
+	}
+
+	return outPath, nil
 }
 
 func (c *Client) Transcribe(ctx context.Context, filePath string) (string, error) {

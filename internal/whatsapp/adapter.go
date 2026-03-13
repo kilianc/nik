@@ -46,6 +46,10 @@ func (a *Adapter) SendImage(ctx context.Context, externalConversationID string, 
 	return a.client.SendImage(ctx, externalConversationID, imagePath, caption)
 }
 
+func (a *Adapter) SendAudio(ctx context.Context, externalConversationID string, audioPath string, voiceNote bool) (messaging.OutboundMessage, error) {
+	return a.client.SendAudio(ctx, externalConversationID, audioPath, voiceNote)
+}
+
 func (a *Adapter) React(ctx context.Context, externalConversationID string, externalMessageID string, externalSenderID string, emoji string) (messaging.OutboundMessage, error) {
 	return a.client.React(ctx, externalConversationID, externalMessageID, externalSenderID, emoji)
 }

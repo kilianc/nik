@@ -176,10 +176,12 @@ type mockPlatform struct {
 	stopTypingCalls  int
 	replyCalls       int
 	sendImageCalls   int
+	sendAudioCalls   int
 	markReadCalls    int
 	lastReadRefs     []InboundMessage
 	outbound         OutboundMessage
 	imageOutbound    OutboundMessage
+	audioOutbound    OutboundMessage
 }
 
 func (m *mockPlatform) Platform() string { return m.platform }
@@ -194,6 +196,10 @@ func (m *mockPlatform) Reply(_ context.Context, _ string, _ string) (OutboundMes
 func (m *mockPlatform) SendImage(_ context.Context, _ string, _ string, _ string) (OutboundMessage, error) {
 	m.sendImageCalls++
 	return m.imageOutbound, nil
+}
+func (m *mockPlatform) SendAudio(_ context.Context, _ string, _ string, _ bool) (OutboundMessage, error) {
+	m.sendAudioCalls++
+	return m.audioOutbound, nil
 }
 func (m *mockPlatform) React(_ context.Context, _, _, _, _ string) (OutboundMessage, error) {
 	return OutboundMessage{}, nil
@@ -367,6 +373,82 @@ func TestSendImagePersistsOutbound(t *testing.T) {
 	}
 	if platform.startTypingCalls != 1 || platform.stopTypingCalls != 1 {
 		t.Fatalf("expected start/stop typing once each, got start=%d stop=%d", platform.startTypingCalls, platform.stopTypingCalls)
+	}
+}
+
+func TestSendAudioPersistsOutbound(t *testing.T) {
+	ctx := context.Background()
+
+	conn, err := db.OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	contactsSvc := contacts.NewService(conn)
+	svc := NewService(&config.Config{}, conn, contactsSvc)
+
+	now := time.Now()
+	err = db.UpsertConversation(ctx, conn, db.UpsertConversationParams{
+		Platform:               "whatsapp",
+		ExternalConversationID: "conversation@s.whatsapp.net",
+		Kind:                   "dm",
+		LastMessageAt:          &now,
+	})
+	if err != nil {
+		t.Fatalf("upsert conversation: %v", err)
+	}
+
+	conversation, err := db.GetConversation(ctx, conn, db.GetConversationParams{
+		Platform:               "whatsapp",
+		ExternalConversationID: "conversation@s.whatsapp.net",
+	})
+	if err != nil {
+		t.Fatalf("get conversation: %v", err)
+	}
+
+	tmpFile, err := os.CreateTemp("", "test-audio-*.ogg")
+	if err != nil {
+		t.Fatalf("create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+	_, _ = tmpFile.Write([]byte("fake audio data"))
+	tmpFile.Close()
+
+	platform := &mockPlatform{
+		platform: "whatsapp",
+		audioOutbound: OutboundMessage{
+			ExternalMessageID: "audio-1",
+			ExternalSenderID:  "nik@s.whatsapp.net",
+			SentAt:            now,
+			Kind:              "audio",
+			MimeType:          "audio/ogg; codecs=opus",
+			LocalPath:         "abc123.ogg",
+		},
+	}
+	svc.RegisterPlatform(platform)
+
+	err = svc.SendAudio(ctx, conversation.ID, tmpFile.Name(), true)
+	if err != nil {
+		t.Fatalf("send audio: %v", err)
+	}
+
+	msg, err := db.GetMessage(ctx, conn, db.GetMessageParams{
+		Platform:          "whatsapp",
+		ExternalMessageID: "audio-1",
+	})
+	if err != nil {
+		t.Fatalf("get outbound audio message: %v", err)
+	}
+
+	if !msg.IsFromMe {
+		t.Fatalf("expected outbound message is_from_me=true")
+	}
+	if msg.Kind != "audio" {
+		t.Fatalf("expected kind audio, got %q", msg.Kind)
+	}
+	if platform.sendAudioCalls != 1 {
+		t.Fatalf("expected one send audio call, got %d", platform.sendAudioCalls)
 	}
 }
 

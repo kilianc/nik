@@ -28,6 +28,7 @@ type Service struct {
 	registry   *Registry
 	contacts   ContactService
 	replyDelay func(body string) time.Duration
+	speechFn   func(ctx context.Context, text string) (string, error)
 }
 
 func NewService(cfg *config.Config, conn *sql.DB, contacts ContactService) *Service {
@@ -38,6 +39,10 @@ func NewService(cfg *config.Config, conn *sql.DB, contacts ContactService) *Serv
 		contacts:   contacts,
 		replyDelay: humanizedReplyDelay,
 	}
+}
+
+func (s *Service) SetSpeechFn(fn func(ctx context.Context, text string) (string, error)) {
+	s.speechFn = fn
 }
 
 func (s *Service) RegisterPlatform(platform MessagingPlatform) {
@@ -398,6 +403,57 @@ func (s *Service) SendImage(ctx context.Context, conversationID string, imagePat
 		LocalPath:              outbound.LocalPath,
 		MediaHash:              mediaHashFromPath(imagePath),
 		MediaSizeBytes:         fileSize(imagePath),
+	})
+}
+
+func (s *Service) SendAudio(ctx context.Context, conversationID string, audioPath string, voiceNote bool) error {
+	conv, err := db.GetConversation(ctx, s.db, db.GetConversationParams{ID: conversationID})
+	if err != nil {
+		return err
+	}
+
+	platform, err := s.registry.Get(conv.Platform)
+	if err != nil {
+		return err
+	}
+
+	outbound, err := platform.SendAudio(ctx, conv.ExternalConversationID, audioPath, voiceNote)
+	if err != nil {
+		return err
+	}
+
+	if outbound.ExternalMessageID == "" {
+		return fmt.Errorf("platform send audio missing external_message_id")
+	}
+
+	if outbound.ExternalSenderID == "" {
+		return fmt.Errorf("platform send audio missing external_sender_id")
+	}
+
+	sentAt := outbound.SentAt
+	if sentAt.IsZero() {
+		sentAt = time.Now()
+	}
+
+	kind := outbound.Kind
+	if kind == "" {
+		kind = "audio"
+	}
+
+	return s.ReceiveMessage(ctx, InboundMessage{
+		Platform:               conv.Platform,
+		ExternalConversationID: conv.ExternalConversationID,
+		ExternalMessageID:      outbound.ExternalMessageID,
+		ExternalSenderID:       outbound.ExternalSenderID,
+		Kind:                   kind,
+		Body:                   "",
+		MimeType:               outbound.MimeType,
+		SentAt:                 sentAt,
+		IsFromMe:               true,
+		IsGroup:                conv.Kind == "group",
+		LocalPath:              outbound.LocalPath,
+		MediaHash:              mediaHashFromPath(audioPath),
+		MediaSizeBytes:         fileSize(audioPath),
 	})
 }
 

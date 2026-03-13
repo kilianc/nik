@@ -167,6 +167,10 @@ func main() {
 
 	llmClient.SetObserver(stats.NewRecorder(conn))
 
+	messagingSvc.SetSpeechFn(func(ctx context.Context, text string) (string, error) {
+		return llmClient.Speech(ctx, text, cfg.TTSVoiceOrDefault(), cfg.TTSInstructions, cfg.TTSSpeedOrDefault())
+	})
+
 	taskRunner := task.NewRunner(cfg, llmClient, taskSvc, taskTools)
 
 	b := brain.New(cfg, llmClient)
