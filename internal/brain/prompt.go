@@ -21,6 +21,7 @@ type promptData struct {
 	Recall          string
 	WorkerTools     string
 	NikTools        string
+	BannedWords     []string
 	PreloadedSkills []skills.PreloadedSkill
 	AvailableSkills []skillSummaryData
 }
@@ -157,6 +158,8 @@ func (b *Brain) buildPromptData(now time.Time, recall string) promptData {
 		Timezone: fmt.Sprintf("%s (%s, UTC%s%d)", loc.String(), abbrev, sign, hours),
 		Location: b.cfg.Location,
 	}
+
+	data.BannedWords = b.cfg.BannedWords
 
 	soulData, err := os.ReadFile(filepath.Join(b.cfg.Home, "soul", "latest.md"))
 	if err == nil {

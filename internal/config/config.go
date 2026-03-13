@@ -38,6 +38,8 @@ type Config struct {
 	DreamStart     string `yaml:"dream_start"`
 	BriefingTime   string `yaml:"briefing_time"`
 	DiagnosticTime string `yaml:"diagnostic_time"`
+
+	BannedWords []string `yaml:"banned_words"`
 }
 
 func (c Config) LogPath() string {

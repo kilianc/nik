@@ -756,6 +756,196 @@ func TestConversationHeaderUnifiedDM(t *testing.T) {
 	}
 }
 
+func TestReplyRejectsBannedWords(t *testing.T) {
+	ctx := context.Background()
+
+	conn, err := db.OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	contactsSvc := contacts.NewService(conn)
+	cfg := &config.Config{BannedWords: []string{"forbidden", "BLOCKED"}}
+	svc := NewService(cfg, conn, contactsSvc)
+	svc.replyDelay = func(string) time.Duration { return 0 }
+
+	now := time.Now()
+	err = db.UpsertConversation(ctx, conn, db.UpsertConversationParams{
+		Platform:               "whatsapp",
+		ExternalConversationID: "conv-banned@s.whatsapp.net",
+		Kind:                   "dm",
+		LastMessageAt:          &now,
+	})
+	if err != nil {
+		t.Fatalf("upsert conversation: %v", err)
+	}
+
+	conv, err := db.GetConversation(ctx, conn, db.GetConversationParams{
+		Platform:               "whatsapp",
+		ExternalConversationID: "conv-banned@s.whatsapp.net",
+	})
+	if err != nil {
+		t.Fatalf("get conversation: %v", err)
+	}
+
+	platform := &mockPlatform{
+		platform: "whatsapp",
+		outbound: OutboundMessage{
+			ExternalMessageID: "out-ban",
+			ExternalSenderID:  "nik@s.whatsapp.net",
+			SentAt:            now,
+			Kind:              "text",
+			Body:              "clean",
+		},
+	}
+	svc.RegisterPlatform(platform)
+
+	err = svc.Reply(ctx, conv.ID, "this is forbidden content")
+	if err == nil {
+		t.Fatalf("expected error for banned word")
+	}
+	if !strings.Contains(err.Error(), "banned word") {
+		t.Fatalf("expected banned word error, got %v", err)
+	}
+	if platform.replyCalls != 0 {
+		t.Fatalf("expected no platform reply calls, got %d", platform.replyCalls)
+	}
+
+	// case-insensitive: "blocked" in config as "BLOCKED", message has "Blocked"
+	err = svc.Reply(ctx, conv.ID, "this is Blocked too")
+	if err == nil {
+		t.Fatalf("expected error for case-insensitive banned word")
+	}
+
+	// clean message should go through
+	err = svc.Reply(ctx, conv.ID, "clean message")
+	if err != nil {
+		t.Fatalf("clean reply: %v", err)
+	}
+	if platform.replyCalls != 1 {
+		t.Fatalf("expected one platform reply call for clean message, got %d", platform.replyCalls)
+	}
+}
+
+func TestSendImageRejectsBannedWordsInCaption(t *testing.T) {
+	ctx := context.Background()
+
+	conn, err := db.OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	contactsSvc := contacts.NewService(conn)
+	cfg := &config.Config{BannedWords: []string{"nope"}}
+	svc := NewService(cfg, conn, contactsSvc)
+	svc.replyDelay = func(string) time.Duration { return 0 }
+
+	now := time.Now()
+	err = db.UpsertConversation(ctx, conn, db.UpsertConversationParams{
+		Platform:               "whatsapp",
+		ExternalConversationID: "conv-img-ban@s.whatsapp.net",
+		Kind:                   "dm",
+		LastMessageAt:          &now,
+	})
+	if err != nil {
+		t.Fatalf("upsert conversation: %v", err)
+	}
+
+	conv, err := db.GetConversation(ctx, conn, db.GetConversationParams{
+		Platform:               "whatsapp",
+		ExternalConversationID: "conv-img-ban@s.whatsapp.net",
+	})
+	if err != nil {
+		t.Fatalf("get conversation: %v", err)
+	}
+
+	platform := &mockPlatform{
+		platform: "whatsapp",
+		imageOutbound: OutboundMessage{
+			ExternalMessageID: "img-ban",
+			ExternalSenderID:  "nik@s.whatsapp.net",
+			SentAt:            now,
+			Kind:              "image",
+			MimeType:          "image/jpeg",
+		},
+	}
+	svc.RegisterPlatform(platform)
+
+	tmpFile, err := os.CreateTemp("", "test-ban-img-*.jpg")
+	if err != nil {
+		t.Fatalf("create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+	_, _ = tmpFile.Write([]byte("fake"))
+	tmpFile.Close()
+
+	err = svc.SendImage(ctx, conv.ID, tmpFile.Name(), "nope bad caption")
+	if err == nil {
+		t.Fatalf("expected error for banned word in caption")
+	}
+	if !strings.Contains(err.Error(), "banned word") {
+		t.Fatalf("expected banned word error, got %v", err)
+	}
+	if platform.sendImageCalls != 0 {
+		t.Fatalf("expected no platform send image calls, got %d", platform.sendImageCalls)
+	}
+}
+
+func TestReplyNoBannedWordsConfigured(t *testing.T) {
+	ctx := context.Background()
+
+	conn, err := db.OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	contactsSvc := contacts.NewService(conn)
+	svc := NewService(&config.Config{}, conn, contactsSvc)
+	svc.replyDelay = func(string) time.Duration { return 0 }
+
+	now := time.Now()
+	err = db.UpsertConversation(ctx, conn, db.UpsertConversationParams{
+		Platform:               "whatsapp",
+		ExternalConversationID: "conv-noban@s.whatsapp.net",
+		Kind:                   "dm",
+		LastMessageAt:          &now,
+	})
+	if err != nil {
+		t.Fatalf("upsert conversation: %v", err)
+	}
+
+	conv, err := db.GetConversation(ctx, conn, db.GetConversationParams{
+		Platform:               "whatsapp",
+		ExternalConversationID: "conv-noban@s.whatsapp.net",
+	})
+	if err != nil {
+		t.Fatalf("get conversation: %v", err)
+	}
+
+	platform := &mockPlatform{
+		platform: "whatsapp",
+		outbound: OutboundMessage{
+			ExternalMessageID: "out-noban",
+			ExternalSenderID:  "nik@s.whatsapp.net",
+			SentAt:            now,
+			Kind:              "text",
+			Body:              "anything goes",
+		},
+	}
+	svc.RegisterPlatform(platform)
+
+	err = svc.Reply(ctx, conv.ID, "anything goes")
+	if err != nil {
+		t.Fatalf("reply with no banned words configured: %v", err)
+	}
+	if platform.replyCalls != 1 {
+		t.Fatalf("expected one reply call, got %d", platform.replyCalls)
+	}
+}
+
 func TestResolveConversationCreatesNewConversation(t *testing.T) {
 	ctx := context.Background()
 
