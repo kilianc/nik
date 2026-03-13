@@ -58,11 +58,16 @@ func (r *Recorder) OnToolCall(ctx context.Context, name string, args string, res
 	}
 }
 
-func (r *Recorder) OnFinish(ctx context.Context, model, reasoningEffort string, usage llm.Usage, toolCalls int, durationMS int64, output string, isError bool) {
+func (r *Recorder) OnFinish(ctx context.Context, model, reasoningEffort string, usage llm.Usage, toolCalls int, durationMS int64, output string, processErr error) {
 	meta := metaFromCtx(ctx)
 	actID := meta["activation_id"]
 	if actID == "" {
 		return
+	}
+
+	var errText string
+	if processErr != nil {
+		errText = processErr.Error()
 	}
 
 	// detach so the write completes even if the activation context is canceled
@@ -78,7 +83,7 @@ func (r *Recorder) OnFinish(ctx context.Context, model, reasoningEffort string, 
 		CostUSD:         llm.ComputeCost(model, usage.InputTokens, usage.OutputTokens, usage.CachedTokens),
 		ToolCallCount:   toolCalls,
 		DurationMS:      durationMS,
-		IsError:         isError,
+		Error:           errText,
 		Output:          output,
 	})
 	if err != nil {
