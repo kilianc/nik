@@ -90,6 +90,10 @@ When working in plan mode, always put details, before/after examples, and ration
 - The database lives at `nik.db` in Home.
 - The `workspace/` folder in the repo is the user-facing workspace. All runtime artifacts (db, logs, media) are written here. When nik is installed, this is the only folder exposed to users. Prompts and skills currently live at the repo root; `prompts_dir` and `skills_dir` in config.yaml point nik at them (relative to Home).
 - **Workspace skills** (`Home/skills`, i.e. `workspace/skills/`): nik writes his own skills here at runtime. These are loaded from disk on every brain activation alongside built-in skills. When a workspace skill shares a name with a built-in skill, the workspace version wins. Not git-tracked (`workspace/` is gitignored).
+### Workspace file immutability
+
+Files produced by skills (journals, briefings, diagnostics, dreams, memories, soul, workspace skills) are immutable after creation. Only the scheduled skill execution that owns them may write or update them. Outside that context, workspace artifacts are read-only. If a previous output was wrong, the next scheduled run corrects it -- old files are never patched.
+
 - **Always pass `*config.Config`** — never copy individual fields into local config structs. Every package that needs config holds a `*config.Config` pointer and reads from it directly. Derived paths live as getters on `Config` (e.g. `DBPath()`, `MediaPath()`, `WorkspaceSkillsPath()`).
 
 ### Project structure
