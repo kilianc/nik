@@ -41,7 +41,7 @@ func (s *Service) CheckSessions(ctx context.Context) {
 			code, _ := getExitCode(sid)
 			killSession(sid)
 
-			err = db.ShellOutputUpsert(ctx, s.conn, db.ShellOutputUpsertParams{
+			err = db.ShellOutputUpdate(ctx, s.conn, db.ShellOutputUpdateParams{
 				SessionID: sid,
 				Output:    out,
 				ExitCode:  &code,
@@ -65,7 +65,7 @@ func (s *Service) CheckSessions(ctx context.Context) {
 			out, _ := capturePane(sid)
 			killSession(sid)
 
-			err = db.ShellOutputUpsert(ctx, s.conn, db.ShellOutputUpsertParams{
+			err = db.ShellOutputUpdate(ctx, s.conn, db.ShellOutputUpdateParams{
 				SessionID: sid,
 				Output:    out,
 				Alive:     false,

@@ -167,14 +167,15 @@ CREATE TABLE IF NOT EXISTS task_report (
 );
 
 CREATE TABLE IF NOT EXISTS shell_output (
-  session_id  TEXT PRIMARY KEY,
-  command     TEXT NOT NULL DEFAULT '',
-  description TEXT NOT NULL DEFAULT '',
-  output      TEXT NOT NULL DEFAULT '',
-  exit_code   INTEGER,
-  alive       INTEGER NOT NULL DEFAULT 1,
-  created_at  TIMESTAMP NOT NULL DEFAULT (datetime('now')),
-  updated_at  TIMESTAMP NOT NULL DEFAULT (datetime('now'))
+  session_id    TEXT PRIMARY KEY,
+  activation_id TEXT NOT NULL REFERENCES activation(id),
+  command       TEXT NOT NULL DEFAULT '',
+  description   TEXT NOT NULL DEFAULT '',
+  output        TEXT NOT NULL DEFAULT '',
+  exit_code     INTEGER,
+  alive         INTEGER NOT NULL DEFAULT 1,
+  created_at    TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+  updated_at    TIMESTAMP NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS activation_detail (

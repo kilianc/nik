@@ -137,7 +137,7 @@ func (s *Service) handleRun(ctx context.Context, args shellArgs) (string, error)
 
 	output, alive, code := stare(ctx, sid, maxWait)
 
-	s.persistOutput(ctx, sid, args.Command, args.Description, output, alive, code)
+	s.persistOutput(ctx, sid, meta.ActivationID, args.Command, args.Description, output, alive, code)
 
 	if !alive {
 		killSession(sid)
@@ -163,7 +163,7 @@ func (s *Service) handleInteract(ctx context.Context, args shellArgs) (string, e
 		out, _ := capturePane(args.SessionID)
 		code, _ := getExitCode(args.SessionID)
 		killSession(args.SessionID)
-		s.persistOutput(ctx, args.SessionID, "", "", out, false, code)
+		s.updateOutput(ctx, args.SessionID, out, false, code)
 		return shellResult(args.SessionID, out, false, code), nil
 	}
 
@@ -174,7 +174,7 @@ func (s *Service) handleInteract(ctx context.Context, args shellArgs) (string, e
 
 	output, alive, code := stare(ctx, args.SessionID, maxWait)
 
-	s.persistOutput(ctx, args.SessionID, "", "", output, alive, code)
+	s.updateOutput(ctx, args.SessionID, output, alive, code)
 
 	if !alive {
 		killSession(args.SessionID)
@@ -196,7 +196,7 @@ func handleKill(args shellArgs) (string, error) {
 	return `{"ok":true}`, nil
 }
 
-func (s *Service) persistOutput(ctx context.Context, sid, command, description, output string, alive bool, exitCode int) {
+func (s *Service) persistOutput(ctx context.Context, sid, activationID, command, description, output string, alive bool, exitCode int) {
 	if s.conn == nil {
 		return
 	}
@@ -207,15 +207,37 @@ func (s *Service) persistOutput(ctx context.Context, sid, command, description, 
 	}
 
 	err := db.ShellOutputUpsert(ctx, s.conn, db.ShellOutputUpsertParams{
-		SessionID:   sid,
-		Command:     command,
-		Description: description,
-		Output:      output,
-		ExitCode:    codePtr,
-		Alive:       alive,
+		SessionID:    sid,
+		ActivationID: activationID,
+		Command:      command,
+		Description:  description,
+		Output:       output,
+		ExitCode:     codePtr,
+		Alive:        alive,
 	})
 	if err != nil {
 		slog.Warn("persist shell output", "pkg", "shell", "session_id", sid, "error", err)
+	}
+}
+
+func (s *Service) updateOutput(ctx context.Context, sid, output string, alive bool, exitCode int) {
+	if s.conn == nil {
+		return
+	}
+
+	var codePtr *int
+	if !alive {
+		codePtr = &exitCode
+	}
+
+	err := db.ShellOutputUpdate(ctx, s.conn, db.ShellOutputUpdateParams{
+		SessionID: sid,
+		Output:    output,
+		ExitCode:  codePtr,
+		Alive:     alive,
+	})
+	if err != nil {
+		slog.Warn("update shell output", "pkg", "shell", "session_id", sid, "error", err)
 	}
 }
 

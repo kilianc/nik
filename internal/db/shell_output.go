@@ -9,12 +9,13 @@ import (
 )
 
 type ShellOutputUpsertParams struct {
-	SessionID   string
-	Command     string
-	Description string
-	Output      string
-	ExitCode    *int
-	Alive       bool
+	SessionID    string
+	ActivationID string
+	Command      string
+	Description  string
+	Output       string
+	ExitCode     *int
+	Alive        bool
 }
 
 func ShellOutputUpsert(ctx context.Context, db DBTX, p ShellOutputUpsertParams) error {
@@ -25,6 +26,7 @@ func ShellOutputUpsert(ctx context.Context, db DBTX, p ShellOutputUpsertParams) 
 
 	_, err := db.ExecContext(ctx, queries.ShellOutputUpsert,
 		p.SessionID,
+		p.ActivationID,
 		p.Command,
 		p.Description,
 		p.Output,
@@ -33,6 +35,32 @@ func ShellOutputUpsert(ctx context.Context, db DBTX, p ShellOutputUpsertParams) 
 	)
 	if err != nil {
 		return fmt.Errorf("upsert shell output %s: %w", p.SessionID, err)
+	}
+
+	return nil
+}
+
+type ShellOutputUpdateParams struct {
+	SessionID string
+	Output    string
+	ExitCode  *int
+	Alive     bool
+}
+
+func ShellOutputUpdate(ctx context.Context, db DBTX, p ShellOutputUpdateParams) error {
+	aliveFlag := 0
+	if p.Alive {
+		aliveFlag = 1
+	}
+
+	_, err := db.ExecContext(ctx, queries.ShellOutputUpdate,
+		p.SessionID,
+		p.Output,
+		p.ExitCode,
+		aliveFlag,
+	)
+	if err != nil {
+		return fmt.Errorf("update shell output %s: %w", p.SessionID, err)
 	}
 
 	return nil
