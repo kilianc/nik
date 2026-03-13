@@ -49,7 +49,6 @@ func (t *Timeline) Check(ctx context.Context) ([]brain.Stimulus, error) {
 			continue
 		}
 		if ok {
-			t.markRead(ctx, convID)
 			stimuli = append(stimuli, s)
 		}
 	}
@@ -73,7 +72,6 @@ func (t *Timeline) Get(ctx context.Context, convID string) string {
 	if conv.LastReadAt.Valid {
 		readLine = conv.LastReadAt.Time
 	}
-
 	var since time.Time
 	if len(msgs) > 0 {
 		since = msgs[0].SentAt
@@ -87,6 +85,8 @@ func (t *Timeline) Get(ctx context.Context, convID string) string {
 	lines = append(lines, "## Session", "")
 	lines = append(lines, session.Lines...)
 	lines = append(lines, renderTimeline(entries, readLine)...)
+
+	t.markRead(ctx, convID)
 
 	return strings.Join(lines, "\n")
 }
@@ -185,7 +185,6 @@ func (t *Timeline) check(ctx context.Context, convID string) (brain.Stimulus, bo
 
 func (t *Timeline) markRead(ctx context.Context, convID string) {
 	now := time.Now().UTC()
-
 	err := t.msgSvc.MarkRead(ctx, convID, now)
 	if err != nil {
 		slog.Warn("mark conversation read", "pkg", "timeline", "conversation_id", convID, "error", err)
