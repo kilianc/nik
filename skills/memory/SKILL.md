@@ -110,7 +110,7 @@ Only extract facts you would tell a colleague taking over this relationship.
 **Retractions**: if a message asks to forget, remove, or stop remembering something, append a `retraction` row instead of a normal fact. The memory column should reference the original fact being retracted, prefixed with `retract:`. Do not remove or modify existing rows — extraction is append-only. Compaction will resolve the retraction later.
 
 ```
-| 2026-03-12 | retraction | Kilian Ciuffolo | retract: prefers a goofier tone | [DM](019c...) |
+| 2026-03-12 | retraction | Jane Doe | retract: prefers a goofier tone | [DM](019c...) |
 ```
 
 ### Step 4. Write facts and save cursor

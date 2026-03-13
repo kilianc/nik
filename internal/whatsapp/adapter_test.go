@@ -8,8 +8,8 @@ func TestNormalizeJID(t *testing.T) {
 		raw  string
 		want string
 	}{
-		{name: "phone bare", raw: "14153491822@s.whatsapp.net", want: "14153491822@s.whatsapp.net"},
-		{name: "phone with device", raw: "14153491822:12@s.whatsapp.net", want: "14153491822@s.whatsapp.net"},
+		{name: "phone bare", raw: "15551234567@s.whatsapp.net", want: "15551234567@s.whatsapp.net"},
+		{name: "phone with device", raw: "15551234567:12@s.whatsapp.net", want: "15551234567@s.whatsapp.net"},
 		{name: "lid bare", raw: "219971061866633@lid", want: "219971061866633@lid"},
 		{name: "lid with device", raw: "219971061866633:12@lid", want: "219971061866633@lid"},
 		{name: "group jid", raw: "120363123456789@g.us", want: "120363123456789@g.us"},

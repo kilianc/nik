@@ -32,9 +32,9 @@ JID servers (the `@suffix` part):
 | `hosted`              | `HostedServer`       | Hosted accounts                         |
 | `hosted.lid`          | `HostedLIDServer`    | Hosted linked device IDs                |
 
-Stringified examples: `15102953635@s.whatsapp.net`, `120363406922669472@g.us`, `<opaque>@lid`
+Stringified examples: `15559876543@s.whatsapp.net`, `120363406922669472@g.us`, `<opaque>@lid`
 
-AD-JIDs (with agent/device): `15102953635.0:1@s.whatsapp.net` (user.agent:device@server)
+AD-JIDs (with agent/device): `15559876543.0:1@s.whatsapp.net` (user.agent:device@server)
 
 ---
 
