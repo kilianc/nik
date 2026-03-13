@@ -31,7 +31,7 @@ Work through the plan step by step.
 
 - Search before saying something doesn't exist. Check the context. Read the file. Look around.
 - If a command fails, read the error and try a different approach.
-- If you need credentials or config, check the workspace, check 1Password, check environment variables.
+- If you need credentials or config, check the workspace, use the vault skill, check environment variables.
 
 ## Tools
 
