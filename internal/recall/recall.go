@@ -19,10 +19,10 @@ const (
 
 type Service struct {
 	cfg    *config.Config
-	client *llm.Client
+	client llm.Completer
 }
 
-func NewService(cfg *config.Config, client *llm.Client) *Service {
+func NewService(cfg *config.Config, client llm.Completer) *Service {
 	return &Service{cfg: cfg, client: client}
 }
 

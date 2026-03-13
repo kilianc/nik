@@ -29,13 +29,13 @@ type taskPromptData struct {
 
 type Runner struct {
 	cfg     *config.Config
-	llm     *llm.Client
+	llm     llm.Completer
 	svc     *Service
 	tools   []llm.Tool
 	cancels sync.Map
 }
 
-func NewRunner(cfg *config.Config, llmClient *llm.Client, svc *Service, tools []llm.Tool) *Runner {
+func NewRunner(cfg *config.Config, llmClient llm.Completer, svc *Service, tools []llm.Tool) *Runner {
 	return &Runner{
 		cfg:   cfg,
 		llm:   llmClient,
