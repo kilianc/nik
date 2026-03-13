@@ -15,6 +15,7 @@
 
 # Track build
 !Makefile
+!Dockerfile
 
 # Track docs
 !AGENTS.md
