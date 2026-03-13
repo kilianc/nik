@@ -18,10 +18,10 @@
 !Dockerfile
 
 # Track docs
-!AGENTS.md
-!*.md
 !.gitignore
-!.config.example.yaml
+!*.md
+!AGENTS.md
+!config.example.yaml
 
 # Track deploy files
 !*.sh

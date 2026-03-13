@@ -35,7 +35,7 @@ type Config struct {
 	Timezone       string `yaml:"timezone"`
 	Location       string `yaml:"location"`
 	JournalTime    string `yaml:"journal_time"`
-	DreamStart     string `yaml:"dream_start"`
+	DreamTime      string `yaml:"dream_time"`
 	BriefingTime   string `yaml:"briefing_time"`
 	DiagnosticTime string `yaml:"diagnostic_time"`
 
