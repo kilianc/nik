@@ -109,6 +109,9 @@ var ActivationInsert string
 //go:embed activation_update_stats.sql
 var ActivationUpdateStats string
 
+//go:embed activation_detail_insert.sql
+var ActivationDetailInsert string
+
 // tool call queries
 
 //go:embed tool_call_insert_one.sql

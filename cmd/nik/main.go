@@ -174,7 +174,6 @@ func main() {
 	b.SetWorkerToolNames(workerToolNames)
 	b.SetRecaller(recallSvc.Recall)
 	b.SetToolReactor(toolEmojis, messagingSvc.React)
-	b.SetDebugRecorder(brain.NewDebugRecorder(cfg.DebugPath, llmClient.Model, time.Now, taskSvc))
 
 	b.RegisterReflex(0, taskSvc.CheckStale)
 	b.RegisterReflex(0, alarmSvc.FireDueAlarms)

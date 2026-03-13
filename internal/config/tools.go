@@ -25,7 +25,7 @@ var configDef = llm.ToolDef{
 			},
 			"field": map[string]any{
 				"type":        "string",
-				"description": "Config field name for 'set'. Writable fields: timezone, location, model, reasoning_effort, debug_dir, media_dir, max_history.",
+				"description": "Config field name for 'set'. Writable fields: timezone, location, model, reasoning_effort, media_dir, max_history.",
 			},
 			"value": map[string]any{
 				"type":        "string",
@@ -80,7 +80,6 @@ func configGet(cfg *Config) (string, error) {
 		"model":                       cfg.Model,
 		"reasoning_effort":            cfg.ReasoningEffort,
 		"exa_api_key":                 cfg.ExaAPIKey,
-		"debug_dir":                   cfg.DebugDirValue,
 		"media_dir":                   cfg.MediaDirValue,
 		"max_history":                 cfg.MaxHistory,
 		"timezone":                    cfg.Timezone,
@@ -127,8 +126,6 @@ func configSet(cfg *Config, field, value string) (string, error) {
 			return llm.ToolErrorf("invalid reasoning_effort %q (none, minimal, low, medium, high, xhigh, or empty)", value), nil
 		}
 		cfg.ReasoningEffort = value
-	case "debug_dir":
-		cfg.DebugDirValue = value
 	case "media_dir":
 		cfg.MediaDirValue = value
 	case "max_history":

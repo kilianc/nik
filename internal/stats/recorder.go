@@ -91,6 +91,27 @@ func (r *Recorder) OnFinish(ctx context.Context, model, reasoningEffort string, 
 	}
 }
 
+func (r *Recorder) OnDetail(ctx context.Context, instructions string, userInput string, tools []string, reasoningSummaries []string) {
+	meta := metaFromCtx(ctx)
+	actID := meta["activation_id"]
+	if actID == "" {
+		return
+	}
+
+	ctx = context.WithoutCancel(ctx)
+
+	err := db.ActivationDetailInsert(ctx, r.conn, db.ActivationDetailParams{
+		ActivationID:       actID,
+		Instructions:       instructions,
+		UserInput:          userInput,
+		Tools:              tools,
+		ReasoningSummaries: reasoningSummaries,
+	})
+	if err != nil {
+		slog.Warn("insert activation detail", "pkg", "stats", "activation_id", actID, "error", err)
+	}
+}
+
 func metaFromCtx(ctx context.Context) map[string]string {
 	meta, _ := ctx.Value("meta").(map[string]string)
 	if meta == nil {

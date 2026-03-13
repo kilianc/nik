@@ -26,6 +26,7 @@ type CompletionObserver interface {
 	OnStart(ctx context.Context, model string)
 	OnToolCall(ctx context.Context, name string, args string, result string, duration time.Duration, isError bool)
 	OnFinish(ctx context.Context, model string, reasoningEffort string, usage Usage, toolCalls int, durationMS int64, output string, processErr error)
+	OnDetail(ctx context.Context, instructions string, userInput string, tools []string, reasoningSummaries []string)
 }
 
 const maxConcurrentSessions = 6
@@ -264,9 +265,17 @@ func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instru
 	var retOutput string
 	var history []ToolCallRecord
 
+	var lastInput string
+
 	if c.observer != nil {
 		defer func() {
 			c.observer.OnFinish(ctx, *c.model, extra.ReasoningEffort, total, len(history), time.Since(completeStart).Milliseconds(), retOutput, retErr)
+
+			toolNames := make([]string, len(tools))
+			for i, t := range tools {
+				toolNames[i] = t.Name
+			}
+			c.observer.OnDetail(ctx, instructions, lastInput, toolNames, extra.ReasoningSummaries)
 		}()
 	}
 
@@ -309,6 +318,7 @@ func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instru
 	for round := 0; ; round++ {
 		if getInput != nil {
 			content := getInput()
+			lastInput = content
 			msg := responses.ResponseInputItemParamOfMessage(content, responses.EasyInputMessageRoleUser)
 			if round == 0 {
 				items = append(items, msg)

@@ -37,7 +37,7 @@ The model drives the cadence -- it decides how long to stare, when to come back,
 - runtime logs are in `workspace/nik.log`
 - never run `make run` on your own, ask me to do it if you need me to
 - do not override GOPROXY, I need a VPN when it fails, tell me to connect to it and wait
-- there is a debug folder with all inputs and output to nik for each activation, you can use it to check what's happening
+- activation detail (instructions, user input, tools, reasoning) is stored in the `activation_detail` DB table, queryable via `db_query`
 - after completing Go changes, do this in order:
   - run `make lint`
   - run `make test`
@@ -88,9 +88,9 @@ When working in plan mode, always put details, before/after examples, and ration
 - Home directory is set via `--home` flag (defaults to current working directory). During development, `make run` passes `--home workspace`.
 - `config.yaml` in Home: all app config (API keys, model, reasoning effort, directory overrides, conversation ACLs, schedule times, etc.). Loaded at startup by `config.Load(home)`.
 - The database lives at `nik.db` in Home.
-- The `workspace/` folder in the repo is the user-facing workspace. All runtime artifacts (db, logs, media, debug) are written here. When nik is installed, this is the only folder exposed to users. Prompts and skills currently live at the repo root; `prompts_dir` and `skills_dir` in config.yaml point nik at them (relative to Home).
+- The `workspace/` folder in the repo is the user-facing workspace. All runtime artifacts (db, logs, media) are written here. When nik is installed, this is the only folder exposed to users. Prompts and skills currently live at the repo root; `prompts_dir` and `skills_dir` in config.yaml point nik at them (relative to Home).
 - **Workspace skills** (`Home/skills`, i.e. `workspace/skills/`): nik writes his own skills here at runtime. These are loaded from disk on every brain activation alongside built-in skills. When a workspace skill shares a name with a built-in skill, the workspace version wins. Not git-tracked (`workspace/` is gitignored).
-- **Always pass `*config.Config`** — never copy individual fields into local config structs. Every package that needs config holds a `*config.Config` pointer and reads from it directly. Derived paths live as getters on `Config` (e.g. `DBPath()`, `MediaPath()`, `DebugPath()`, `WorkspaceSkillsPath()`).
+- **Always pass `*config.Config`** — never copy individual fields into local config structs. Every package that needs config holds a `*config.Config` pointer and reads from it directly. Derived paths live as getters on `Config` (e.g. `DBPath()`, `MediaPath()`, `WorkspaceSkillsPath()`).
 
 ### Project structure
 
@@ -102,7 +102,7 @@ Entry point: `cmd/nik/main.go`
 | `internal/config/` | `Config` struct + `Load(home)` from `config.yaml` in home dir |
 | `internal/db/` | SQLite open/schema, models, one Go file per query function |
 | `internal/queries/` | embedded `.sql` files for canonical entities (`conversation_*`, `message_*`, `media_*`, etc.) |
-| `internal/brain/` | main loop, sense + reflex + tool registration, prompt loading, debug output |
+| `internal/brain/` | main loop, sense + reflex + tool registration, prompt loading |
 | `internal/codex/` | Codex auth for LLM client (login, token management) |
 | `internal/id/` | UUID generation — `V4()`, `V7()`, `Short(n)` |
 | `internal/llm/` | LLM client — `Complete`, `Transcribe`, `Describe`; supports OpenAI and Codex auth |
@@ -117,7 +117,7 @@ Entry point: `cmd/nik/main.go`
 | `tools/` | codegen/build/debug tools invoked by `make` — no runtime code; each tool has its own README |
 | `prompts/` | system prompt templates loaded at runtime |
 | `skills/` | built-in skill definitions (SKILL.md files), git-tracked |
-| `workspace/` | user-facing workspace — runtime artifacts (db, logs, media, debug, config) |
+| `workspace/` | user-facing workspace — runtime artifacts (db, logs, media, config) |
 | `workspace/skills/` | nik-authored skills written at runtime, loaded every activation, not git-tracked |
 
 ### Prompt files and what goes where

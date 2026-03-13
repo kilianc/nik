@@ -22,7 +22,6 @@ type Brain struct {
 	toolReactor     ToolReactor
 	toolEmojis      map[string]string
 	workerToolNames []string
-	debugRecorder   DebugRecorder
 	now             func() time.Time
 
 	claimed *SyncSet
@@ -162,14 +161,9 @@ const maxThinkAttempts = 2
 func (b *Brain) think(ctx context.Context, getInput func() string) (string, llm.Usage, error) {
 	userInput := getInput()
 
-	var recall, debugRecall string
+	var recall string
 	if b.recaller != nil {
 		recall = b.recaller(ctx, userInput)
-		if recall == "" {
-			debugRecall = "(no relevant memories)"
-		} else {
-			debugRecall = recall
-		}
 	}
 
 	thinkCtx, cancel := context.WithTimeout(ctx, activationTimeout)
@@ -196,21 +190,6 @@ func (b *Brain) think(ctx context.Context, getInput func() string) (string, llm.
 		result := <-ch
 
 		meta["activation_id"] = actID
-
-		if b.debugRecorder != nil {
-			b.debugRecorder(DebugInput{
-				Meta:         meta,
-				Recall:       debugRecall,
-				Instructions: instructions,
-				UserInput:    userInput,
-				RawOutput:    result.Output,
-				Tools:        tools,
-				ToolCalls:    result.History,
-				Extra:        result.Extra,
-				Usage:        result.Usage,
-				ProcessErr:   result.Err,
-			})
-		}
 
 		totalUsage.InputTokens += result.Usage.InputTokens
 		totalUsage.OutputTokens += result.Usage.OutputTokens
