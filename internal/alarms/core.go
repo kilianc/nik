@@ -22,11 +22,7 @@ type coreSchedule struct {
 
 var coreSchedules = []coreSchedule{
 	{prefix: "[NIK_JOURNAL]", goal: "[NIK_JOURNAL] End of day journal -- load journal skill", recurrence: "every day", configTime: func(c *config.Config) string { return c.JournalTime }},
-	{prefix: "[NIK_DREAM_1]", goal: "[NIK_DREAM_1] Drift -- load dream skill", recurrence: "every day", configTime: func(c *config.Config) string { return c.DreamStart }},
-	{prefix: "[NIK_DREAM_2]", goal: "[NIK_DREAM_2] Weave -- load dream skill", recurrence: "every day", configTime: func(c *config.Config) string { return c.DreamStart }, offset: time.Hour},
-	{prefix: "[NIK_DREAM_3]", goal: "[NIK_DREAM_3] Depths -- load dream skill", recurrence: "every day", configTime: func(c *config.Config) string { return c.DreamStart }, offset: 2 * time.Hour},
-	{prefix: "[NIK_DREAM_4]", goal: "[NIK_DREAM_4] Crystallize -- load dream skill", recurrence: "every day", configTime: func(c *config.Config) string { return c.DreamStart }, offset: 3 * time.Hour},
-	{prefix: "[NIK_DREAM_5]", goal: "[NIK_DREAM_5] Wake -- load dream skill", recurrence: "every day", configTime: func(c *config.Config) string { return c.DreamStart }, offset: 4 * time.Hour},
+	{prefix: "[NIK_DREAM_CYCLE]", goal: "[NIK_DREAM_CYCLE] Dream -- load dream skill", recurrence: "every day", configTime: func(c *config.Config) string { return c.DreamTime }},
 	{prefix: "[NIK_BRIEFING]", goal: "[NIK_BRIEFING] Morning briefing -- load briefing skill", recurrence: "every day", configTime: func(c *config.Config) string { return c.BriefingTime }},
 	{prefix: "[NIK_DIAGNOSTIC]", goal: "[NIK_DIAGNOSTIC] System diagnostic -- load diagnostic skill", recurrence: "every day", configTime: func(c *config.Config) string { return c.DiagnosticTime }},
 }
