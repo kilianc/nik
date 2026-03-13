@@ -9,22 +9,29 @@ preload: true
 
 # Vault
 
-Provider-agnostic secret access. The vault is a shell script adapter at
-`./skills/vault/vault` that wraps whatever secret store the user has.
-You write the adapter yourself during setup, tailored to their tool.
+All secret access goes through a single adapter script at
+`./vault/cli`. The adapter wraps whatever secret store the
+user chose during setup. You write the adapter yourself, tailored to
+their tool.
 
-Uses: `shell`.
+Do not assume which provider is behind the adapter. Do not reference
+provider-specific paths, CLIs, or URI schemes anywhere -- not in
+messages, task plans, or reports. If the conversation timeline mentions
+old providers or helpers, ignore it; only the current adapter matters.
 
 ## Contract
 
-The adapter must support four actions:
+```
+./vault/cli read <name>            # print secret value to stdout
+./vault/cli write <name> <value>   # store or update a secret (optional)
+./vault/cli delete <name>          # remove a secret (optional)
+./vault/cli list                   # print secret names, one per line
+```
 
-```
-./skills/vault/vault read <name>            # print secret value to stdout
-./skills/vault/vault write <name> <value>   # store or update a secret
-./skills/vault/vault delete <name>          # remove a secret
-./skills/vault/vault list                   # print secret names, one per line
-```
+`read` and `list` are required. `write` and `delete` are optional --
+many password managers grant read-only access to service accounts or
+CLI tokens. If write is unavailable, ask the user to add or remove
+secrets through their own tool.
 
 `list` never prints values.
 
@@ -34,58 +41,55 @@ The adapter must support four actions:
   value stays in the shell and never appears in tool output.
 
 ```
-go run ./skills/tesla/main.go setup \
-  "$(./skills/vault/vault read tesla_client_id)" \
-  "$(./skills/vault/vault read tesla_client_secret)"
+API_KEY="$(./vault/cli read some_api_key)" some_command
 ```
 
 - **Never** echo, log, print, or include secret values in messages,
   reports, or task outputs.
 - **Never** store secrets in plaintext files, environment variables,
-  or config.yaml as a workaround.
-- **Never** issue commands that would result in secret values being
-  stored in the database, written to log files, or sent over the
-  internet to third parties.
+  or config as a workaround.
+- **Never** issue commands that would store secrets in the database,
+  write them to log files, or send them to third parties.
 
-## When the vault doesn't exist
+## Setup
 
-If `./skills/vault/vault` doesn't exist or fails and a secret is needed:
+If `./vault/cli` doesn't exist or fails, **stop and talk to
+the user.** Do not guess, do not pick a provider, do not write an
+adapter without their input. Follow these steps in order:
 
-1. Tell the user you want to handle credentials safely.
-2. Ask if they already have a password manager or secret store. If
-   they don't, ask if they'd like help picking one.
-3. Walk them through installing and initializing their tool.
-4. Handle auth bootstrapping (see below).
-5. Write the adapter script at `./skills/vault/vault`. Keep it simple
+1. Tell the user you need a secret store to handle credentials safely.
+2. Ask if they already have a password manager or encrypted secret
+   store. If they don't, ask if they'd like help picking one.
+3. Once a tool is chosen, **look up official docs** for its CLI and
+   unattended / headless / daemon mode. Nik runs as a daemon -- the
+   adapter must work without human interaction (no login prompts,
+   no Touch ID, no browser OAuth, no GUI unlocks). If the tool doesn't
+   support unattended access, it's not suitable.
+4. Research how the tool authenticates for unattended use. Every
+   secret store has a bootstrapping credential that can't live in the
+   vault itself (chicken-and-egg). Common patterns: service account
+   tokens, API keys, app-specific passwords, age identities. Guide
+   the user through creating and saving it. These bootstrapping
+   credentials live in `./vault/` as files, protected by file
+   permissions and OS-level disk encryption. Never ask for auth
+   credentials in a chat message -- guide the user to save them to a
+   file directly. Explain the trade-off honestly: one credential on
+   disk that unlocks everything else.
+5. Walk the user through installing and initializing their tool.
+6. Write the adapter script at `./vault/cli`. Keep it simple
    -- `#!/bin/sh`, `set -eu`, ~20 lines. Namespace secrets with a
-   prefix if the provider is shared (e.g. `nik/` in passage).
-6. Test with a round-trip: write a test secret, read it back, delete
-   it. Debug with the user if it fails.
-7. Ask the user to add the secrets that skills need to their password
+   prefix if the provider is shared (e.g. `nik/`).
+7. Test the adapter. If write is supported, do a round-trip: write a
+   test secret, read it back, delete it. If the adapter is read-only,
+   ask the user to add a test secret through their tool and verify
+   you can read it. Debug with the user if it fails.
+8. Ask the user to add the secrets that skills need to their password
    manager (e.g. "can you add your Tesla API client_id under the name
    tesla_client_id?"). Verify by reading through the adapter.
 
-## When a secret is missing
+## Missing secrets
 
-If the vault exists but a secret isn't found, ask the user to add it
-to their password manager under the expected name. The user manages
+If the adapter exists but a secret isn't found, ask the user to add
+it to their password manager under the expected name. The user manages
 secrets through their own tool -- don't tell them to run vault
 commands. Verify it's there by reading through the adapter.
-
-## Auth bootstrapping
-
-Every secret store needs some way to authenticate. This is the one
-credential that can't live in the vault (chicken-and-egg). When setting
-up the adapter, research how the user's chosen tool handles headless /
-CLI authentication and guide them through it.
-
-Some tools need no auth file at all (the key lives in the user's home
-directory or is managed by the OS). Others need a service account
-token or API credentials saved to a file on disk. Never ask for auth
-credentials in a chat message -- guide the user to save them to a
-file directly.
-
-For any provider that needs auth on disk, explain the trade-off
-honestly: one credential on disk, protected by file permissions and
-OS-level disk encryption. It unlocks everything else. Minimum possible
-exposure.
