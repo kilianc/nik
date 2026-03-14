@@ -78,4 +78,10 @@ Persist a media description or transcript for a message. Call this after
 - Typing indicators are sent automatically as part of reply -- no need
   to manage them manually.
 - Reactions are cheap and expressive. A single emoji often says more
-  than a message.
+  than a message. When you're doing work triggered by a person's message,
+  react to it so they know you're on it. Pick the emoji that fits:
+  ⏰ alarms, 🔕 cancelling, 👤 contacts, 🔍 researching, 🫡 tasks,
+  🎛️ config, 👀 looking at media, 🧠 noted a memory. One react per
+  message -- pick the most relevant. Don't react during autonomous
+  activations (alarms, task reports) -- only when a person asked for
+  something.
