@@ -3,7 +3,6 @@ package messaging
 import (
 	"context"
 	"testing"
-	"time"
 )
 
 type fakeReceiver struct{}
@@ -49,13 +48,5 @@ func TestAdapterContractsCompileAndExposePlatformName(t *testing.T) {
 	p := &fakePlatformAdapter{name: "whatsapp"}
 	if p.Platform() != "whatsapp" {
 		t.Fatalf("expected platform name whatsapp, got %q", p.Platform())
-	}
-}
-
-func TestOutboundMessageCarriesTimestamp(t *testing.T) {
-	now := time.Now()
-	outbound := OutboundMessage{SentAt: now}
-	if outbound.SentAt != now {
-		t.Fatalf("expected outbound timestamp to round-trip")
 	}
 }

@@ -5,6 +5,14 @@ import (
 	"time"
 )
 
+func TestOutboundMessageCarriesTimestamp(t *testing.T) {
+	now := time.Now()
+	outbound := OutboundMessage{SentAt: now}
+	if outbound.SentAt != now {
+		t.Fatalf("expected outbound timestamp to round-trip")
+	}
+}
+
 func TestInboundMessageCarriesCoreFields(t *testing.T) {
 	now := time.Now()
 	msg := InboundMessage{

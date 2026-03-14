@@ -1,8 +1,11 @@
 package task
 
 import (
+	"context"
+	"strings"
 	"testing"
 
+	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/db"
 )
 
@@ -43,5 +46,76 @@ func TestFormatToolCallsEmpty(t *testing.T) {
 	got := formatToolCalls(nil)
 	if got != "(no tool calls recorded)" {
 		t.Fatalf("expected placeholder, got %q", got)
+	}
+}
+
+func TestFormatReportsNoReports(t *testing.T) {
+	svc, _ := testDB(t)
+
+	cfg := &config.Config{}
+	runner := NewRunner(cfg, nil, svc, nil)
+
+	task, err := svc.Create(context.Background(), createParams{
+		Goal: "test", Thinking: "low", ConversationID: testConvID,
+	})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+
+	got := runner.formatReports(context.Background(), task.ID)
+	if got != "(no reports)" {
+		t.Fatalf("expected '(no reports)', got %q", got)
+	}
+}
+
+func TestFormatReportsWithEntries(t *testing.T) {
+	svc, _ := testDB(t)
+	ctx := context.Background()
+
+	cfg := &config.Config{}
+	runner := NewRunner(cfg, nil, svc, nil)
+
+	task, err := svc.Create(ctx, createParams{
+		Goal: "test", Thinking: "low", ConversationID: testConvID,
+	})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+
+	err = svc.InsertReport(ctx, task.ID, "running", "compiling")
+	if err != nil {
+		t.Fatalf("insert report: %v", err)
+	}
+
+	err = svc.InsertReport(ctx, task.ID, "completed", "done")
+	if err != nil {
+		t.Fatalf("insert report: %v", err)
+	}
+
+	got := runner.formatReports(ctx, task.ID)
+	if !strings.Contains(got, "running: compiling") {
+		t.Fatalf("expected running report, got %q", got)
+	}
+	if !strings.Contains(got, "completed: done") {
+		t.Fatalf("expected completed report, got %q", got)
+	}
+}
+
+func TestFallbackCriticPrompt(t *testing.T) {
+	task := db.Task{ID: "task-123", Goal: "run tests", Status: "completed"}
+
+	got := fallbackCriticPrompt(task, "- shell [ok] 100ms\n", "- [12:00:00] completed: done\n")
+
+	if !strings.Contains(got, "task-123") {
+		t.Fatalf("expected task ID in prompt, got %q", got)
+	}
+	if !strings.Contains(got, "run tests") {
+		t.Fatalf("expected goal in prompt, got %q", got)
+	}
+	if !strings.Contains(got, "completed") {
+		t.Fatalf("expected status in prompt, got %q", got)
+	}
+	if !strings.Contains(got, "shell") {
+		t.Fatalf("expected tool calls in prompt, got %q", got)
 	}
 }
