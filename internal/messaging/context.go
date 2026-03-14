@@ -16,16 +16,12 @@ func FormatMessageText(msg db.Message) string {
 
 	if msg.Kind == "reaction" {
 		if text == "" {
-			text = "removed reaction"
+			text = "(removed reaction)"
 		} else {
-			text = "reacted " + text
+			text = "(" + text + ")"
 		}
 	} else if text == "" {
 		text = "(" + msg.Kind + ")"
-	}
-
-	if msg.IsEdit {
-		text = fmt.Sprintf("edited: %s", text)
 	}
 
 	var extras []string

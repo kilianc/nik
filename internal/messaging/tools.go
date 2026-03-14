@@ -74,20 +74,24 @@ var noopToolDef = llm.ToolDef{
 
 var reactToolDef = llm.ToolDef{
 	Name:        "message_react",
-	Description: "React to a specific message with one emoji. Identify the message by quoting its text (substring match on the formatted line). Include sender name if ambiguous.",
+	Description: "React to a specific message with one emoji.",
 	Parameters: map[string]any{
 		"type": "object",
 		"properties": map[string]any{
 			"text": map[string]any{
 				"type":        "string",
-				"description": "Quote from the message to target (substring match on the formatted message line).",
+				"description": "Exact message content as shown after sender name in timeline, before any to [...] context.",
+			},
+			"time": map[string]any{
+				"type":        "string",
+				"description": "Timestamp in HH:MM:SS from the timeline brackets.",
 			},
 			"emoji": map[string]any{
 				"type":        "string",
 				"description": "Reaction emoji.",
 			},
 		},
-		"required":             []string{"text", "emoji"},
+		"required":             []string{"text", "time", "emoji"},
 		"additionalProperties": false,
 	},
 }
@@ -114,13 +118,17 @@ var setPresenceToolDef = llm.ToolDef{
 
 var updateMediaDescriptionToolDef = llm.ToolDef{
 	Name:        "message_update_media_description",
-	Description: "Persist media description for a message and optionally replace body text. Identify the message by quoting its text (substring match on the formatted message line). Include sender name if ambiguous.",
+	Description: "Persist media description for a message and optionally replace body text.",
 	Parameters: map[string]any{
 		"type": "object",
 		"properties": map[string]any{
 			"text": map[string]any{
 				"type":        "string",
-				"description": "Quote from the message to target (substring match on the formatted message line).",
+				"description": "Exact message content as shown after sender name in timeline, before any to [...] context.",
+			},
+			"time": map[string]any{
+				"type":        "string",
+				"description": "Timestamp in HH:MM:SS from the timeline brackets.",
 			},
 			"description": map[string]any{
 				"type":        "string",
@@ -131,7 +139,7 @@ var updateMediaDescriptionToolDef = llm.ToolDef{
 				"description": "Optional replacement body text (pass empty string to skip).",
 			},
 		},
-		"required":             []string{"text", "description", "body"},
+		"required":             []string{"text", "time", "description", "body"},
 		"additionalProperties": false,
 	},
 }
@@ -243,6 +251,7 @@ func reactHandler(svc *Service) llm.ToolExecutor {
 	return func(ctx context.Context, call llm.ToolCall) (string, error) {
 		var args struct {
 			Text  string `json:"text"`
+			Time  string `json:"time"`
 			Emoji string `json:"emoji"`
 		}
 
@@ -255,12 +264,16 @@ func reactHandler(svc *Service) llm.ToolExecutor {
 			return `{"error":"missing text"}`, nil
 		}
 
+		if strings.TrimSpace(args.Time) == "" {
+			return `{"error":"missing time"}`, nil
+		}
+
 		conversationID := contextMetaValue(ctx, "conversation_id")
 		if conversationID == "" {
 			return `{"error":"missing conversation_id in context"}`, nil
 		}
 
-		msg, err := svc.FindMessage(ctx, conversationID, args.Text)
+		msg, err := svc.FindMessage(ctx, conversationID, args.Text, args.Time)
 		if err != nil {
 			return llm.ToolError(err), nil
 		}
@@ -299,6 +312,7 @@ func updateMediaDescriptionHandler(svc *Service) llm.ToolExecutor {
 	return func(ctx context.Context, call llm.ToolCall) (string, error) {
 		var args struct {
 			Text        string `json:"text"`
+			Time        string `json:"time"`
 			Description string `json:"description"`
 			Body        string `json:"body"`
 		}
@@ -312,12 +326,16 @@ func updateMediaDescriptionHandler(svc *Service) llm.ToolExecutor {
 			return `{"error":"missing text"}`, nil
 		}
 
+		if strings.TrimSpace(args.Time) == "" {
+			return `{"error":"missing time"}`, nil
+		}
+
 		conversationID := contextMetaValue(ctx, "conversation_id")
 		if conversationID == "" {
 			return `{"error":"missing conversation_id in context"}`, nil
 		}
 
-		msg, err := svc.FindMessage(ctx, conversationID, args.Text)
+		msg, err := svc.FindMessage(ctx, conversationID, args.Text, args.Time)
 		if err != nil {
 			return llm.ToolError(err), nil
 		}

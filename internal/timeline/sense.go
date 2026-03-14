@@ -201,13 +201,8 @@ type entry struct {
 func (t *Timeline) buildEntries(ctx context.Context, convID string, since time.Time, msgs []db.Message, senderLabels map[string]string) []entry {
 	var entries []entry
 
-	extIDToMsg := make(map[string]db.Message, len(msgs))
 	for _, msg := range msgs {
-		extIDToMsg[msg.ExternalMessageID] = msg
-	}
-
-	for _, msg := range msgs {
-		entries = append(entries, messageEntry(msg, senderLabels[msg.ID], extIDToMsg))
+		entries = append(entries, messageEntry(msg, senderLabels[msg.ID], t.msgSvc.DB()))
 	}
 
 	reports, err := t.taskSvc.ListReports(ctx, convID, since)
@@ -316,7 +311,7 @@ func renderEntries(entries []entry) []string {
 	return lines
 }
 
-func messageEntry(msg db.Message, sender string, extIDToMsg map[string]db.Message) entry {
+func messageEntry(msg db.Message, sender string, database *sql.DB) entry {
 	if msg.IsFromMe {
 		sender = "YOU"
 	} else if sender == "" {
@@ -325,9 +320,29 @@ func messageEntry(msg db.Message, sender string, extIDToMsg map[string]db.Messag
 
 	text := messaging.FormatMessageText(msg)
 
-	if msg.Kind == "reaction" && msg.ContextStanzaID.Valid {
-		if target, ok := extIDToMsg[msg.ContextStanzaID.String]; ok {
-			text += " to " + reactionTargetSnippet(target)
+	if msg.ContextStanzaID.Valid && database != nil {
+		target, err := db.GetMessage(context.Background(), database, db.GetMessageParams{
+			Platform:          msg.Platform,
+			ExternalMessageID: msg.ContextStanzaID.String,
+		})
+		if err == nil {
+			verb := "replying to "
+			if msg.Kind == "reaction" {
+				verb = "reacting to "
+			}
+			targetSender := resolveContactName(context.Background(), database, target)
+			text += " (" + verb + targetSnippet(target, targetSender) + ")"
+		}
+	}
+
+	if msg.IsEdit && msg.EditTargetMessageID.Valid && database != nil {
+		target, err := db.GetMessage(context.Background(), database, db.GetMessageParams{
+			Platform:          msg.Platform,
+			ExternalMessageID: msg.EditTargetMessageID.String,
+		})
+		if err == nil {
+			targetSender := resolveContactName(context.Background(), database, target)
+			text += " (edit of " + targetSnippet(target, targetSender) + ")"
 		}
 	}
 
@@ -338,22 +353,45 @@ func messageEntry(msg db.Message, sender string, extIDToMsg map[string]db.Messag
 	}
 }
 
-const reactionTargetTruncateLen = 50
+const targetSnippetTruncateLen = 200
 
-func reactionTargetSnippet(msg db.Message) string {
+func targetSnippet(msg db.Message, sender string) string {
+	ts := msg.SentAt.Format("15:04:05")
 	body := strings.TrimSpace(msg.Body)
 
-	label := id.Shorten(msg.ID)
+	prefix := "[" + ts + "] " + sender + ": "
 
 	if body == "" {
-		return label + " (" + msg.Kind + ")"
+		return prefix + "(" + msg.Kind + ")"
 	}
 
-	if len(body) > reactionTargetTruncateLen {
-		body = body[:reactionTargetTruncateLen] + "…"
+	if len(body) > targetSnippetTruncateLen {
+		body = body[:targetSnippetTruncateLen] + "…"
 	}
 
-	return label + ` "` + body + `"`
+	return prefix + `"` + body + `"`
+}
+
+func resolveContactName(ctx context.Context, database *sql.DB, msg db.Message) string {
+	if msg.IsFromMe {
+		return "YOU"
+	}
+
+	if msg.ContactID == "" {
+		return "unknown"
+	}
+
+	contact, err := db.GetContact(ctx, database, msg.ContactID)
+	if err != nil {
+		return "unknown"
+	}
+
+	name := strings.TrimSpace(contact.Name)
+	if name != "" {
+		return name
+	}
+
+	return "unknown"
 }
 
 const (

@@ -743,7 +743,7 @@ func TestMarkReadPicksUpMessagesAfterOutbound(t *testing.T) {
 	}
 }
 
-func TestFindMessageUniqueMatch(t *testing.T) {
+func TestFindMessageExactMatch(t *testing.T) {
 	ctx := context.Background()
 	conn, err := db.OpenInMemory()
 	if err != nil {
@@ -754,11 +754,12 @@ func TestFindMessageUniqueMatch(t *testing.T) {
 	contactsSvc := contacts.NewService(conn)
 	svc := NewService(&config.Config{}, conn, contactsSvc)
 
+	ts := time.Date(2026, time.February, 28, 10, 0, 0, 0, time.UTC)
 	convID := seedConversation(t, ctx, svc, "whatsapp", "conv-find@s.whatsapp.net", "dm")
-	seedMessage(t, ctx, svc, "conv-find@s.whatsapp.net", "sender@s.whatsapp.net", "find-1", "unique hello", time.Now())
-	seedMessage(t, ctx, svc, "conv-find@s.whatsapp.net", "sender@s.whatsapp.net", "find-2", "unique world", time.Now())
+	seedMessage(t, ctx, svc, "conv-find@s.whatsapp.net", "sender@s.whatsapp.net", "find-1", "unique hello", ts)
+	seedMessage(t, ctx, svc, "conv-find@s.whatsapp.net", "sender@s.whatsapp.net", "find-2", "unique world", ts.Add(time.Second))
 
-	msg, err := svc.FindMessage(ctx, convID, "unique hello")
+	msg, err := svc.FindMessage(ctx, convID, "unique hello", "10:00:00")
 	if err != nil {
 		t.Fatalf("find message: %v", err)
 	}
@@ -778,10 +779,11 @@ func TestFindMessageNoMatch(t *testing.T) {
 	contactsSvc := contacts.NewService(conn)
 	svc := NewService(&config.Config{}, conn, contactsSvc)
 
+	ts := time.Date(2026, time.February, 28, 10, 0, 0, 0, time.UTC)
 	convID := seedConversation(t, ctx, svc, "whatsapp", "conv-nomatch@s.whatsapp.net", "dm")
-	seedMessage(t, ctx, svc, "conv-nomatch@s.whatsapp.net", "sender@s.whatsapp.net", "nm-1", "hello", time.Now())
+	seedMessage(t, ctx, svc, "conv-nomatch@s.whatsapp.net", "sender@s.whatsapp.net", "nm-1", "hello", ts)
 
-	_, err = svc.FindMessage(ctx, convID, "nonexistent")
+	_, err = svc.FindMessage(ctx, convID, "nonexistent", "10:00:00")
 	if err == nil {
 		t.Fatalf("expected error for no match")
 	}
@@ -790,7 +792,7 @@ func TestFindMessageNoMatch(t *testing.T) {
 	}
 }
 
-func TestFindMessageAmbiguousReturnsError(t *testing.T) {
+func TestFindMessageWrongTimeNoMatch(t *testing.T) {
 	ctx := context.Background()
 	conn, err := db.OpenInMemory()
 	if err != nil {
@@ -798,55 +800,79 @@ func TestFindMessageAmbiguousReturnsError(t *testing.T) {
 	}
 	defer conn.Close()
 
-	_, err = db.UpsertContact(ctx, conn, db.UpsertContactParams{
-		Platform:      "whatsapp",
-		ExternalID:    "alice@s.whatsapp.net",
-		Name:          "Alice",
-		Phone:         "11111",
-		LastMessageAt: time.Now(),
-	})
-	if err != nil {
-		t.Fatalf("seed contact alice: %v", err)
+	contactsSvc := contacts.NewService(conn)
+	svc := NewService(&config.Config{}, conn, contactsSvc)
+
+	ts := time.Date(2026, time.February, 28, 10, 0, 0, 0, time.UTC)
+	convID := seedConversation(t, ctx, svc, "whatsapp", "conv-wrongtime@s.whatsapp.net", "dm")
+	seedMessage(t, ctx, svc, "conv-wrongtime@s.whatsapp.net", "sender@s.whatsapp.net", "wt-1", "hello", ts)
+
+	_, err = svc.FindMessage(ctx, convID, "hello", "11:00:00")
+	if err == nil {
+		t.Fatalf("expected error for wrong time")
 	}
-	_, err = db.UpsertContact(ctx, conn, db.UpsertContactParams{
-		Platform:      "whatsapp",
-		ExternalID:    "bob@s.whatsapp.net",
-		Name:          "Bob",
-		Phone:         "22222",
-		LastMessageAt: time.Now(),
-	})
+}
+
+func TestFindMessageSameTextDifferentTimesDisambiguates(t *testing.T) {
+	ctx := context.Background()
+	conn, err := db.OpenInMemory()
 	if err != nil {
-		t.Fatalf("seed contact bob: %v", err)
+		t.Fatalf("open in-memory db: %v", err)
 	}
+	defer conn.Close()
 
 	contactsSvc := contacts.NewService(conn)
 	svc := NewService(&config.Config{}, conn, contactsSvc)
 
-	convID := seedConversation(t, ctx, svc, "whatsapp", "conv-ambig@s.whatsapp.net", "group")
 	t1 := time.Date(2026, time.February, 28, 10, 0, 0, 0, time.UTC)
 	t2 := time.Date(2026, time.February, 28, 10, 0, 5, 0, time.UTC)
-	seedMessage(t, ctx, svc, "conv-ambig@s.whatsapp.net", "alice@s.whatsapp.net", "amb-1", "ok", t1)
-	seedMessage(t, ctx, svc, "conv-ambig@s.whatsapp.net", "bob@s.whatsapp.net", "amb-2", "ok", t2)
+	convID := seedConversation(t, ctx, svc, "whatsapp", "conv-disamb@s.whatsapp.net", "dm")
+	seedMessage(t, ctx, svc, "conv-disamb@s.whatsapp.net", "sender@s.whatsapp.net", "dis-1", "ok", t1)
+	seedMessage(t, ctx, svc, "conv-disamb@s.whatsapp.net", "sender@s.whatsapp.net", "dis-2", "ok", t2)
 
-	_, err = svc.FindMessage(ctx, convID, "ok")
-	if err == nil {
-		t.Fatalf("expected ambiguous match error")
-	}
-	if !strings.Contains(err.Error(), "messages match") {
-		t.Fatalf("expected 'messages match' error, got %v", err)
-	}
-
-	// disambiguate with sender
-	msg, err := svc.FindMessage(ctx, convID, "Alice: ok")
+	msg, err := svc.FindMessage(ctx, convID, "ok", "10:00:00")
 	if err != nil {
-		t.Fatalf("find message with sender: %v", err)
+		t.Fatalf("find first ok: %v", err)
+	}
+	if msg.ExternalMessageID != "dis-1" {
+		t.Fatalf("expected dis-1, got %q", msg.ExternalMessageID)
+	}
+
+	msg, err = svc.FindMessage(ctx, convID, "ok", "10:00:05")
+	if err != nil {
+		t.Fatalf("find second ok: %v", err)
+	}
+	if msg.ExternalMessageID != "dis-2" {
+		t.Fatalf("expected dis-2, got %q", msg.ExternalMessageID)
+	}
+}
+
+func TestFindMessageCollisionPicksMostRecent(t *testing.T) {
+	ctx := context.Background()
+	conn, err := db.OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	contactsSvc := contacts.NewService(conn)
+	svc := NewService(&config.Config{}, conn, contactsSvc)
+
+	ts := time.Date(2026, time.February, 28, 10, 0, 0, 0, time.UTC)
+	convID := seedConversation(t, ctx, svc, "whatsapp", "conv-collision@s.whatsapp.net", "dm")
+	seedMessage(t, ctx, svc, "conv-collision@s.whatsapp.net", "sender@s.whatsapp.net", "col-1", "ok", ts)
+	seedMessage(t, ctx, svc, "conv-collision@s.whatsapp.net", "sender@s.whatsapp.net", "col-2", "ok", ts)
+
+	msg, err := svc.FindMessage(ctx, convID, "ok", "10:00:00")
+	if err != nil {
+		t.Fatalf("find collision: %v", err)
 	}
 	if msg.Body != "ok" {
 		t.Fatalf("expected body 'ok', got %q", msg.Body)
 	}
 }
 
-func TestFindMessageIdenticalPicksMostRecent(t *testing.T) {
+func TestFindMessageSubstringDoesNotMatch(t *testing.T) {
 	ctx := context.Background()
 	conn, err := db.OpenInMemory()
 	if err != nil {
@@ -857,19 +883,13 @@ func TestFindMessageIdenticalPicksMostRecent(t *testing.T) {
 	contactsSvc := contacts.NewService(conn)
 	svc := NewService(&config.Config{}, conn, contactsSvc)
 
-	convID := seedConversation(t, ctx, svc, "whatsapp", "conv-ident@s.whatsapp.net", "dm")
 	ts := time.Date(2026, time.February, 28, 10, 0, 0, 0, time.UTC)
-	seedMessage(t, ctx, svc, "conv-ident@s.whatsapp.net", "sender@s.whatsapp.net", "id-1", "ok", ts)
-	seedMessage(t, ctx, svc, "conv-ident@s.whatsapp.net", "sender@s.whatsapp.net", "id-2", "ok", ts)
+	convID := seedConversation(t, ctx, svc, "whatsapp", "conv-substr@s.whatsapp.net", "dm")
+	seedMessage(t, ctx, svc, "conv-substr@s.whatsapp.net", "sender@s.whatsapp.net", "sub-1", "hello world", ts)
 
-	msg, err := svc.FindMessage(ctx, convID, "ok")
-	if err != nil {
-		t.Fatalf("find identical messages: %v", err)
-	}
-
-	// should pick the most recent (last inserted)
-	if msg.Body != "ok" {
-		t.Fatalf("expected body 'ok', got %q", msg.Body)
+	_, err = svc.FindMessage(ctx, convID, "hello", "10:00:00")
+	if err == nil {
+		t.Fatalf("expected error: substring should not match")
 	}
 }
 

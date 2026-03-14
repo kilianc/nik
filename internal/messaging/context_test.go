@@ -24,11 +24,11 @@ func TestMessageLineIncludesMediaAndEditContext(t *testing.T) {
 	}
 
 	line := formatMessageLine(msg, "Alice")
-	if !strings.Contains(line, "edited:") {
-		t.Fatalf("expected edit metadata, got %q", line)
+	if strings.Contains(line, "edited:") {
+		t.Fatalf("edit prefix should not appear in FormatMessageText, got %q", line)
 	}
-	if !strings.Contains(line, "reacted") {
-		t.Fatalf("expected reaction formatting, got %q", line)
+	if !strings.Contains(line, "(👍)") {
+		t.Fatalf("expected paren-wrapped reaction, got %q", line)
 	}
 	if !strings.Contains(line, "Alice:") {
 		t.Fatalf("expected sender in output, got %q", line)
