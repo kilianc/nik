@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"slices"
 
 	"github.com/kciuffolo/nik/internal/llm"
 )
@@ -60,11 +59,7 @@ func (b *Brain) toolsForContext(ctx context.Context) []llm.ToolDef {
 }
 
 func (b *Brain) isPrivilegedContext(meta map[string]string) bool {
-	if len(b.cfg.PrivilegedConversationIDs) == 0 {
-		return false
-	}
-
-	return slices.Contains(b.cfg.PrivilegedConversationIDs, meta["conversation_id"])
+	return b.cfg.IsPrivileged(meta["conversation_id"])
 }
 
 func (b *Brain) toolExecutor() llm.ToolExecutor {

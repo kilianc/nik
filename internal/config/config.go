@@ -26,8 +26,8 @@ type Config struct {
 	PromptsDirValue string `yaml:"prompts_dir"`
 	SkillsDirValue  string `yaml:"skills_dir"`
 
-	AllowConversationIDs      []string `yaml:"allow_conversation_ids"`
-	PrivilegedConversationIDs []string `yaml:"privileged_conversation_ids"`
+	AllowConversationIDs      map[string]string `yaml:"allow_conversation_ids"`
+	PrivilegedConversationIDs map[string]string `yaml:"privileged_conversation_ids"`
 
 	RecallModel string `yaml:"recall_model"`
 
@@ -144,6 +144,47 @@ func (c Config) MemoriesPath() string {
 	return filepath.Join(c.Home, "memories", "latest.md")
 }
 
+func (c Config) AllowedIDs() []string {
+	ids := make([]string, 0, len(c.AllowConversationIDs))
+	for _, id := range c.AllowConversationIDs {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	return ids
+}
+
+func (c Config) PrivilegedIDs() []string {
+	ids := make([]string, 0, len(c.PrivilegedConversationIDs))
+	for _, id := range c.PrivilegedConversationIDs {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	return ids
+}
+
+func (c Config) IsPrivileged(id string) bool {
+	for _, v := range c.PrivilegedConversationIDs {
+		if v == id {
+			return true
+		}
+	}
+	return false
+}
+
+func (c Config) ConversationLabel(id string) string {
+	for label, v := range c.AllowConversationIDs {
+		if v == id {
+			return label
+		}
+	}
+	for label, v := range c.PrivilegedConversationIDs {
+		if v == id {
+			return label
+		}
+	}
+	return ""
+}
+
 func (c *Config) Save(path string) error {
 	data, err := yaml.Marshal(c)
 	if err != nil {
@@ -191,9 +232,12 @@ func Load(home string) (*Config, error) {
 		cfg.lastModTime = info.ModTime()
 	}
 
-	for _, pid := range cfg.PrivilegedConversationIDs {
-		if !slices.Contains(cfg.AllowConversationIDs, pid) {
-			cfg.AllowConversationIDs = append(cfg.AllowConversationIDs, pid)
+	if cfg.AllowConversationIDs == nil {
+		cfg.AllowConversationIDs = make(map[string]string)
+	}
+	for label, pid := range cfg.PrivilegedConversationIDs {
+		if !mapContainsValue(cfg.AllowConversationIDs, pid) {
+			cfg.AllowConversationIDs[label] = pid
 		}
 	}
 
@@ -245,11 +289,23 @@ func (c *Config) reload() error {
 	c.Home = home
 	c.lastModTime = modTime
 
-	for _, pid := range c.PrivilegedConversationIDs {
-		if !slices.Contains(c.AllowConversationIDs, pid) {
-			c.AllowConversationIDs = append(c.AllowConversationIDs, pid)
+	if c.AllowConversationIDs == nil {
+		c.AllowConversationIDs = make(map[string]string)
+	}
+	for label, pid := range c.PrivilegedConversationIDs {
+		if !mapContainsValue(c.AllowConversationIDs, pid) {
+			c.AllowConversationIDs[label] = pid
 		}
 	}
 
 	return nil
+}
+
+func mapContainsValue(m map[string]string, val string) bool {
+	for _, v := range m {
+		if v == val {
+			return true
+		}
+	}
+	return false
 }

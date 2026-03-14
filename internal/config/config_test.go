@@ -122,7 +122,7 @@ func TestReloadIfChangedPreservesPointer(t *testing.T) {
 
 func TestReloadIfChangedMergesPrivilegedIntoAllow(t *testing.T) {
 	dir := t.TempDir()
-	writeTestConfig(t, dir, "openai_key: sk-test\nprivileged_conversation_ids:\n  - priv1\nallow_conversation_ids:\n  - conv1\n")
+	writeTestConfig(t, dir, "openai_key: sk-test\nprivileged_conversation_ids:\n  priv: priv1\nallow_conversation_ids:\n  conv: conv1\n")
 
 	cfg, err := Load(dir)
 	if err != nil {
@@ -134,7 +134,7 @@ func TestReloadIfChangedMergesPrivilegedIntoAllow(t *testing.T) {
 	}
 
 	time.Sleep(50 * time.Millisecond)
-	writeTestConfig(t, dir, "openai_key: sk-test\nprivileged_conversation_ids:\n  - priv1\n  - priv2\nallow_conversation_ids:\n  - conv1\n")
+	writeTestConfig(t, dir, "openai_key: sk-test\nprivileged_conversation_ids:\n  priv: priv1\n  priv2: priv2\nallow_conversation_ids:\n  conv: conv1\n")
 
 	_, err = cfg.ReloadIfChanged()
 	if err != nil {
