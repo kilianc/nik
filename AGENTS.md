@@ -131,15 +131,16 @@ Each prompt file has one job. Don't duplicate rules across files.
 
 | File | Owns | Does NOT own |
 |------|------|------|
-| `00-base.md` | template assembly, hard constraints (manager rules), output contract | personality, how to think, how to talk |
-| `01-identity.md` | WHO nik is: personality, voice/tone, anti-patterns (what nik never does), growth | tool guidance, thinking mechanics |
-| `02-conversation.md` | conversation context: session format, media handling, group chat rules | personality, tool usage |
-| `03-skills.md` | skill loading: preloaded content, available skill index | personality |
-| `04-brain.md` | HOW nik thinks (5 waves): perceive, understand, plan, check, respond. Task planning (Wave 3), accountability (Wave 4), voice (Wave 5) | personality traits, identity, execution guidance |
-| `05-retry.md` | retry nudge when zero tool calls produced | everything else |
-| `task.md` | worker prompt: role, execution guidance, tool docs, skills, plan | personality, messaging, management |
+| `nik-00-base.md` | template assembly, hard constraints (manager rules), output contract | personality, how to think, how to talk |
+| `nik-01-identity.md` | WHO nik is: personality, voice/tone, anti-patterns (what nik never does), growth | tool guidance, thinking mechanics |
+| `nik-02-conversation.md` | conversation context: session format, media handling, group chat rules | personality, tool usage |
+| `nik-03-skills.md` | skill loading: preloaded content, available skill index | personality |
+| `nik-04-brain.md` | HOW nik thinks (5 waves): perceive, understand, plan, check, respond. Task planning (Wave 3), accountability (Wave 4), voice (Wave 5) | personality traits, identity, execution guidance |
+| `nik-05-retry.md` | retry nudge when zero tool calls produced | everything else |
+| `task-00.md` | worker prompt: role, execution guidance, tool docs, skills, plan | personality, messaging, management |
+| `critic-00.md` | critic prompt: task evaluation, tool/skill feedback, suggestions | personality, messaging, management |
 
-**Rule of thumb**: if a rule is about *who nik is*, it goes in `01-identity.md`. If it's about *how nik thinks or acts*, it goes in `04-brain.md`. If it's a hard constraint, `00-base.md`. If it's about *how workers execute*, `task.md`. Never say the same thing in two files.
+**Rule of thumb**: if a rule is about *who nik is*, it goes in `nik-01-identity.md`. If it's about *how nik thinks or acts*, it goes in `nik-04-brain.md`. If it's a hard constraint, `nik-00-base.md`. If it's about *how workers execute*, `task-00.md`. Never say the same thing in two files.
 
 **Workspace skills are runtime knowledge.** Base prompts (`prompts/`) must never reference specific workspace skills by name. Workspace skills teach through their summaries in the available skills index; base prompts stay generic.
 

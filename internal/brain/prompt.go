@@ -42,10 +42,10 @@ var sectionFiles = []struct {
 	name string
 	file string
 }{
-	{"identity", "01-identity.md"},
-	{"conversation", "02-conversation.md"},
-	{"skills", "03-skills.md"},
-	{"brain", "04-brain.md"},
+	{"identity", "nik-01-identity.md"},
+	{"conversation", "nik-02-conversation.md"},
+	{"skills", "nik-03-skills.md"},
+	{"brain", "nik-04-brain.md"},
 }
 
 var templateFuncs = template.FuncMap{
@@ -74,9 +74,9 @@ func shiftHeadings(n int, content string) string {
 func (b *Brain) loadInstructions(now time.Time, recall string, retry bool) (string, error) {
 	dir := b.cfg.PromptsPath()
 
-	baseData, err := os.ReadFile(filepath.Join(dir, "00-base.md"))
+	baseData, err := os.ReadFile(filepath.Join(dir, "nik-00-base.md"))
 	if err != nil {
-		return "", fmt.Errorf("read prompt 00-base.md: %w", err)
+		return "", fmt.Errorf("read prompt nik-00-base.md: %w", err)
 	}
 
 	tmpl, err := template.New("base").Funcs(templateFuncs).Parse(string(baseData))
@@ -108,7 +108,7 @@ func (b *Brain) loadInstructions(now time.Time, recall string, retry bool) (stri
 	result := htmlCommentRe.ReplaceAllString(buf.String(), "")
 
 	if retry {
-		nudge, nudgeErr := os.ReadFile(filepath.Join(dir, "05-retry.md"))
+		nudge, nudgeErr := os.ReadFile(filepath.Join(dir, "nik-05-retry.md"))
 		if nudgeErr != nil {
 			slog.Warn("load retry nudge", "pkg", "brain", "error", nudgeErr)
 		} else {
