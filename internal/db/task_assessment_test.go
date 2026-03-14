@@ -207,14 +207,14 @@ func TestTaskReportsByTask(t *testing.T) {
 	}
 
 	_, err = conn.ExecContext(ctx,
-		"INSERT INTO task_report (id, task_id, kind, status, content, created_at) VALUES ('rpt1', ?, 'report', 'running', 'compiling...', datetime('now'))",
+		"INSERT INTO task_report (id, task_id, status, content, created_at) VALUES ('rpt1', ?, 'running', 'compiling...', datetime('now'))",
 		taskID)
 	if err != nil {
 		t.Fatalf("insert report 1: %v", err)
 	}
 
 	_, err = conn.ExecContext(ctx,
-		"INSERT INTO task_report (id, task_id, kind, status, content, created_at) VALUES ('rpt2', ?, 'report', 'completed', 'done', datetime('now', '+1 second'))",
+		"INSERT INTO task_report (id, task_id, status, content, created_at) VALUES ('rpt2', ?, 'completed', 'done', datetime('now', '+1 second'))",
 		taskID)
 	if err != nil {
 		t.Fatalf("insert report 2: %v", err)

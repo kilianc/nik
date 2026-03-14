@@ -290,7 +290,6 @@ func scanTask(sc scanner) (Task, error) {
 type TaskReportInsertParams struct {
 	ID        string
 	TaskID    string
-	Kind      string
 	Status    string
 	Content   string
 	CreatedAt time.Time
@@ -300,7 +299,6 @@ func TaskReportInsert(ctx context.Context, db *sql.DB, p TaskReportInsertParams)
 	_, err := db.ExecContext(ctx, queries.TaskReportInsert,
 		p.ID,
 		p.TaskID,
-		p.Kind,
 		p.Status,
 		p.Content,
 		p.CreatedAt,

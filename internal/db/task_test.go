@@ -35,7 +35,6 @@ func TestTaskRetryChainAnnotatesReadReports(t *testing.T) {
 	err = TaskReportInsert(ctx, conn, TaskReportInsertParams{
 		ID:        id.V7(),
 		TaskID:    rootID,
-		Kind:      "report",
 		Status:    "completed",
 		Content:   "first report",
 		CreatedAt: now,
@@ -63,7 +62,6 @@ func TestTaskRetryChainAnnotatesReadReports(t *testing.T) {
 	err = TaskReportInsert(ctx, conn, TaskReportInsertParams{
 		ID:        unreadReportID,
 		TaskID:    retryID,
-		Kind:      "report",
 		Status:    "running",
 		Content:   "second report",
 		CreatedAt: now.Add(2 * time.Second),

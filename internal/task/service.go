@@ -85,7 +85,6 @@ func (s *Service) InsertReport(ctx context.Context, taskID, status, content stri
 	return db.TaskReportInsert(ctx, s.conn, db.TaskReportInsertParams{
 		ID:        id.V7(),
 		TaskID:    taskID,
-		Kind:      "report",
 		Status:    status,
 		Content:   content,
 		CreatedAt: time.Now().UTC(),
