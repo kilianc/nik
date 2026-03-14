@@ -14,8 +14,8 @@ tools:
 
 All messaging tools use canonical nik IDs, not platform-specific ones.
 Conversation IDs come from context automatically -- pass empty string to
-use the current conversation. Message targeting uses content-based
-matching: quote part of the message text and the handler finds it.
+use the current conversation. Message targeting uses exact matching on
+content + timestamp from the timeline.
 
 ## Tools
 
@@ -30,14 +30,18 @@ becomes a separate text bubble -- like texting. One thought per message.
 
 ### message_react
 
-React to a specific message with one emoji. Identify the target by
-quoting text from the message line (substring match).
+React to a specific message with one emoji.
 
-- `text` -- quote from the message to target. For unique content, just
-  the body works: `"hey fam"`. For repeated text, include sender:
-  `"Jane Doe: ok"`. For same-sender same-text, include time:
-  `"[09:32:10] Jane Doe: ok"`.
+- `text` -- exact message content as shown after sender name in timeline,
+  before any `(replying to ...)`/`(reacting to ...)`/`(edit of ...)` context
+- `time` -- timestamp in HH:MM:SS from the timeline brackets
 - `emoji` -- reaction emoji
+
+Examples:
+- Reply `where? (replying to [09:12:45] Bob: "ok")` → react to original: text="ok", time="09:12:45"
+- Reaction `(👍) (reacting to [09:12:30] Alice: "hello")` → react to original: text="hello", time="09:12:30"
+- Edit `hello (edit of [09:12:30] Alice: "helo")` → react to edit: text="hello", time="09:12:35"
+- Edit `hello (edit of [09:12:30] Alice: "helo")` → react to original: text="helo", time="09:12:30"
 
 ### message_noop
 
@@ -57,10 +61,10 @@ Set account-level presence for a platform.
 ### message_update_media_description
 
 Persist a media description or transcript for a message. Call this after
-`describe_media` to save the result. Identify the target by quoting text
-from the message line (same matching as `message_react`).
+`describe_media` to save the result. Same matching as `message_react`.
 
-- `text` -- quote from the message to target
+- `text` -- exact message content as shown after sender name in timeline
+- `time` -- timestamp in HH:MM:SS from the timeline brackets
 - `description` -- description or transcript text
 - `body` -- optional replacement body text (empty = skip)
 

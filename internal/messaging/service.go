@@ -882,48 +882,26 @@ func participantName(p db.ConversationParticipant, fallback string) string {
 	return fallback
 }
 
-// the snippet is matched against formatted message lines (the same lines
-// the LLM sees in the prompt), so any substring the LLM copies will match.
-func (s *Service) FindMessage(ctx context.Context, conversationID, text string) (db.Message, error) {
+func (s *Service) FindMessage(ctx context.Context, conversationID, text, at string) (db.Message, error) {
 	msgs, err := db.GetMessagesByConversation(ctx, s.db, conversationID, "", 200)
 	if err != nil {
 		return db.Message{}, fmt.Errorf("get messages: %w", err)
 	}
 
-	labels := s.SenderLabels(ctx, msgs)
-
 	var matches []db.Message
 	for _, msg := range msgs {
-		line := formatMessageLine(msg, labels[msg.ID])
-		if strings.Contains(line, text) {
+		if FormatMessageText(msg) == text && msg.SentAt.Format("15:04:05") == at {
 			matches = append(matches, msg)
 		}
 	}
 
-	if len(matches) == 1 {
-		return matches[0], nil
-	}
 	if len(matches) == 0 {
-		return db.Message{}, fmt.Errorf("no message matching %q", text)
+		return db.Message{}, fmt.Errorf("no message matching text=%q time=%s", text, at)
 	}
-
-	// if all matches produce identical formatted lines (same sender, same
-	// second, same text), pick the most recent -- they are indistinguishable
-	// to the LLM and the target doesn't matter
-	allSame := true
-	firstLine := formatMessageLine(matches[0], labels[matches[0].ID])
-	for _, m := range matches[1:] {
-		if formatMessageLine(m, labels[m.ID]) != firstLine {
-			allSame = false
-			break
-		}
-	}
-	if allSame {
-		return matches[len(matches)-1], nil
-	}
-
-	return db.Message{}, fmt.Errorf("%d messages match %q, quote more text or include sender", len(matches), text)
+	return matches[len(matches)-1], nil
 }
+
+func (s *Service) DB() *sql.DB { return s.db }
 
 func mediaHashFromPath(path string) string {
 	data, err := os.ReadFile(path)

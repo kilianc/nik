@@ -173,7 +173,7 @@ func TestReactHandlerRejectsEmptyText(t *testing.T) {
 	handler := reactHandler(&Service{})
 
 	out, err := handler(context.Background(), llm.ToolCall{
-		Arguments: `{"text":"","emoji":"👍"}`,
+		Arguments: `{"text":"","time":"09:00:00","emoji":"👍"}`,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -183,11 +183,25 @@ func TestReactHandlerRejectsEmptyText(t *testing.T) {
 	}
 }
 
+func TestReactHandlerRejectsEmptyTime(t *testing.T) {
+	handler := reactHandler(&Service{})
+
+	out, err := handler(context.Background(), llm.ToolCall{
+		Arguments: `{"text":"hello","time":"","emoji":"👍"}`,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "missing time") {
+		t.Fatalf("expected missing time error, got %q", out)
+	}
+}
+
 func TestReactHandlerRejectsMissingConversationID(t *testing.T) {
 	handler := reactHandler(&Service{})
 
 	out, err := handler(context.Background(), llm.ToolCall{
-		Arguments: `{"text":"hello","emoji":"👍"}`,
+		Arguments: `{"text":"hello","time":"09:00:00","emoji":"👍"}`,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -201,7 +215,7 @@ func TestUpdateMediaDescriptionHandlerRejectsEmptyText(t *testing.T) {
 	handler := updateMediaDescriptionHandler(&Service{})
 
 	out, err := handler(context.Background(), llm.ToolCall{
-		Arguments: `{"text":"","description":"desc","body":""}`,
+		Arguments: `{"text":"","time":"09:00:00","description":"desc","body":""}`,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -211,7 +225,21 @@ func TestUpdateMediaDescriptionHandlerRejectsEmptyText(t *testing.T) {
 	}
 }
 
-func TestReactToolDefUsesTextParam(t *testing.T) {
+func TestUpdateMediaDescriptionHandlerRejectsEmptyTime(t *testing.T) {
+	handler := updateMediaDescriptionHandler(&Service{})
+
+	out, err := handler(context.Background(), llm.ToolCall{
+		Arguments: `{"text":"hello","time":"","description":"desc","body":""}`,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "missing time") {
+		t.Fatalf("expected missing time error, got %q", out)
+	}
+}
+
+func TestReactToolDefUsesTextAndTimeParams(t *testing.T) {
 	props, ok := reactToolDef.Parameters["properties"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected properties map")
@@ -220,12 +248,23 @@ func TestReactToolDefUsesTextParam(t *testing.T) {
 	if _, ok := props["text"]; !ok {
 		t.Fatalf("expected 'text' parameter in react tool def")
 	}
-	if _, ok := props["message_id"]; ok {
-		t.Fatalf("message_id should not be in react tool def")
+	if _, ok := props["time"]; !ok {
+		t.Fatalf("expected 'time' parameter in react tool def")
+	}
+
+	required := reactToolDef.Parameters["required"].([]string)
+	hasTime := false
+	for _, r := range required {
+		if r == "time" {
+			hasTime = true
+		}
+	}
+	if !hasTime {
+		t.Fatalf("expected 'time' in required list")
 	}
 }
 
-func TestUpdateMediaToolDefUsesTextParam(t *testing.T) {
+func TestUpdateMediaToolDefUsesTextAndTimeParams(t *testing.T) {
 	props, ok := updateMediaDescriptionToolDef.Parameters["properties"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected properties map")
@@ -234,7 +273,18 @@ func TestUpdateMediaToolDefUsesTextParam(t *testing.T) {
 	if _, ok := props["text"]; !ok {
 		t.Fatalf("expected 'text' parameter in update media tool def")
 	}
-	if _, ok := props["message_id"]; ok {
-		t.Fatalf("message_id should not be in update media tool def")
+	if _, ok := props["time"]; !ok {
+		t.Fatalf("expected 'time' parameter in update media tool def")
+	}
+
+	required := updateMediaDescriptionToolDef.Parameters["required"].([]string)
+	hasTime := false
+	for _, r := range required {
+		if r == "time" {
+			hasTime = true
+		}
+	}
+	if !hasTime {
+		t.Fatalf("expected 'time' in required list")
 	}
 }
