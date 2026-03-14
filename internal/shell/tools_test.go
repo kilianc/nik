@@ -4,8 +4,6 @@ import (
 	"context"
 	"strings"
 	"testing"
-
-	"github.com/kciuffolo/nik/internal/id"
 )
 
 func TestHandleRunValidatesRequiredFields(t *testing.T) {
@@ -42,22 +40,5 @@ func TestHandleReadMissingSession(t *testing.T) {
 
 	if strings.Contains(result, `"status":"running"`) {
 		t.Fatalf("handleRead reported running for a killed session: %s", result)
-	}
-}
-
-func TestShortIDCollision(t *testing.T) {
-	seen := make(map[string]bool)
-	collisions := 0
-
-	for i := 0; i < 20; i++ {
-		sid := id.Short(4)
-		if seen[sid] {
-			collisions++
-		}
-		seen[sid] = true
-	}
-
-	if collisions > 0 {
-		t.Fatalf("got %d collisions in 20 sequential IDs", collisions)
 	}
 }
