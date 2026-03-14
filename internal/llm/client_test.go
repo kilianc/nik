@@ -1,6 +1,12 @@
 package llm
 
-import "testing"
+import (
+	"context"
+	"fmt"
+	"sync"
+	"testing"
+	"time"
+)
 
 func TestIsImageMime(t *testing.T) {
 	if !isImageMime("image/png") {
@@ -43,6 +49,119 @@ func TestSpeechRequiresAPIKey(t *testing.T) {
 	}
 	if err.Error() != "speech: requires api key" {
 		t.Fatalf("expected 'requires api key' error, got %v", err)
+	}
+}
+
+func TestParallelToolExecution(t *testing.T) {
+	const delay = 50 * time.Millisecond
+
+	executor := func(_ context.Context, call ToolCall) (string, error) {
+		time.Sleep(delay)
+		return fmt.Sprintf("result-%s", call.CallID), nil
+	}
+
+	calls := []ToolCall{
+		{CallID: "a", Name: "tool1", Arguments: `{}`},
+		{CallID: "b", Name: "tool2", Arguments: `{}`},
+		{CallID: "c", Name: "tool3", Arguments: `{}`},
+	}
+
+	type toolResult struct {
+		result  string
+		elapsed time.Duration
+		isErr   bool
+	}
+
+	results := make([]toolResult, len(calls))
+
+	start := time.Now()
+
+	var wg sync.WaitGroup
+	wg.Add(len(calls))
+
+	for i, call := range calls {
+		go func(i int, call ToolCall) {
+			defer wg.Done()
+			s := time.Now()
+			result, err := executor(context.Background(), call)
+			elapsed := time.Since(s)
+
+			if err != nil {
+				results[i] = toolResult{result: ToolError(err), elapsed: elapsed, isErr: true}
+				return
+			}
+			results[i] = toolResult{result: result, elapsed: elapsed}
+		}(i, call)
+	}
+
+	wg.Wait()
+	total := time.Since(start)
+
+	if total >= delay*time.Duration(len(calls)) {
+		t.Fatalf("expected parallel execution (<%v), took %v", delay*time.Duration(len(calls)), total)
+	}
+
+	for i, call := range calls {
+		expected := fmt.Sprintf("result-%s", call.CallID)
+		if results[i].result != expected {
+			t.Fatalf("call %d: expected %q, got %q", i, expected, results[i].result)
+		}
+		if results[i].isErr {
+			t.Fatalf("call %d: unexpected error", i)
+		}
+	}
+}
+
+func TestParallelToolExecutionWithErrors(t *testing.T) {
+	executor := func(_ context.Context, call ToolCall) (string, error) {
+		if call.Name == "fail" {
+			return "", fmt.Errorf("boom")
+		}
+		return "ok", nil
+	}
+
+	calls := []ToolCall{
+		{CallID: "a", Name: "succeed", Arguments: `{}`},
+		{CallID: "b", Name: "fail", Arguments: `{}`},
+	}
+
+	type toolResult struct {
+		result  string
+		elapsed time.Duration
+		isErr   bool
+	}
+
+	results := make([]toolResult, len(calls))
+
+	var wg sync.WaitGroup
+	wg.Add(len(calls))
+
+	for i, call := range calls {
+		go func(i int, call ToolCall) {
+			defer wg.Done()
+			s := time.Now()
+			result, err := executor(context.Background(), call)
+			elapsed := time.Since(s)
+
+			if err != nil {
+				results[i] = toolResult{result: ToolError(err), elapsed: elapsed, isErr: true}
+				return
+			}
+			results[i] = toolResult{result: result, elapsed: elapsed}
+		}(i, call)
+	}
+
+	wg.Wait()
+
+	if results[0].result != "ok" || results[0].isErr {
+		t.Fatalf("call 0: expected success, got %q (err=%v)", results[0].result, results[0].isErr)
+	}
+
+	if !results[1].isErr {
+		t.Fatalf("call 1: expected error flag")
+	}
+	if results[1].result != `{"error":"boom"}` {
+		t.Fatalf("call 1: expected error json, got %q", results[1].result)
 	}
 }
 

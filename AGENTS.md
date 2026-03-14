@@ -464,6 +464,8 @@ Location: `workspace/nik.log` (slog text format). Key events to grep for:
 
 **No PII in the repo.** Never commit personally identifiable information — real names, emails, phone numbers, hostnames, addresses, or any other data that identifies a specific person or device. Use placeholders or derive values at runtime (e.g. `$(hostname)`).
 
+**No tool-generated trailers.** Never add metadata lines like `Made-with: Cursor`, `Co-authored-by: AI`, or similar trailers to commit messages. Commit messages contain only the subject and body written by the author.
+
 ## Style
 
 - Always use `TEXT`, never `VARCHAR`

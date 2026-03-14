@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/kciuffolo/nik/internal/codex"
@@ -419,34 +420,56 @@ func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instru
 		}
 		prevSig = sig
 
-		for _, call := range calls {
-			items = append(items, responses.ResponseInputItemParamOfFunctionCall(call.Arguments, call.CallID, call.Name))
+		type toolResult struct {
+			result  string
+			elapsed time.Duration
+			isErr   bool
+		}
 
+		results := make([]toolResult, len(calls))
+
+		var wg sync.WaitGroup
+		wg.Add(len(calls))
+
+		for i, call := range calls {
 			slog.Info("tool call", toolCallAttrs(ctx, call.Name, round, call.Arguments)...)
 
-			start := time.Now()
-			result, err := executor(ctx, call)
-			elapsed := time.Since(start)
+			go func(i int, call ToolCall) {
+				defer wg.Done()
+				start := time.Now()
+				result, err := executor(ctx, call)
+				elapsed := time.Since(start)
+
+				if err != nil {
+					result = ToolError(err)
+					results[i] = toolResult{result: result, elapsed: elapsed, isErr: true}
+					return
+				}
+				results[i] = toolResult{result: result, elapsed: elapsed}
+			}(i, call)
+		}
+
+		wg.Wait()
+
+		for i, call := range calls {
+			r := results[i]
+
+			items = append(items, responses.ResponseInputItemParamOfFunctionCall(call.Arguments, call.CallID, call.Name))
 
 			rec := ToolCallRecord{
 				Name:       call.Name,
 				Args:       call.Arguments,
-				DurationMS: elapsed.Milliseconds(),
+				Result:     r.result,
+				Error:      r.isErr,
+				DurationMS: r.elapsed.Milliseconds(),
 			}
-
-			if err != nil {
-				result = ToolError(err)
-				rec.Error = true
-			}
-
-			rec.Result = result
 			history = append(history, rec)
 
 			if c.observer != nil {
-				c.observer.OnToolCall(ctx, rec.Name, rec.Args, rec.Result, elapsed, rec.Error)
+				c.observer.OnToolCall(ctx, rec.Name, rec.Args, rec.Result, r.elapsed, rec.Error)
 			}
 
-			items = append(items, responses.ResponseInputItemParamOfFunctionCallOutput(call.CallID, result))
+			items = append(items, responses.ResponseInputItemParamOfFunctionCallOutput(call.CallID, r.result))
 		}
 	}
 }
