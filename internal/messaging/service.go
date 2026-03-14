@@ -6,8 +6,10 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -211,11 +213,20 @@ func (s *Service) ReceiveMessage(ctx context.Context, msg InboundMessage) error 
 			sizeBytes = &msg.MediaSizeBytes
 		}
 
+		transcriptText := nullable(msg.MediaTranscriptText)
+		var transcribedAt *time.Time
+		if msg.MediaTranscriptText != "" {
+			now := time.Now()
+			transcribedAt = &now
+		}
+
 		err = db.UpsertMedia(ctx, tx, db.UpsertMediaParams{
-			ID:        msg.MediaHash,
-			MimeType:  mimeType,
-			LocalPath: localPath,
-			SizeBytes: sizeBytes,
+			ID:             msg.MediaHash,
+			MimeType:       mimeType,
+			LocalPath:      localPath,
+			SizeBytes:      sizeBytes,
+			TranscriptText: transcriptText,
+			TranscribedAt:  transcribedAt,
 		})
 		if err != nil {
 			return err
@@ -406,7 +417,7 @@ func (s *Service) SendImage(ctx context.Context, conversationID string, imagePat
 	})
 }
 
-func (s *Service) SendAudio(ctx context.Context, conversationID string, audioPath string, voiceNote bool) error {
+func (s *Service) SendAudio(ctx context.Context, conversationID string, audioPath string, voiceNote bool, body string) error {
 	conv, err := db.GetConversation(ctx, s.db, db.GetConversationParams{ID: conversationID})
 	if err != nil {
 		return err
@@ -415,6 +426,19 @@ func (s *Service) SendAudio(ctx context.Context, conversationID string, audioPat
 	platform, err := s.registry.Get(conv.Platform)
 	if err != nil {
 		return err
+	}
+
+	mediaHash := mediaHashFromPath(audioPath)
+	localPath := ""
+	if mediaHash != "" {
+		ext := filepath.Ext(audioPath)
+		mediaFile := filepath.Join(s.cfg.MediaPath(), mediaHash+ext)
+		cpErr := copyFile(audioPath, mediaFile)
+		if cpErr != nil {
+			slog.Warn("copy outbound audio to media dir", "pkg", "messaging", "error", cpErr)
+		} else {
+			localPath = mediaFile
+		}
 	}
 
 	outbound, err := platform.SendAudio(ctx, conv.ExternalConversationID, audioPath, voiceNote)
@@ -440,20 +464,25 @@ func (s *Service) SendAudio(ctx context.Context, conversationID string, audioPat
 		kind = "audio"
 	}
 
+	if localPath == "" {
+		localPath = outbound.LocalPath
+	}
+
 	return s.ReceiveMessage(ctx, InboundMessage{
 		Platform:               conv.Platform,
 		ExternalConversationID: conv.ExternalConversationID,
 		ExternalMessageID:      outbound.ExternalMessageID,
 		ExternalSenderID:       outbound.ExternalSenderID,
 		Kind:                   kind,
-		Body:                   "",
+		Body:                   body,
 		MimeType:               outbound.MimeType,
 		SentAt:                 sentAt,
 		IsFromMe:               true,
 		IsGroup:                conv.Kind == "group",
-		LocalPath:              outbound.LocalPath,
-		MediaHash:              mediaHashFromPath(audioPath),
+		LocalPath:              localPath,
+		MediaHash:              mediaHash,
 		MediaSizeBytes:         fileSize(audioPath),
+		MediaTranscriptText:    body,
 	})
 }
 
@@ -913,4 +942,26 @@ func fileSize(path string) int64 {
 	}
 
 	return info.Size()
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	err = os.MkdirAll(filepath.Dir(dst), 0o755)
+	if err != nil {
+		return err
+	}
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, in)
+	return err
 }

@@ -205,7 +205,7 @@ func replyHandler(svc *Service) llm.ToolExecutor {
 				if speechErr != nil {
 					return llm.ToolError(speechErr), nil
 				}
-				err = svc.SendAudio(ctx, args.ConversationID, audioPath, true)
+				err = svc.SendAudio(ctx, args.ConversationID, audioPath, true, msg.Text)
 			case strings.TrimSpace(msg.ImagePath) != "":
 				err = svc.SendImage(ctx, args.ConversationID, msg.ImagePath, msg.Text)
 			default:
