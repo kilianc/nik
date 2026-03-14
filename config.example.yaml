@@ -11,11 +11,11 @@ media_dir: media
 prompts_dir: ../prompts
 skills_dir: ../skills
 
-# conversations
+# conversations (label: uuid)
 privileged_conversation_ids: # conversations with owner-level access — always allowed
-  - ...
+  dms: ...
 allow_conversation_ids:      # other conversations nik can respond to
-  - ...
+  family: ...
 
 # context
 max_history: 100             # max messages loaded per conversation

@@ -34,12 +34,13 @@ func (s *Service) CoreAlarmEnforcer(cfg *config.Config) func(ctx context.Context
 }
 
 func (s *Service) ensureCoreAlarms(ctx context.Context, cfg *config.Config) {
-	if len(cfg.PrivilegedConversationIDs) == 0 {
+	privIDs := cfg.PrivilegedIDs()
+	if len(privIDs) == 0 {
 		slog.Warn("no privileged conversations configured, skipping core alarm enforcement", "pkg", "alarms")
 		return
 	}
 
-	convID := cfg.PrivilegedConversationIDs[0]
+	convID := privIDs[0]
 	tz := cfg.TZ()
 	now := time.Now()
 

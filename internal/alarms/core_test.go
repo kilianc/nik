@@ -90,7 +90,7 @@ func TestEnsureCoreAlarmsCreatesWhenMissing(t *testing.T) {
 	cfg := &config.Config{
 		DiagnosticTime:            "08:00",
 		Timezone:                  "UTC",
-		PrivilegedConversationIDs: []string{convID},
+		PrivilegedConversationIDs: map[string]string{"test": convID},
 	}
 
 	svc := New(conn)
@@ -124,7 +124,7 @@ func TestEnsureCoreAlarmsHealsDeadAlarm(t *testing.T) {
 	cfg := &config.Config{
 		BriefingTime:              "08:00",
 		Timezone:                  "UTC",
-		PrivilegedConversationIDs: []string{convID},
+		PrivilegedConversationIDs: map[string]string{"test": convID},
 	}
 
 	pastTime := time.Now().Add(-24 * time.Hour)
@@ -166,7 +166,7 @@ func TestEnsureCoreAlarmsSkipsHealthy(t *testing.T) {
 	cfg := &config.Config{
 		JournalTime:               "00:00",
 		Timezone:                  "UTC",
-		PrivilegedConversationIDs: []string{convID},
+		PrivilegedConversationIDs: map[string]string{"test": convID},
 	}
 
 	futureTime := time.Now().Add(12 * time.Hour)
@@ -207,7 +207,7 @@ func TestEnsureCoreAlarmsSkipsEmptyConfigTime(t *testing.T) {
 	convID := seedConversation(t, ctx, conn)
 	cfg := &config.Config{
 		Timezone:                  "UTC",
-		PrivilegedConversationIDs: []string{convID},
+		PrivilegedConversationIDs: map[string]string{"test": convID},
 	}
 
 	svc := New(conn)

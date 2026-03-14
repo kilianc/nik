@@ -39,7 +39,7 @@ func New(cfg *config.Config, msgSvc *messaging.Service, taskSvc *task.Service, a
 func (t *Timeline) Check(ctx context.Context) ([]brain.Stimulus, error) {
 	var stimuli []brain.Stimulus
 
-	for _, convID := range t.cfg.AllowConversationIDs {
+	for _, convID := range t.cfg.AllowedIDs() {
 		s, ok, err := t.check(ctx, convID)
 		if errors.Is(err, sql.ErrNoRows) {
 			continue

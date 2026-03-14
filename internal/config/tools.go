@@ -5,10 +5,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"log/slog"
-	"slices"
+	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/kciuffolo/nik/internal/db"
+	"github.com/kciuffolo/nik/internal/id"
 	"github.com/kciuffolo/nik/internal/llm"
 )
 
@@ -153,24 +155,29 @@ func allowlistAdd(ctx context.Context, cfg *Config, conn *sql.DB, conversationID
 		return `{"error":"empty conversation_id"}`, nil
 	}
 
-	_, err := db.GetConversation(ctx, conn, db.GetConversationParams{ID: conversationID})
+	conv, err := db.GetConversation(ctx, conn, db.GetConversationParams{ID: conversationID})
 	if err != nil {
 		return llm.ToolErrorf("conversation not found: %s", conversationID), nil
 	}
 
-	if slices.Contains(cfg.AllowConversationIDs, conversationID) {
+	if mapContainsValue(cfg.AllowConversationIDs, conversationID) {
 		return `{"error":"already in allow list"}`, nil
 	}
 
-	cfg.AllowConversationIDs = append(cfg.AllowConversationIDs, conversationID)
+	label := deriveLabel(ctx, conn, conv)
+
+	if cfg.AllowConversationIDs == nil {
+		cfg.AllowConversationIDs = make(map[string]string)
+	}
+	cfg.AllowConversationIDs[label] = conversationID
 
 	err = cfg.Save(cfg.ConfigPath())
 	if err != nil {
-		cfg.AllowConversationIDs = cfg.AllowConversationIDs[:len(cfg.AllowConversationIDs)-1]
+		delete(cfg.AllowConversationIDs, label)
 		return llm.ToolError(err), nil
 	}
 
-	slog.Info("allowlist add", "pkg", "config", "conversation_id", conversationID)
+	slog.Info("allowlist add", "pkg", "config", "label", label, "conversation_id", conversationID)
 
 	return `{"ok":true}`, nil
 }
@@ -184,23 +191,58 @@ func allowlistRemove(cfg *Config, conversationID string) (string, error) {
 		return `{"error":"cannot remove last allow list entry"}`, nil
 	}
 
-	if slices.Contains(cfg.PrivilegedConversationIDs, conversationID) {
+	if cfg.IsPrivileged(conversationID) {
 		return `{"error":"cannot remove privileged channel from allow list"}`, nil
 	}
 
-	idx := slices.Index(cfg.AllowConversationIDs, conversationID)
-	if idx == -1 {
+	var label string
+	for k, v := range cfg.AllowConversationIDs {
+		if v == conversationID {
+			label = k
+			break
+		}
+	}
+	if label == "" {
 		return `{"error":"conversation_id not in allow list"}`, nil
 	}
 
-	cfg.AllowConversationIDs = slices.Delete(cfg.AllowConversationIDs, idx, idx+1)
+	delete(cfg.AllowConversationIDs, label)
 
 	err := cfg.Save(cfg.ConfigPath())
 	if err != nil {
 		return llm.ToolError(err), nil
 	}
 
-	slog.Info("allowlist remove", "pkg", "config", "conversation_id", conversationID)
+	slog.Info("allowlist remove", "pkg", "config", "label", label, "conversation_id", conversationID)
 
 	return `{"ok":true}`, nil
+}
+
+var labelSanitizer = regexp.MustCompile(`[^a-z0-9-]`)
+
+func deriveLabel(ctx context.Context, conn *sql.DB, conv db.Conversation) string {
+	if conv.Title.Valid && strings.TrimSpace(conv.Title.String) != "" {
+		raw := strings.ToLower(strings.TrimSpace(conv.Title.String))
+		raw = strings.ReplaceAll(raw, " ", "-")
+		return labelSanitizer.ReplaceAllString(raw, "")
+	}
+
+	if conv.Kind == "dm" {
+		participants, err := db.GetConversationParticipants(ctx, conn, conv.ID)
+		if err == nil {
+			for _, p := range participants {
+				name := p.DisplayName.String
+				if name == "" {
+					name = p.ContactName.String
+				}
+				if name != "" {
+					raw := strings.ToLower(strings.TrimSpace(name))
+					raw = strings.ReplaceAll(raw, " ", "-")
+					return labelSanitizer.ReplaceAllString(raw, "")
+				}
+			}
+		}
+	}
+
+	return conv.Kind + "-" + id.Shorten(conv.ID)[:6]
 }
