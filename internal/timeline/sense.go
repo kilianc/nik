@@ -152,14 +152,6 @@ func (t *Timeline) check(ctx context.Context, convID string) (brain.Stimulus, bo
 		return brain.Stimulus{}, false, nil
 	}
 
-	var reactToID string
-	for i := len(msgs) - 1; i >= 0; i-- {
-		if !msgs[i].IsFromMe {
-			reactToID = msgs[i].ID
-			break
-		}
-	}
-
 	hasTasks := false
 	hasAlarms := false
 	for _, e := range entries {
@@ -175,9 +167,6 @@ func (t *Timeline) check(ctx context.Context, convID string) (brain.Stimulus, bo
 	meta := map[string]string{
 		"conversation_id": convID,
 		"sources":         sources,
-	}
-	if reactToID != "" {
-		meta["react_to_message_id"] = reactToID
 	}
 
 	return brain.Stimulus{Meta: meta}, true, nil

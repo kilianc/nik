@@ -19,8 +19,6 @@ type Brain struct {
 	sensor          Sensor
 	reflexes        []Reflex
 	recaller        func(ctx context.Context, stimulus string) string
-	toolReactor     ToolReactor
-	toolEmojis      map[string]string
 	workerToolNames []string
 	now             func() time.Time
 
@@ -44,11 +42,6 @@ func (b *Brain) SetWorkerToolNames(names []string) {
 
 func (b *Brain) SetRecaller(fn func(ctx context.Context, stimulus string) string) {
 	b.recaller = fn
-}
-
-func (b *Brain) SetToolReactor(emojis map[string]string, fn ToolReactor) {
-	b.toolEmojis = emojis
-	b.toolReactor = fn
 }
 
 const activationTimeout = 20 * time.Minute
@@ -126,15 +119,6 @@ func (b *Brain) activate(ctx context.Context, output Stimulus) {
 	slog.Info("activation starting", "pkg", "brain", "conversation_id", convID, "sources", sources)
 
 	ctx = context.WithValue(ctx, "meta", output.Meta)
-
-	if b.toolReactor != nil {
-		reactTo := output.Meta["react_to_message_id"]
-		if reactTo != "" {
-			q := startReactionQueue(ctx, reactTo, b.toolReactor)
-			ctx = context.WithValue(ctx, reactionQueueKey{}, q)
-			defer q.close()
-		}
-	}
 
 	_, usage, err := b.think(ctx, func() string {
 		return b.sensor.Get(ctx, convID)

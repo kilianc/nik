@@ -31,17 +31,6 @@ import (
 
 const version = "0.0.1"
 
-var toolEmojis = map[string]string{
-	"alarm":          "⏰",
-	"update_alarm":   "⏰",
-	"cancel_alarm":   "🔕",
-	"update_contact": "📇",
-	"load_skill":     "📚",
-	"task_spawn":     "🛠️",
-	"config":         "⚙️",
-	"describe_media": "👁️",
-}
-
 func main() {
 	home := flag.String("home", "", "workspace directory (default: current directory)")
 	wappLink := flag.Bool("force-wapp-link", false, "force WhatsApp QR pairing")
@@ -177,7 +166,6 @@ func main() {
 
 	b.SetWorkerToolNames(workerToolNames)
 	b.SetRecaller(recallSvc.Recall)
-	b.SetToolReactor(toolEmojis, messagingSvc.React)
 
 	b.RegisterReflex(0, taskSvc.CheckStale)
 	b.RegisterReflex(0, alarmSvc.FireDueAlarms)
