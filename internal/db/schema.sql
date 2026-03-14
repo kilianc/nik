@@ -185,3 +185,14 @@ CREATE TABLE IF NOT EXISTS activation_detail (
   tools               TEXT NOT NULL DEFAULT '[]',
   reasoning_summaries TEXT NOT NULL DEFAULT '[]'
 );
+
+CREATE TABLE IF NOT EXISTS task_assessment (
+  id             TEXT PRIMARY KEY,
+  task_id        TEXT NOT NULL UNIQUE REFERENCES task(id),
+  activation_id  TEXT NOT NULL UNIQUE REFERENCES activation(id),
+  effectiveness  INTEGER NOT NULL CHECK(effectiveness BETWEEN 1 AND 5),
+  tool_feedback  TEXT NOT NULL DEFAULT '',
+  skill_feedback TEXT NOT NULL DEFAULT '',
+  suggestions    TEXT NOT NULL DEFAULT '',
+  created_at     TIMESTAMP NOT NULL DEFAULT (datetime('now'))
+);

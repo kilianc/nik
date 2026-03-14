@@ -28,11 +28,12 @@ type taskPromptData struct {
 }
 
 type Runner struct {
-	cfg     *config.Config
-	llm     llm.Completer
-	svc     *Service
-	tools   []llm.Tool
-	cancels sync.Map
+	cfg       *config.Config
+	llm       llm.Completer
+	criticLLM llm.Completer
+	svc       *Service
+	tools     []llm.Tool
+	cancels   sync.Map
 }
 
 func NewRunner(cfg *config.Config, llmClient llm.Completer, svc *Service, tools []llm.Tool) *Runner {
@@ -42,6 +43,10 @@ func NewRunner(cfg *config.Config, llmClient llm.Completer, svc *Service, tools 
 		svc:   svc,
 		tools: tools,
 	}
+}
+
+func (r *Runner) SetCriticLLM(c llm.Completer) {
+	r.criticLLM = c
 }
 
 func (r *Runner) renderPrompt(t db.Task, tools []llm.ToolDef) string {
@@ -174,6 +179,10 @@ func (r *Runner) Run(ctx context.Context, t db.Task) {
 
 	r.svc.UpdateStatus(ctx, t.ID, finalStatus)
 	slog.Info("task "+finalStatus, "pkg", "task", "task_id", t.ID, "goal", t.Goal)
+
+	t.Status = finalStatus
+	t.ActivationID = actID
+	r.RunCritic(context.Background(), t)
 }
 
 func (r *Runner) Cancel(taskID string) bool {

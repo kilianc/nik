@@ -5,6 +5,8 @@ model: gpt-5.4
 reasoning_effort: ""     # none, minimal, low, medium, high, xhigh (empty = model default)
 verbosity: ""            # low, medium, high (empty = model default)
 recall_model: ""         # model for recall pre-filtering (empty = skip recall)
+critic_enabled: false    # enable post-task critic assessment
+critic_model: ""         # model for critic (empty = recall_model or main model)
 
 # paths (relative to home dir)
 media_dir: media

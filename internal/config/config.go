@@ -41,6 +41,9 @@ type Config struct {
 
 	BannedWords []string `yaml:"banned_words"`
 
+	CriticEnabled bool   `yaml:"critic_enabled"`
+	CriticModel   string `yaml:"critic_model"`
+
 	TTSVoice        string  `yaml:"tts_voice"`
 	TTSInstructions string  `yaml:"tts_instructions"`
 	TTSSpeed        float64 `yaml:"tts_speed"`
@@ -138,6 +141,16 @@ func (c Config) TTSSpeedOrDefault() float64 {
 		return 1.0
 	}
 	return c.TTSSpeed
+}
+
+func (c Config) CriticModelOrDefault() string {
+	if c.CriticModel != "" {
+		return c.CriticModel
+	}
+	if c.RecallModel != "" {
+		return c.RecallModel
+	}
+	return c.Model
 }
 
 func (c Config) MemoriesPath() string {

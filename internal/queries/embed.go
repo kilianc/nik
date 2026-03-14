@@ -149,6 +149,17 @@ var TaskListSpawned string
 //go:embed task_list_cancelled.sql
 var TaskListCancelled string
 
+// task assessment queries
+
+//go:embed task_assessment_insert.sql
+var TaskAssessmentInsert string
+
+//go:embed task_assessment_tool_calls.sql
+var TaskAssessmentToolCalls string
+
+//go:embed task_report_by_task.sql
+var TaskReportByTask string
+
 // task report queries
 
 //go:embed task_report_insert.sql
