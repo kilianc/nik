@@ -146,6 +146,38 @@ flowchart LR
 
 When a message arrives: the WhatsApp adapter normalizes it and calls `ReceiveMessage`, which upserts the conversation, resolves/creates the contact, and inserts the message. On the next perceive cycle, the messaging data source polls for unread conversations, builds the context (history + session info + participant profiles), and hands it to the brain. The brain activates, thinks, and calls tools -- most commonly `message_reply`, which goes back through the service to the adapter and out to WhatsApp. The outbound message is also fed back through `ReceiveMessage` so it appears in the canonical history.
 
+## Autonomous Systems
+
+These run on schedule via alarms — the brain activates them like any other stimulus. Core alarms use `[NIK_XXX]` goal prefixes (e.g. `[NIK_JOURNAL]`, `[NIK_DREAM_1]`) and are enforced by the `CoreAlarmEnforcer` reflex in `internal/alarms/core.go`. The reflex creates missing alarms and heals dead ones (null/past `next_fire_at`) using schedule times from config. Skills still document the alarm format as a fallback.
+
+- **Journal**: managed entirely by the `journal` skill. Nik uses a recurring alarm, gathers day context via `db_query`/`shell`, and writes to `journal/` files. No domain package.
+- **Dream**: managed entirely by the `dream` skill. Nik uses 5 recurring alarms (one per dream pass), processes the journal and memories, and writes to `dreams/` files. The final pass (Wake) evolves nik's **soul** — a living identity document stored in `soul/latest.md` and loaded into the system prompt on every activation. Dated snapshots in `soul/YYYY-MM-DD.md` preserve history. No domain package.
+- **Briefing**: managed entirely by the `briefing` skill. Nik uses a recurring alarm, `web_search` for news, and writes to `briefings/` files. No domain package.
+- **Diagnostic**: managed entirely by the `diagnostic` skill. Nik uses a recurring alarm, discovers skills/services, tests auth, verifies alarm chains and skill outputs, checks data integrity and spending. Writes to `diagnostics/` files. No domain package.
+
+## Tasks and the Timeline
+
+**Principle:** when things happen, they appear in the timeline. If making an event appear is hard, the data model is wrong.
+
+**Notification model:** the timeline is a notification feed. Task and alarm entries use structured key: value format with 11-space padding on continuation lines (width of `[HH:MM:SS] `). Report content is truncated to 200 chars with `[truncated]` marker. `task_status` provides the full picture: plan, complete report content, tool calls, retry chain.
+
+**Two actors:**
+
+- Workers produce `task_report` rows with a `status` field (`running`, `completed`, `failed`). The runner reads the last report's status to set `task.status`.
+- The system produces lifecycle entries from the `task` table (spawned, cancelled, retried).
+
+| Event        | Who produces it                    | Timeline entry                        | Separate system entry?               |
+| ------------ | ---------------------------------- | ------------------------------------- | ------------------------------------ |
+| Task created | nik calls `task_spawn`             | `[Task spawned]`                      | Yes — introduces the task_id         |
+| Progress     | worker writes report               | `[Task report] ... status: running`   | No                                   |
+| Completed    | worker writes final report         | `[Task report] ... status: completed` | No — the report IS the event         |
+| Failed       | worker writes final report         | `[Task report] ... status: failed`    | No — the report IS the event         |
+| Cancelled    | nik calls `task_cancel`            | `[Task cancelled]`                    | Yes — no report covers this          |
+| Retried      | nik calls `task_retry`             | `[Task retry #N spawned]`             | Yes — introduces the new task_id     |
+| Stale        | `CheckStale` reflex inserts report | `[Task report] ... stale`             | No — stale detection writes a report |
+
+`task_status` is for drill-down, not discovery.
+
 ## Tools
 
 Domain packages define tools via `BuildTools()` and register them at startup. The brain makes them available to the LLM during activations. Some tools are privileged (owner-only).

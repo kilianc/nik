@@ -4,57 +4,25 @@
 
 These rules are binding for work in this repo.
 
-## Philosophy
-
-Nik is an autonomous personal AI -- like OpenClaw but with a personality, real memory, and the goal of becoming a family member. It talks to people directly on WhatsApp (and eventually other platforms).
-
-**Design principles:**
-
-- **Highest autonomy** -- nik should be able to do everything on its own without human intervention
-- **Smallest codebase** -- the code should be small enough for one person (or one AI) to fully grok; every line earns its place
-- **Core tools + extensible skills** -- a small set of powerful core tools (exec, read, write, search, etc.) and a growing set of user-defined skills that compose them. Skills are the extension mechanism, not more tools.
-- **Single decision-maker** -- infrastructure (runners, adapters, reflexes) moves data and updates state, but never decides on behalf of the LLM. When code auto-generates messages, reports, or actions, it creates invisible actors that confuse the model. Only the LLM decides what to communicate and when.
-
-### Human-centric async design
-
-Nik interacts with long-running tasks the way a human does:
-
-- **Staring**: synchronous watching with polling. Kick off a command, watch for output, catch when it finishes. Fast commands return immediately.
-- **Checking in**: asynchronous reminders. Walk away, set a mental note to come back later, glance at the screen, decide what to do.
-
-The model drives the cadence -- it decides how long to stare, when to come back, whether to report to a user, and whether to keep watching or walk away. The alarm is just a calendar reminder.
-
-**Invariant**: every alive session always has a scheduled check-in. The only way to stop is to kill it. No orphans.
-
 ## Initialization
 
 - read this entire file before doing anything
 - follow all rules strictly
 - acknowledge you read it by replying with "I read the AGENTS.md - <the color in **Fin**>" (and only that color) but don't stop and continue your tasks.
 
-## Logging and debugging
-
-- runtime logs are in `workspace/nik.log`
-- never run `make run` on your own, ask me to do it if you need me to
-- never send signals to nik's process (kill, SIGQUIT, SIGTERM, etc.) -- if nik needs a restart, ask me
-- do not override GOPROXY, I need a VPN when it fails, tell me to connect to it and wait
-- activation detail (instructions, user input, tools, reasoning) is stored in the `activation_detail` DB table, queryable via `db_query`
-- after completing Go changes, do this in order:
-  - run `make lint`
-  - run `make test`
-  - run `make schema-diff` to check for schema drift against the live DB
-
-## Code style and best practices
+## Agent Conduct
 
 - always read the target file before making edits
 - never guess the current state of a file
 - preserve user changes; never undo or revert them
 - never write documentation files (`*.md`, `README`, etc.) unless explicitly requested
 - work inside the user's existing structure and patterns
+- workspace files produced by skills (journals, briefings, diagnostics, dreams, memories, soul) are immutable after creation. Only the skill that owns them may write or update them. If a previous output was wrong, the next scheduled run corrects it -- never patch old files
+- when the user points out a mistake, suggests a different approach, or questions a convention, add an entry to the **Candidates** section (even if they don't ask you to)
 
-### Nik reprocesses its own messages -- this is correct
+### Smallest codebase possible
 
-Nik's outbound actions (replies, reactions, tool reaction emojis) are stored via `ReceiveMessage` and appear as new events on the next perception cycle. This triggers re-activation. This is **by design** and must never be treated as a bug, a contributing factor to loops, or something to filter out. If a loop exists, the root cause is elsewhere (e.g. the LLM being compelled to re-handle already-handled events). Never propose fixes that suppress nik's own messages from triggering activation.
+The code should be small enough for one person (or one AI) to fully grok. Every line earns its place -- even at the cost of functionality. When a change increases the code surface, question whether it's worth it. Prefer deleting code over adding it. If a feature can be a skill instead of a package, make it a skill.
 
 ### Don't over complicate
 
@@ -68,36 +36,34 @@ When debugging or investigating an issue, present findings and a proposed fix **
 
 When working in plan mode, always put details, before/after examples, and rationale into the plan file itself -- not into chat messages. The plan is the artifact the user reviews and approves.
 
-### Comments
+### Single decision-maker
 
-- use lowercase except proper nouns, acronyms, and code references
-- keep comments minimal and focused on the why
-- avoid comments that restate the code
-- avoid placeholder comments like `// helper function`
-- no godoc-style comments that restate the function/type name (e.g. `// GetUser returns a user by ID`); only comment exported symbols when the comment adds info the name and signature don't already convey
+Infrastructure (runners, adapters, reflexes) moves data and updates state, but never decides on behalf of the LLM. When code auto-generates messages, reports, or actions, it creates invisible actors that confuse the model. Only the LLM decides what to communicate and when.
 
-### Go
+### Human-centric async design
 
-- errors are present tense, always wrapped like "read file xxx: err" not "error while reading"
-- avoid inline error assignment in if statements; assign first, then check
-- never chain multiple operations in a single if condition
-- use blank lines to separate logical blocks within a function (guard clauses, parse steps, main logic, return)
-- `cmd/nik/main.go` is wiring only — no types, no helper functions, no adapters. If you need a bridge between packages, put it in the domain package that owns the logic.
+Nik interacts with long-running work the way a human does:
 
-## Configuration
+- **Staring**: the shell tool's `max_wait` parameter. Kick off a command, watch the terminal, return early if it finishes. The LLM picks how long to watch -- short for quick checks, longer for builds.
+- **Checking in**: recurring alarms for scheduled skills (journal, briefing, diagnostic, dream). The alarm fires, nik wakes up, decides what to do, and reschedules the next one.
 
-- Home directory is set via `--home` flag (defaults to current working directory). During development, `make run` passes `--home workspace`.
-- `config.yaml` in Home: all app config (API keys, model, reasoning effort, directory overrides, conversation ACLs, schedule times, etc.). Loaded at startup by `config.Load(home)`.
-- The database lives at `nik.db` in Home.
-- The `workspace/` folder in the repo is the user-facing workspace. All runtime artifacts (db, logs, media) are written here. When nik is installed, this is the only folder exposed to users. Prompts and skills currently live at the repo root; `prompts_dir` and `skills_dir` in config.yaml point nik at them (relative to Home).
-- **Workspace skills** (`Home/skills`, i.e. `workspace/skills/`): nik writes his own skills here at runtime. These are loaded from disk on every brain activation alongside built-in skills. When a workspace skill shares a name with a built-in skill, the workspace version wins. Not git-tracked (`workspace/` is gitignored).
-### Workspace file immutability
+The model drives the cadence -- it decides how long to stare, when to schedule the next check-in, and whether to report to a user. Infrastructure never makes those calls.
 
-Files produced by skills (journals, briefings, diagnostics, dreams, memories, soul, workspace skills) are immutable after creation. Only the scheduled skill execution that owns them may write or update them. Outside that context, workspace artifacts are read-only. If a previous output was wrong, the next scheduled run corrects it -- old files are never patched.
+Safety nets: `CheckSessions` reflex reaps dead/stale shell sessions every tick. `CheckStale` reflex flags tasks with no activity. `CoreAlarmEnforcer` heals missing or dead alarms.
 
-- **Always pass `*config.Config`** — never copy individual fields into local config structs. Every package that needs config holds a `*config.Config` pointer and reads from it directly. Derived paths live as getters on `Config` (e.g. `DBPath()`, `MediaPath()`, `WorkspaceSkillsPath()`).
+### Nik reprocesses its own messages -- this is correct
 
-### Project structure
+Nik's outbound actions (replies, reactions, tool reaction emojis) are stored via `ReceiveMessage` and appear as new events on the next perception cycle. This triggers re-activation. This is **by design** and must never be treated as a bug, a contributing factor to loops, or something to filter out. If a loop exists, the root cause is elsewhere (e.g. the LLM being compelled to re-handle already-handled events). Never propose fixes that suppress nik's own messages from triggering activation.
+
+### Nik's identity
+
+Nik is an independent entity with its own WhatsApp phone number. `is_from_me` means "sent by nik" (not "sent by nik's owner"). Nik communicates directly on WhatsApp.
+
+### Messaging
+
+Canonical tables are the source of truth (`conversation`, `message`, `media`, `message_media`). Platform packages are transport adapters that normalize inbound events and execute outbound actions. Adapters never decide on behalf of the LLM. See `README.md` for the full messaging architecture, adapter contract, and data flow diagrams.
+
+## Project Structure
 
 Entry point: `cmd/nik/main.go`
 
@@ -123,248 +89,39 @@ Entry point: `cmd/nik/main.go`
 | `prompts/` | system prompt templates loaded at runtime |
 | `skills/` | built-in skill definitions (SKILL.md files), git-tracked |
 | `workspace/` | user-facing workspace — runtime artifacts (db, logs, media, config) |
-| `workspace/skills/` | nik-authored skills written at runtime, loaded every activation, not git-tracked |
+| `workspace/skills/` | nik-authored skills written at runtime, loaded every activation, override built-in skills by name, not git-tracked |
 
-### Prompt files and what goes where
+### Naming conventions
 
-Each prompt file has one job. Don't duplicate rules across files.
-
-| File | Owns | Does NOT own |
-|------|------|------|
-| `nik-00-base.md` | template assembly, hard constraints (manager rules), output contract | personality, how to think, how to talk |
-| `nik-01-identity.md` | WHO nik is: personality, voice/tone, anti-patterns (what nik never does), growth | tool guidance, thinking mechanics |
-| `nik-02-conversation.md` | conversation context: session format, media handling, group chat rules | personality, tool usage |
-| `nik-03-skills.md` | skill loading: preloaded content, available skill index | personality |
-| `nik-04-brain.md` | HOW nik thinks (5 waves): perceive, understand, plan, check, respond. Task planning (Wave 3), accountability (Wave 4), voice (Wave 5) | personality traits, identity, execution guidance |
-| `nik-05-retry.md` | retry nudge when zero tool calls produced | everything else |
-| `task-00.md` | worker prompt: role, execution guidance, tool docs, skills, plan | personality, messaging, management |
-| `critic-00.md` | critic prompt: task evaluation, tool/skill feedback, suggestions | personality, messaging, management |
-
-**Rule of thumb**: if a rule is about *who nik is*, it goes in `nik-01-identity.md`. If it's about *how nik thinks or acts*, it goes in `nik-04-brain.md`. If it's a hard constraint, `nik-00-base.md`. If it's about *how workers execute*, `task-00.md`. Never say the same thing in two files.
-
-**Workspace skills are runtime knowledge.** Base prompts (`prompts/`) must never reference specific workspace skills by name. Workspace skills teach through their summaries in the available skills index; base prompts stay generic.
-
-### Brain activation model
-
-The brain uses cognitive metaphors; the LLM client uses transport/mechanical ones.
-
-```
-Brain.Awake()        -- wake up, start the loop
-  reflexes           -- unconscious side effects (check stale tasks, fire due alarms)
-  Brain.perceive()   -- scan sense for new stimuli
-    Brain.activate() -- one stimulus triggers one activation
-      Brain.think()  -- form thoughts (calls llm.Complete under the hood)
-        llm.Complete() -- send request, get completion (transport)
-```
-
-- **Reflex** (`func(ctx context.Context)`): unconscious, automatic, side-effect-producing function. Runs every tick *before* perception. Examples: `task.CheckStale` (inserts stale reports), `alarms.FireDueAlarms` (creates occurrences and claims alarms), `alarms.CoreAlarmEnforcer` (ensures core alarms exist and are healthy, throttled to 30 min).
-- **Sense** (`interface { Scan(ctx) ([]Stimulus, error) }`): the brain's single, unified perception. Strictly read-only — no side effects. Returns `[]Stimulus`, one per conversation with new events.
-- **Stimulus**: structured perception output (`Preamble`, `Timeline []TimelineEntry`, `ReadLine`, `Meta`, `LiveInput`, `Processed`). The timeline is a chronological mix of messages, task reports, and alarm occurrences.
-
-### Autonomous systems
-
-These run on schedule via alarms — the brain activates them like any other stimulus. Core alarms use `[NIK_XXX]` goal prefixes (e.g. `[NIK_JOURNAL]`, `[NIK_DREAM_1]`) and are enforced by the `CoreAlarmEnforcer` reflex in `internal/alarms/core.go`. The reflex creates missing alarms and heals dead ones (null/past `next_fire_at`) using schedule times from config. Skills still document the alarm format as a fallback.
-
-- **Journal**: managed entirely by the `journal` skill. Nik uses a recurring alarm, gathers day context via `db_query`/`shell`, and writes to `journal/` files. No domain package.
-- **Dream**: managed entirely by the `dream` skill. Nik uses 5 recurring alarms (one per dream pass), processes the journal and memories, and writes to `dreams/` files. The final pass (Wake) evolves nik's **soul** — a living identity document stored in `soul/latest.md` and loaded into the system prompt on every activation. Dated snapshots in `soul/YYYY-MM-DD.md` preserve history. No domain package.
-- **Briefing**: managed entirely by the `briefing` skill. Nik uses a recurring alarm, `web_search` for news, and writes to `briefings/` files. No domain package.
-- **Diagnostic**: managed entirely by the `diagnostic` skill. Nik uses a recurring alarm, discovers skills/services, tests auth, verifies alarm chains and skill outputs, checks data integrity and spending. Writes to `diagnostics/` files. No domain package.
-
-### Tasks and the timeline
-
-**Principle:** when things happen, they appear in the timeline. If making an event appear is hard, the data model is wrong.
-
-**Notification model:** the timeline is a notification feed. Task and alarm entries use structured key: value format with 11-space padding on continuation lines (width of `[HH:MM:SS] `). Report content is truncated to 200 chars with `[truncated]` marker. `task_status` provides the full picture: plan, complete report content, tool calls, retry chain.
-
-**Two actors:**
-
-- Workers produce `task_report` rows with a `status` field (`running`, `completed`, `failed`). The runner reads the last report's status to set `task.status`.
-- The system produces lifecycle entries from the `task` table (spawned, cancelled, retried).
-
-| Event        | Who produces it                    | Timeline entry                        | Separate system entry?               |
-| ------------ | ---------------------------------- | ------------------------------------- | ------------------------------------ |
-| Task created | nik calls `task_spawn`             | `[Task spawned]`                      | Yes — introduces the task_id         |
-| Progress     | worker writes report               | `[Task report] ... status: running`   | No                                   |
-| Completed    | worker writes final report         | `[Task report] ... status: completed` | No — the report IS the event         |
-| Failed       | worker writes final report         | `[Task report] ... status: failed`    | No — the report IS the event         |
-| Cancelled    | nik calls `task_cancel`            | `[Task cancelled]`                    | Yes — no report covers this          |
-| Retried      | nik calls `task_retry`             | `[Task retry #N spawned]`             | Yes — introduces the new task_id     |
-| Stale        | `CheckStale` reflex inserts report | `[Task report] ... stale`             | No — stale detection writes a report |
-
-`task_status` is for drill-down, not discovery.
-
-### Scripts and Tools
-
-- avoid bash scripts; create small Go commands in `tools/`
-- use `exec.Command()` for external tools
-- every tool in `tools/` must have a corresponding `make` target in the Makefile
-
-## Architecture: Canonical Messaging + Adapters
-
-**Core principle:** canonical tables are the source of truth (`conversation`, `message`, `media`, `message_media`). Platform packages are transport adapters that normalize inbound events and execute outbound actions.
-
-### Canonical entities
-
-- `conversation`: nik-owned conversation identity + platform/external chat reference
-- `message`: nik-owned message identity + normalized content + platform external refs
-- `media`: hash-keyed media cache (`sha256`) for reusable description/transcription
-- `message_media`: link table (`UNIQUE(message_id)`) for one media per message for now
-
-### Adapter contract
-
-- each platform implements `MessagingPlatform` in `internal/messaging` contracts
-- adapters emit canonical `Conversation`/`Message` via `ReceiveConversation` + `ReceiveMessage`
-- adapters expose outbound methods with matching names: `Reply`, `SendImage`, `React`, `StartTyping`, `StopTyping`, `SetPresence`, `MarkRead`
-
-### CRM core: `contact` table
-
-Platform-agnostic. Stores identifiers from all platforms in JSON array columns (`whatsapp_ids`, `telegram_ids`, `slack_ids`, etc.). Fields like `nicknames`, `emails`, `phone_numbers` are also JSON arrays stored as TEXT. `timezone`, `location`, `one_liner`, and `notes` provide free-text context for nik. See `internal/db/schema.sql` for full column listing.
-
-## Database
-
-SQLite, single file at `$NIK_HOME/nik.db`. Schema applied on startup via `db.Open()`. Foreign keys are enabled via `_foreign_keys=1` pragma. WAL mode is on for concurrent reads.
-
-**Never use the `sqlite3` CLI to mutate nik.db.** The CLI defaults to `PRAGMA foreign_keys = OFF`, which silently bypasses FK constraints and creates orphaned rows. All writes must go through `db.Open()` (which enforces FKs) or, if the CLI is unavoidable, start every session with `PRAGMA foreign_keys = ON;` before any mutation.
-
-### No sqlc
-
-All queries live in `internal/queries/*.sql` files with exact executable SQL (positional `?1`/`?2` params). The `queries` Go package (`internal/queries/embed.go`) embeds every `.sql` file as an exported string var. The `db` package imports it as `"github.com/kciuffolo/nik/internal/queries"` and passes the embedded SQL to `database/sql` calls. Schema DDL lives in `internal/db/schema.sql`, embedded directly by the `db` package. **No inline SQL in Go files.**
-
-### SQLite Features Used
-
-- JSON arrays in TEXT columns for multi-value fields (nicknames, emails, whatsapp_ids, phone_numbers)
-- `json_each()`, `json_extract()` for array lookups
-- `jaro_winkler_similarity()` custom function for fuzzy contact search
-- `ON CONFLICT ... DO UPDATE` for upserts
-
-
-### UUIDs
-
-All primary keys are **UUIDv7** (time-ordered), generated in Go via `id.V7()` from `internal/id/` (`github.com/google/uuid`). `id.V4()` for random UUIDs, `id.Short(n)` for short hex IDs (e.g. shell session names). Stored as plain `TEXT` in SQLite.
-
-**Short IDs in the timeline:** `id.Shorten(uuid)` extracts the last 12 hex chars (random portion) of a UUID for display. All entity IDs in the timeline (`task_id:`, `alarm_id:`) use short forms to save tokens. Disambiguation: short ID + context (timestamp, goal, entry type) is unique — same principle as message text matching. Tools resolve short IDs by suffix match via `db.ResolveShortID` (`WHERE id LIKE '%' || ?1`).
-
-### SQLite Go Driver Conventions
-
-Using `mattn/go-sqlite3`:
-
-- **UUID handling**: all UUIDs are stored and queried as plain TEXT strings
-- **Array columns**: multi-value fields are JSON arrays in TEXT columns. Use `MarshalStringSlice` to bind and `scanStringSlice` to scan (both in `scan.go`)
-- **Custom functions**: `jaro_winkler_similarity` is registered via the driver's `ConnectHook` in `db.go`
-
-### Query function design
-
-One Go function per entity operation. Never create multiple `DoSomethingByX` / `DoSomethingByY` variants that differ only in lookup column. Instead, use a single function with a params struct and dispatch internally based on which fields are populated. Multiple `.sql` files behind a single Go function is fine.
-
-Good — `GetContact` already does this (`get_contact.sql` uses `WHERE id = ?1 OR EXISTS (SELECT 1 FROM json_each(whatsapp_ids) WHERE value = ?1) OR ...`). `GetMessagesByConversation` dispatches between two SQL files based on `beforeID`.
-
-### DB / service layering
-
-`db/` is the only package that touches `internal/queries`. It owns model types (`db/models.go`), scan helpers, and query functions. Domain packages (`internal/<name>/`) hold services, tools, and reflexes — they call `db.*` functions for all persistence.
-
-- model types (plain data structs, no methods) go in `db/models.go`
-- query functions are standalone: `func TaskGet(ctx, db, taskID) (Task, error)`
-- scan helpers are unexported: `func scanTask(s scanner) (Task, error)`
-- any db function with 3+ domain params uses a Params struct: `TaskInsertParams`, `CreateAlarmParams`
-- services own business logic: ID generation, LLM calls, time calculations, type transforms
-
-### Naming Conventions
-
-- All table names are **singular**: `contact`, `conversation`, `conversation_participant`, `message`, `media`, `message_media`, `alarm`, `alarm_occurrence`, `dream`, `soul`, `briefing`, `briefing_topic`
-- Canonical query files use canonical prefixes: `conversation_*`, `message_*`, `media_*`, `message_media_*`, `contact_*`, `alarm_*`
-- Tool names use canonical prefixes by domain (see "Where tools live" table for the full list)
-- Metadata keys use canonical ids: `conversation_id`, `message_id` (platform ids are never exposed to LLM context)
-- FK columns always include the target table name: `<table>_id` for simple references, `<qualifier>_<table>_id` when disambiguation is needed (e.g. `origin_contact_id`, `retry_for_task_id`). Self-references follow the same pattern.
-- Service method names: `Get` for single entity by ID, `List<Plural>` for returning slices (e.g. `ListTasks`, `ListReports`, `ListOccurrences`). Avoid bare `List()` — include the entity name.
-- DB function names follow the same pattern with entity prefix: `TaskGet`, `TaskList`, `TaskReportList`.
-
-### Nik's Identity
-
-Nik is an independent entity with its own WhatsApp phone number. `is_from_me` means "sent by nik" (not "sent by nik's owner"). Nik communicates directly on WhatsApp.
-
-## LLM tool schemas
-
-OpenAI's API requires `required` to list **every** key in `properties`. Optional parameters must still appear in `required`; use `"description"` to indicate they can be empty/null.
-
-## Brain tools, sense, and reflexes
-
-The `brain` package provides registration machinery (`Tool`, `ToolDeps`, `ToolHandler`, `Sense`, `Reflex`) but **never defines tools, sense, or reflexes itself**. Each domain package defines its own pieces, and `main.go` wires them in.
-
-### Where tools live
-
-Tools are defined in their domain package, not in `brain/`:
-
-| Package | Tools | Why |
-|---------|-------|-----|
-| `internal/messaging/` | `message_reply`, `message_noop`, `message_react`, `message_set_presence`, `message_update_media_description` | canonical messaging actions routed by platform |
-| `internal/contacts/` | `update_contact` | contact profile management |
-| `internal/db/` | `db_query` | read-only SQL queries against nik's SQLite database |
-| `internal/llm/` | `describe_media` | generic AI capability, wraps LLM methods |
-| `internal/shell/` | `shell` | persistent tmux terminal (run/read/send/kill/list) |
-| `internal/alarms/` | `alarm`, `update_alarm`, `cancel_alarm` | alarm/reminder scheduling |
-| `internal/skills/` | `load_skill` | load skill definitions from SKILL.md files |
-| `internal/config/` | `config` | read and update config values |
-| `internal/task/` | `task_spawn`, `task_retry`, `task_list`, `task_status`, `task_cancel` | background task orchestration |
-
-Each package exposes a `BuildTools() []llm.Tool` function that returns tool definitions + handlers. `main.go` calls `b.RegisterTools(pkg.BuildTools()...)`.
-
-### Where sense and reflexes live
-
-- **Sense**: `internal/timeline/` — single `Sense` implementation that iterates `AllowConversationIDs`, fetches messages/reports/occurrences, and maps them to `Stimulus`. Centrally owns all timeline formatting.
-- **Reflexes**: defined in domain packages — `task.Service.CheckStale`, `alarms.Service.FireDueAlarms`, `alarms.Service.CoreAlarmEnforcer`. Registered in `main.go` via `b.RegisterReflex(...)`.
-
-### Registration flow (`main.go`)
-
-1. Load config, open DB, create WhatsApp client and adapter
-2. Register adapter with messaging service, start adapter
-3. Build LLM client (OpenAI key or Codex auth)
-4. Create domain services: `alarms`, `recall`
-5. Create brain: `b := brain.New(cfg, llmClient)` (soul loaded from `soul/latest.md` automatically)
-6. Register reflexes: `taskSvc.CheckStale`, `alarmSvc.FireDueAlarms`, `alarmSvc.CoreAlarmEnforcer(cfg)`
-7. Set sense: `timeline.NewSense(cfg, messagingSvc, taskSvc, alarmSvc)`
-8. Register tools from all domain packages (see tools table above)
-9. `b.Awake(ctx, pollInterval)` starts the main loop
-
-### Adding a new tool
-
-1. Define `var myToolDef = llm.ToolDef{...}` and `func executeMyTool(ctx, deps, call)` in the domain package
-2. Add to the package's `BuildTools()` return list
-3. Wire in `main.go`
-4. Register in `tools/call/main.go` so the tool is available for CLI testing
-5. Update `tools/call/README.md` to reflect the new tool
-
-## Migrations
-
-Schema source of truth is `internal/db/schema.sql`. On fresh databases it is applied directly via `CREATE TABLE IF NOT EXISTS`. For existing databases, run `make schema-diff` to compare the live DB against the desired schema. The tool prints column-level diffs (missing columns, type/default mismatches, extra columns). It never modifies the database -- the AI reads the diff output and applies the necessary `ALTER TABLE` statements itself.
-
-Before applying any migration to the live DB:
-
-- **Back up first**: copy the DB file in workspace/backups/<date-time>.db before touching it. Ensure all data is committed, nik might be running.
-- **One statement at a time**: execute each `ALTER TABLE` / `CREATE TABLE` / `DROP TABLE` independently so a failure doesn't leave the DB in a half-migrated state.
-- **Do not lose data**: migrate the data, and abort if you are not confident.
-
-## Testing
-
-- Tests run against in-memory SQLite (`:memory:`) where applicable.
-- `make test` or regular `go test`
-- Most `.go` should have a `_test.go` counterpart, no dangling test files, if the file gets too big it's a signal the base `.go` file might have to be split.
+- Tool names use canonical prefixes by domain
 
 ## Debugging
+
+- never run `make run` on your own, ask me to do it if you need me to
+- never send signals to nik's process (kill, SIGQUIT, SIGTERM, etc.) -- if nik needs a restart, ask me
+- do not override GOPROXY, I need a VPN when it fails, tell me to connect to it and wait
+
+### After completing changes
+
+1. run `make lint`
+2. run `make test`
+3. run `make schema-diff` to check for schema drift against the live DB
 
 ### Entity graph
 
 ```
 contact ──┬── conversation_participant ──┬── conversation
-           │                              │
-           ├── message ───────────────────┘
-           │     └── message_media ── media
-           │
-           ├── task ──┬── task_report
-           │          └── retry chain (retry_for_task_id → task)
-           │
-           └── alarm ─── alarm_occurrence
-                │
-                └── origin_conversation_id → conversation
+          │                              │
+          ├── message ───────────────────┘
+          │     └── message_media ── media
+          │
+          ├── task ──┬── task_report
+          │          ├── task_assessment
+          │          └── retry chain (retry_for_task_id → task)
+          │
+          └── alarm ─── alarm_occurrence
+               │
+               └── origin_conversation_id → conversation
 
 conversation ── activation ──┬── tool_call
                              ├── activation_detail
@@ -374,6 +131,17 @@ conversation ── activation ──┬── tool_call
 task.activation_id  = the activation that ran the worker
 task.conversation_id + task.contact_id = who requested it
 ```
+
+### Log file
+
+Location: `workspace/nik.log` (slog text format). Key events to grep for:
+
+- `activation starting` / `activation completed` / `activation failed` -- brain lifecycle
+- `tool call` -- includes tool name, round, args (llm package)
+- `no terminal tool call, retrying` -- brain loop stall
+- `activation_id` appears in both DB rows and log lines -- use it to correlate
+
+Activation detail (instructions, user input, tools, reasoning) is stored in the `activation_detail` DB table, queryable via `db_query`.
 
 ### Tracing recipes
 
@@ -439,15 +207,6 @@ FROM alarm a LEFT JOIN alarm_occurrence ao ON ao.alarm_id = a.id
 WHERE a.id LIKE '%<short_id>' ORDER BY ao.fired_at DESC LIMIT 10;
 ```
 
-### Log file
-
-Location: `workspace/nik.log` (slog text format). Key events to grep for:
-
-- `activation starting` / `activation completed` / `activation failed` -- brain lifecycle
-- `tool call` -- includes tool name, round, args (llm package)
-- `no terminal tool call, retrying` -- brain loop stall
-- `activation_id` appears in both DB rows and log lines -- use it to correlate
-
 ### Debug workflow
 
 1. **Anchor** -- find the message or event that triggered the bug (conversation_id + time window, or body text search)
@@ -459,7 +218,7 @@ Location: `workspace/nik.log` (slog text format). Key events to grep for:
 7. **Check logs** -- grep nik.log for the activation_id to see runtime errors, timing, retries
 8. **Alarm chain** -- if alarm-related, check alarm -> alarm_occurrence -> next_fire_at progression
 
-## Git Strategy
+## Git
 
 `.gitignore` uses ignore-all approach: `*` ignores everything, then specific patterns are un-ignored (`!*.go`, `!go.mod`, `!go.sum`, `!*.sql`, `!*.yaml`, `!*.md`, `!Makefile`, `!.gitignore`, `!.config.example.yaml`). `workspace/` is blanket-ignored (contains runtime artifacts and secrets). Use `git add -f` if a new file type needs tracking.
 
@@ -467,16 +226,186 @@ Location: `workspace/nik.log` (slog text format). Key events to grep for:
 
 **No tool-generated trailers.** Never add metadata lines like `Made-with: Cursor`, `Co-authored-by: AI`, or similar trailers to commit messages. Commit messages contain only the subject and body written by the author.
 
-## Style
+**Allowed commit prefixes.** Use only `fix:`, `feat:`, `chore:`, or `docs:`. No other commit prefixes are allowed.
 
-- Always use `TEXT`, never `VARCHAR`
-- SQL uses two-space indentation
-- **One column per line** in SELECT lists and one field per line in Go `Scan()` calls -- never pack multiple columns/fields onto a single line
-- In every `CREATE TABLE`, keep all `*_at` timestamp columns grouped at the bottom of the column list
-- Go follows standard gofmt conventions
+**Agent git command path.** In this workspace, `git` may resolve to `/opt/rbx/infosec/safe-git-push/git`, which can inject forbidden commit trailers. For any commit workflow, use `/usr/bin/git` explicitly.
+
+**Agent commit steps (exact order):**
+1. `/usr/bin/git status --short`
+2. `/usr/bin/git add <files>`
+3. `/usr/bin/git commit -m "$(cat <<'EOF'
+<prefix>: <subject line>  # prefix must be fix|feat|chore|docs
+
+<body>
+EOF
+)"`
+4. `/usr/bin/git log -1 --pretty=%B` and verify no forbidden trailer lines are present
+5. `/usr/bin/git status --short`
+
+## Go
+
+### Style
+
+- metadata keys use canonical ids: `conversation_id`, `message_id` (platform ids are never exposed to LLM context)
+- service method names: `Get` for single entity by ID, `List<Plural>` for returning slices (e.g. `ListTasks`, `ListReports`, `ListOccurrences`). Avoid bare `List()` — include the entity name.
+- DB function names follow the same pattern with entity prefix: `TaskGet`, `TaskList`, `TaskReportList`.
+- errors are present tense, always wrapped like "read file xxx: err" not "error while reading"
+- avoid inline error assignment in if statements; assign first, then check
+- never chain multiple operations in a single if condition
+- use blank lines to separate logical blocks within a function (guard clauses, parse steps, main logic, return)
+- `cmd/nik/main.go` is wiring only — no types, no helper functions, no adapters. If you need a bridge between packages, put it in the domain package that owns the logic.
+- follows standard gofmt conventions
+- one Go file per query function, one test file per query function
+- one field per line in Go `Scan()` calls -- never pack multiple fields onto a single line
+- **always pass `*config.Config`** — never copy individual fields into local config structs. Every package reads from the pointer directly. Config is realtime (`ReloadIfChanged` on every activation); derived paths live as getters (e.g. `DBPath()`, `MediaPath()`)
+- bash/shell scripts use two-space indentation
 - YAML uses two-space indentation
-- Bash/shell scripts use two-space indentation
-- One Go file per query function, one test file per query function
+
+### Comments
+
+- use lowercase except proper nouns, acronyms, and code references
+- keep comments minimal and focused on the why
+- avoid comments that restate the code
+- avoid placeholder comments like `// helper function`
+- no godoc-style comments that restate the function/type name (e.g. `// GetUser returns a user by ID`); only comment exported symbols when the comment adds info the name and signature don't already convey
+
+### Testing
+
+- tests run against in-memory SQLite (`:memory:`) where applicable
+- `make test` or regular `go test`
+- most `.go` should have a `_test.go` counterpart, no dangling test files, if the file gets too big it's a signal the base `.go` file might have to be split
+
+### Scripts and tools
+
+- avoid bash scripts; create small Go commands in `tools/`
+- use `exec.Command()` for external tools
+- every tool in `tools/` must have a corresponding `make` target in the Makefile
+
+### Prompt files and what goes where
+
+Each prompt file has one job. Don't duplicate rules across files.
+
+| File | Owns | Does NOT own |
+|------|------|------|
+| `nik-00-base.md` | template assembly, hard constraints (manager rules), output contract | personality, how to think, how to talk |
+| `nik-01-identity.md` | WHO nik is: personality, voice/tone, anti-patterns (what nik never does), growth | tool guidance, thinking mechanics |
+| `nik-02-conversation.md` | conversation context: session format, media handling, group chat rules | personality, tool usage |
+| `nik-03-skills.md` | skill loading: preloaded content, available skill index | personality |
+| `nik-04-brain.md` | HOW nik thinks (5 waves): perceive, understand, plan, check, respond. Task planning (Wave 3), accountability (Wave 4), voice (Wave 5) | personality traits, identity, execution guidance |
+| `nik-05-retry.md` | retry nudge when zero tool calls produced | everything else |
+| `task-00.md` | worker prompt: role, execution guidance, tool docs, skills, plan | personality, messaging, management |
+| `critic-00.md` | critic prompt: task evaluation, tool/skill feedback, suggestions | personality, messaging, management |
+
+**Rule of thumb**: if a rule is about *who nik is*, it goes in `nik-01-identity.md`. If it's about *how nik thinks or acts*, it goes in `nik-04-brain.md`. If it's a hard constraint, `nik-00-base.md`. If it's about *how workers execute*, `task-00.md`. Never say the same thing in two files.
+
+**Workspace skills are runtime knowledge.** Base prompts (`prompts/`) must never reference specific workspace skills by name. Workspace skills teach through their summaries in the available skills index; base prompts stay generic.
+
+### Brain concepts
+
+The brain uses cognitive metaphors; the LLM client uses transport/mechanical ones.
+
+- **Reflex** (`func(ctx context.Context)`): unconscious, automatic, side-effect-producing function. Runs every tick *before* perception. Examples: `task.CheckStale` (inserts stale reports), `alarms.FireDueAlarms` (creates occurrences and claims alarms), `alarms.CoreAlarmEnforcer` (ensures core alarms exist and are healthy, throttled to 30 min).
+- **Sense** (`interface { Scan(ctx) ([]Stimulus, error) }`): the brain's single, unified perception. Strictly read-only — no side effects. Returns `[]Stimulus`, one per conversation with new events.
+- **Stimulus**: structured perception output (`Preamble`, `Timeline []TimelineEntry`, `ReadLine`, `Meta`, `LiveInput`, `Processed`). The timeline is a chronological mix of messages, task reports, and alarm occurrences.
+
+### Registration flow (`main.go`)
+
+The `brain` package provides registration machinery (`Tool`, `ToolDeps`, `ToolHandler`, `Sense`, `Reflex`) but **never defines tools, sense, or reflexes itself**. Each domain package defines its own pieces, and `main.go` wires them in.
+
+Each domain package exposes a `BuildTools() []llm.Tool` function that returns tool definitions + handlers. `main.go` calls `b.RegisterTools(pkg.BuildTools()...)`.
+
+- **Sense**: `internal/timeline/` — single `Sense` implementation. Registered via `b.SetSense(...)`.
+- **Reflexes**: defined in domain packages — `task.Service.CheckStale`, `alarms.Service.FireDueAlarms`, `alarms.Service.CoreAlarmEnforcer`. Registered in `main.go` via `b.RegisterReflex(...)`.
+
+Wiring steps:
+
+1. Load config, open DB, create WhatsApp client and adapter
+2. Register adapter with messaging service, start adapter
+3. Build LLM client (OpenAI key or Codex auth)
+4. Create domain services: `alarms`, `recall`
+5. Create brain: `b := brain.New(cfg, llmClient)` (soul loaded from `soul/latest.md` automatically)
+6. Register reflexes: `taskSvc.CheckStale`, `alarmSvc.FireDueAlarms`, `alarmSvc.CoreAlarmEnforcer(cfg)`
+7. Set sense: `timeline.NewSense(cfg, messagingSvc, taskSvc, alarmSvc)`
+8. Register tools from all domain packages
+9. `b.Awake(ctx, pollInterval)` starts the main loop
+
+### Adding a new tool
+
+1. Define `var myToolDef = llm.ToolDef{...}` and `func executeMyTool(ctx, deps, call)` in the domain package
+2. Add to the package's `BuildTools()` return list
+3. Wire in `main.go`
+4. Register in `tools/call/main.go` so the tool is available for CLI testing
+5. Update `tools/call/README.md` to reflect the new tool
+
+### LLM tool schemas
+
+OpenAI's API requires `required` to list **every** key in `properties`. Optional parameters must still appear in `required`; use `"description"` to indicate they can be empty/null.
+
+### Query embedding (no sqlc)
+
+All queries live in `internal/queries/*.sql` files with exact executable SQL (positional `?1`/`?2` params). The `queries` Go package (`internal/queries/embed.go`) embeds every `.sql` file as an exported string var. The `db` package imports it as `"github.com/kciuffolo/nik/internal/queries"` and passes the embedded SQL to `database/sql` calls. Schema DDL lives in `internal/db/schema.sql`, embedded directly by the `db` package.
+
+### DB layer
+
+**Driver** (`mattn/go-sqlite3`):
+
+- **UUID handling**: all UUIDs are stored and queried as plain TEXT strings
+- **Array columns**: multi-value fields are JSON arrays in TEXT columns. Use `MarshalStringSlice` to bind and `scanStringSlice` to scan (both in `scan.go`)
+- **Custom functions**: `jaro_winkler_similarity` is registered via the driver's `ConnectHook` in `db.go`
+
+**Query function design:** one Go function per entity operation. Never create multiple `DoSomethingByX` / `DoSomethingByY` variants that differ only in lookup column. Instead, use a single function with a params struct and dispatch internally based on which fields are populated. Multiple `.sql` files behind a single Go function is fine.
+
+Good — `GetContact` already does this (`get_contact.sql` uses `WHERE id = ?1 OR EXISTS (SELECT 1 FROM json_each(whatsapp_ids) WHERE value = ?1) OR ...`). `GetMessagesByConversation` dispatches between two SQL files based on `beforeID`.
+
+**Service layering:** `db/` is the only package that touches `internal/queries`. It owns model types (`db/models.go`), scan helpers, and query functions. Domain packages (`internal/<name>/`) hold services, tools, and reflexes — they call `db.*` functions for all persistence.
+
+- model types (plain data structs, no methods) go in `db/models.go`
+- query functions are standalone: `func TaskGet(ctx, db, taskID) (Task, error)`
+- scan helpers are unexported: `func scanTask(s scanner) (Task, error)`
+- any db function with 3+ domain params uses a Params struct: `TaskInsertParams`, `CreateAlarmParams`
+- services own business logic: ID generation, LLM calls, time calculations, type transforms
+
+**UUIDs:** all primary keys are **UUIDv7** (time-ordered), generated via `id.V7()` from `internal/id/` (`github.com/google/uuid`). `id.V4()` for random UUIDs, `id.Short(n)` for short hex IDs (e.g. shell session names). Stored as plain `TEXT` in SQLite.
+
+**Short IDs in the timeline:** `id.Shorten(uuid)` extracts the last 12 hex chars (random portion) of a UUID for display. All entity IDs in the timeline (`task_id:`, `alarm_id:`) use short forms to save tokens. Disambiguation: short ID + context (timestamp, goal, entry type) is unique — same principle as message text matching. Tools resolve short IDs by suffix match via `db.ResolveShortID` (`WHERE id LIKE '%' || ?1`).
+
+## SQL
+
+SQLite, single file at `$NIK_HOME/nik.db`. Schema applied on startup via `db.Open()`. Foreign keys are enabled via `_foreign_keys=1` pragma. WAL mode is on for concurrent reads.
+
+**Never use the `sqlite3` CLI to mutate nik.db.** The CLI defaults to `PRAGMA foreign_keys = OFF`, which silently bypasses FK constraints and creates orphaned rows. All writes must go through `db.Open()` (which enforces FKs) or, if the CLI is unavoidable, start every session with `PRAGMA foreign_keys = ON;` before any mutation.
+
+- always use `TEXT`, never `VARCHAR`
+- SQL uses two-space indentation
+- **one column per line** in SELECT lists -- never pack multiple columns onto a single line
+- in every `CREATE TABLE`, keep all `*_at` timestamp columns grouped at the bottom of the column list
+- no inline SQL in Go files
+- all table names are **singular**: `contact`, `conversation`, `message`, `media`, `alarm`, `task`, etc.
+- canonical query files use canonical prefixes: `conversation_*`, `message_*`, `media_*`, `contact_*`, `alarm_*`
+- FK columns always include the target table name: `<table>_id` for simple references, `<qualifier>_<table>_id` when disambiguation is needed (e.g. `origin_contact_id`, `retry_for_task_id`)
+
+### SQLite features
+
+- JSON arrays in TEXT columns for multi-value fields (nicknames, emails, whatsapp_ids, phone_numbers)
+- `json_each()`, `json_extract()` for array lookups
+- `jaro_winkler_similarity()` custom function for fuzzy contact search
+- `ON CONFLICT ... DO UPDATE` for upserts
+
+### Migrations
+
+Schema source of truth is `internal/db/schema.sql`. On fresh databases it is applied directly via `CREATE TABLE IF NOT EXISTS`. For existing databases, run `make schema-diff` to compare the live DB against the desired schema. The tool prints column-level diffs (missing columns, type/default mismatches, extra columns). It never modifies the database -- the AI reads the diff output and applies the necessary `ALTER TABLE` statements itself.
+
+Before applying any migration to the live DB:
+
+- **Back up first**: copy the DB file in workspace/backups/<date-time>.db before touching it. Ensure all data is committed, nik might be running.
+- **One statement at a time**: execute each `ALTER TABLE` / `CREATE TABLE` / `DROP TABLE` independently so a failure doesn't leave the DB in a half-migrated state.
+- **Do not lose data**: migrate the data, and abort if you are not confident.
+
+## Candidates
+
+Things to revisit periodically. The agent adds entries here when the user flags a mistake or suggests a different approach. Only the user removes entries.
+
+<!-- example: - 2026-03-14: user prefers X over Y for error handling -- revisit error style rules -->
 
 ## Fin
 
