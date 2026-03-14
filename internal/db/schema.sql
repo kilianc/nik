@@ -160,7 +160,6 @@ CREATE TABLE IF NOT EXISTS task (
 CREATE TABLE IF NOT EXISTS task_report (
   id          TEXT PRIMARY KEY,
   task_id     TEXT NOT NULL REFERENCES task(id),
-  kind        TEXT NOT NULL CHECK(kind IN ('report')),
   status      TEXT NOT NULL DEFAULT 'running' CHECK(status IN ('running', 'completed', 'failed')),
   content     TEXT NOT NULL,
   created_at  TIMESTAMP NOT NULL DEFAULT (datetime('now'))
