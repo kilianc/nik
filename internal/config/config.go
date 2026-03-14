@@ -12,24 +12,47 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+type ModelConfig struct {
+	Model           string `yaml:"model"`
+	ReasoningEffort string `yaml:"reasoning_effort"`
+	Verbosity       string `yaml:"verbosity"`
+}
+
+type CriticConfig struct {
+	Enabled         bool   `yaml:"enabled"`
+	Model           string `yaml:"model"`
+	ReasoningEffort string `yaml:"reasoning_effort"`
+	Verbosity       string `yaml:"verbosity"`
+}
+
+type ModelsConfig struct {
+	Main   ModelConfig  `yaml:"main"`
+	Recall ModelConfig  `yaml:"recall"`
+	Critic CriticConfig `yaml:"critic"`
+	TTS    TTSConfig    `yaml:"tts"`
+}
+
+type TTSConfig struct {
+	Model        string  `yaml:"model"`
+	Voice        string  `yaml:"voice"`
+	Instructions string  `yaml:"instructions"`
+	Speed        float64 `yaml:"speed"`
+}
+
 type Config struct {
 	Home        string    `yaml:"-"`
 	lastModTime time.Time `yaml:"-"`
 
-	OpenAIKey       string `yaml:"openai_key"`
-	UseCodex        bool   `yaml:"use_codex"`
-	ExaAPIKey       string `yaml:"exa_api_key"`
-	Model           string `yaml:"model"`
-	ReasoningEffort string `yaml:"reasoning_effort"`
-	Verbosity       string `yaml:"verbosity"`
-	MediaDirValue   string `yaml:"media_dir"`
-	PromptsDirValue string `yaml:"prompts_dir"`
-	SkillsDirValue  string `yaml:"skills_dir"`
+	OpenAIKey       string       `yaml:"openai_key"`
+	UseCodex        bool         `yaml:"use_codex"`
+	ExaAPIKey       string       `yaml:"exa_api_key"`
+	Models          ModelsConfig `yaml:"models"`
+	MediaDirValue   string       `yaml:"media_dir"`
+	PromptsDirValue string       `yaml:"prompts_dir"`
+	SkillsDirValue  string       `yaml:"skills_dir"`
 
 	AllowConversationIDs      map[string]string `yaml:"allow_conversation_ids"`
 	PrivilegedConversationIDs map[string]string `yaml:"privileged_conversation_ids"`
-
-	RecallModel string `yaml:"recall_model"`
 
 	MaxHistory     int    `yaml:"max_history"`
 	Timezone       string `yaml:"timezone"`
@@ -40,13 +63,6 @@ type Config struct {
 	DiagnosticTime string `yaml:"diagnostic_time"`
 
 	BannedWords []string `yaml:"banned_words"`
-
-	CriticEnabled bool   `yaml:"critic_enabled"`
-	CriticModel   string `yaml:"critic_model"`
-
-	TTSVoice        string  `yaml:"tts_voice"`
-	TTSInstructions string  `yaml:"tts_instructions"`
-	TTSSpeed        float64 `yaml:"tts_speed"`
 }
 
 func (c Config) LogPath() string {
@@ -130,27 +146,24 @@ func (c Config) TZ() *time.Location {
 }
 
 func (c Config) TTSVoiceOrDefault() string {
-	if c.TTSVoice == "" {
+	if c.Models.TTS.Voice == "" {
 		return "ash"
 	}
-	return c.TTSVoice
+	return c.Models.TTS.Voice
 }
 
 func (c Config) TTSSpeedOrDefault() float64 {
-	if c.TTSSpeed == 0 {
+	if c.Models.TTS.Speed == 0 {
 		return 1.0
 	}
-	return c.TTSSpeed
+	return c.Models.TTS.Speed
 }
 
-func (c Config) CriticModelOrDefault() string {
-	if c.CriticModel != "" {
-		return c.CriticModel
+func (c Config) TTSModelOrDefault() string {
+	if c.Models.TTS.Model == "" {
+		return "gpt-4o-mini-tts"
 	}
-	if c.RecallModel != "" {
-		return c.RecallModel
-	}
-	return c.Model
+	return c.Models.TTS.Model
 }
 
 func (c Config) MemoriesPath() string {
@@ -245,17 +258,10 @@ func Load(home string) (*Config, error) {
 		cfg.lastModTime = info.ModTime()
 	}
 
-	if cfg.AllowConversationIDs == nil {
-		cfg.AllowConversationIDs = make(map[string]string)
-	}
-	for label, pid := range cfg.PrivilegedConversationIDs {
-		if !mapContainsValue(cfg.AllowConversationIDs, pid) {
-			cfg.AllowConversationIDs[label] = pid
-		}
-	}
-
-	if strings.TrimSpace(cfg.OpenAIKey) == "" && !cfg.UseCodex {
-		return nil, fmt.Errorf("missing required config key openai_key (or set use_codex: true)")
+	normalizeConfig(&cfg)
+	err = validateConfig(cfg)
+	if err != nil {
+		return nil, err
 	}
 
 	return &cfg, nil
@@ -296,22 +302,96 @@ func (c *Config) reload() error {
 		return fmt.Errorf("parse %s: %w", path, err)
 	}
 
+	normalizeConfig(&fresh)
+	err = validateConfig(fresh)
+	if err != nil {
+		return err
+	}
+
 	home := c.Home
 	modTime := c.lastModTime
 	*c = fresh
 	c.Home = home
 	c.lastModTime = modTime
 
-	if c.AllowConversationIDs == nil {
-		c.AllowConversationIDs = make(map[string]string)
+	return nil
+}
+
+func normalizeConfig(cfg *Config) {
+	if cfg.AllowConversationIDs == nil {
+		cfg.AllowConversationIDs = make(map[string]string)
 	}
-	for label, pid := range c.PrivilegedConversationIDs {
-		if !mapContainsValue(c.AllowConversationIDs, pid) {
-			c.AllowConversationIDs[label] = pid
+	for label, pid := range cfg.PrivilegedConversationIDs {
+		if !mapContainsValue(cfg.AllowConversationIDs, pid) {
+			cfg.AllowConversationIDs[label] = pid
 		}
+	}
+}
+
+func validateConfig(cfg Config) error {
+	if strings.TrimSpace(cfg.OpenAIKey) == "" && !cfg.UseCodex {
+		return fmt.Errorf("missing required config key openai_key (or set use_codex: true)")
+	}
+
+	if strings.TrimSpace(cfg.Models.Main.Model) == "" {
+		return fmt.Errorf("missing required config key models.main.model")
+	}
+
+	err := validatePurposeModel("main", cfg.Models.Main)
+	if err != nil {
+		return err
+	}
+
+	err = validatePurposeModel("recall", cfg.Models.Recall)
+	if err != nil {
+		return err
+	}
+
+	criticModel := ModelConfig{
+		Model:           cfg.Models.Critic.Model,
+		ReasoningEffort: cfg.Models.Critic.ReasoningEffort,
+		Verbosity:       cfg.Models.Critic.Verbosity,
+	}
+	err = validatePurposeModel("critic", criticModel)
+	if err != nil {
+		return err
+	}
+
+	if cfg.Models.Critic.Enabled && strings.TrimSpace(cfg.Models.Critic.Model) == "" {
+		return fmt.Errorf("missing required config key models.critic.model when models.critic.enabled is true")
 	}
 
 	return nil
+}
+
+func validatePurposeModel(purpose string, modelCfg ModelConfig) error {
+	if !isValidReasoningEffort(modelCfg.ReasoningEffort) {
+		return fmt.Errorf("invalid models.%s.reasoning_effort %q (none, minimal, low, medium, high, xhigh, or empty)", purpose, modelCfg.ReasoningEffort)
+	}
+
+	if !isValidVerbosity(modelCfg.Verbosity) {
+		return fmt.Errorf("invalid models.%s.verbosity %q (low, medium, high, or empty)", purpose, modelCfg.Verbosity)
+	}
+
+	return nil
+}
+
+func isValidReasoningEffort(value string) bool {
+	switch value {
+	case "", "none", "minimal", "low", "medium", "high", "xhigh":
+		return true
+	default:
+		return false
+	}
+}
+
+func isValidVerbosity(value string) bool {
+	switch value {
+	case "", "low", "medium", "high":
+		return true
+	default:
+		return false
+	}
 }
 
 func mapContainsValue(m map[string]string, val string) bool {

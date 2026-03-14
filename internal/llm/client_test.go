@@ -43,7 +43,7 @@ func TestRoundSignature(t *testing.T) {
 func TestSpeechRequiresAPIKey(t *testing.T) {
 	client := &Client{}
 
-	_, err := client.Speech(t.Context(), "hello", "ash", "", 1.0)
+	_, err := client.Speech(t.Context(), "hello", "gpt-4o-mini-tts", "ash", "", 1.0)
 	if err == nil {
 		t.Fatalf("expected error when apiClient is nil")
 	}

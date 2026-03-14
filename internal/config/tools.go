@@ -27,7 +27,7 @@ var configDef = llm.ToolDef{
 			},
 			"field": map[string]any{
 				"type":        "string",
-				"description": "Config field name for 'set'. Writable fields: timezone, location, model, reasoning_effort, media_dir, max_history.",
+				"description": "Config field name for 'set'. Writable fields: timezone, location, media_dir, max_history, models.main.*, models.recall.*, models.critic.*.",
 			},
 			"value": map[string]any{
 				"type":        "string",
@@ -79,8 +79,24 @@ func configHandler(cfg *Config, conn *sql.DB) llm.ToolExecutor {
 
 func configGet(cfg *Config) (string, error) {
 	out := map[string]any{
-		"model":                       cfg.Model,
-		"reasoning_effort":            cfg.ReasoningEffort,
+		"models": map[string]any{
+			"main": map[string]any{
+				"model":            cfg.Models.Main.Model,
+				"reasoning_effort": cfg.Models.Main.ReasoningEffort,
+				"verbosity":        cfg.Models.Main.Verbosity,
+			},
+			"recall": map[string]any{
+				"model":            cfg.Models.Recall.Model,
+				"reasoning_effort": cfg.Models.Recall.ReasoningEffort,
+				"verbosity":        cfg.Models.Recall.Verbosity,
+			},
+			"critic": map[string]any{
+				"enabled":          cfg.Models.Critic.Enabled,
+				"model":            cfg.Models.Critic.Model,
+				"reasoning_effort": cfg.Models.Critic.ReasoningEffort,
+				"verbosity":        cfg.Models.Critic.Verbosity,
+			},
+		},
 		"exa_api_key":                 cfg.ExaAPIKey,
 		"media_dir":                   cfg.MediaDirValue,
 		"max_history":                 cfg.MaxHistory,
@@ -112,22 +128,13 @@ func configSet(cfg *Config, field, value string) (string, error) {
 		return llm.ToolErrorf("field %q is read-only", field), nil
 	}
 
+	previous := *cfg
+
 	switch field {
 	case "timezone":
 		cfg.Timezone = value
 	case "location":
 		cfg.Location = value
-	case "model":
-		cfg.Model = value
-	case "reasoning_effort":
-		valid := map[string]bool{
-			"": true, "none": true, "minimal": true,
-			"low": true, "medium": true, "high": true, "xhigh": true,
-		}
-		if !valid[value] {
-			return llm.ToolErrorf("invalid reasoning_effort %q (none, minimal, low, medium, high, xhigh, or empty)", value), nil
-		}
-		cfg.ReasoningEffort = value
 	case "media_dir":
 		cfg.MediaDirValue = value
 	case "max_history":
@@ -136,12 +143,61 @@ func configSet(cfg *Config, field, value string) (string, error) {
 			return llm.ToolErrorf("invalid max_history: %s", value), nil
 		}
 		cfg.MaxHistory = n
+	case "models.main.model":
+		cfg.Models.Main.Model = value
+	case "models.main.reasoning_effort":
+		if !isValidReasoningEffort(value) {
+			return llm.ToolErrorf("invalid models.main.reasoning_effort %q (none, minimal, low, medium, high, xhigh, or empty)", value), nil
+		}
+		cfg.Models.Main.ReasoningEffort = value
+	case "models.main.verbosity":
+		if !isValidVerbosity(value) {
+			return llm.ToolErrorf("invalid models.main.verbosity %q (low, medium, high, or empty)", value), nil
+		}
+		cfg.Models.Main.Verbosity = value
+	case "models.recall.model":
+		cfg.Models.Recall.Model = value
+	case "models.recall.reasoning_effort":
+		if !isValidReasoningEffort(value) {
+			return llm.ToolErrorf("invalid models.recall.reasoning_effort %q (none, minimal, low, medium, high, xhigh, or empty)", value), nil
+		}
+		cfg.Models.Recall.ReasoningEffort = value
+	case "models.recall.verbosity":
+		if !isValidVerbosity(value) {
+			return llm.ToolErrorf("invalid models.recall.verbosity %q (low, medium, high, or empty)", value), nil
+		}
+		cfg.Models.Recall.Verbosity = value
+	case "models.critic.enabled":
+		enabled, err := strconv.ParseBool(value)
+		if err != nil {
+			return llm.ToolErrorf("invalid models.critic.enabled %q (true or false)", value), nil
+		}
+		cfg.Models.Critic.Enabled = enabled
+	case "models.critic.model":
+		cfg.Models.Critic.Model = value
+	case "models.critic.reasoning_effort":
+		if !isValidReasoningEffort(value) {
+			return llm.ToolErrorf("invalid models.critic.reasoning_effort %q (none, minimal, low, medium, high, xhigh, or empty)", value), nil
+		}
+		cfg.Models.Critic.ReasoningEffort = value
+	case "models.critic.verbosity":
+		if !isValidVerbosity(value) {
+			return llm.ToolErrorf("invalid models.critic.verbosity %q (low, medium, high, or empty)", value), nil
+		}
+		cfg.Models.Critic.Verbosity = value
 	default:
 		return llm.ToolErrorf("unknown field %q", field), nil
 	}
 
-	err := cfg.Save(cfg.ConfigPath())
+	err := validateConfig(*cfg)
 	if err != nil {
+		*cfg = previous
+		return llm.ToolError(err), nil
+	}
+
+	err = cfg.Save(cfg.ConfigPath())
+	if err != nil {
+		*cfg = previous
 		return llm.ToolError(err), nil
 	}
 
