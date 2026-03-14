@@ -31,7 +31,7 @@ type criticPromptData struct {
 const criticTimeout = 5 * time.Minute
 
 func (r *Runner) RunCritic(ctx context.Context, t db.Task) {
-	if !r.cfg.CriticEnabled || r.criticLLM == nil {
+	if !r.cfg.Models.Critic.Enabled || r.criticLLM == nil {
 		return
 	}
 

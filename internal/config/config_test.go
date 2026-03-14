@@ -42,19 +42,38 @@ func writeTestConfig(t *testing.T, dir, content string) {
 
 func TestReloadIfChangedPicksUpNewValues(t *testing.T) {
 	dir := t.TempDir()
-	writeTestConfig(t, dir, "openai_key: sk-test\nmodel: gpt-4\ntimezone: UTC\nmax_history: 50\n")
+	writeTestConfig(t, dir, `
+openai_key: sk-test
+models:
+  main:
+    model: gpt-4
+    reasoning_effort: low
+    verbosity: medium
+timezone: UTC
+max_history: 50
+`)
 
 	cfg, err := Load(dir)
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
 
-	if cfg.Model != "gpt-4" {
-		t.Fatalf("expected model gpt-4, got %q", cfg.Model)
+	if cfg.Models.Main.Model != "gpt-4" {
+		t.Fatalf("expected model gpt-4, got %q", cfg.Models.Main.Model)
 	}
 
 	time.Sleep(50 * time.Millisecond)
-	writeTestConfig(t, dir, "openai_key: sk-test\nmodel: gpt-5\ntimezone: America/Chicago\nmax_history: 200\nlocation: Chicago\n")
+	writeTestConfig(t, dir, `
+openai_key: sk-test
+models:
+  main:
+    model: gpt-5
+    reasoning_effort: high
+    verbosity: low
+timezone: America/Chicago
+max_history: 200
+location: Chicago
+`)
 
 	reloaded, err := cfg.ReloadIfChanged()
 	if err != nil {
@@ -64,8 +83,8 @@ func TestReloadIfChangedPicksUpNewValues(t *testing.T) {
 		t.Fatal("expected reload to return true")
 	}
 
-	if cfg.Model != "gpt-5" {
-		t.Fatalf("expected model gpt-5 after reload, got %q", cfg.Model)
+	if cfg.Models.Main.Model != "gpt-5" {
+		t.Fatalf("expected model gpt-5 after reload, got %q", cfg.Models.Main.Model)
 	}
 	if cfg.Timezone != "America/Chicago" {
 		t.Fatalf("expected timezone America/Chicago, got %q", cfg.Timezone)
@@ -80,7 +99,12 @@ func TestReloadIfChangedPicksUpNewValues(t *testing.T) {
 
 func TestReloadIfChangedNoOpWhenUnmodified(t *testing.T) {
 	dir := t.TempDir()
-	writeTestConfig(t, dir, "openai_key: sk-test\nmodel: gpt-4\n")
+	writeTestConfig(t, dir, `
+openai_key: sk-test
+models:
+  main:
+    model: gpt-4
+`)
 
 	cfg, err := Load(dir)
 	if err != nil {
@@ -98,17 +122,27 @@ func TestReloadIfChangedNoOpWhenUnmodified(t *testing.T) {
 
 func TestReloadIfChangedPreservesPointer(t *testing.T) {
 	dir := t.TempDir()
-	writeTestConfig(t, dir, "openai_key: sk-test\nmodel: gpt-4\n")
+	writeTestConfig(t, dir, `
+openai_key: sk-test
+models:
+  main:
+    model: gpt-4
+`)
 
 	cfg, err := Load(dir)
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
 
-	modelPtr := &cfg.Model
+	modelPtr := &cfg.Models.Main.Model
 
 	time.Sleep(50 * time.Millisecond)
-	writeTestConfig(t, dir, "openai_key: sk-test\nmodel: gpt-5\n")
+	writeTestConfig(t, dir, `
+openai_key: sk-test
+models:
+  main:
+    model: gpt-5
+`)
 
 	_, err = cfg.ReloadIfChanged()
 	if err != nil {
@@ -122,7 +156,16 @@ func TestReloadIfChangedPreservesPointer(t *testing.T) {
 
 func TestReloadIfChangedMergesPrivilegedIntoAllow(t *testing.T) {
 	dir := t.TempDir()
-	writeTestConfig(t, dir, "openai_key: sk-test\nprivileged_conversation_ids:\n  priv: priv1\nallow_conversation_ids:\n  conv: conv1\n")
+	writeTestConfig(t, dir, `
+openai_key: sk-test
+models:
+  main:
+    model: gpt-4
+privileged_conversation_ids:
+  priv: priv1
+allow_conversation_ids:
+  conv: conv1
+`)
 
 	cfg, err := Load(dir)
 	if err != nil {
@@ -134,7 +177,17 @@ func TestReloadIfChangedMergesPrivilegedIntoAllow(t *testing.T) {
 	}
 
 	time.Sleep(50 * time.Millisecond)
-	writeTestConfig(t, dir, "openai_key: sk-test\nprivileged_conversation_ids:\n  priv: priv1\n  priv2: priv2\nallow_conversation_ids:\n  conv: conv1\n")
+	writeTestConfig(t, dir, `
+openai_key: sk-test
+models:
+  main:
+    model: gpt-4
+privileged_conversation_ids:
+  priv: priv1
+  priv2: priv2
+allow_conversation_ids:
+  conv: conv1
+`)
 
 	_, err = cfg.ReloadIfChanged()
 	if err != nil {
@@ -146,25 +199,51 @@ func TestReloadIfChangedMergesPrivilegedIntoAllow(t *testing.T) {
 	}
 }
 
-func TestCriticModelOrDefault(t *testing.T) {
-	t.Run("explicit critic model", func(t *testing.T) {
-		c := Config{CriticModel: "gpt-4.1-nano", RecallModel: "gpt-4.1-mini", Model: "gpt-4.1"}
-		if got := c.CriticModelOrDefault(); got != "gpt-4.1-nano" {
-			t.Fatalf("expected gpt-4.1-nano, got %q", got)
-		}
-	})
+func TestLoadRejectsMissingMainModel(t *testing.T) {
+	dir := t.TempDir()
+	writeTestConfig(t, dir, `
+openai_key: sk-test
+models:
+  main:
+    model: ""
+`)
 
-	t.Run("falls back to recall model", func(t *testing.T) {
-		c := Config{RecallModel: "gpt-4.1-mini", Model: "gpt-4.1"}
-		if got := c.CriticModelOrDefault(); got != "gpt-4.1-mini" {
-			t.Fatalf("expected gpt-4.1-mini, got %q", got)
-		}
-	})
+	_, err := Load(dir)
+	if err == nil {
+		t.Fatal("expected error for missing models.main.model")
+	}
+}
 
-	t.Run("falls back to main model", func(t *testing.T) {
-		c := Config{Model: "gpt-4.1"}
-		if got := c.CriticModelOrDefault(); got != "gpt-4.1" {
-			t.Fatalf("expected gpt-4.1, got %q", got)
-		}
-	})
+func TestLoadRejectsEnabledCriticWithoutModel(t *testing.T) {
+	dir := t.TempDir()
+	writeTestConfig(t, dir, `
+openai_key: sk-test
+models:
+  main:
+    model: gpt-5
+  critic:
+    enabled: true
+    model: ""
+`)
+
+	_, err := Load(dir)
+	if err == nil {
+		t.Fatal("expected error when critic is enabled without model")
+	}
+}
+
+func TestLoadRejectsInvalidPurposeSettings(t *testing.T) {
+	dir := t.TempDir()
+	writeTestConfig(t, dir, `
+openai_key: sk-test
+models:
+  main:
+    model: gpt-5
+    reasoning_effort: turbo
+`)
+
+	_, err := Load(dir)
+	if err == nil {
+		t.Fatal("expected error for invalid models.main.reasoning_effort")
+	}
 }

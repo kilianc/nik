@@ -500,14 +500,19 @@ func completeStreaming(ctx context.Context, client *openai.Client, params respon
 	return final, nil
 }
 
-func (c *Client) Speech(ctx context.Context, text string, voice string, instructions string, speed float64) (string, error) {
+func (c *Client) Speech(ctx context.Context, text string, model string, voice string, instructions string, speed float64) (string, error) {
 	if c.apiClient == nil {
 		return "", fmt.Errorf("speech: requires api key")
 	}
 
+	speechModel := openai.SpeechModelGPT4oMiniTTS
+	if strings.TrimSpace(model) != "" {
+		speechModel = openai.SpeechModel(model)
+	}
+
 	params := openai.AudioSpeechNewParams{
 		Input:          text,
-		Model:          openai.SpeechModelGPT4oMiniTTS,
+		Model:          speechModel,
 		Voice:          openai.AudioSpeechNewParamsVoice(voice),
 		ResponseFormat: openai.AudioSpeechNewParamsResponseFormatOpus,
 		Speed:          openai.Float(speed),

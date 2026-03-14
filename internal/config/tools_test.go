@@ -39,3 +39,78 @@ func TestAllowlistRemoveGuardsLastEntry(t *testing.T) {
 		t.Fatalf("expected guard error, got %q", out)
 	}
 }
+
+func TestConfigSetSupportsPurposeModelFields(t *testing.T) {
+	cfg := &Config{
+		Home:      t.TempDir(),
+		OpenAIKey: "sk-test",
+		Models: ModelsConfig{
+			Main: ModelConfig{
+				Model: "gpt-5",
+			},
+			Recall: ModelConfig{
+				Model: "gpt-4.1-nano",
+			},
+			Critic: CriticConfig{
+				Model: "gpt-4.1-nano",
+			},
+		},
+	}
+
+	out, err := configSet(cfg, "models.main.model", "gpt-5.4")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, `"ok":true`) {
+		t.Fatalf("expected ok response, got %q", out)
+	}
+	if cfg.Models.Main.Model != "gpt-5.4" {
+		t.Fatalf("expected models.main.model to update, got %q", cfg.Models.Main.Model)
+	}
+
+	out, err = configSet(cfg, "models.critic.enabled", "true")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, `"ok":true`) {
+		t.Fatalf("expected ok response, got %q", out)
+	}
+	if !cfg.Models.Critic.Enabled {
+		t.Fatal("expected models.critic.enabled to be true")
+	}
+}
+
+func TestConfigSetRejectsInvalidPurposeModelFields(t *testing.T) {
+	cfg := &Config{
+		Home:      t.TempDir(),
+		OpenAIKey: "sk-test",
+		Models: ModelsConfig{
+			Main: ModelConfig{
+				Model: "gpt-5",
+			},
+			Critic: CriticConfig{
+				Enabled: true,
+				Model:   "gpt-4.1-nano",
+			},
+		},
+	}
+
+	out, err := configSet(cfg, "models.recall.reasoning_effort", "turbo")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "invalid models.recall.reasoning_effort") {
+		t.Fatalf("expected validation error, got %q", out)
+	}
+
+	out, err = configSet(cfg, "models.critic.model", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "missing required config key models.critic.model") {
+		t.Fatalf("expected missing critic model error, got %q", out)
+	}
+	if cfg.Models.Critic.Model == "" {
+		t.Fatal("expected rollback to keep prior models.critic.model")
+	}
+}

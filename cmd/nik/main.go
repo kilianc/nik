@@ -125,14 +125,19 @@ func main() {
 		llmOpts = append(llmOpts, llm.WithCodex(auth))
 		slog.Info("codex auth ready", "account_id", auth.AccountID)
 	}
-	llmOpts = append(llmOpts, llm.WithReasoningEffort(&cfg.ReasoningEffort))
-	llmOpts = append(llmOpts, llm.WithVerbosity(&cfg.Verbosity))
-	llmClient := llm.NewClient(&cfg.Model, llmOpts...)
+	llmOpts = append(llmOpts, llm.WithReasoningEffort(&cfg.Models.Main.ReasoningEffort))
+	llmOpts = append(llmOpts, llm.WithVerbosity(&cfg.Models.Main.Verbosity))
+	llmClient := llm.NewClient(&cfg.Models.Main.Model, llmOpts...)
 
 	var recallClient *llm.Client
-	if cfg.RecallModel != "" && cfg.OpenAIKey != "" {
-		recallClient = llm.NewClient(&cfg.RecallModel, llm.WithAPIKey(cfg.OpenAIKey))
-		slog.Info("recall client ready", "model", cfg.RecallModel)
+	if cfg.Models.Recall.Model != "" && cfg.OpenAIKey != "" {
+		recallOpts := []llm.ClientOption{
+			llm.WithAPIKey(cfg.OpenAIKey),
+			llm.WithReasoningEffort(&cfg.Models.Recall.ReasoningEffort),
+			llm.WithVerbosity(&cfg.Models.Recall.Verbosity),
+		}
+		recallClient = llm.NewClient(&cfg.Models.Recall.Model, recallOpts...)
+		slog.Info("recall client ready", "model", cfg.Models.Recall.Model)
 	}
 
 	alarmSvc := alarms.New(conn)
@@ -157,17 +162,28 @@ func main() {
 	llmClient.SetObserver(stats.NewRecorder(conn))
 
 	messagingSvc.SetSpeechFn(func(ctx context.Context, text string) (string, error) {
-		return llmClient.Speech(ctx, text, cfg.TTSVoiceOrDefault(), cfg.TTSInstructions, cfg.TTSSpeedOrDefault())
+		return llmClient.Speech(
+			ctx,
+			text,
+			cfg.TTSModelOrDefault(),
+			cfg.TTSVoiceOrDefault(),
+			cfg.Models.TTS.Instructions,
+			cfg.TTSSpeedOrDefault(),
+		)
 	})
 
 	taskRunner := task.NewRunner(cfg, llmClient, taskSvc, taskTools)
 
-	if cfg.OpenAIKey != "" {
-		criticModel := cfg.CriticModelOrDefault()
-		criticClient := llm.NewClient(&criticModel, llm.WithAPIKey(cfg.OpenAIKey))
+	if cfg.Models.Critic.Enabled && cfg.OpenAIKey != "" {
+		criticOpts := []llm.ClientOption{
+			llm.WithAPIKey(cfg.OpenAIKey),
+			llm.WithReasoningEffort(&cfg.Models.Critic.ReasoningEffort),
+			llm.WithVerbosity(&cfg.Models.Critic.Verbosity),
+		}
+		criticClient := llm.NewClient(&cfg.Models.Critic.Model, criticOpts...)
 		criticClient.SetObserver(stats.NewRecorder(conn))
 		taskRunner.SetCriticLLM(criticClient)
-		slog.Info("critic client ready", "model", criticModel, "enabled", cfg.CriticEnabled)
+		slog.Info("critic client ready", "model", cfg.Models.Critic.Model, "enabled", cfg.Models.Critic.Enabled)
 	}
 
 	b := brain.New(cfg, llmClient)

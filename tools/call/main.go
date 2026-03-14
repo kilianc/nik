@@ -48,8 +48,9 @@ func main() {
 		}
 		llmOpts = append(llmOpts, llm.WithCodex(auth))
 	}
-	llmOpts = append(llmOpts, llm.WithReasoningEffort(&cfg.ReasoningEffort))
-	llmClient := llm.NewClient(&cfg.Model, llmOpts...)
+	llmOpts = append(llmOpts, llm.WithReasoningEffort(&cfg.Models.Main.ReasoningEffort))
+	llmOpts = append(llmOpts, llm.WithVerbosity(&cfg.Models.Main.Verbosity))
+	llmClient := llm.NewClient(&cfg.Models.Main.Model, llmOpts...)
 
 	conn, err := db.Open(cfg.DBPath(), cfg.TZ())
 	if err != nil {
