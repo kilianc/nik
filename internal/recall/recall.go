@@ -2,8 +2,10 @@ package recall
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -12,9 +14,8 @@ import (
 )
 
 const (
-	recallTimeout    = 30 * time.Second
-	maxContextTokens = 800_000
-	charsPerToken    = 4
+	recallTimeout = 30 * time.Second
+	charsPerToken = 4
 )
 
 type Service struct {
@@ -41,173 +42,130 @@ func (s *Service) Recall(ctx context.Context, stimulus string) string {
 		return ""
 	}
 
+	numbered, rows := numberRows(memories)
+	if len(rows) == 0 {
+		return ""
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, recallTimeout)
 	defer cancel()
 
-	slog.Info("recall starting", "pkg", "recall", "memories_chars", len(memories))
+	slog.Info("recall starting", "pkg", "recall", "memories_chars", len(memories), "rows", len(rows))
 
-	result := s.recallRecursive(ctx, stimulus, memories, 0)
-
-	if result == "" || result == "nil" {
-		return ""
-	}
-
-	return result
-}
-
-const maxRecursionDepth = 3
-
-func (s *Service) recallRecursive(ctx context.Context, stimulus, historyBlock string, depth int) string {
-	if depth > maxRecursionDepth {
-		slog.Warn("recall max recursion depth reached", "pkg", "recall", "depth", depth)
-		return historyBlock
-	}
-
-	if tokenEstimate(historyBlock) <= maxContextTokens {
-		return s.recallSinglePass(ctx, stimulus, historyBlock)
-	}
-
-	chunks := partition(historyBlock, maxContextTokens)
-	slog.Info("recall partitioning", "pkg", "recall", "chunks", len(chunks), "depth", depth)
-
-	var extracted []string
-
-	for i, chunk := range chunks {
-		result := s.recallExtract(ctx, stimulus, chunk)
-		if result != "" && result != "nil" {
-			extracted = append(extracted, result)
-		}
-		slog.Info("recall chunk processed", "pkg", "recall", "chunk", i+1, "of", len(chunks), "extracted_len", len(result))
-	}
-
-	if len(extracted) == 0 {
-		return ""
-	}
-
-	merged := strings.Join(extracted, "\n")
-
-	if tokenEstimate(merged) > maxContextTokens {
-		return s.recallRecursive(ctx, stimulus, merged, depth+1)
-	}
-
-	return s.recallSynthesize(ctx, stimulus, merged)
-}
-
-func (s *Service) recallSinglePass(ctx context.Context, stimulus, historyBlock string) string {
 	instructions := buildRecallPrompt(stimulus)
 
-	_, ch := s.client.Complete(ctx, instructions, llm.StaticInput(historyBlock), nil, nil)
+	_, ch := s.client.Complete(ctx, instructions, llm.StaticInput(numbered), nil, nil)
 	result := <-ch
 
 	if result.Err != nil {
-		slog.Warn("recall single pass failed", "pkg", "recall", "err", result.Err)
+		slog.Warn("recall failed", "pkg", "recall", "err", result.Err)
 		return ""
 	}
 
+	ids := parseSelectedIDs(result.Output, len(rows))
+
 	slog.Info("recall completed",
 		"pkg", "recall",
-		"mode", "single_pass",
-		"history_tokens", tokenEstimate(historyBlock),
-		"output_len", len(result.Output),
+		"rows", len(rows),
+		"selected", len(ids),
 		"input_tokens", result.Usage.InputTokens,
 		"output_tokens", result.Usage.OutputTokens,
 	)
 
-	return result.Output
-}
-
-func (s *Service) recallExtract(ctx context.Context, stimulus, chunk string) string {
-	instructions := buildRecallPrompt(stimulus)
-
-	_, ch := s.client.Complete(ctx, instructions, llm.StaticInput(chunk), nil, nil)
-	result := <-ch
-
-	if result.Err != nil {
-		slog.Warn("recall extract failed", "pkg", "recall", "err", result.Err)
+	if len(ids) == 0 {
 		return ""
 	}
 
-	return result.Output
-}
-
-func (s *Service) recallSynthesize(ctx context.Context, stimulus, extracted string) string {
-	instructions := buildSynthesizePrompt(stimulus)
-
-	_, ch := s.client.Complete(ctx, instructions, llm.StaticInput(extracted), nil, nil)
-	result := <-ch
-
-	if result.Err != nil {
-		slog.Warn("recall synthesize failed", "pkg", "recall", "err", result.Err)
-		return ""
+	var selected []string
+	for _, id := range ids {
+		selected = append(selected, rows[id-1])
 	}
-
-	slog.Info("recall completed",
-		"pkg", "recall",
-		"mode", "multi_pass",
-		"output_len", len(result.Output),
-		"input_tokens", result.Usage.InputTokens,
-		"output_tokens", result.Usage.OutputTokens,
-	)
-
-	return result.Output
+	return strings.Join(selected, "\n")
 }
 
 func buildRecallPrompt(stimulus string) string {
-	return `Extract facts relevant to this stimulus from the history below.
+	return `The input is a numbered list of memories (facts about people, preferences, events, decisions).
+Return ONLY the row numbers relevant to this conversation as a comma-separated list.
+If nothing is relevant, return: nil
 
-Each bullet = one fact about a person, date, preference, event, plan, or commitment.
-
-STOP RULES — never output any of these:
-- Nik's tools, skills, capabilities, architecture, or system behavior
-- Technical implementation details (APIs, code, configs, IDs)
-- Themes, analysis, summaries, or meta-commentary
-- Duplicate facts (state each fact once)
-- Closing remarks or offers
-
-If nothing relevant, output: nil
-
-Stimulus: ` + stimulus
+Stimulus:
+` + stimulus
 }
 
-func buildSynthesizePrompt(stimulus string) string {
-	return `Merge and deduplicate these pre-filtered facts into a single list. Group by person or topic. Remove redundancy, keep all unique facts.
+// numberRows parses a markdown table, skips everything up to and including
+// the separator line (|---|---|...), and returns a numbered version for
+// the LLM plus the original data rows for reassembly. Row IDs are 1-based.
+func numberRows(memories string) (numbered string, rows []string) {
+	lines := strings.Split(strings.TrimSpace(memories), "\n")
 
-STOP RULES — never output any of these:
-- Nik's tools, skills, capabilities, architecture, or system behavior
-- Technical implementation details (APIs, code, configs, IDs)
-- Themes, analysis, summaries, or meta-commentary
-- Duplicate facts (state each fact once)
-- Closing remarks or offers
+	pastSeparator := false
+	var b strings.Builder
 
-Stimulus: ` + stimulus
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+
+		if !pastSeparator {
+			if isSeparator(trimmed) {
+				pastSeparator = true
+			}
+			continue
+		}
+
+		rows = append(rows, line)
+		fmt.Fprintf(&b, "%d: %s\n", len(rows), trimmed)
+	}
+
+	return b.String(), rows
+}
+
+func isSeparator(line string) bool {
+	if !strings.HasPrefix(line, "|") {
+		return false
+	}
+
+	inner := strings.Trim(line, "| ")
+	if inner == "" {
+		return false
+	}
+	for _, c := range inner {
+		if c != '-' && c != '|' && c != ' ' {
+			return false
+		}
+	}
+	return true
+}
+
+// parseSelectedIDs extracts integers from a comma-separated LLM output,
+// discarding out-of-range values and non-numeric tokens.
+func parseSelectedIDs(output string, maxID int) []int {
+	output = strings.TrimSpace(output)
+	if output == "" || output == "nil" {
+		return nil
+	}
+
+	parts := strings.Split(output, ",")
+	seen := make(map[int]bool, len(parts))
+	var ids []int
+
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		n, err := strconv.Atoi(p)
+		if err != nil || n < 1 || n > maxID {
+			continue
+		}
+		if seen[n] {
+			continue
+		}
+		seen[n] = true
+		ids = append(ids, n)
+	}
+
+	return ids
 }
 
 func tokenEstimate(s string) int {
 	return len(s) / charsPerToken
-}
-
-func partition(block string, maxTokens int) []string {
-	maxChars := maxTokens * charsPerToken
-	lines := strings.Split(block, "\n")
-
-	var chunks []string
-	var current strings.Builder
-
-	for _, line := range lines {
-		if current.Len()+len(line)+1 > maxChars && current.Len() > 0 {
-			chunks = append(chunks, current.String())
-			current.Reset()
-		}
-
-		if current.Len() > 0 {
-			current.WriteByte('\n')
-		}
-		current.WriteString(line)
-	}
-
-	if current.Len() > 0 {
-		chunks = append(chunks, current.String())
-	}
-
-	return chunks
 }
