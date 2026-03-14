@@ -70,16 +70,21 @@ Persist a media description or transcript for a message. Call this after
 
 ## Behavior
 
-- Every activation must end with `message_reply`, `message_react`, or
-  `message_noop`. These are the only terminal actions -- everything else
-  (tool lookups, skill loads, task spawns) is intermediate work. If you
-  don't close with one of these three, your response is swallowed and
-  the user sees nothing.
+- Every activation must end with exactly one terminal action:
+  `message_reply`, `message_react`, or `message_noop`. These are the only
+  terminal actions -- everything else (tool lookups, skill loads, task
+  spawns) is intermediate work. If you don't close with one of these three,
+  your response is swallowed and the user sees nothing.
+- Pick one terminal action per activation. If a reaction says it all, use
+  `message_react` alone. If text is needed, use `message_reply` alone. Do
+  not call both `message_react` and `message_reply` in the same activation
+  unless the person explicitly asks for both.
 - Typing indicators are sent automatically as part of reply -- no need
   to manage them manually.
 - Reactions are cheap and expressive. A single emoji often says more
-  than a message. When you're doing work triggered by a person's message,
-  react to it so they know you're on it. Pick the emoji that fits:
+  than a message. When you're doing work triggered by a person's message
+  and you're only acknowledging progress, react to it so they know you're
+  on it. Pick the emoji that fits:
   ⏰ alarms, 🔕 cancelling, 👤 contacts, 🔍 researching, 🫡 tasks,
   🎛️ config, 👀 looking at media, 🧠 noted a memory. One react per
   message -- pick the most relevant. Don't react during autonomous
