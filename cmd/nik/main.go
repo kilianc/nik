@@ -162,6 +162,14 @@ func main() {
 
 	taskRunner := task.NewRunner(cfg, llmClient, taskSvc, taskTools)
 
+	if cfg.OpenAIKey != "" {
+		criticModel := cfg.CriticModelOrDefault()
+		criticClient := llm.NewClient(&criticModel, llm.WithAPIKey(cfg.OpenAIKey))
+		criticClient.SetObserver(stats.NewRecorder(conn))
+		taskRunner.SetCriticLLM(criticClient)
+		slog.Info("critic client ready", "model", criticModel, "enabled", cfg.CriticEnabled)
+	}
+
 	b := brain.New(cfg, llmClient)
 
 	b.SetWorkerToolNames(workerToolNames)

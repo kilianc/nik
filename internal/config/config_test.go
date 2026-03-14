@@ -145,3 +145,26 @@ func TestReloadIfChangedMergesPrivilegedIntoAllow(t *testing.T) {
 		t.Fatalf("expected 3 allow IDs after reload (conv1 + priv1 + priv2), got %d: %v", len(cfg.AllowConversationIDs), cfg.AllowConversationIDs)
 	}
 }
+
+func TestCriticModelOrDefault(t *testing.T) {
+	t.Run("explicit critic model", func(t *testing.T) {
+		c := Config{CriticModel: "gpt-4.1-nano", RecallModel: "gpt-4.1-mini", Model: "gpt-4.1"}
+		if got := c.CriticModelOrDefault(); got != "gpt-4.1-nano" {
+			t.Fatalf("expected gpt-4.1-nano, got %q", got)
+		}
+	})
+
+	t.Run("falls back to recall model", func(t *testing.T) {
+		c := Config{RecallModel: "gpt-4.1-mini", Model: "gpt-4.1"}
+		if got := c.CriticModelOrDefault(); got != "gpt-4.1-mini" {
+			t.Fatalf("expected gpt-4.1-mini, got %q", got)
+		}
+	})
+
+	t.Run("falls back to main model", func(t *testing.T) {
+		c := Config{Model: "gpt-4.1"}
+		if got := c.CriticModelOrDefault(); got != "gpt-4.1" {
+			t.Fatalf("expected gpt-4.1, got %q", got)
+		}
+	})
+}
