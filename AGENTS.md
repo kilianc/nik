@@ -348,6 +348,116 @@ Before applying any migration to the live DB:
 - `make test` or regular `go test`
 - Most `.go` should have a `_test.go` counterpart, no dangling test files, if the file gets too big it's a signal the base `.go` file might have to be split.
 
+## Debugging
+
+### Entity graph
+
+```
+contact ──┬── conversation_participant ──┬── conversation
+           │                              │
+           ├── message ───────────────────┘
+           │     └── message_media ── media
+           │
+           ├── task ──┬── task_report
+           │          └── retry chain (retry_for_task_id → task)
+           │
+           └── alarm ─── alarm_occurrence
+                │
+                └── origin_conversation_id → conversation
+
+conversation ── activation ──┬── tool_call
+                             ├── activation_detail
+                             ├── shell_output
+                             └── task (activation_id = spawning activation)
+
+task.activation_id  = the activation that ran the worker
+task.conversation_id + task.contact_id = who requested it
+```
+
+### Tracing recipes
+
+All queries use `db_query`. Replace `<placeholders>` with real values.
+
+**Find a message and who sent it:**
+
+```sql
+SELECT m.id, m.body, m.sent_at, m.is_from_me, c.name, c.whatsapp_ids, m.conversation_id
+FROM message m JOIN contact c ON c.id = m.contact_id
+WHERE m.body LIKE '%<search text>%' ORDER BY m.sent_at DESC LIMIT 10;
+```
+
+**What activation processed a conversation window:**
+
+```sql
+SELECT id, conversation_id, task_id, model, tool_call_count, duration_ms, cost_usd, error, created_at
+FROM activation
+WHERE conversation_id = '<conv_id>' AND created_at >= '<start_time>'
+ORDER BY created_at DESC LIMIT 20;
+```
+
+**What did nik think and do in an activation:**
+
+```sql
+SELECT ad.instructions, ad.user_input, ad.tools, ad.reasoning_summaries
+FROM activation_detail ad WHERE ad.activation_id = '<act_id>';
+
+SELECT name, input, output, duration_ms, error, created_at
+FROM tool_call WHERE activation_id = '<act_id>' ORDER BY created_at;
+```
+
+**Task lifecycle -- goal, reports, worker tool calls:**
+
+```sql
+SELECT id, goal, status, plan, activation_id, retry_for_task_id, retry_number, created_at, completed_at
+FROM task WHERE id LIKE '%<short_id>';
+
+SELECT id, status, content, created_at
+FROM task_report WHERE task_id = '<task_id>' ORDER BY created_at;
+
+SELECT tc.name, tc.input, tc.output, tc.duration_ms, tc.error
+FROM tool_call tc JOIN activation a ON a.id = tc.activation_id
+WHERE a.task_id = '<task_id>' ORDER BY tc.created_at;
+```
+
+**Retry chain:**
+
+```sql
+WITH RECURSIVE chain(id, goal, status, retry_number, retry_for_task_id) AS (
+  SELECT id, goal, status, retry_number, retry_for_task_id FROM task WHERE id LIKE '%<short_id>'
+  UNION ALL
+  SELECT t.id, t.goal, t.status, t.retry_number, t.retry_for_task_id
+  FROM task t JOIN chain c ON t.retry_for_task_id = c.id
+) SELECT * FROM chain;
+```
+
+**Alarm -> occurrence -> next activation:**
+
+```sql
+SELECT a.id, a.goal, a.recurrence, a.next_fire_at, ao.fired_at, ao.note
+FROM alarm a LEFT JOIN alarm_occurrence ao ON ao.alarm_id = a.id
+WHERE a.id LIKE '%<short_id>' ORDER BY ao.fired_at DESC LIMIT 10;
+```
+
+### Log file
+
+Location: `workspace/nik.log` (slog text format). Key events to grep for:
+
+- `activation starting` / `activation completed` / `activation failed` -- brain lifecycle
+- `tool call` -- includes tool name, round, args (llm package)
+- `no terminal tool call, retrying` -- brain loop stall
+- `activation_id` appears in both DB rows and log lines -- use it to correlate
+
+### Debug workflow
+
+1. **Anchor** -- find the message or event that triggered the bug (conversation_id + time window, or body text search)
+2. **Expand** -- join to conversation, contact, participants to understand who/where
+3. **Trace activation** -- find activation(s) by conversation_id + created_at window
+4. **Inspect reasoning** -- activation_detail for full prompt context and reasoning summaries
+5. **Audit tool calls** -- tool_call rows for the activation, check errors, inspect input/output
+6. **Follow tasks** -- task -> task_report -> worker activation (task.activation_id) -> worker tool_calls
+7. **Check logs** -- grep nik.log for the activation_id to see runtime errors, timing, retries
+8. **Alarm chain** -- if alarm-related, check alarm -> alarm_occurrence -> next_fire_at progression
+
 ## Git Strategy
 
 `.gitignore` uses ignore-all approach: `*` ignores everything, then specific patterns are un-ignored (`!*.go`, `!go.mod`, `!go.sum`, `!*.sql`, `!*.yaml`, `!*.md`, `!Makefile`, `!.gitignore`, `!.config.example.yaml`). `workspace/` is blanket-ignored (contains runtime artifacts and secrets). Use `git add -f` if a new file type needs tracking.
