@@ -50,7 +50,7 @@ func (r *Runner) SetCriticLLM(c llm.Completer) {
 }
 
 func (r *Runner) renderPrompt(t db.Task, tools []llm.ToolDef) string {
-	tmplPath := filepath.Join(r.cfg.PromptsPath(), "task.md")
+	tmplPath := filepath.Join(r.cfg.PromptsPath(), "task-00.md")
 
 	raw, err := os.ReadFile(tmplPath)
 	if err != nil {

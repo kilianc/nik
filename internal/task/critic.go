@@ -141,7 +141,7 @@ func extractSkillNames(calls []db.ToolCallInfo) string {
 }
 
 func (r *Runner) renderCriticPrompt(t db.Task, toolCalls, reports, skills string, tools []llm.ToolDef) string {
-	tmplPath := filepath.Join(r.cfg.PromptsPath(), "critic.md")
+	tmplPath := filepath.Join(r.cfg.PromptsPath(), "critic-00.md")
 
 	raw, err := os.ReadFile(tmplPath)
 	if err != nil {
