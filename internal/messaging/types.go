@@ -39,6 +39,7 @@ type InboundMessage struct {
 	LocalPath              string
 	MediaHash              string
 	MediaSizeBytes         int64
+	MediaTranscriptText    string
 }
 
 type OutboundMessage struct {

@@ -428,7 +428,7 @@ func TestSendAudioPersistsOutbound(t *testing.T) {
 	}
 	svc.RegisterPlatform(platform)
 
-	err = svc.SendAudio(ctx, conversation.ID, tmpFile.Name(), true)
+	err = svc.SendAudio(ctx, conversation.ID, tmpFile.Name(), true, "")
 	if err != nil {
 		t.Fatalf("send audio: %v", err)
 	}
@@ -449,6 +449,85 @@ func TestSendAudioPersistsOutbound(t *testing.T) {
 	}
 	if platform.sendAudioCalls != 1 {
 		t.Fatalf("expected one send audio call, got %d", platform.sendAudioCalls)
+	}
+}
+
+func TestSendAudioStoresTranscript(t *testing.T) {
+	ctx := context.Background()
+
+	conn, err := db.OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	contactsSvc := contacts.NewService(conn)
+	cfg := &config.Config{}
+	cfg.Home = t.TempDir()
+	svc := NewService(cfg, conn, contactsSvc)
+
+	now := time.Now()
+	err = db.UpsertConversation(ctx, conn, db.UpsertConversationParams{
+		Platform:               "whatsapp",
+		ExternalConversationID: "conversation@s.whatsapp.net",
+		Kind:                   "dm",
+		LastMessageAt:          &now,
+	})
+	if err != nil {
+		t.Fatalf("upsert conversation: %v", err)
+	}
+
+	conversation, err := db.GetConversation(ctx, conn, db.GetConversationParams{
+		Platform:               "whatsapp",
+		ExternalConversationID: "conversation@s.whatsapp.net",
+	})
+	if err != nil {
+		t.Fatalf("get conversation: %v", err)
+	}
+
+	tmpFile, err := os.CreateTemp("", "test-audio-*.ogg")
+	if err != nil {
+		t.Fatalf("create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+	_, _ = tmpFile.Write([]byte("fake audio data for transcript test"))
+	tmpFile.Close()
+
+	platform := &mockPlatform{
+		platform: "whatsapp",
+		audioOutbound: OutboundMessage{
+			ExternalMessageID: "audio-transcript-1",
+			ExternalSenderID:  "nik@s.whatsapp.net",
+			SentAt:            now,
+			Kind:              "audio",
+			MimeType:          "audio/ogg; codecs=opus",
+			LocalPath:         "abc123.ogg",
+		},
+	}
+	svc.RegisterPlatform(platform)
+
+	ttsText := "Hey CT, sending you a quick hello"
+	err = svc.SendAudio(ctx, conversation.ID, tmpFile.Name(), true, ttsText)
+	if err != nil {
+		t.Fatalf("send audio: %v", err)
+	}
+
+	msg, err := db.GetMessage(ctx, conn, db.GetMessageParams{
+		Platform:          "whatsapp",
+		ExternalMessageID: "audio-transcript-1",
+	})
+	if err != nil {
+		t.Fatalf("get outbound audio message: %v", err)
+	}
+
+	if msg.Body != ttsText {
+		t.Fatalf("expected body %q, got %q", ttsText, msg.Body)
+	}
+	if !msg.MediaTranscriptText.Valid || msg.MediaTranscriptText.String != ttsText {
+		t.Fatalf("expected media transcript %q, got %+v", ttsText, msg.MediaTranscriptText)
+	}
+	if !msg.MediaLocalPath.Valid || msg.MediaLocalPath.String == "" {
+		t.Fatalf("expected non-empty media local path, got %+v", msg.MediaLocalPath)
 	}
 }
 
