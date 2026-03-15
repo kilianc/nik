@@ -118,4 +118,81 @@ func TestFallbackCriticPrompt(t *testing.T) {
 	if !strings.Contains(got, "shell") {
 		t.Fatalf("expected tool calls in prompt, got %q", got)
 	}
+	if !strings.Contains(got, "JSON") {
+		t.Fatalf("expected JSON instruction in fallback prompt, got %q", got)
+	}
+}
+
+func TestParseCriticOutput(t *testing.T) {
+	t.Run("valid json", func(t *testing.T) {
+		out, err := parseCriticOutput(`{"effectiveness": 4, "tool_feedback": "shell helped", "skill_feedback": "web not useful", "suggestions": "add build skill"}`)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if out.Effectiveness != 4 {
+			t.Fatalf("expected effectiveness 4, got %d", out.Effectiveness)
+		}
+		if out.ToolFeedback != "shell helped" {
+			t.Fatalf("expected tool_feedback 'shell helped', got %q", out.ToolFeedback)
+		}
+		if out.SkillFeedback != "web not useful" {
+			t.Fatalf("expected skill_feedback 'web not useful', got %q", out.SkillFeedback)
+		}
+		if out.Suggestions != "add build skill" {
+			t.Fatalf("expected suggestions 'add build skill', got %q", out.Suggestions)
+		}
+	})
+
+	t.Run("markdown fenced json", func(t *testing.T) {
+		input := "```json\n{\"effectiveness\": 5, \"tool_feedback\": \"ok\", \"skill_feedback\": \"ok\", \"suggestions\": \"none\"}\n```"
+		out, err := parseCriticOutput(input)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if out.Effectiveness != 5 {
+			t.Fatalf("expected effectiveness 5, got %d", out.Effectiveness)
+		}
+	})
+
+	t.Run("bare fenced json", func(t *testing.T) {
+		input := "```\n{\"effectiveness\": 3, \"tool_feedback\": \"ok\", \"skill_feedback\": \"ok\", \"suggestions\": \"none\"}\n```"
+		out, err := parseCriticOutput(input)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if out.Effectiveness != 3 {
+			t.Fatalf("expected effectiveness 3, got %d", out.Effectiveness)
+		}
+	})
+
+	t.Run("effectiveness too low", func(t *testing.T) {
+		_, err := parseCriticOutput(`{"effectiveness": 0, "tool_feedback": "", "skill_feedback": "", "suggestions": ""}`)
+		if err == nil {
+			t.Fatal("expected error for effectiveness 0")
+		}
+	})
+
+	t.Run("effectiveness too high", func(t *testing.T) {
+		_, err := parseCriticOutput(`{"effectiveness": 6, "tool_feedback": "", "skill_feedback": "", "suggestions": ""}`)
+		if err == nil {
+			t.Fatal("expected error for effectiveness 6")
+		}
+	})
+
+	t.Run("malformed json", func(t *testing.T) {
+		_, err := parseCriticOutput(`not json at all`)
+		if err == nil {
+			t.Fatal("expected error for malformed json")
+		}
+	})
+
+	t.Run("whitespace padded", func(t *testing.T) {
+		out, err := parseCriticOutput(`  {"effectiveness": 2, "tool_feedback": "x", "skill_feedback": "y", "suggestions": "z"}  `)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if out.Effectiveness != 2 {
+			t.Fatalf("expected effectiveness 2, got %d", out.Effectiveness)
+		}
+	})
 }

@@ -16,19 +16,27 @@ import (
 )
 
 type criticPromptData struct {
-	Now        string
-	Home       string
-	Goal       string
-	Plan       string
-	Status     string
-	ToolCalls  string
-	Reports    string
-	Skills     string
-	ToolDocs   string
-	SkillIndex string
+	Now       string
+	Home      string
+	Goal      string
+	Plan      string
+	Status    string
+	ToolCalls string
+	Reports   string
+	Skills    string
+}
+
+type assessOutput struct {
+	Effectiveness int    `json:"effectiveness"`
+	ToolFeedback  string `json:"tool_feedback"`
+	SkillFeedback string `json:"skill_feedback"`
+	Suggestions   string `json:"suggestions"`
 }
 
 const criticTimeout = 5 * time.Minute
+
+const criticRetryNudge = `Your previous response was not valid JSON. Respond with only a JSON object, nothing else:
+{"effectiveness": <1-5>, "tool_feedback": "...", "skill_feedback": "...", "suggestions": "..."}`
 
 func (r *Runner) RunCritic(ctx context.Context, t db.Task) {
 	if !r.cfg.Models.Critic.Enabled || r.criticLLM == nil {
@@ -53,25 +61,74 @@ func (r *Runner) RunCritic(ctx context.Context, t db.Task) {
 	reportsStr := r.formatReports(ctx, t.ID)
 	skillsStr := extractSkillNames(toolCalls)
 
-	assessTool := BuildAssessTool(r.svc, t.ID)
+	instructions := r.renderCriticPrompt(t, toolCallsStr, reportsStr, skillsStr)
 
-	filtered := make([]llm.Tool, 0, len(r.tools)+1)
-	filtered = append(filtered, assessTool)
-	for _, tool := range r.tools {
-		if tool.Def.Name != "task_report" {
-			filtered = append(filtered, tool)
-		}
-	}
-
-	defs, exec := llm.SplitTools(filtered)
-	instructions := r.renderCriticPrompt(t, toolCallsStr, reportsStr, skillsStr, defs)
-
-	_, ch := r.criticLLM.Complete(ctx, instructions, llm.StaticInput(""), defs, exec)
+	actID, ch := r.criticLLM.Complete(ctx, instructions, llm.StaticInput(""), nil, nil)
 	result := <-ch
 
 	if result.Err != nil {
 		slog.Warn("critic failed", "pkg", "task", "task_id", t.ID, "error", result.Err)
+		return
 	}
+
+	assessment, err := parseCriticOutput(result.Output)
+	if err != nil {
+		slog.Warn("critic parse failed, retrying", "pkg", "task", "task_id", t.ID, "error", err)
+
+		_, ch = r.criticLLM.Complete(ctx, criticRetryNudge, llm.StaticInput(""), nil, nil)
+		result = <-ch
+
+		if result.Err != nil {
+			slog.Warn("critic retry failed", "pkg", "task", "task_id", t.ID, "error", result.Err)
+			return
+		}
+
+		assessment, err = parseCriticOutput(result.Output)
+		if err != nil {
+			slog.Warn("critic parse failed after retry", "pkg", "task", "task_id", t.ID, "error", err)
+			return
+		}
+	}
+
+	err = r.svc.InsertAssessment(ctx, db.TaskAssessmentInsertParams{
+		TaskID:        t.ID,
+		ActivationID:  actID,
+		Effectiveness: assessment.Effectiveness,
+		ToolFeedback:  assessment.ToolFeedback,
+		SkillFeedback: assessment.SkillFeedback,
+		Suggestions:   assessment.Suggestions,
+	})
+	if err != nil {
+		slog.Warn("critic insert assessment", "pkg", "task", "task_id", t.ID, "error", err)
+	}
+}
+
+func parseCriticOutput(raw string) (assessOutput, error) {
+	raw = strings.TrimSpace(raw)
+
+	if strings.HasPrefix(raw, "```") {
+		lines := strings.SplitN(raw, "\n", 2)
+		if len(lines) == 2 {
+			raw = lines[1]
+		}
+		if idx := strings.LastIndex(raw, "```"); idx >= 0 {
+			raw = raw[:idx]
+		}
+		raw = strings.TrimSpace(raw)
+	}
+
+	var out assessOutput
+
+	err := json.Unmarshal([]byte(raw), &out)
+	if err != nil {
+		return assessOutput{}, fmt.Errorf("unmarshal critic output: %w", err)
+	}
+
+	if out.Effectiveness < 1 || out.Effectiveness > 5 {
+		return assessOutput{}, fmt.Errorf("effectiveness must be 1-5, got %d", out.Effectiveness)
+	}
+
+	return out, nil
 }
 
 func formatToolCalls(calls []db.ToolCallInfo) string {
@@ -140,7 +197,7 @@ func extractSkillNames(calls []db.ToolCallInfo) string {
 	return strings.Join(loaded, ", ")
 }
 
-func (r *Runner) renderCriticPrompt(t db.Task, toolCalls, reports, skills string, tools []llm.ToolDef) string {
+func (r *Runner) renderCriticPrompt(t db.Task, toolCalls, reports, skills string) string {
 	tmplPath := filepath.Join(r.cfg.PromptsPath(), "critic-00.md")
 
 	raw, err := os.ReadFile(tmplPath)
@@ -159,16 +216,14 @@ func (r *Runner) renderCriticPrompt(t db.Task, toolCalls, reports, skills string
 	now := time.Now().In(loc).Format("Monday, January 2, 2006 3:04 PM")
 
 	data := criticPromptData{
-		Now:        now,
-		Home:       r.cfg.Home,
-		Goal:       t.Goal,
-		Plan:       t.Plan,
-		Status:     t.Status,
-		ToolCalls:  toolCalls,
-		Reports:    reports,
-		Skills:     skills,
-		ToolDocs:   buildToolDocs(tools),
-		SkillIndex: buildSkillDocs(r.cfg),
+		Now:       now,
+		Home:      r.cfg.Home,
+		Goal:      t.Goal,
+		Plan:      t.Plan,
+		Status:    t.Status,
+		ToolCalls: toolCalls,
+		Reports:   reports,
+		Skills:    skills,
 	}
 
 	var buf strings.Builder
@@ -182,6 +237,6 @@ func (r *Runner) renderCriticPrompt(t db.Task, toolCalls, reports, skills string
 }
 
 func fallbackCriticPrompt(t db.Task, toolCalls, reports string) string {
-	return fmt.Sprintf("Evaluate task %s.\nGoal: %s\nStatus: %s\n\nTool calls:\n%s\nReports:\n%s",
+	return fmt.Sprintf("Evaluate task %s.\nGoal: %s\nStatus: %s\n\nTool calls:\n%s\nReports:\n%s\n\nRespond with JSON: {\"effectiveness\": <1-5>, \"tool_feedback\": \"...\", \"skill_feedback\": \"...\", \"suggestions\": \"...\"}",
 		t.ID, t.Goal, t.Status, toolCalls, reports)
 }
