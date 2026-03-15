@@ -84,13 +84,17 @@ func (b *Brain) loadInstructions(now time.Time, recall string, retry bool) (stri
 		return "", fmt.Errorf("parse base template: %w", err)
 	}
 
+	hooks := loadHooks(b.cfg.Home, b.cfg.Models.Main.Model)
+
 	for _, s := range sectionFiles {
 		data, readErr := os.ReadFile(filepath.Join(dir, s.file))
 		if readErr != nil {
 			return "", fmt.Errorf("read prompt %s: %w", s.file, readErr)
 		}
 
-		_, err = tmpl.New(s.name).Parse(string(data))
+		content := applyHooks(string(data), s.name, hooks)
+
+		_, err = tmpl.New(s.name).Parse(content)
 		if err != nil {
 			return "", fmt.Errorf("parse %s template: %w", s.name, err)
 		}
