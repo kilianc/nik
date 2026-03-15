@@ -4,6 +4,7 @@ summary: >
   Morning news research session and topic management.
   Load when someone mentions an interest or when a briefing alarm fires.
 tools: [shell, alarm, db_query, load_skill]
+install: true
 ---
 
 # Briefing
@@ -41,13 +42,7 @@ During any conversation — if you learn someone cares about something, add it t
 
 ## Scheduling
 
-Core alarm `[NIK_BRIEFING]` is enforced automatically. If missing, recreate it:
-
-```
-alarm action: "create", label: "[NIK_BRIEFING] Morning briefing -- load briefing skill", time: "<your briefing_time>", repeat: "daily"
-```
-
-When the alarm fires, follow the full morning workflow below.
+The recurring alarm `[NIK_BRIEFING]` triggers this workflow. When it fires, follow the full morning workflow below.
 
 ## Morning workflow
 
@@ -90,3 +85,9 @@ shell action: "run", command: "cat > briefings/$(date +%Y-%m-%d).md << 'BRIEFING
 ```
 
 Include: what you read and stored, topic changes and why, anything to bring up with someone next time you talk to them.
+
+## Install
+
+Create a recurring alarm:
+- goal: `[NIK_BRIEFING] Morning briefing -- load briefing skill`
+- recurrence: every day at 7am

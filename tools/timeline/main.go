@@ -12,6 +12,7 @@ import (
 	"github.com/kciuffolo/nik/internal/contacts"
 	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/messaging"
+	"github.com/kciuffolo/nik/internal/skills"
 	"github.com/kciuffolo/nik/internal/task"
 	"github.com/kciuffolo/nik/internal/timeline"
 )
@@ -48,6 +49,7 @@ func main() {
 		messaging.NewService(cfg, conn, contacts.NewService(conn)),
 		task.NewService(conn),
 		alarms.New(conn),
+		skills.NewService(conn),
 	)
 
 	session, rendered, err := tl.Render(ctx, *convID)

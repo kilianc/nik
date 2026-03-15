@@ -13,7 +13,9 @@ You have **skills** — real capabilities you can execute right now. Each skill 
 ### Available Skills
 
 Before using a tool, load its skill first -- it has the full instructions.
+
+**Install is idempotent.** When running a skill's `## Install` section, always check current state first (query for existing alarms, check if binaries exist, verify credentials) before creating or modifying anything. Never create duplicates.
 {{ range .AvailableSkills }}
-- **{{ .Name }}**: {{ .Summary }} (tools: {{ .Tools }})
+- **{{ .Name }}**: {{ .Summary }} (tools: {{ .Tools }}){{ if .Install }} [needs install]{{ end }}
 {{- end }}
 {{- end }}

@@ -147,6 +147,7 @@ func main() {
 	recallSvc := recall.NewService(cfg, recallClient)
 	taskSvc := task.NewService(conn)
 	shellSvc := shell.NewService(conn, cfg.Home)
+	skillsSvc := skills.NewService(conn)
 
 	// worker tools: subset available to background task runners.
 	// workers can execute commands, query the DB, describe media, and load skills.
@@ -182,6 +183,7 @@ func main() {
 			llm.WithAPIKey(cfg.OpenAIKey),
 			llm.WithReasoningEffort(&cfg.Models.Critic.ReasoningEffort),
 			llm.WithVerbosity(&cfg.Models.Critic.Verbosity),
+			llm.WithJSONOutput(),
 		}
 		criticClient := llm.NewClient(&cfg.Models.Critic.Model, criticOpts...)
 		criticClient.SetObserver(stats.NewRecorder(conn))
@@ -196,9 +198,10 @@ func main() {
 
 	b.RegisterReflex(0, taskSvc.CheckStale)
 	b.RegisterReflex(0, alarmSvc.FireDueAlarms)
-	b.RegisterReflex(30*time.Minute, alarmSvc.CoreAlarmEnforcer(cfg))
+	b.RegisterReflex(30*time.Minute, alarmSvc.StaleAlarmReflex())
+	b.RegisterReflex(5*time.Minute, skills.SkillChangeReflex(cfg, conn))
 	b.RegisterReflex(10*time.Second, shellSvc.CheckSessions)
-	b.SetSensor(timeline.New(cfg, messagingSvc, taskSvc, alarmSvc))
+	b.SetSensor(timeline.New(cfg, messagingSvc, taskSvc, alarmSvc, skillsSvc))
 
 	b.RegisterTools(llm.BuildTools(llmClient, cfg.Home)...)
 	b.RegisterTools(config.BuildTools(cfg, conn)...)

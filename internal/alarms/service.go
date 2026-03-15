@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kciuffolo/nik/internal/db"
+	"github.com/kciuffolo/nik/internal/queries"
 )
 
 type Alarm = db.Alarm
@@ -51,23 +52,61 @@ func (s *Service) FireDueAlarms(ctx context.Context) {
 	}
 
 	for _, a := range alarms {
-		_, err = db.AlarmOccurrenceInsert(ctx, s.db, a.ID, now)
+		_, err = db.AlarmFire(ctx, s.db, a.ID, now)
 		if err != nil {
-			slog.Warn("log alarm occurrence", "pkg", "alarms", "alarm_id", a.ID, "error", err)
+			slog.Warn("fire alarm", "pkg", "alarms", "alarm_id", a.ID, "error", err)
 			continue
-		}
-
-		err = db.AlarmClaim(ctx, s.db, a.ID, now)
-		if err != nil {
-			slog.Warn("claim alarm", "pkg", "alarms", "alarm_id", a.ID, "error", err)
 		}
 
 		slog.Info("alarm fired", "pkg", "alarms", "id", a.ID)
 	}
 }
 
-func (s *Service) UpdateAlarm(ctx context.Context, id string, p db.AlarmUpdateParams) error {
-	return db.AlarmUpdate(ctx, s.db, id, p)
+type UpdateParams struct {
+	Goal           *string
+	Recurrence     *string
+	NextFireAt     *time.Time
+	OccurrenceNote *string
+}
+
+func (p UpdateParams) hasAlarmFields() bool {
+	return p.Goal != nil || p.Recurrence != nil || p.NextFireAt != nil
+}
+
+func (p UpdateParams) hasOccurrenceFields() bool {
+	return p.OccurrenceNote != nil
+}
+
+func (s *Service) Update(ctx context.Context, alarmID string, p UpdateParams) error {
+	if !p.hasAlarmFields() && !p.hasOccurrenceFields() {
+		return nil
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	if p.hasAlarmFields() {
+		var nfa any
+		if p.NextFireAt != nil {
+			nfa = *p.NextFireAt
+		}
+		_, err = tx.ExecContext(ctx, queries.AlarmUpdate, alarmID, p.Goal, p.Recurrence, nfa, nil)
+		if err != nil {
+			return fmt.Errorf("update alarm: %w", err)
+		}
+	}
+
+	if p.hasOccurrenceFields() {
+		_, err = tx.ExecContext(ctx, queries.AlarmOccurrenceUpdate, alarmID, *p.OccurrenceNote)
+		if err != nil {
+			return fmt.Errorf("update occurrence note: %w", err)
+		}
+	}
+
+	return tx.Commit()
 }
 
 func (s *Service) Cancel(ctx context.Context, id string) error {
@@ -78,14 +117,34 @@ func (s *Service) ResolveAlarmID(ctx context.Context, shortID string) (string, e
 	return db.ResolveShortID(ctx, s.db, "alarm", shortID)
 }
 
-func (s *Service) UpdateLatestOccurrenceNote(ctx context.Context, alarmID, note string) error {
-	return db.AlarmOccurrenceUpdateNoteByAlarm(ctx, s.db, alarmID, note)
-}
-
 func (s *Service) ListOccurrences(ctx context.Context, conversationID string, since time.Time) ([]AlarmOccurrence, error) {
 	return db.AlarmOccurrenceList(ctx, s.db, conversationID, since)
 }
 
 func (s *Service) ListCreated(ctx context.Context, conversationID string, since time.Time) ([]Alarm, error) {
 	return db.AlarmListCreated(ctx, s.db, conversationID, since)
+}
+
+func (s *Service) StaleAlarmReflex() func(ctx context.Context) {
+	return func(ctx context.Context) {
+		s.healStaleAlarms(ctx)
+	}
+}
+
+func (s *Service) healStaleAlarms(ctx context.Context) {
+	now := time.Now()
+
+	stale, err := db.StaleRecurringAlarms(ctx, s.db, now)
+	if err != nil {
+		slog.Warn("find stale alarms", "pkg", "alarms", "error", err)
+		return
+	}
+
+	for _, a := range stale {
+		slog.Info("stale alarm detected", "pkg", "alarms", "alarm_id", a.ID, "goal", a.Goal)
+	}
+}
+
+func (s *Service) ListStale(ctx context.Context, now time.Time) ([]Alarm, error) {
+	return db.StaleRecurringAlarms(ctx, s.db, now)
 }

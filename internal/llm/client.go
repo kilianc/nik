@@ -43,6 +43,7 @@ type Client struct {
 	model           *string
 	reasoningEffort *string
 	verbosity       *string
+	jsonOutput      bool
 	observer        CompletionObserver
 	sem             chan struct{}
 }
@@ -56,6 +57,7 @@ type clientConfig struct {
 	codexAuth       *codex.Auth
 	reasoningEffort *string
 	verbosity       *string
+	jsonOutput      bool
 }
 
 type ClientOption func(*clientConfig)
@@ -86,6 +88,12 @@ func WithVerbosity(v *string) ClientOption {
 	}
 }
 
+func WithJSONOutput() ClientOption {
+	return func(c *clientConfig) {
+		c.jsonOutput = true
+	}
+}
+
 func NewClient(model *string, opts ...ClientOption) *Client {
 	var cfg clientConfig
 	for _, opt := range opts {
@@ -96,6 +104,7 @@ func NewClient(model *string, opts ...ClientOption) *Client {
 		model:           model,
 		reasoningEffort: cfg.reasoningEffort,
 		verbosity:       cfg.verbosity,
+		jsonOutput:      cfg.jsonOutput,
 		sem:             make(chan struct{}, maxConcurrentSessions),
 	}
 
@@ -303,6 +312,12 @@ func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instru
 	if c.verbosity != nil && *c.verbosity != "" {
 		params.Text = responses.ResponseTextConfigParam{
 			Verbosity: responses.ResponseTextConfigVerbosity(*c.verbosity),
+		}
+	}
+
+	if c.jsonOutput {
+		params.Text.Format = responses.ResponseFormatTextConfigUnionParam{
+			OfJSONObject: &shared.ResponseFormatJSONObjectParam{},
 		}
 	}
 

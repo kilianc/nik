@@ -195,4 +195,24 @@ func TestParseCriticOutput(t *testing.T) {
 			t.Fatalf("expected effectiveness 2, got %d", out.Effectiveness)
 		}
 	})
+
+	t.Run("object valued fields", func(t *testing.T) {
+		input := `{"effectiveness": 3, "tool_feedback": {"shell": {"verdict": "helped"}}, "skill_feedback": "ok", "suggestions": ["add build skill"]}`
+		out, err := parseCriticOutput(input)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if out.Effectiveness != 3 {
+			t.Fatalf("expected effectiveness 3, got %d", out.Effectiveness)
+		}
+		if !strings.Contains(out.ToolFeedback, "shell") {
+			t.Fatalf("expected tool_feedback to contain 'shell', got %q", out.ToolFeedback)
+		}
+		if out.SkillFeedback != "ok" {
+			t.Fatalf("expected skill_feedback 'ok', got %q", out.SkillFeedback)
+		}
+		if !strings.Contains(out.Suggestions, "add build skill") {
+			t.Fatalf("expected suggestions to contain 'add build skill', got %q", out.Suggestions)
+		}
+	})
 }

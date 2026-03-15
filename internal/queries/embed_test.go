@@ -11,7 +11,7 @@ func TestEmbeddedQueriesArePresent(t *testing.T) {
 		"conversation_upsert":            ConversationUpsert,
 		"message_insert":                 MessageInsert,
 		"media_upsert":                   MediaUpsert,
-		"create_alarm":                   CreateAlarm,
+		"alarm_insert":                   AlarmInsert,
 	}
 
 	for name, query := range required {

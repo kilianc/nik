@@ -4,6 +4,7 @@ summary: >
   Extract durable facts from conversations into memories/latest.md (incremental via cursor),
   and compact the file daily. Load when a memory alarm fires or on request.
 tools: [db_query, shell]
+install: true
 ---
 
 # Memory
@@ -25,14 +26,7 @@ Use `shell` to read and write these files. Create the `memories/` directory if i
 
 ## Scheduling
 
-Maintain two recurring alarms. If you don't have them, create them:
-
-```
-alarm action: "create", label: "Memory extract — load memory skill", repeat: "every 1 hour"
-alarm action: "create", label: "Memory compact — load memory skill", time: "<30 min before journal_time>", repeat: "daily"
-```
-
-When an alarm fires, check the label to know which mode to run. Both modes are silent -- do not message anyone about the run.
+Two recurring alarms trigger this skill: `[NIK_MEMORY_EXTRACT]` and `[NIK_MEMORY_COMPACT]`. When an alarm fires, check the label to know which mode to run. Both modes are silent -- do not message anyone about the run.
 
 ---
 
@@ -196,3 +190,9 @@ shell action: "run", command: "mv memories/staging.md memories/latest.md"
 Do NOT touch `memories/latest-cursor.txt` — the cursor tracks messages processed, not facts.
 
 Report how many rows before vs after compaction.
+
+## Install
+
+Create two recurring alarms:
+- goal: `[NIK_MEMORY_EXTRACT] Extract new memories -- load memory skill`, recurrence: every hour
+- goal: `[NIK_MEMORY_COMPACT] Compact memories -- load memory skill`, recurrence: every day at 11pm

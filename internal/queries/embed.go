@@ -69,14 +69,11 @@ var MessageMediaUpsert string
 
 // alarm queries
 
-//go:embed create_alarm.sql
-var CreateAlarm string
+//go:embed alarm_insert.sql
+var AlarmInsert string
 
-//go:embed due_alarms.sql
-var DueAlarms string
-
-//go:embed alarm_claim.sql
-var AlarmClaim string
+//go:embed alarm_due.sql
+var AlarmDue string
 
 //go:embed alarm_update.sql
 var AlarmUpdate string
@@ -90,6 +87,9 @@ var AlarmListCreated string
 //go:embed alarm_get.sql
 var AlarmGet string
 
+//go:embed alarm_stale_recurring.sql
+var AlarmStaleRecurring string
+
 // alarm occurrence queries
 
 //go:embed alarm_occurrence_insert.sql
@@ -98,8 +98,19 @@ var AlarmOccurrenceInsert string
 //go:embed alarm_occurrence_list.sql
 var AlarmOccurrenceList string
 
-//go:embed alarm_occurrence_update_note.sql
-var AlarmOccurrenceUpdateNote string
+//go:embed alarm_occurrence_update.sql
+var AlarmOccurrenceUpdate string
+
+// skill event queries
+
+//go:embed skill_event_insert.sql
+var SkillEventInsert string
+
+//go:embed skill_event_latest_per_name.sql
+var SkillEventLatestPerName string
+
+//go:embed skill_event_list.sql
+var SkillEventList string
 
 // activation queries
 
