@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/kciuffolo/nik/internal/config"
@@ -23,6 +24,7 @@ type Brain struct {
 	now             func() time.Time
 
 	claimed *SyncSet
+	wg      sync.WaitGroup
 }
 
 func New(cfg *config.Config, llmClient llm.Completer) *Brain {
@@ -61,6 +63,8 @@ func (b *Brain) Awake(ctx context.Context, pollInterval time.Duration) {
 	for {
 		select {
 		case <-ctx.Done():
+			slog.Info("brain draining activations", "pkg", "brain")
+			b.wg.Wait()
 			slog.Info("brain sleeping", "pkg", "brain")
 			return
 		case <-ticker.C:
@@ -100,12 +104,14 @@ func (b *Brain) perceive(ctx context.Context) {
 			continue
 		}
 
-		go b.activate(ctx, s)
+		b.wg.Add(1)
+		go b.activate(context.WithoutCancel(ctx), s)
 	}
 }
 
 // activate consumes a single stimulus from perceive and runs the think loop against it.
 func (b *Brain) activate(ctx context.Context, output Stimulus) {
+	defer b.wg.Done()
 	start := time.Now()
 
 	if output.Meta == nil {

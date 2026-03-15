@@ -270,6 +270,7 @@ func spawnHandler(svc *Service, runner *Runner) llm.ToolExecutor {
 			return llm.ToolError(err), nil
 		}
 
+		runner.wg.Add(1)
 		go runner.Run(context.Background(), t)
 
 		return llm.ToolResult(map[string]any{
@@ -486,6 +487,7 @@ func retryHandler(svc *Service, runner *Runner) llm.ToolExecutor {
 			return llm.ToolError(err), nil
 		}
 
+		runner.wg.Add(1)
 		go runner.Run(context.Background(), t)
 
 		return llm.ToolResult(map[string]any{

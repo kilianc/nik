@@ -71,8 +71,11 @@ func main() {
 	fmt.Println(motd)
 	fmt.Println()
 
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	sig := make(chan os.Signal, 2)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 
 	conn, err := db.Open(cfg.DBPath(), cfg.TZ())
 	if err != nil {
@@ -206,13 +209,28 @@ func main() {
 	b.RegisterTools(skills.BuildTools(cfg)...)
 	b.RegisterTools(task.BuildTools(taskSvc, taskRunner)...)
 
-	go b.Awake(ctx, 2*time.Second)
+	brainDone := make(chan struct{})
+	go func() {
+		b.Awake(ctx, 2*time.Second)
+		close(brainDone)
+	}()
 
 	if err := whatsappClient.Connect(ctx, *wappLink); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
 
-	<-ctx.Done()
-	slog.Info("shutting down")
+	<-sig
+	slog.Info("shutting down, waiting for in-flight work (ctrl-c again to force)")
+	cancel()
+
+	go func() {
+		<-sig
+		slog.Warn("force exit")
+		os.Exit(1)
+	}()
+
+	<-brainDone
+	taskRunner.Wait()
+	slog.Info("shutdown complete")
 }

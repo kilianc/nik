@@ -1,7 +1,10 @@
 package brain
 
 import (
+	"context"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/llm"
@@ -75,4 +78,62 @@ func TestHasTerminalCall(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAwakeDrainsActivationsBeforeReturning(t *testing.T) {
+	b := New(&config.Config{}, nil)
+
+	var activationDone atomic.Bool
+
+	b.SetSensor(&fakeSensor{
+		checkOnce: true,
+		stimuli: []Stimulus{
+			{Meta: map[string]string{"conversation_id": "test-conv", "sources": "[]"}},
+		},
+	})
+
+	origActivate := b.activate
+	_ = origActivate
+
+	b.wg.Add(1)
+	go func() {
+		defer b.wg.Done()
+		time.Sleep(200 * time.Millisecond)
+		activationDone.Store(true)
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	done := make(chan struct{})
+	go func() {
+		b.Awake(ctx, 50*time.Millisecond)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		if !activationDone.Load() {
+			t.Fatal("Awake returned before activation finished")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Awake did not return within timeout")
+	}
+}
+
+type fakeSensor struct {
+	checkOnce bool
+	called    atomic.Bool
+	stimuli   []Stimulus
+}
+
+func (f *fakeSensor) Check(_ context.Context) ([]Stimulus, error) {
+	if f.checkOnce && f.called.Swap(true) {
+		return nil, nil
+	}
+	return f.stimuli, nil
+}
+
+func (f *fakeSensor) Get(_ context.Context, _ string) string {
+	return ""
 }
