@@ -138,41 +138,6 @@ type reportArgs struct {
 	Note   string `json:"note"`
 }
 
-var assessToolDef = llm.ToolDef{
-	Name:        "task_assess",
-	Description: "Submit your assessment of the task. Call exactly once with your evaluation.",
-	Parameters: map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"effectiveness": map[string]any{
-				"type":        "integer",
-				"description": "1-5 rating. Did the outcome match the goal? 1=total failure, 3=partial, 5=nailed it.",
-			},
-			"tool_feedback": map[string]any{
-				"type":        "string",
-				"description": "Per-tool assessment. What helped, what failed and why (root cause: auth, bad input, API issue, missing capability).",
-			},
-			"skill_feedback": map[string]any{
-				"type":        "string",
-				"description": "Per-skill assessment. Which were useful, which weren't, why.",
-			},
-			"suggestions": map[string]any{
-				"type":        "string",
-				"description": "What tools/skills are missing, what single change would most improve the next attempt.",
-			},
-		},
-		"required":             []string{"effectiveness", "tool_feedback", "skill_feedback", "suggestions"},
-		"additionalProperties": false,
-	},
-}
-
-type assessArgs struct {
-	Effectiveness int    `json:"effectiveness"`
-	ToolFeedback  string `json:"tool_feedback"`
-	SkillFeedback string `json:"skill_feedback"`
-	Suggestions   string `json:"suggestions"`
-}
-
 var retryToolDef = llm.ToolDef{
 	Name:        "task_retry",
 	Description: "Retry a failed task with a better plan. Use instead of task_spawn for work that already failed.",
@@ -217,13 +182,6 @@ func BuildReportTool(svc *Service, taskID string) llm.Tool {
 	return llm.Tool{
 		Def:     reportToolDef,
 		Handler: reportHandler(svc, taskID),
-	}
-}
-
-func BuildAssessTool(svc *Service, taskID string) llm.Tool {
-	return llm.Tool{
-		Def:     assessToolDef,
-		Handler: assessHandler(svc, taskID),
 	}
 }
 
@@ -530,38 +488,6 @@ func reportHandler(svc *Service, taskID string) llm.ToolExecutor {
 		}
 
 		err = svc.InsertReport(ctx, taskID, args.Status, args.Note)
-		if err != nil {
-			return llm.ToolError(err), nil
-		}
-
-		return llm.ToolResult(map[string]any{"ok": true}), nil
-	}
-}
-
-func assessHandler(svc *Service, taskID string) llm.ToolExecutor {
-	return func(ctx context.Context, call llm.ToolCall) (string, error) {
-		var args assessArgs
-
-		err := json.Unmarshal([]byte(call.Arguments), &args)
-		if err != nil {
-			return llm.ToolError(err), nil
-		}
-
-		if args.Effectiveness < 1 || args.Effectiveness > 5 {
-			return llm.ToolErrorf("effectiveness must be 1-5, got %d", args.Effectiveness), nil
-		}
-
-		meta, _ := ctx.Value("meta").(map[string]string)
-		activationID := meta["activation_id"]
-
-		err = svc.InsertAssessment(ctx, db.TaskAssessmentInsertParams{
-			TaskID:        taskID,
-			ActivationID:  activationID,
-			Effectiveness: args.Effectiveness,
-			ToolFeedback:  args.ToolFeedback,
-			SkillFeedback: args.SkillFeedback,
-			Suggestions:   args.Suggestions,
-		})
 		if err != nil {
 			return llm.ToolError(err), nil
 		}
