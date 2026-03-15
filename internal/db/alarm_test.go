@@ -204,9 +204,9 @@ func TestDueAlarmsExcludesClaimedAlarms(t *testing.T) {
 		t.Fatalf("create alarm: %v", err)
 	}
 
-	err = AlarmClaim(ctx, conn, alarm.ID, now)
+	err = AlarmUpdate(ctx, conn, alarm.ID, AlarmUpdateParams{LastFiredAt: now})
 	if err != nil {
-		t.Fatalf("claim alarm: %v", err)
+		t.Fatalf("set alarm fired: %v", err)
 	}
 
 	alarms, err := DueAlarms(ctx, conn, now)
@@ -261,7 +261,7 @@ func TestAlarmCancelRemovesFromDueList(t *testing.T) {
 	}
 }
 
-func TestAlarmClaimSetsLastFiredAtAndKeepsNextFireAt(t *testing.T) {
+func TestAlarmUpdateSetsLastFiredAtAndKeepsNextFireAt(t *testing.T) {
 	ctx := context.Background()
 
 	conn, err := OpenInMemory()
@@ -282,9 +282,9 @@ func TestAlarmClaimSetsLastFiredAtAndKeepsNextFireAt(t *testing.T) {
 		t.Fatalf("create alarm: %v", err)
 	}
 
-	err = AlarmClaim(ctx, conn, alarm.ID, now)
+	err = AlarmUpdate(ctx, conn, alarm.ID, AlarmUpdateParams{LastFiredAt: now})
 	if err != nil {
-		t.Fatalf("claim alarm: %v", err)
+		t.Fatalf("set alarm fired: %v", err)
 	}
 
 	var (
@@ -509,6 +509,52 @@ func TestAlarmGetIgnoresCancelled(t *testing.T) {
 	}
 	if ok {
 		t.Fatalf("expected cancelled alarm to be excluded")
+	}
+}
+
+func TestAlarmFireAtomicCommit(t *testing.T) {
+	ctx := context.Background()
+
+	conn, err := OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	convID := seedConversation(t, ctx, conn, "whatsapp", "fire-atomic@g.us", "group")
+	now := time.Now().UTC().Truncate(time.Second)
+
+	alarm, err := CreateAlarm(ctx, conn, CreateAlarmParams{
+		OriginConversationID: convID,
+		Goal:                 "atomic fire test",
+		Recurrence:           "every day",
+		NextFireAt:           now.Add(-time.Minute),
+	})
+	if err != nil {
+		t.Fatalf("create alarm: %v", err)
+	}
+
+	occ, err := AlarmFire(ctx, conn, alarm.ID, now)
+	if err != nil {
+		t.Fatalf("alarm fire: %v", err)
+	}
+
+	if occ.ID == "" {
+		t.Fatal("expected occurrence id")
+	}
+	if occ.AlarmID != alarm.ID {
+		t.Fatalf("expected alarm_id %q, got %q", alarm.ID, occ.AlarmID)
+	}
+
+	var lastFiredAt sql.NullString
+	err = conn.QueryRowContext(ctx,
+		`SELECT last_fired_at FROM alarm WHERE id = ?1`, alarm.ID,
+	).Scan(&lastFiredAt)
+	if err != nil {
+		t.Fatalf("query alarm: %v", err)
+	}
+	if !lastFiredAt.Valid {
+		t.Fatal("expected last_fired_at to be set after fire")
 	}
 }
 

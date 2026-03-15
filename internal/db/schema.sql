@@ -96,17 +96,16 @@ CREATE TABLE IF NOT EXISTS alarm (
   origin_conversation_id TEXT NOT NULL REFERENCES conversation(id),
   goal                   TEXT NOT NULL,
   recurrence             TEXT,
-  next_fire_at           TIMESTAMP,
+  next_fire_at           TIMESTAMP NOT NULL,
   last_fired_at          TIMESTAMP,
   cancelled_at           TIMESTAMP,
   created_at             TIMESTAMP NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS alarm_occurrence (
-  id               TEXT NOT NULL,
+  id               TEXT PRIMARY KEY,
   alarm_id         TEXT NOT NULL REFERENCES alarm(id),
   note             TEXT,
-  next_fire_at_set TIMESTAMP,
   fired_at         TIMESTAMP NOT NULL
 );
 
@@ -183,6 +182,15 @@ CREATE TABLE IF NOT EXISTS activation_detail (
   user_input          TEXT NOT NULL DEFAULT '',
   tools               TEXT NOT NULL DEFAULT '[]',
   reasoning_summaries TEXT NOT NULL DEFAULT '[]'
+);
+
+CREATE TABLE IF NOT EXISTS skill_event (
+  id           TEXT PRIMARY KEY,
+  name         TEXT NOT NULL,
+  kind         TEXT NOT NULL CHECK(kind IN ('added', 'removed', 'changed')),
+  content_hash TEXT,
+  install_hash TEXT,
+  created_at   TIMESTAMP NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS task_assessment (

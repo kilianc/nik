@@ -117,18 +117,45 @@ func parseCriticOutput(raw string) (assessOutput, error) {
 		raw = strings.TrimSpace(raw)
 	}
 
-	var out assessOutput
+	var intermediate struct {
+		Effectiveness int             `json:"effectiveness"`
+		ToolFeedback  json.RawMessage `json:"tool_feedback"`
+		SkillFeedback json.RawMessage `json:"skill_feedback"`
+		Suggestions   json.RawMessage `json:"suggestions"`
+	}
 
-	err := json.Unmarshal([]byte(raw), &out)
+	err := json.Unmarshal([]byte(raw), &intermediate)
 	if err != nil {
 		return assessOutput{}, fmt.Errorf("unmarshal critic output: %w", err)
 	}
 
-	if out.Effectiveness < 1 || out.Effectiveness > 5 {
-		return assessOutput{}, fmt.Errorf("effectiveness must be 1-5, got %d", out.Effectiveness)
+	if intermediate.Effectiveness < 1 || intermediate.Effectiveness > 5 {
+		return assessOutput{}, fmt.Errorf("effectiveness must be 1-5, got %d", intermediate.Effectiveness)
+	}
+
+	out := assessOutput{
+		Effectiveness: intermediate.Effectiveness,
+		ToolFeedback:  coerceString(intermediate.ToolFeedback),
+		SkillFeedback: coerceString(intermediate.SkillFeedback),
+		Suggestions:   coerceString(intermediate.Suggestions),
 	}
 
 	return out, nil
+}
+
+// coerceString extracts a string from raw JSON. If the value is a JSON
+// string it is unquoted; objects and arrays are returned as compact JSON.
+func coerceString(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+
+	var s string
+	if json.Unmarshal(raw, &s) == nil {
+		return s
+	}
+
+	return string(raw)
 }
 
 func formatToolCalls(calls []db.ToolCallInfo) string {

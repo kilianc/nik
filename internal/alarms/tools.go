@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/llm"
 )
 
@@ -173,34 +172,27 @@ func updateAlarmHandler(svc *Service) llm.ToolExecutor {
 			return llm.ToolError(err), nil
 		}
 
-		hasUpdate := args.Goal != "" || args.Recurrence != "" || args.NextFireAt != ""
-		if hasUpdate {
-			p := db.AlarmUpdateParams{}
-			if args.Goal != "" {
-				p.Goal = &args.Goal
+		p := UpdateParams{}
+		if args.Goal != "" {
+			p.Goal = &args.Goal
+		}
+		if args.Recurrence != "" {
+			p.Recurrence = &args.Recurrence
+		}
+		if args.NextFireAt != "" {
+			t, parseErr := time.Parse(time.RFC3339, args.NextFireAt)
+			if parseErr != nil {
+				return llm.ToolErrorf("parse next_fire_at: %s", parseErr.Error()), nil
 			}
-			if args.Recurrence != "" {
-				p.Recurrence = &args.Recurrence
-			}
-			if args.NextFireAt != "" {
-				t, err := time.Parse(time.RFC3339, args.NextFireAt)
-				if err != nil {
-					return llm.ToolErrorf("parse next_fire_at: %s", err.Error()), nil
-				}
-				p.NextFireAt = t
-			}
-
-			err = svc.UpdateAlarm(ctx, alarmID, p)
-			if err != nil {
-				return llm.ToolError(err), nil
-			}
+			p.NextFireAt = &t
+		}
+		if args.OccurrenceNote != "" {
+			p.OccurrenceNote = &args.OccurrenceNote
 		}
 
-		if args.OccurrenceNote != "" {
-			err = svc.UpdateLatestOccurrenceNote(ctx, alarmID, args.OccurrenceNote)
-			if err != nil {
-				return llm.ToolError(err), nil
-			}
+		err = svc.Update(ctx, alarmID, p)
+		if err != nil {
+			return llm.ToolError(err), nil
 		}
 
 		return `{"updated":true}`, nil

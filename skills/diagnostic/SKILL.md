@@ -5,6 +5,7 @@ summary: >
   for anything that needs credentials, verifies alarm chains and skill
   outputs, checks data integrity. Load when the diagnostic alarm fires.
 tools: [db_query, shell, alarm, load_skill]
+install: true
 ---
 
 # Diagnostic
@@ -24,13 +25,7 @@ Use `shell` to write these files. Create the directory if it doesn't exist.
 
 ## Scheduling
 
-Core alarm `[NIK_DIAGNOSTIC]` is enforced automatically. If missing, recreate it:
-
-```
-alarm action: "create", label: "[NIK_DIAGNOSTIC] System diagnostic -- load diagnostic skill", time: "<your diagnostic_time>", repeat: "daily"
-```
-
-When the alarm fires, follow the full workflow below.
+The recurring alarm `[NIK_DIAGNOSTIC]` triggers this workflow. When it fires, follow the full workflow below.
 
 ## Design principle
 
@@ -146,6 +141,21 @@ Severity:
 - Duplicate alarm = WARN
 - Stale `next_fire_at` (in the past) = FAIL
 
+## Phase 3b — Self-healing audit
+
+Skill installation and alarm health are handled automatically by reflexes (skill change reflex detects new/changed skills, stale alarm reflex re-fires unscheduled recurring alarms). This phase verifies those mechanisms are working.
+
+For every skill with `install: true`:
+1. Check that its expected resources exist (alarm with future `next_fire_at`, credentials configured, binaries present)
+2. If something is still broken despite reflexes having run, that's a real problem — flag it to the user
+
+Do NOT attempt to fix anything here. The reflexes and Nik's normal activation handle repairs. This phase only audits.
+
+Severity:
+
+- Resource healthy = PASS
+- Resource missing or broken despite reflexes = FAIL (flag to user with details)
+
 ## Phase 4 — Verify skill outputs
 
 Using the output directories discovered in 1d:
@@ -242,6 +252,9 @@ group downstream failures under root cause
 ## Alarm Chains
 dead, duplicate, or stale alarms with IDs and goals
 
+## Self-Healing Audit
+per-skill: PASS / FAIL (what's still broken despite reflexes)
+
 ## Skill Outputs
 per-directory: last file date, gap analysis
 
@@ -328,3 +341,9 @@ next journal entry.
 - Read yesterday's diagnostic before writing today's to track trends
 - The diagnostic alarm is itself a recurring alarm — don't forget to
   reschedule it at the end
+
+## Install
+
+Create a recurring alarm:
+- goal: `[NIK_DIAGNOSTIC] System diagnostic -- load diagnostic skill`
+- recurrence: every day at 6am

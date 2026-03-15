@@ -171,6 +171,15 @@ type TaskCancelled struct {
 	CompletedAt time.Time
 }
 
+type SkillEvent struct {
+	ID          string
+	Name        string
+	Kind        string
+	ContentHash sql.NullString
+	InstallHash sql.NullString
+	CreatedAt   time.Time
+}
+
 type ToolCallInfo struct {
 	Name       string
 	Input      string

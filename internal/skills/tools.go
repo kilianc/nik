@@ -38,11 +38,12 @@ var loadSkillDef = llm.ToolDef{
 	},
 }
 
-type skillSummary struct {
+type SkillSummary struct {
 	Name    string   `json:"name"`
 	Summary string   `json:"summary"`
 	Tools   []string `json:"tools"`
 	Preload bool     `json:"preload"`
+	Install bool     `json:"install"`
 }
 
 func BuildTools(cfg *config.Config) []llm.Tool {
@@ -116,7 +117,7 @@ func handleLoad(dirs []string, name string) (string, error) {
 // walkSkillDirs iterates skill directories, parses frontmatter from each
 // SKILL.md, and calls fn for each unique skill. Later directories override
 // earlier ones when skills share a name.
-func walkSkillDirs(dirs []string, fn func(path string, s skillSummary)) error {
+func walkSkillDirs(dirs []string, fn func(path string, s SkillSummary)) error {
 	for _, dir := range dirs {
 		entries, err := os.ReadDir(dir)
 		if err != nil {
@@ -146,11 +147,11 @@ func walkSkillDirs(dirs []string, fn func(path string, s skillSummary)) error {
 }
 
 // later directories override earlier ones when skills share a name.
-func ListSkills(dirs ...string) ([]skillSummary, error) {
+func ListSkills(dirs ...string) ([]SkillSummary, error) {
 	seen := map[string]int{}
-	var summaries []skillSummary
+	var summaries []SkillSummary
 
-	err := walkSkillDirs(dirs, func(_ string, s skillSummary) {
+	err := walkSkillDirs(dirs, func(_ string, s SkillSummary) {
 		if idx, ok := seen[s.Name]; ok {
 			summaries[idx] = s
 		} else {
@@ -164,20 +165,20 @@ func ListSkills(dirs ...string) ([]skillSummary, error) {
 
 // parseFrontmatter extracts name, summary, and tools from YAML frontmatter.
 // Handles simple scalar and flow/block sequence formats without a YAML dependency.
-func parseFrontmatter(path string) (skillSummary, error) {
+func parseFrontmatter(path string) (SkillSummary, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return skillSummary{}, err
+		return SkillSummary{}, err
 	}
 	defer f.Close()
 
 	scanner := bufio.NewScanner(f)
 
 	if !scanner.Scan() || strings.TrimSpace(scanner.Text()) != "---" {
-		return skillSummary{}, fmt.Errorf("no frontmatter in %s", path)
+		return SkillSummary{}, fmt.Errorf("no frontmatter in %s", path)
 	}
 
-	var s skillSummary
+	var s SkillSummary
 	var descLines []string
 	inDesc := false
 	inTools := false
@@ -217,6 +218,17 @@ func parseFrontmatter(path string) (skillSummary, error) {
 			inTools = false
 			val := strings.TrimSpace(strings.TrimPrefix(line, "preload:"))
 			s.Preload = val == "true"
+			continue
+		}
+
+		if strings.HasPrefix(line, "install:") {
+			if inDesc && len(descLines) > 0 {
+				s.Summary = strings.Join(descLines, " ")
+			}
+			inDesc = false
+			inTools = false
+			val := strings.TrimSpace(strings.TrimPrefix(line, "install:"))
+			s.Install = val == "true"
 			continue
 		}
 
@@ -276,7 +288,7 @@ func PreloadedSkills(dirs ...string) ([]PreloadedSkill, error) {
 	seen := map[string]int{}
 	var result []PreloadedSkill
 
-	err := walkSkillDirs(dirs, func(path string, s skillSummary) {
+	err := walkSkillDirs(dirs, func(path string, s SkillSummary) {
 		if !s.Preload {
 			return
 		}

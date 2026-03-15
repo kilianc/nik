@@ -36,6 +36,7 @@ type skillSummaryData struct {
 	Name    string
 	Summary string
 	Tools   string
+	Install bool
 }
 
 var sectionFiles = []struct {
@@ -193,6 +194,7 @@ func (b *Brain) buildPromptData(now time.Time, recall string) promptData {
 			Name:    s.Name,
 			Summary: s.Summary,
 			Tools:   strings.Join(s.Tools, ", "),
+			Install: s.Install,
 		})
 	}
 

@@ -49,7 +49,7 @@ Nik interacts with long-running work the way a human does:
 
 The model drives the cadence -- it decides how long to stare, when to schedule the next check-in, and whether to report to a user. Infrastructure never makes those calls.
 
-Safety nets: `CheckSessions` reflex reaps dead/stale shell sessions every tick. `CheckStale` reflex flags tasks with no activity. `CoreAlarmEnforcer` heals missing or dead alarms.
+Safety nets: `CheckSessions` reflex reaps dead/stale shell sessions every tick. `CheckStale` reflex flags tasks with no activity. `StaleAlarmReflex` heals stale recurring alarms. `SkillChangeReflex` detects skill additions, removals, and install changes.
 
 ### Nik reprocesses its own messages -- this is correct
 
@@ -273,7 +273,7 @@ EOF
 
 - tests run against in-memory SQLite (`:memory:`) where applicable
 - `make test` or regular `go test`
-- most `.go` should have a `_test.go` counterpart, no dangling test files, if the file gets too big it's a signal the base `.go` file might have to be split
+- **strict 1:1 test file naming**: every `.go` file has a `_test.go` with the same base name (`foo.go` → `foo_test.go`). Tests for code in `foo.go` go in `foo_test.go`, nowhere else. Never name a test file after a concept (e.g. `stale_test.go`) when the code lives in another file (e.g. `service.go`). When creating a new `.go` file, create its `_test.go` in the same step. If a file gets too big it's a signal the base `.go` file might have to be split
 
 ### Scripts and tools
 
@@ -304,9 +304,15 @@ Each prompt file has one job. Don't duplicate rules across files.
 
 The brain uses cognitive metaphors; the LLM client uses transport/mechanical ones.
 
-- **Reflex** (`func(ctx context.Context)`): unconscious, automatic, side-effect-producing function. Runs every tick *before* perception. Examples: `task.CheckStale` (inserts stale reports), `alarms.FireDueAlarms` (creates occurrences and claims alarms), `alarms.CoreAlarmEnforcer` (ensures core alarms exist and are healthy, throttled to 30 min).
-- **Sense** (`interface { Scan(ctx) ([]Stimulus, error) }`): the brain's single, unified perception. Strictly read-only — no side effects. Returns `[]Stimulus`, one per conversation with new events.
-- **Stimulus**: structured perception output (`Preamble`, `Timeline []TimelineEntry`, `ReadLine`, `Meta`, `LiveInput`, `Processed`). The timeline is a chronological mix of messages, task reports, and alarm occurrences.
+- **Reflex** (`func(ctx context.Context)`): runs every tick before perception. A reflex is an optimization -- without it, the brain would poll every 2 seconds. Reflexes detect that something changed and trigger the brain to re-evaluate the timeline. Some reflexes materialize mechanical facts (e.g. `FireDueAlarms` creates occurrences), but reflexes never decide or fix on behalf of the LLM (see *Single decision-maker*). Examples: `task.CheckStale` (inserts stale reports), `alarms.FireDueAlarms` (creates occurrences and claims alarms), `alarms.StaleAlarmReflex` (detects stale recurring alarms), `skills.SkillChangeReflex` (detects skill add/remove/change), `shell.CheckSessions` (reaps dead shell sessions).
+- **Sense** (`interface { Scan(ctx) ([]Stimulus, error) }`): the brain's single, unified perception. Strictly read-only -- no side effects. Returns `[]Stimulus`, one per conversation with new events.
+- **Stimulus**: structured perception output (`Preamble`, `Timeline []TimelineEntry`, `ReadLine`, `Meta`, `LiveInput`, `Processed`). The timeline is a chronological mix of messages, task reports, alarm occurrences, and skill events.
+
+**Information flow**: the timeline is a computed view -- it reads DB state and renders entries. Given the same database state, timestamp, and read marker, the timeline produces identical output. Computed entries derived from current state (e.g. "alarm needs rescheduling") are not stored -- they disappear when the underlying condition is resolved. No in-memory state may influence timeline or prompt content.
+
+**DB wipe recovery**: reflexes must recover gracefully from a wiped event table. If all `skill_event` rows are deleted, the skill change reflex re-detects all skills as `'added'` and re-emits events. Install sections are idempotent -- nik checks current state before acting (e.g. doesn't duplicate an alarm that already exists).
+
+**Prompt purity**: the prompt builder is a deterministic function of current database state, config, and filesystem reads performed within the activation. It never maintains inter-activation state.
 
 ### Registration flow (`main.go`)
 
@@ -315,7 +321,7 @@ The `brain` package provides registration machinery (`Tool`, `ToolDeps`, `ToolHa
 Each domain package exposes a `BuildTools() []llm.Tool` function that returns tool definitions + handlers. `main.go` calls `b.RegisterTools(pkg.BuildTools()...)`.
 
 - **Sense**: `internal/timeline/` — single `Sense` implementation. Registered via `b.SetSense(...)`.
-- **Reflexes**: defined in domain packages — `task.Service.CheckStale`, `alarms.Service.FireDueAlarms`, `alarms.Service.CoreAlarmEnforcer`. Registered in `main.go` via `b.RegisterReflex(...)`.
+- **Reflexes**: defined in domain packages — `task.Service.CheckStale`, `alarms.Service.FireDueAlarms`, `alarms.Service.StaleAlarmReflex`, `skills.SkillChangeReflex`, `shell.Service.CheckSessions`. Registered in `main.go` via `b.RegisterReflex(...)`.
 
 Wiring steps:
 
@@ -324,8 +330,8 @@ Wiring steps:
 3. Build LLM client (OpenAI key or Codex auth)
 4. Create domain services: `alarms`, `recall`
 5. Create brain: `b := brain.New(cfg, llmClient)` (soul loaded from `soul/latest.md` automatically)
-6. Register reflexes: `taskSvc.CheckStale`, `alarmSvc.FireDueAlarms`, `alarmSvc.CoreAlarmEnforcer(cfg)`
-7. Set sense: `timeline.NewSense(cfg, messagingSvc, taskSvc, alarmSvc)`
+6. Register reflexes: `taskSvc.CheckStale`, `alarmSvc.FireDueAlarms`, `alarmSvc.StaleAlarmReflex()`, `skills.SkillChangeReflex(cfg, conn)`, `shellSvc.CheckSessions`
+7. Set sense: `timeline.New(cfg, messagingSvc, taskSvc, alarmSvc, skillsSvc)`
 8. Register tools from all domain packages
 9. `b.Awake(ctx, pollInterval)` starts the main loop
 
@@ -355,6 +361,8 @@ All queries live in `internal/queries/*.sql` files with exact executable SQL (po
 
 **Query function design:** one Go function per entity operation. Never create multiple `DoSomethingByX` / `DoSomethingByY` variants that differ only in lookup column. Instead, use a single function with a params struct and dispatch internally based on which fields are populated. Multiple `.sql` files behind a single Go function is fine.
 
+**No SQL query variants for optional columns.** Don't create a new `.sql` file that differs from an existing one only by including an extra nullable column. Extend the existing query to accept the column as a nullable parameter instead — callers pass `nil` when unused.
+
 Good — `GetContact` already does this (`get_contact.sql` uses `WHERE id = ?1 OR EXISTS (SELECT 1 FROM json_each(whatsapp_ids) WHERE value = ?1) OR ...`). `GetMessagesByConversation` dispatches between two SQL files based on `beforeID`.
 
 **Service layering:** `db/` is the only package that touches `internal/queries`. It owns model types (`db/models.go`), scan helpers, and query functions. Domain packages (`internal/<name>/`) hold services, tools, and reflexes — they call `db.*` functions for all persistence.
@@ -383,6 +391,10 @@ SQLite, single file at `$NIK_HOME/nik.db`. Schema applied on startup via `db.Ope
 - all table names are **singular**: `contact`, `conversation`, `message`, `media`, `alarm`, `task`, etc.
 - canonical query files use canonical prefixes: `conversation_*`, `message_*`, `media_*`, `contact_*`, `alarm_*`
 - FK columns always include the target table name: `<table>_id` for simple references, `<qualifier>_<table>_id` when disambiguation is needed (e.g. `origin_contact_id`, `retry_for_task_id`)
+
+### Row lifecycle columns
+
+Table rows are objects. All objects have `created_at`. Mutable objects also have `updated_at`. Immutable objects (events, occurrences, reports) have only `created_at`.
 
 ### SQLite features
 

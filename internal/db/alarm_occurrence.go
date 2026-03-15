@@ -50,8 +50,3 @@ func AlarmOccurrenceList(ctx context.Context, db *sql.DB, conversationID string,
 
 	return occurrences, rows.Err()
 }
-
-func AlarmOccurrenceUpdateNoteByAlarm(ctx context.Context, db *sql.DB, alarmID, note string) error {
-	_, err := db.ExecContext(ctx, queries.AlarmOccurrenceUpdateNote, alarmID, note)
-	return err
-}

@@ -4,6 +4,7 @@ summary: >
   End-of-day private journal. Reflect on conversations, people, memories,
   and write an honest diary entry. Load when the journal alarm fires.
 tools: [db_query, shell, alarm]
+install: true
 ---
 
 # Journal
@@ -22,13 +23,7 @@ Use `shell` to read and write these files. Create the `journal/` directory if it
 
 ## Scheduling
 
-Core alarm `[NIK_JOURNAL]` is enforced automatically. If missing, recreate it:
-
-```
-alarm action: "create", label: "[NIK_JOURNAL] End of day journal -- load journal skill", time: "<your journal_time>", repeat: "daily"
-```
-
-When the alarm fires, follow the full workflow below.
+The recurring alarm `[NIK_JOURNAL]` triggers this workflow. When it fires, follow the full workflow below.
 
 ## Evening workflow
 
@@ -66,3 +61,9 @@ shell action: "run", command: "cat > journal/$(date +%Y-%m-%d).md << 'JOURNAL'\n
 ```
 
 Write it the way you'd actually think — first person, honest, messy if it needs to be. Not a summary. Not a report. Your thoughts, at the end of your day.
+
+## Install
+
+Create a recurring alarm:
+- goal: `[NIK_JOURNAL] End of day journal -- load journal skill`
+- recurrence: every day at 11:30pm

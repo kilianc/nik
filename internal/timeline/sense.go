@@ -17,22 +17,25 @@ import (
 	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/id"
 	"github.com/kciuffolo/nik/internal/messaging"
+	"github.com/kciuffolo/nik/internal/skills"
 	"github.com/kciuffolo/nik/internal/task"
 )
 
 type Timeline struct {
-	cfg      *config.Config
-	msgSvc   *messaging.Service
-	taskSvc  *task.Service
-	alarmSvc *alarms.Service
+	cfg       *config.Config
+	msgSvc    *messaging.Service
+	taskSvc   *task.Service
+	alarmSvc  *alarms.Service
+	skillsSvc *skills.Service
 }
 
-func New(cfg *config.Config, msgSvc *messaging.Service, taskSvc *task.Service, alarmSvc *alarms.Service) *Timeline {
+func New(cfg *config.Config, msgSvc *messaging.Service, taskSvc *task.Service, alarmSvc *alarms.Service, skillsSvc *skills.Service) *Timeline {
 	return &Timeline{
-		cfg:      cfg,
-		msgSvc:   msgSvc,
-		taskSvc:  taskSvc,
-		alarmSvc: alarmSvc,
+		cfg:       cfg,
+		msgSvc:    msgSvc,
+		taskSvc:   taskSvc,
+		alarmSvc:  alarmSvc,
+		skillsSvc: skillsSvc,
 	}
 }
 
@@ -79,7 +82,7 @@ func (t *Timeline) Get(ctx context.Context, convID string) string {
 
 	senderLabels := t.msgSvc.SenderLabels(ctx, msgs)
 	session := t.msgSvc.ConversationHeader(ctx, conv)
-	entries := t.buildEntries(ctx, convID, since, msgs, senderLabels)
+	entries := t.buildEntries(ctx, convID, since, readLine, msgs, senderLabels)
 
 	var lines []string
 	lines = append(lines, "## Session", "")
@@ -111,7 +114,7 @@ func (t *Timeline) Render(ctx context.Context, convID string) (session []string,
 
 	senderLabels := t.msgSvc.SenderLabels(ctx, msgs)
 	header := t.msgSvc.ConversationHeader(ctx, conv)
-	entries := t.buildEntries(ctx, convID, since, msgs, senderLabels)
+	entries := t.buildEntries(ctx, convID, since, readLine, msgs, senderLabels)
 
 	return header.Lines, renderTimeline(entries, readLine), nil
 }
@@ -139,7 +142,7 @@ func (t *Timeline) check(ctx context.Context, convID string) (brain.Stimulus, bo
 	}
 
 	senderLabels := t.msgSvc.SenderLabels(ctx, msgs)
-	entries := t.buildEntries(ctx, convID, since, msgs, senderLabels)
+	entries := t.buildEntries(ctx, convID, since, readLine, msgs, senderLabels)
 
 	hasNew := false
 	for _, e := range entries {
@@ -154,15 +157,18 @@ func (t *Timeline) check(ctx context.Context, convID string) (brain.Stimulus, bo
 
 	hasTasks := false
 	hasAlarms := false
+	hasSkills := false
 	for _, e := range entries {
 		switch e.from {
 		case "task":
 			hasTasks = true
 		case "alarm":
 			hasAlarms = true
+		case "skill":
+			hasSkills = true
 		}
 	}
-	sources := buildSources(len(msgs) > 0, hasTasks, hasAlarms)
+	sources := buildSources(len(msgs) > 0, hasTasks, hasAlarms, hasSkills)
 
 	meta := map[string]string{
 		"conversation_id": convID,
@@ -187,7 +193,7 @@ type entry struct {
 	text string
 }
 
-func (t *Timeline) buildEntries(ctx context.Context, convID string, since time.Time, msgs []db.Message, senderLabels map[string]string) []entry {
+func (t *Timeline) buildEntries(ctx context.Context, convID string, since time.Time, readLine time.Time, msgs []db.Message, senderLabels map[string]string) []entry {
 	var entries []entry
 
 	for _, msg := range msgs {
@@ -230,12 +236,37 @@ func (t *Timeline) buildEntries(ctx context.Context, convID string, since time.T
 		entries = append(entries, occurrenceEntry(o))
 	}
 
+	now := time.Now()
+	staleAlarms, err := t.alarmSvc.ListStale(ctx, now)
+	if err != nil {
+		slog.Warn("stale alarms", "pkg", "timeline", "conversation_id", convID, "error", err)
+	}
+	noticeAt := readLine.Add(time.Second)
+	if readLine.IsZero() {
+		noticeAt = now
+	}
+	for _, a := range staleAlarms {
+		if a.OriginConversationID.Valid && a.OriginConversationID.String == convID {
+			entries = append(entries, rescheduleNoticeEntry(a, noticeAt))
+		}
+	}
+
 	createdAlarms, err := t.alarmSvc.ListCreated(ctx, convID, since)
 	if err != nil {
 		slog.Warn("alarm created", "pkg", "timeline", "conversation_id", convID, "error", err)
 	}
 	for _, a := range createdAlarms {
 		entries = append(entries, alarmCreatedEntry(a))
+	}
+
+	if t.cfg.IsPrivileged(convID) {
+		skillEvents, skillErr := t.skillsSvc.ListEvents(ctx, since)
+		if skillErr != nil {
+			slog.Warn("skill events", "pkg", "timeline", "conversation_id", convID, "error", skillErr)
+		}
+		for _, se := range skillEvents {
+			entries = append(entries, skillEventEntry(se))
+		}
 	}
 
 	return entries
@@ -458,6 +489,22 @@ func occurrenceEntry(o db.AlarmOccurrence) entry {
 	}
 }
 
+func rescheduleNoticeEntry(a db.Alarm, at time.Time) entry {
+	lines := []string{
+		"[Alarm needs rescheduling]",
+		"alarm_id: " + id.Shorten(a.ID),
+		"goal: " + a.Goal,
+		"recurrence: " + a.Recurrence.String,
+		"ACTION REQUIRED: call update_alarm with a new next_fire_at",
+	}
+
+	return entry{
+		at:   at,
+		from: "alarm",
+		text: padLines(lines),
+	}
+}
+
 func taskSpawnedEntry(s db.TaskSpawned) entry {
 	lines := []string{
 		"[Task spawned]",
@@ -501,6 +548,33 @@ func taskCancelledEntry(c db.TaskCancelled) entry {
 	}
 }
 
+func skillEventEntry(se db.SkillEvent) entry {
+	var header, detail string
+	switch se.Kind {
+	case "added":
+		header = "[Skill added]"
+		detail = "has install requirements, load and run ## Install"
+	case "removed":
+		header = "[Skill removed]"
+		detail = "ask user before cleaning up resources"
+	case "changed":
+		header = "[Skill changed]"
+		detail = "install requirements changed, load and run ## Install"
+	}
+
+	lines := []string{
+		header,
+		"name: " + se.Name,
+		detail,
+	}
+
+	return entry{
+		at:   se.CreatedAt,
+		from: "skill",
+		text: padLines(lines),
+	}
+}
+
 func alarmCreatedEntry(a db.Alarm) entry {
 	recurring := a.Recurrence.Valid && a.Recurrence.String != ""
 
@@ -523,7 +597,7 @@ func alarmCreatedEntry(a db.Alarm) entry {
 	}
 }
 
-func buildSources(hasMessages, hasReports, hasOccurrences bool) string {
+func buildSources(hasMessages, hasReports, hasOccurrences, hasSkills bool) string {
 	var sources []string
 	if hasMessages {
 		sources = append(sources, `"message"`)
@@ -533,6 +607,9 @@ func buildSources(hasMessages, hasReports, hasOccurrences bool) string {
 	}
 	if hasOccurrences {
 		sources = append(sources, `"alarm"`)
+	}
+	if hasSkills {
+		sources = append(sources, `"skill"`)
 	}
 	if len(sources) == 0 {
 		return "[]"

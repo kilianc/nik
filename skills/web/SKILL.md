@@ -2,6 +2,7 @@
 name: web
 summary: Search the web, fetch URLs, and read tweets.
 tools: [shell]
+install: true
 ---
 
 # Web
@@ -85,3 +86,7 @@ curl -s "https://api.twitter.com/2/tweets?ids=<ID>&tweet.fields=created_at,autho
 ```
 
 Extract the tweet ID from any x.com or twitter.com URL (the long numeric string in the path).
+
+## Install
+
+Message the user to configure the Exa API key (`exa_api_key`) in config.yaml.
