@@ -2,7 +2,9 @@ package task
 
 import (
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/db"
@@ -62,5 +64,33 @@ func TestCancelReturnsFalseForUnknownTask(t *testing.T) {
 	runner := &Runner{}
 	if runner.Cancel("nonexistent") {
 		t.Fatal("expected Cancel to return false for unknown task")
+	}
+}
+
+func TestWaitBlocksUntilRunnersDone(t *testing.T) {
+	runner := &Runner{}
+
+	var done atomic.Bool
+
+	runner.wg.Add(1)
+	go func() {
+		defer runner.wg.Done()
+		time.Sleep(200 * time.Millisecond)
+		done.Store(true)
+	}()
+
+	waited := make(chan struct{})
+	go func() {
+		runner.Wait()
+		close(waited)
+	}()
+
+	select {
+	case <-waited:
+		if !done.Load() {
+			t.Fatal("Wait returned before goroutine finished")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Wait did not return within timeout")
 	}
 }

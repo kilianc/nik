@@ -34,6 +34,7 @@ type Runner struct {
 	svc       *Service
 	tools     []llm.Tool
 	cancels   sync.Map
+	wg        sync.WaitGroup
 }
 
 func NewRunner(cfg *config.Config, llmClient llm.Completer, svc *Service, tools []llm.Tool) *Runner {
@@ -130,7 +131,10 @@ func buildSkillDocs(cfg *config.Config) string {
 	return b.String()
 }
 
+func (r *Runner) Wait() { r.wg.Wait() }
+
 func (r *Runner) Run(ctx context.Context, t db.Task) {
+	defer r.wg.Done()
 	ctx, cancel := context.WithTimeout(ctx, runnerTimeout)
 	r.cancels.Store(t.ID, cancel)
 	defer r.cancels.Delete(t.ID)
