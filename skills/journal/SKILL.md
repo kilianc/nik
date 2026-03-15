@@ -40,7 +40,7 @@ Before reflecting, collect what happened today.
 2. `db_query` for today's messages — scan the actual content chronologically.
 3. `db_query` to refresh who's in your orbit and what you know about them.
 4. `shell` to read today's briefing if one exists (`cat briefings/$(date +%Y-%m-%d).md`).
-5. `shell` to check for code changes (`git log --oneline --after="$(date +%Y-%m-%d)T00:00:00" --before="$(date -v+1d +%Y-%m-%d)T00:00:00" --no-merges`).
+5. `shell` to check for code changes (`git -C ../ log --oneline --since="$(date +%Y-%m-%d)" --no-merges`).
 
 Your memories are already in your recall context — use what you remember.
 
