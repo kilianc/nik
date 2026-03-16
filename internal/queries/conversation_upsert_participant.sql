@@ -1,12 +1,13 @@
--- ?1: conversation_id, ?2: contact_id, ?3: display_name
+-- ?1: id, ?2: conversation_id, ?3: contact_id, ?4: display_name
 INSERT INTO conversation_participant (
+  id,
   conversation_id,
   contact_id,
   display_name,
   created_at,
   updated_at
 )
-VALUES (?1, ?2, ?3, datetime('now'), datetime('now'))
+VALUES (?1, ?2, ?3, ?4, datetime('now'), datetime('now'))
 ON CONFLICT (conversation_id, contact_id) DO UPDATE SET
   display_name = COALESCE(excluded.display_name, conversation_participant.display_name),
   updated_at = datetime('now');

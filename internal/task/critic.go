@@ -35,8 +35,7 @@ type assessOutput struct {
 
 const criticTimeout = 5 * time.Minute
 
-const criticRetryNudge = `Your previous response was not valid JSON. Respond with only a JSON object, nothing else:
-{"effectiveness": <1-5>, "tool_feedback": "...", "skill_feedback": "...", "suggestions": "..."}`
+const criticRetryInput = "Your previous response did not satisfy the required output contract. Return a single json object only."
 
 func (r *Runner) RunCritic(ctx context.Context, t db.Task) {
 	if !r.cfg.Models.Critic.Enabled || r.criticLLM == nil {
@@ -75,7 +74,7 @@ func (r *Runner) RunCritic(ctx context.Context, t db.Task) {
 	if err != nil {
 		slog.Warn("critic parse failed, retrying", "pkg", "task", "task_id", t.ID, "error", err)
 
-		_, ch = r.criticLLM.Complete(ctx, criticRetryNudge, llm.StaticInput(""), nil, nil)
+		actID, ch = r.criticLLM.Complete(ctx, instructions, llm.StaticInput(criticRetryInput), nil, nil)
 		result = <-ch
 
 		if result.Err != nil {

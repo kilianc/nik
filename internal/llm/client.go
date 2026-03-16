@@ -223,6 +223,8 @@ const (
 	maxRetries    = 3
 )
 
+const jsonObjectInputHint = "Return a single json object only."
+
 func StaticInput(s string) func() string {
 	return func() string { return s }
 }
@@ -341,7 +343,7 @@ func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instru
 
 	for round := 0; ; round++ {
 		if getInput != nil {
-			content := getInput()
+			content := ensureJSONInput(getInput(), c.jsonOutput)
 			lastInput = content
 			msg := responses.ResponseInputItemParamOfMessage(content, responses.EasyInputMessageRoleUser)
 			if round == 0 {
@@ -500,6 +502,18 @@ func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instru
 			items = append(items, responses.ResponseInputItemParamOfFunctionCallOutput(call.CallID, r.result))
 		}
 	}
+}
+
+func ensureJSONInput(content string, jsonOutput bool) string {
+	if !jsonOutput {
+		return content
+	}
+
+	if strings.TrimSpace(content) != "" {
+		return content
+	}
+
+	return jsonObjectInputHint
 }
 
 // completeStreaming uses the streaming API and collects the final completed

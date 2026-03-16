@@ -186,9 +186,7 @@ func updateAlarmHandler(svc *Service) llm.ToolExecutor {
 			}
 			p.NextFireAt = &t
 		}
-		if args.OccurrenceNote != "" {
-			p.OccurrenceNote = &args.OccurrenceNote
-		}
+		p.Note = args.OccurrenceNote
 
 		err = svc.Update(ctx, alarmID, p)
 		if err != nil {

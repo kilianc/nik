@@ -83,6 +83,13 @@ func main() {
 		os.Exit(1)
 	}
 	defer conn.Close()
+
+	err = db.EnsureSystemContact(ctx, conn)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: ensure system contact: %v\n", err)
+		os.Exit(1)
+	}
+
 	slog.Info("database ready", "path", cfg.DBPath())
 
 	mediaPath := cfg.MediaPath()
@@ -147,7 +154,6 @@ func main() {
 	recallSvc := recall.NewService(cfg, recallClient)
 	taskSvc := task.NewService(conn)
 	shellSvc := shell.NewService(conn, cfg.Home)
-	skillsSvc := skills.NewService(conn)
 
 	// worker tools: subset available to background task runners.
 	// workers can execute commands, query the DB, describe media, and load skills.
@@ -201,7 +207,7 @@ func main() {
 	b.RegisterReflex(30*time.Minute, alarmSvc.StaleAlarmReflex())
 	b.RegisterReflex(5*time.Minute, skills.SkillChangeReflex(cfg, conn))
 	b.RegisterReflex(10*time.Second, shellSvc.CheckSessions)
-	b.SetSensor(timeline.New(cfg, messagingSvc, taskSvc, alarmSvc, skillsSvc))
+	b.SetSensor(timeline.New(cfg, messagingSvc))
 
 	b.RegisterTools(llm.BuildTools(llmClient, cfg.Home)...)
 	b.RegisterTools(config.BuildTools(cfg, conn)...)

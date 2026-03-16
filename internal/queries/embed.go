@@ -22,6 +22,9 @@ var UpdateContactField string
 //go:embed contact_add_whatsapp_id.sql
 var ContactAddWhatsAppID string
 
+//go:embed system_contact_ensure.sql
+var SystemContactEnsure string
+
 // conversation queries
 
 //go:embed conversation_upsert.sql
@@ -81,9 +84,6 @@ var AlarmUpdate string
 //go:embed alarm_cancel.sql
 var AlarmCancel string
 
-//go:embed alarm_list_created.sql
-var AlarmListCreated string
-
 //go:embed alarm_get.sql
 var AlarmGet string
 
@@ -95,11 +95,16 @@ var AlarmStaleRecurring string
 //go:embed alarm_occurrence_insert.sql
 var AlarmOccurrenceInsert string
 
-//go:embed alarm_occurrence_list.sql
-var AlarmOccurrenceList string
-
 //go:embed alarm_occurrence_update.sql
 var AlarmOccurrenceUpdate string
+
+// skill queries
+
+//go:embed skill_list.sql
+var SkillList string
+
+//go:embed skill_upsert.sql
+var SkillUpsert string
 
 // skill event queries
 
@@ -154,12 +159,6 @@ var TaskRetryChain string
 //go:embed task_list.sql
 var TaskList string
 
-//go:embed task_list_spawned.sql
-var TaskListSpawned string
-
-//go:embed task_list_cancelled.sql
-var TaskListCancelled string
-
 // task assessment queries
 
 //go:embed task_assessment_insert.sql
@@ -176,11 +175,11 @@ var TaskReportByTask string
 //go:embed task_report_insert.sql
 var TaskReportInsert string
 
-//go:embed task_report_list.sql
-var TaskReportList string
-
 //go:embed task_report_last_status.sql
 var TaskReportLastStatus string
+
+//go:embed task_update_last_report_at.sql
+var TaskUpdateLastReportAt string
 
 //go:embed task_tool_calls.sql
 var TaskToolCalls string

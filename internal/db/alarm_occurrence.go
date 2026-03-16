@@ -2,14 +2,13 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"time"
 
 	"github.com/kciuffolo/nik/internal/id"
 	"github.com/kciuffolo/nik/internal/queries"
 )
 
-func AlarmOccurrenceInsert(ctx context.Context, db *sql.DB, alarmID string, firedAt time.Time) (AlarmOccurrence, error) {
+func AlarmOccurrenceInsert(ctx context.Context, db DBTX, alarmID string, firedAt time.Time) (AlarmOccurrence, error) {
 	newID := id.V7()
 
 	_, err := db.ExecContext(ctx, queries.AlarmOccurrenceInsert, newID, alarmID, firedAt)
@@ -24,29 +23,16 @@ func AlarmOccurrenceInsert(ctx context.Context, db *sql.DB, alarmID string, fire
 	}, nil
 }
 
-func AlarmOccurrenceList(ctx context.Context, db *sql.DB, conversationID string, since time.Time) ([]AlarmOccurrence, error) {
-	rows, err := db.QueryContext(ctx, queries.AlarmOccurrenceList, conversationID, since)
+func AlarmOccurrenceUpdateLatestNote(ctx context.Context, db DBTX, alarmID, note string) (bool, error) {
+	result, err := db.ExecContext(ctx, queries.AlarmOccurrenceUpdate, alarmID, note)
 	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var occurrences []AlarmOccurrence
-	for rows.Next() {
-		var o AlarmOccurrence
-		err = rows.Scan(
-			&o.ID,
-			&o.AlarmID,
-			&o.Note,
-			&o.FiredAt,
-			&o.Goal,
-			&o.Recurrence,
-		)
-		if err != nil {
-			return nil, err
-		}
-		occurrences = append(occurrences, o)
+		return false, err
 	}
 
-	return occurrences, rows.Err()
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+
+	return rows > 0, nil
 }

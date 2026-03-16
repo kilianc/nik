@@ -18,7 +18,7 @@ type CreateAlarmParams struct {
 	NextFireAt           time.Time
 }
 
-func CreateAlarm(ctx context.Context, db *sql.DB, p CreateAlarmParams) (Alarm, error) {
+func CreateAlarm(ctx context.Context, db DBTX, p CreateAlarmParams) (Alarm, error) {
 	newID := id.V7()
 	now := time.Now()
 
@@ -56,6 +56,7 @@ func scanAlarm(s scanner) (Alarm, error) {
 		&a.OriginConversationID,
 		&a.Goal,
 		&a.Recurrence,
+		&a.LastOccurrenceNote,
 		&a.NextFireAt,
 		&a.LastFiredAt,
 		&a.CreatedAt,
@@ -83,14 +84,16 @@ func DueAlarms(ctx context.Context, db *sql.DB, now time.Time) ([]Alarm, error) 
 }
 
 type AlarmUpdateParams struct {
-	Goal        *string
-	Recurrence  *string
-	NextFireAt  any
-	LastFiredAt any
+	Goal                    *string
+	Recurrence              *string
+	NextFireAt              any
+	LastFiredAt             any
+	ApplyLastOccurrenceNote bool
+	LastOccurrenceNote      any
 }
 
-func AlarmUpdate(ctx context.Context, db *sql.DB, id string, p AlarmUpdateParams) error {
-	_, err := db.ExecContext(ctx, queries.AlarmUpdate, id, p.Goal, p.Recurrence, p.NextFireAt, p.LastFiredAt)
+func AlarmUpdate(ctx context.Context, db DBTX, id string, p AlarmUpdateParams) error {
+	_, err := db.ExecContext(ctx, queries.AlarmUpdate, id, p.Goal, p.Recurrence, p.NextFireAt, p.LastFiredAt, p.ApplyLastOccurrenceNote, p.LastOccurrenceNote)
 	return err
 }
 
@@ -99,27 +102,8 @@ func AlarmCancel(ctx context.Context, db *sql.DB, id string) error {
 	return err
 }
 
-func AlarmListCreated(ctx context.Context, db *sql.DB, conversationID string, since time.Time) ([]Alarm, error) {
-	rows, err := db.QueryContext(ctx, queries.AlarmListCreated, conversationID, since)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var alarms []Alarm
-	for rows.Next() {
-		a, scanErr := scanAlarm(rows)
-		if scanErr != nil {
-			return nil, scanErr
-		}
-		alarms = append(alarms, a)
-	}
-
-	return alarms, rows.Err()
-}
-
 // AlarmGet looks up a single active alarm by ID or goal prefix.
-func AlarmGet(ctx context.Context, db *sql.DB, identifier string) (Alarm, bool, error) {
+func AlarmGet(ctx context.Context, db DBTX, identifier string) (Alarm, bool, error) {
 	row := db.QueryRowContext(ctx, queries.AlarmGet, identifier)
 
 	a, err := scanAlarm(row)
@@ -152,23 +136,40 @@ func StaleRecurringAlarms(ctx context.Context, db *sql.DB, now time.Time) ([]Ala
 	return alarms, rows.Err()
 }
 
-func AlarmFire(ctx context.Context, conn *sql.DB, alarmID string, now time.Time) (AlarmOccurrence, error) {
+func AlarmFire(ctx context.Context, conn *sql.DB, a Alarm, now time.Time) (AlarmOccurrence, error) {
 	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
 		return AlarmOccurrence{}, fmt.Errorf("begin tx: %w", err)
 	}
 	defer tx.Rollback()
 
-	occID := id.V7()
-
-	_, err = tx.ExecContext(ctx, queries.AlarmOccurrenceInsert, occID, alarmID, now)
+	occ, err := AlarmOccurrenceInsert(ctx, tx, a.ID, now)
 	if err != nil {
 		return AlarmOccurrence{}, fmt.Errorf("insert occurrence: %w", err)
 	}
 
-	_, err = tx.ExecContext(ctx, queries.AlarmUpdate, alarmID, nil, nil, nil, now)
+	err = AlarmUpdate(ctx, tx, a.ID, AlarmUpdateParams{
+		LastFiredAt:             now,
+		ApplyLastOccurrenceNote: true,
+		LastOccurrenceNote:      nil,
+	})
 	if err != nil {
 		return AlarmOccurrence{}, fmt.Errorf("set alarm fired: %w", err)
+	}
+
+	a.LastFiredAt = sql.NullTime{Time: now, Valid: true}
+	a.LastOccurrenceNote = sql.NullString{}
+
+	if a.OriginConversationID.Valid {
+		err = InsertSystemMessage(ctx, tx, SystemMessageParams{
+			ConversationID: a.OriginConversationID.String,
+			Kind:           "alarm_fired",
+			Body:           a,
+			SentAt:         now,
+		})
+		if err != nil {
+			return AlarmOccurrence{}, fmt.Errorf("insert system message: %w", err)
+		}
 	}
 
 	err = tx.Commit()
@@ -176,9 +177,5 @@ func AlarmFire(ctx context.Context, conn *sql.DB, alarmID string, now time.Time)
 		return AlarmOccurrence{}, fmt.Errorf("commit: %w", err)
 	}
 
-	return AlarmOccurrence{
-		ID:      occID,
-		AlarmID: alarmID,
-		FiredAt: now,
-	}, nil
+	return occ, nil
 }

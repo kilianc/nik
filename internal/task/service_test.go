@@ -18,7 +18,14 @@ func testDB(t *testing.T) (*Service, *sql.DB) {
 	}
 	t.Cleanup(func() { conn.Close() })
 
-	_, err = conn.ExecContext(context.Background(),
+	ctx := context.Background()
+
+	err = db.EnsureSystemContact(ctx, conn)
+	if err != nil {
+		t.Fatalf("ensure system contact: %v", err)
+	}
+
+	_, err = conn.ExecContext(ctx,
 		"INSERT INTO conversation (id, platform, external_conversation_id) VALUES (?, 'whatsapp', 'ext-test')",
 		testConvID)
 	if err != nil {
@@ -32,7 +39,12 @@ func TestCreateAndGet(t *testing.T) {
 	svc, _ := testDB(t)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, createParams{Goal: "run build", Plan: "step 1\nstep 2", Thinking: "low"})
+	task, err := svc.Create(ctx, createParams{
+		ConversationID: testConvID,
+		Goal:           "run build",
+		Plan:           "step 1\nstep 2",
+		Thinking:       "low",
+	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -66,7 +78,7 @@ func TestStartAndComplete(t *testing.T) {
 	svc, conn := testDB(t)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, createParams{Goal: "test", Thinking: "low"})
+	task, err := svc.Create(ctx, createParams{Goal: "test", Thinking: "low", ConversationID: testConvID})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -133,18 +145,49 @@ func TestReportInsertAndList(t *testing.T) {
 		t.Fatalf("insert report: %v", err)
 	}
 
-	reports, err := svc.ListReports(ctx, testConvID, task.CreatedAt)
+	var reportContent, reportStatus string
+	err = svc.conn.QueryRowContext(ctx,
+		`SELECT content, status
+		 FROM task_report
+		 WHERE task_id = ?1`,
+		task.ID,
+	).Scan(&reportContent, &reportStatus)
 	if err != nil {
-		t.Fatalf("reports: %v", err)
+		t.Fatalf("query task_report: %v", err)
 	}
-	if len(reports) != 1 {
-		t.Fatalf("expected 1 report, got %d", len(reports))
+	if reportContent != "build passed" {
+		t.Fatalf("expected content 'build passed', got %q", reportContent)
 	}
-	if reports[0].Content != "build passed" {
-		t.Fatalf("expected content 'build passed', got %q", reports[0].Content)
+	if reportStatus != "running" {
+		t.Fatalf("expected status 'running', got %q", reportStatus)
 	}
-	if reports[0].Goal != "test" {
-		t.Fatalf("expected goal 'test', got %q", reports[0].Goal)
+
+	got, err := svc.Get(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("get after report: %v", err)
+	}
+	if !got.LastReportAt.Valid {
+		t.Fatalf("expected last_report_at to be set")
+	}
+
+	var content, status string
+	err = svc.conn.QueryRowContext(ctx,
+		`SELECT json_extract(body, '$.content'),
+		        json_extract(body, '$.status')
+		 FROM message
+		 WHERE platform = 'system'
+		   AND kind = 'task_report'
+		   AND json_extract(body, '$.task_id') = ?1`,
+		task.ID,
+	).Scan(&content, &status)
+	if err != nil {
+		t.Fatalf("query system task report: %v", err)
+	}
+	if content != "build passed" {
+		t.Fatalf("expected system message content 'build passed', got %q", content)
+	}
+	if status != "running" {
+		t.Fatalf("expected system message status 'running', got %q", status)
 	}
 }
 

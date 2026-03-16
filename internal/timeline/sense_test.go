@@ -7,7 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kciuffolo/nik/internal/config"
+	"github.com/kciuffolo/nik/internal/contacts"
 	"github.com/kciuffolo/nik/internal/db"
+	"github.com/kciuffolo/nik/internal/messaging"
 )
 
 func setupTestDB(t *testing.T) (*sql.DB, string) {
@@ -261,5 +264,47 @@ func TestMessageEntryPlainText(t *testing.T) {
 	}
 	if e.from != "Bob" {
 		t.Fatalf("expected sender Bob, got %q", e.from)
+	}
+}
+
+func TestRenderUsesSystemMessagesOnly(t *testing.T) {
+	conn, convID := setupTestDB(t)
+	ctx := context.Background()
+
+	err := db.EnsureSystemContact(ctx, conn)
+	if err != nil {
+		t.Fatalf("ensure system contact: %v", err)
+	}
+
+	err = db.InsertSystemMessage(ctx, conn, db.SystemMessageParams{
+		ConversationID: convID,
+		Kind:           "task_report",
+		Body: db.TaskReport{
+			TaskID:  "aaaa-bbbb-cccc-dddd",
+			Goal:    "check build",
+			Status:  "running",
+			Content: "working",
+		},
+		SentAt: time.Date(2026, 3, 14, 15, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("insert system message: %v", err)
+	}
+
+	cfg := &config.Config{MaxHistory: 10}
+	msgSvc := messaging.NewService(cfg, conn, contacts.NewService(conn))
+	tl := New(cfg, msgSvc)
+
+	_, rendered, err := tl.Render(ctx, convID)
+	if err != nil {
+		t.Fatalf("render timeline: %v", err)
+	}
+
+	out := strings.Join(rendered, "\n")
+	if !strings.Contains(out, "[Task report]") {
+		t.Fatalf("expected rendered timeline to include task report, got %q", out)
+	}
+	if !strings.Contains(out, "goal: check build") {
+		t.Fatalf("expected rendered timeline to include task goal, got %q", out)
 	}
 }

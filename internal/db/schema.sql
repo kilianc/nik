@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS conversation (
 );
 
 CREATE TABLE IF NOT EXISTS conversation_participant (
+  id              TEXT PRIMARY KEY,
   conversation_id TEXT NOT NULL REFERENCES conversation(id),
   contact_id      TEXT NOT NULL REFERENCES contact(id),
   display_name    TEXT,
@@ -48,13 +49,19 @@ CREATE TABLE IF NOT EXISTS message (
   id                     TEXT PRIMARY KEY,
   conversation_id        TEXT NOT NULL REFERENCES conversation(id),
   contact_id             TEXT NOT NULL REFERENCES contact(id),
-  platform               TEXT NOT NULL CHECK(platform IN ('whatsapp')),
+  platform               TEXT NOT NULL CHECK(platform IN ('whatsapp', 'system')),
   external_conversation_id TEXT NOT NULL,
   external_message_id    TEXT NOT NULL,
   external_sender_id     TEXT NOT NULL,
   is_from_me             INTEGER NOT NULL DEFAULT 0,
   is_group               INTEGER NOT NULL DEFAULT 0,
-  kind                   TEXT NOT NULL DEFAULT 'text' CHECK(kind IN ('text', 'image', 'audio', 'video', 'ptv', 'document', 'sticker', 'reaction', 'location', 'contact', 'poll')),
+  kind                   TEXT NOT NULL DEFAULT 'text' CHECK(kind IN (
+    'text', 'image', 'audio', 'video', 'ptv', 'document',
+    'sticker', 'reaction', 'location', 'contact', 'poll',
+    'task_report', 'task_spawned', 'task_retry', 'task_cancelled',
+    'alarm_fired', 'alarm_stale', 'alarm_created', 'alarm_updated',
+    'skill_added', 'skill_removed', 'skill_changed'
+  )),
   body                   TEXT NOT NULL DEFAULT '',
   mime_type              TEXT,
   is_edit                INTEGER NOT NULL DEFAULT 0,
@@ -85,6 +92,7 @@ CREATE TABLE IF NOT EXISTS media (
 );
 
 CREATE TABLE IF NOT EXISTS message_media (
+  id          TEXT PRIMARY KEY,
   message_id  TEXT NOT NULL UNIQUE REFERENCES message(id),
   media_id    TEXT NOT NULL REFERENCES media(id),
   created_at  TIMESTAMP NOT NULL DEFAULT (datetime('now'))
@@ -96,6 +104,7 @@ CREATE TABLE IF NOT EXISTS alarm (
   origin_conversation_id TEXT NOT NULL REFERENCES conversation(id),
   goal                   TEXT NOT NULL,
   recurrence             TEXT,
+  last_occurrence_note   TEXT,
   next_fire_at           TIMESTAMP NOT NULL,
   last_fired_at          TIMESTAMP,
   cancelled_at           TIMESTAMP,
@@ -142,7 +151,7 @@ CREATE TABLE IF NOT EXISTS tool_call (
 
 CREATE TABLE IF NOT EXISTS task (
   id                TEXT PRIMARY KEY,
-  conversation_id   TEXT REFERENCES conversation(id),
+  conversation_id   TEXT NOT NULL REFERENCES conversation(id),
   contact_id        TEXT REFERENCES contact(id),
   activation_id     TEXT REFERENCES activation(id),
   retry_for_task_id TEXT REFERENCES task(id),
@@ -153,7 +162,8 @@ CREATE TABLE IF NOT EXISTS task (
   status            TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),
   created_at        TIMESTAMP NOT NULL DEFAULT (datetime('now')),
   started_at        TIMESTAMP,
-  completed_at      TIMESTAMP
+  completed_at      TIMESTAMP,
+  last_report_at    TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS task_report (
@@ -165,7 +175,8 @@ CREATE TABLE IF NOT EXISTS task_report (
 );
 
 CREATE TABLE IF NOT EXISTS shell_output (
-  session_id    TEXT PRIMARY KEY,
+  id            TEXT PRIMARY KEY,
+  session_id    TEXT NOT NULL UNIQUE,
   activation_id TEXT NOT NULL REFERENCES activation(id),
   command       TEXT NOT NULL DEFAULT '',
   description   TEXT NOT NULL DEFAULT '',
@@ -177,11 +188,22 @@ CREATE TABLE IF NOT EXISTS shell_output (
 );
 
 CREATE TABLE IF NOT EXISTS activation_detail (
-  activation_id       TEXT PRIMARY KEY REFERENCES activation(id),
+  id                  TEXT PRIMARY KEY,
+  activation_id       TEXT NOT NULL UNIQUE REFERENCES activation(id),
   instructions        TEXT NOT NULL DEFAULT '',
   user_input          TEXT NOT NULL DEFAULT '',
   tools               TEXT NOT NULL DEFAULT '[]',
   reasoning_summaries TEXT NOT NULL DEFAULT '[]'
+);
+
+CREATE TABLE IF NOT EXISTS skill (
+  id            TEXT PRIMARY KEY,
+  name          TEXT NOT NULL UNIQUE,
+  status        TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'removed')),
+  content_hash  TEXT,
+  install_hash  TEXT,
+  created_at    TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+  updated_at    TIMESTAMP NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS skill_event (

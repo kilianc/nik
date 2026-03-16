@@ -19,14 +19,16 @@ func TestTaskRetryChainAnnotatesReadReports(t *testing.T) {
 
 	now := time.Now().UTC()
 	rootID := id.V7()
+	convID := seedConversation(t, ctx, conn, "whatsapp", "task-retry-chain@s.whatsapp.net", "dm")
 
 	err = TaskInsert(ctx, conn, TaskInsertParams{
-		ID:        rootID,
-		Goal:      "attempt zero",
-		Plan:      "plan",
-		Thinking:  "low",
-		Status:    "completed",
-		CreatedAt: now,
+		ID:             rootID,
+		ConversationID: convID,
+		Goal:           "attempt zero",
+		Plan:           "plan",
+		Thinking:       "low",
+		Status:         "completed",
+		CreatedAt:      now,
 	})
 	if err != nil {
 		t.Fatalf("insert root task: %v", err)
@@ -46,6 +48,7 @@ func TestTaskRetryChainAnnotatesReadReports(t *testing.T) {
 	retryID := id.V7()
 	err = TaskInsert(ctx, conn, TaskInsertParams{
 		ID:             retryID,
+		ConversationID: convID,
 		RetryForTaskID: rootID,
 		RetryNumber:    1,
 		Goal:           "attempt one",
@@ -112,13 +115,15 @@ func TestTaskRetryChainNoReports(t *testing.T) {
 	defer conn.Close()
 
 	rootID := id.V7()
+	convID := seedConversation(t, ctx, conn, "whatsapp", "silent-task@s.whatsapp.net", "dm")
 	err = TaskInsert(ctx, conn, TaskInsertParams{
-		ID:        rootID,
-		Goal:      "silent task",
-		Plan:      "plan",
-		Thinking:  "low",
-		Status:    "completed",
-		CreatedAt: time.Now().UTC(),
+		ID:             rootID,
+		ConversationID: convID,
+		Goal:           "silent task",
+		Plan:           "plan",
+		Thinking:       "low",
+		Status:         "completed",
+		CreatedAt:      time.Now().UTC(),
 	})
 	if err != nil {
 		t.Fatalf("insert task: %v", err)

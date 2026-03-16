@@ -22,7 +22,7 @@ type TaskInsertParams struct {
 	CreatedAt      time.Time
 }
 
-func TaskGet(ctx context.Context, db *sql.DB, taskID string) (Task, error) {
+func TaskGet(ctx context.Context, db DBTX, taskID string) (Task, error) {
 	row := db.QueryRowContext(ctx, queries.TaskGet, taskID)
 
 	t, err := scanTask(row)
@@ -33,7 +33,7 @@ func TaskGet(ctx context.Context, db *sql.DB, taskID string) (Task, error) {
 	return t, nil
 }
 
-func TaskInsert(ctx context.Context, db *sql.DB, p TaskInsertParams) error {
+func TaskInsert(ctx context.Context, db DBTX, p TaskInsertParams) error {
 	var convID any
 	if p.ConversationID != "" {
 		convID = p.ConversationID
@@ -77,7 +77,7 @@ func TaskStart(ctx context.Context, db *sql.DB, taskID, activationID string) err
 	return nil
 }
 
-func TaskUpdateStatus(ctx context.Context, db *sql.DB, taskID, status string) error {
+func TaskUpdateStatus(ctx context.Context, db DBTX, taskID, status string) error {
 	_, err := db.ExecContext(ctx, queries.TaskUpdateStatus, taskID, status)
 	if err != nil {
 		return fmt.Errorf("update task status %s: %w", taskID, err)
@@ -207,56 +207,6 @@ func TaskRecentToolCalls(ctx context.Context, db *sql.DB, activationID string) (
 	return calls, rows.Err()
 }
 
-func TaskListSpawned(ctx context.Context, db *sql.DB, conversationID string, since time.Time) ([]TaskSpawned, error) {
-	rows, err := db.QueryContext(ctx, queries.TaskListSpawned, conversationID, since)
-	if err != nil {
-		return nil, fmt.Errorf("list spawned tasks: %w", err)
-	}
-	defer rows.Close()
-
-	var tasks []TaskSpawned
-	for rows.Next() {
-		var t TaskSpawned
-		err = rows.Scan(
-			&t.ID,
-			&t.Goal,
-			&t.RetryForTaskID,
-			&t.RetryNumber,
-			&t.CreatedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("scan spawned task: %w", err)
-		}
-		tasks = append(tasks, t)
-	}
-
-	return tasks, rows.Err()
-}
-
-func TaskListCancelled(ctx context.Context, db *sql.DB, conversationID string, since time.Time) ([]TaskCancelled, error) {
-	rows, err := db.QueryContext(ctx, queries.TaskListCancelled, conversationID, since)
-	if err != nil {
-		return nil, fmt.Errorf("list cancelled tasks: %w", err)
-	}
-	defer rows.Close()
-
-	var tasks []TaskCancelled
-	for rows.Next() {
-		var t TaskCancelled
-		err = rows.Scan(
-			&t.ID,
-			&t.Goal,
-			&t.CompletedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("scan cancelled task: %w", err)
-		}
-		tasks = append(tasks, t)
-	}
-
-	return tasks, rows.Err()
-}
-
 func scanTask(sc scanner) (Task, error) {
 	var t Task
 	var convID, contactID, activationID, retryForTaskID sql.NullString
@@ -275,6 +225,7 @@ func scanTask(sc scanner) (Task, error) {
 		&t.CreatedAt,
 		&t.StartedAt,
 		&t.CompletedAt,
+		&t.LastReportAt,
 	)
 	if err != nil {
 		return Task{}, err
@@ -295,7 +246,7 @@ type TaskReportInsertParams struct {
 	CreatedAt time.Time
 }
 
-func TaskReportInsert(ctx context.Context, db *sql.DB, p TaskReportInsertParams) error {
+func TaskReportInsert(ctx context.Context, db DBTX, p TaskReportInsertParams) error {
 	_, err := db.ExecContext(ctx, queries.TaskReportInsert,
 		p.ID,
 		p.TaskID,
@@ -310,6 +261,15 @@ func TaskReportInsert(ctx context.Context, db *sql.DB, p TaskReportInsertParams)
 	return nil
 }
 
+func TaskUpdateLastReportAt(ctx context.Context, db DBTX, taskID string, at time.Time) error {
+	_, err := db.ExecContext(ctx, queries.TaskUpdateLastReportAt, taskID, at)
+	if err != nil {
+		return fmt.Errorf("update task last_report_at %s: %w", taskID, err)
+	}
+
+	return nil
+}
+
 func TaskReportLastStatus(ctx context.Context, db *sql.DB, taskID string) (string, error) {
 	var status string
 	err := db.QueryRowContext(ctx, queries.TaskReportLastStatus, taskID).Scan(&status)
@@ -317,33 +277,6 @@ func TaskReportLastStatus(ctx context.Context, db *sql.DB, taskID string) (strin
 		return "", fmt.Errorf("last report status for task %s: %w", taskID, err)
 	}
 	return status, nil
-}
-
-func TaskReportList(ctx context.Context, db *sql.DB, conversationID string, since time.Time) ([]TaskReport, error) {
-	rows, err := db.QueryContext(ctx, queries.TaskReportList, conversationID, since)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var reports []TaskReport
-	for rows.Next() {
-		var r TaskReport
-		err = rows.Scan(
-			&r.ID,
-			&r.TaskID,
-			&r.Content,
-			&r.CreatedAt,
-			&r.Goal,
-			&r.Status,
-		)
-		if err != nil {
-			return nil, err
-		}
-		reports = append(reports, r)
-	}
-
-	return reports, rows.Err()
 }
 
 func TaskRetryChain(ctx context.Context, db *sql.DB, rootID string) ([]RetryChainEntry, error) {

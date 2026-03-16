@@ -42,6 +42,7 @@ type Conversation struct {
 }
 
 type ConversationParticipant struct {
+	ID          string
 	ContactID   string
 	DisplayName sql.NullString
 	ContactName sql.NullString
@@ -81,14 +82,15 @@ type Message struct {
 }
 
 type Alarm struct {
-	ID                   string
-	OriginContactID      sql.NullString
-	OriginConversationID sql.NullString
-	Goal                 string
-	Recurrence           sql.NullString
-	NextFireAt           sql.NullTime
-	LastFiredAt          sql.NullTime
-	CreatedAt            time.Time
+	ID                   string         `json:"id"`
+	OriginContactID      sql.NullString `json:"origin_contact_id"`
+	OriginConversationID sql.NullString `json:"origin_conversation_id"`
+	Goal                 string         `json:"goal"`
+	Recurrence           sql.NullString `json:"recurrence"`
+	LastOccurrenceNote   sql.NullString `json:"last_occurrence_note"`
+	NextFireAt           sql.NullTime   `json:"next_fire_at"`
+	LastFiredAt          sql.NullTime   `json:"last_fired_at"`
+	CreatedAt            time.Time      `json:"created_at"`
 }
 
 type AlarmOccurrence struct {
@@ -101,19 +103,20 @@ type AlarmOccurrence struct {
 }
 
 type Task struct {
-	ID             string
-	ConversationID string
-	ContactID      string
-	ActivationID   string
-	RetryForTaskID string
-	RetryNumber    int
-	Goal           string
-	Plan           string
-	Thinking       string
-	Status         string
-	CreatedAt      time.Time
-	StartedAt      sql.NullTime
-	CompletedAt    sql.NullTime
+	ID             string       `json:"id"`
+	ConversationID string       `json:"conversation_id"`
+	ContactID      string       `json:"contact_id"`
+	ActivationID   string       `json:"activation_id"`
+	RetryForTaskID string       `json:"retry_for_task_id"`
+	RetryNumber    int          `json:"retry_number"`
+	Goal           string       `json:"goal"`
+	Plan           string       `json:"plan"`
+	Thinking       string       `json:"thinking"`
+	Status         string       `json:"status"`
+	CreatedAt      time.Time    `json:"created_at"`
+	StartedAt      sql.NullTime `json:"started_at"`
+	CompletedAt    sql.NullTime `json:"completed_at"`
+	LastReportAt   sql.NullTime `json:"last_report_at"`
 }
 
 type ActiveTask struct {
@@ -129,7 +132,7 @@ type TaskListRow struct {
 	ID             string
 	Goal           string
 	Status         string
-	ConversationID sql.NullString
+	ConversationID string
 	CreatedAt      time.Time
 	StartedAt      sql.NullTime
 	CompletedAt    sql.NullTime
@@ -149,26 +152,12 @@ type RetryChainEntry struct {
 }
 
 type TaskReport struct {
-	ID        string
-	TaskID    string
-	Content   string
-	CreatedAt time.Time
-	Goal      string
-	Status    string
-}
-
-type TaskSpawned struct {
-	ID             string
-	Goal           string
-	RetryForTaskID sql.NullString
-	RetryNumber    int
-	CreatedAt      time.Time
-}
-
-type TaskCancelled struct {
-	ID          string
-	Goal        string
-	CompletedAt time.Time
+	ID        string    `json:"id"`
+	TaskID    string    `json:"task_id"`
+	Content   string    `json:"content"`
+	CreatedAt time.Time `json:"created_at"`
+	Goal      string    `json:"goal"`
+	Status    string    `json:"status"`
 }
 
 type SkillEvent struct {
@@ -178,6 +167,16 @@ type SkillEvent struct {
 	ContentHash sql.NullString
 	InstallHash sql.NullString
 	CreatedAt   time.Time
+}
+
+type Skill struct {
+	ID          string         `json:"id"`
+	Name        string         `json:"name"`
+	Status      string         `json:"status"`
+	ContentHash sql.NullString `json:"content_hash"`
+	InstallHash sql.NullString `json:"install_hash"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
 }
 
 type ToolCallInfo struct {

@@ -1,5 +1,6 @@
 -- ?1: conversation id (UUID string)
 SELECT
+  cp.id,
   cp.contact_id,
   cp.display_name,
   c.name,

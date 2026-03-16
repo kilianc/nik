@@ -103,6 +103,18 @@ func TestActivationDetailInsertReplacesOnConflict(t *testing.T) {
 		t.Fatalf("first insert: %v", err)
 	}
 
+	var firstID string
+	err = conn.QueryRowContext(ctx,
+		"SELECT id FROM activation_detail WHERE activation_id = ?1",
+		actID,
+	).Scan(&firstID)
+	if err != nil {
+		t.Fatalf("query first id: %v", err)
+	}
+	if firstID == "" {
+		t.Fatalf("expected non-empty activation_detail id")
+	}
+
 	err = ActivationDetailInsert(ctx, conn, ActivationDetailParams{
 		ActivationID: actID,
 		Instructions: "second",
@@ -123,5 +135,17 @@ func TestActivationDetailInsertReplacesOnConflict(t *testing.T) {
 
 	if got != "second" {
 		t.Fatalf("expected replaced instructions %q, got %q", "second", got)
+	}
+
+	var secondID string
+	err = conn.QueryRowContext(ctx,
+		"SELECT id FROM activation_detail WHERE activation_id = ?1",
+		actID,
+	).Scan(&secondID)
+	if err != nil {
+		t.Fatalf("query second id: %v", err)
+	}
+	if secondID != firstID {
+		t.Fatalf("expected activation_detail id %s to be preserved, got %s", firstID, secondID)
 	}
 }

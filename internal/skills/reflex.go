@@ -23,10 +23,12 @@ func SkillChangeReflex(cfg *config.Config, conn *sql.DB) func(ctx context.Contex
 			if readErr != nil {
 				return
 			}
+
 			content := string(raw)
 			contentHash := sha256.Sum256(raw)
 			installSection := extractInstallSection(content)
 			installHash := sha256.Sum256([]byte(installSection))
+
 			fsSkills[s.Name] = fsSkill{
 				contentHash: hex.EncodeToString(contentHash[:]),
 				installHash: hex.EncodeToString(installHash[:]),
@@ -37,75 +39,136 @@ func SkillChangeReflex(cfg *config.Config, conn *sql.DB) func(ctx context.Contex
 			return
 		}
 
-		latest, err := db.SkillEventLatestPerName(ctx, conn)
+		existing, err := db.SkillList(ctx, conn)
 		if err != nil {
-			slog.Warn("skill reflex: query latest events", "error", err)
+			slog.Warn("skill reflex: list skills", "error", err)
 			return
 		}
 
-		known := map[string]db.SkillEvent{}
-		for _, e := range latest {
-			known[e.Name] = e
+		known := map[string]db.Skill{}
+		for _, s := range existing {
+			known[s.Name] = s
 		}
+
+		privIDs := cfg.PrivilegedIDs()
 
 		for name, fs := range fsSkills {
 			prev, exists := known[name]
 
-			if !exists || prev.Kind == "removed" {
-				_, insertErr := db.SkillEventInsert(ctx, conn, db.SkillEventInsertParams{
+			if !exists || prev.Status == "removed" {
+				applySkillChange(ctx, conn, privIDs, "added", db.SkillUpsertParams{
 					Name:        name,
-					Kind:        "added",
+					Status:      "active",
 					ContentHash: fs.contentHash,
 					InstallHash: fs.installHash,
 				})
-				if insertErr != nil {
-					slog.Warn("skill reflex: insert added", "name", name, "error", insertErr)
-				} else {
-					slog.Info("skill event", "name", name, "type", "added")
-				}
 				continue
 			}
 
-			if prev.ContentHash.Valid && prev.ContentHash.String == fs.contentHash {
-				continue
-			}
-
+			contentChanged := !prev.ContentHash.Valid || prev.ContentHash.String != fs.contentHash
 			installChanged := !prev.InstallHash.Valid || prev.InstallHash.String != fs.installHash
 
+			if !contentChanged && !installChanged {
+				continue
+			}
+
 			if installChanged {
-				_, insertErr := db.SkillEventInsert(ctx, conn, db.SkillEventInsertParams{
+				applySkillChange(ctx, conn, privIDs, "changed", db.SkillUpsertParams{
 					Name:        name,
-					Kind:        "changed",
+					Status:      "active",
 					ContentHash: fs.contentHash,
 					InstallHash: fs.installHash,
 				})
-				if insertErr != nil {
-					slog.Warn("skill reflex: insert changed", "name", name, "error", insertErr)
-				} else {
-					slog.Info("skill event", "name", name, "type", "changed")
-				}
+				continue
+			}
+
+			err = upsertSkillOnly(ctx, conn, db.SkillUpsertParams{
+				Name:        name,
+				Status:      "active",
+				ContentHash: fs.contentHash,
+				InstallHash: fs.installHash,
+			})
+			if err != nil {
+				slog.Warn("skill reflex: upsert prompt-only change", "name", name, "error", err)
 			}
 		}
 
 		for name, prev := range known {
-			if prev.Kind == "removed" {
+			if prev.Status == "removed" {
 				continue
 			}
 			if _, onDisk := fsSkills[name]; onDisk {
 				continue
 			}
 
-			_, insertErr := db.SkillEventInsert(ctx, conn, db.SkillEventInsertParams{
-				Name: name,
-				Kind: "removed",
+			applySkillChange(ctx, conn, privIDs, "removed", db.SkillUpsertParams{
+				Name:   name,
+				Status: "removed",
 			})
-			if insertErr != nil {
-				slog.Warn("skill reflex: insert removed", "name", name, "error", insertErr)
-			} else {
-				slog.Info("skill event", "name", name, "type", "removed")
-			}
 		}
 	}
+}
+
+func applySkillChange(ctx context.Context, conn *sql.DB, privIDs []string, kind string, p db.SkillUpsertParams) {
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		slog.Warn("skill reflex: begin tx", "name", p.Name, "error", err)
+		return
+	}
+	defer tx.Rollback()
+
+	skill, err := db.SkillUpsert(ctx, tx, p)
+	if err != nil {
+		slog.Warn("skill reflex: upsert "+kind, "name", p.Name, "error", err)
+		return
+	}
+
+	_, err = db.SkillEventInsert(ctx, tx, db.SkillEventInsertParams{
+		Name:        p.Name,
+		Kind:        kind,
+		ContentHash: p.ContentHash,
+		InstallHash: p.InstallHash,
+	})
+	if err != nil {
+		slog.Warn("skill reflex: insert event", "name", p.Name, "kind", kind, "error", err)
+		return
+	}
+
+	for _, convID := range privIDs {
+		err = db.InsertSystemMessage(ctx, tx, db.SystemMessageParams{
+			ConversationID: convID,
+			Kind:           "skill_" + kind,
+			Body:           skill,
+			SentAt:         skill.UpdatedAt,
+		})
+		if err != nil {
+			slog.Warn("skill reflex: insert system message", "name", p.Name, "kind", kind, "error", err)
+			return
+		}
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		slog.Warn("skill reflex: commit", "name", p.Name, "error", err)
+		return
+	}
+
+	slog.Info("skill event", "name", p.Name, "type", kind)
+}
+
+func upsertSkillOnly(ctx context.Context, conn *sql.DB, p db.SkillUpsertParams) error {
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = db.SkillUpsert(ctx, tx, p)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 type fsSkill struct {

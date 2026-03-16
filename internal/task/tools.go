@@ -260,14 +260,11 @@ func listHandler(svc *Service) llm.ToolExecutor {
 		items := make([]map[string]any, len(tasks))
 		for i, t := range tasks {
 			item := map[string]any{
-				"task_id":    t.ID,
-				"goal":       t.Goal,
-				"status":     t.Status,
-				"created_at": t.CreatedAt.Format("2006-01-02 15:04:05"),
-			}
-
-			if t.ConversationID.Valid {
-				item["conversation_id"] = t.ConversationID.String
+				"task_id":         t.ID,
+				"goal":            t.Goal,
+				"status":          t.Status,
+				"conversation_id": t.ConversationID,
+				"created_at":      t.CreatedAt.Format("2006-01-02 15:04:05"),
 			}
 
 			if t.StartedAt.Valid {

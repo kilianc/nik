@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/kciuffolo/nik/internal/id"
 	"github.com/kciuffolo/nik/internal/queries"
 )
 
@@ -17,6 +18,7 @@ type ActivationDetailParams struct {
 
 func ActivationDetailInsert(ctx context.Context, db DBTX, p ActivationDetailParams) error {
 	_, err := db.ExecContext(ctx, queries.ActivationDetailInsert,
+		id.V7(),
 		p.ActivationID,
 		p.Instructions,
 		p.UserInput,

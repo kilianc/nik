@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/kciuffolo/nik/internal/id"
 	"github.com/kciuffolo/nik/internal/queries"
 )
 
@@ -25,6 +26,7 @@ func ShellOutputUpsert(ctx context.Context, db DBTX, p ShellOutputUpsertParams) 
 	}
 
 	_, err := db.ExecContext(ctx, queries.ShellOutputUpsert,
+		id.V7(),
 		p.SessionID,
 		p.ActivationID,
 		p.Command,

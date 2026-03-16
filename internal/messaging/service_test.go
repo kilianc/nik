@@ -566,6 +566,26 @@ func TestMarkReadCapsAtReadUpTo(t *testing.T) {
 	}
 	conversationID := conv.ID
 
+	err = db.EnsureSystemContact(ctx, conn)
+	if err != nil {
+		t.Fatalf("ensure system contact: %v", err)
+	}
+
+	err = db.InsertSystemMessage(ctx, conn, db.SystemMessageParams{
+		ConversationID: conversationID,
+		Kind:           "task_report",
+		Body: map[string]any{
+			"task_id": "deadbeef-cafe-fade-face-000000000001",
+			"goal":    "ignored",
+			"status":  "running",
+			"content": "system note",
+		},
+		SentAt: t2,
+	})
+	if err != nil {
+		t.Fatalf("insert system message: %v", err)
+	}
+
 	err = svc.MarkRead(ctx, conversationID, t2)
 	if err != nil {
 		t.Fatalf("mark read up to t2: %v", err)

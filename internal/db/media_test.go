@@ -53,6 +53,18 @@ func TestMessageMediaRoundTrip(t *testing.T) {
 		t.Fatalf("upsert message_media: %v", err)
 	}
 
+	var rowID string
+	err = conn.QueryRowContext(ctx,
+		"SELECT id FROM message_media WHERE message_id = ?1",
+		messageID,
+	).Scan(&rowID)
+	if err != nil {
+		t.Fatalf("query message_media id: %v", err)
+	}
+	if rowID == "" {
+		t.Fatalf("expected non-empty message_media id")
+	}
+
 	msg, err := GetMessage(ctx, conn, GetMessageParams{ID: messageID})
 	if err != nil {
 		t.Fatalf("get message: %v", err)
