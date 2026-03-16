@@ -391,6 +391,7 @@ SQLite, single file at `$NIK_HOME/nik.db`. Schema applied on startup via `db.Ope
 - all table names are **singular**: `contact`, `conversation`, `message`, `media`, `alarm`, `task`, etc.
 - canonical query files use canonical prefixes: `conversation_*`, `message_*`, `media_*`, `contact_*`, `alarm_*`
 - FK columns always include the target table name: `<table>_id` for simple references, `<qualifier>_<table>_id` when disambiguation is needed (e.g. `origin_contact_id`, `retry_for_task_id`)
+- enums are `TEXT` columns with a `CHECK(col IN (...))` constraint — never use a separate lookup table
 
 ### Row lifecycle columns
 
