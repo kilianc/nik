@@ -77,6 +77,10 @@ func (c Config) WappSessionDBPath() string {
 	return filepath.Join(c.Home, "wapp_session.db")
 }
 
+func (c Config) TmpPath() string {
+	return filepath.Join(c.Home, "tmp")
+}
+
 func (c Config) ConfigPath() string {
 	return filepath.Join(c.Home, "config.yaml")
 }
