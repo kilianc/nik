@@ -11,6 +11,7 @@ SELECT
   status,
   created_at,
   started_at,
-  completed_at
+  completed_at,
+  last_report_at
 FROM task
 WHERE id = ?1

@@ -169,6 +169,19 @@ func TestUpsertConversationParticipantDeduplicatesByContactID(t *testing.T) {
 		t.Fatalf("upsert participant second: %v", err)
 	}
 
+	var rowID string
+	err = conn.QueryRowContext(ctx,
+		"SELECT id FROM conversation_participant WHERE conversation_id = ?1 AND contact_id = ?2",
+		conversationID,
+		contact.ID,
+	).Scan(&rowID)
+	if err != nil {
+		t.Fatalf("query participant id: %v", err)
+	}
+	if rowID == "" {
+		t.Fatalf("expected non-empty participant id")
+	}
+
 	participants, err := GetConversationParticipants(ctx, conn, conversationID)
 	if err != nil {
 		t.Fatalf("get participants: %v", err)
@@ -180,5 +193,8 @@ func TestUpsertConversationParticipantDeduplicatesByContactID(t *testing.T) {
 
 	if participants[0].ContactID != contact.ID {
 		t.Fatalf("expected contact id %s, got %s", contact.ID, participants[0].ContactID)
+	}
+	if participants[0].ID != rowID {
+		t.Fatalf("expected participant id %s, got %s", rowID, participants[0].ID)
 	}
 }

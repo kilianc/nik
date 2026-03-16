@@ -79,6 +79,16 @@ func TestShellOutputUpsert(t *testing.T) {
 		t.Fatalf("upsert alive: %v", err)
 	}
 
+	var rowID string
+	err = conn.QueryRowContext(ctx,
+		"SELECT id FROM shell_output WHERE session_id = 'def456'").Scan(&rowID)
+	if err != nil {
+		t.Fatalf("select id after insert: %v", err)
+	}
+	if rowID == "" {
+		t.Fatal("expected shell_output.id to be set")
+	}
+
 	ids, err = ShellOutputAliveIDs(ctx, conn)
 	if err != nil {
 		t.Fatalf("alive ids: %v", err)
@@ -96,6 +106,16 @@ func TestShellOutputUpsert(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("update: %v", err)
+	}
+
+	var updatedRowID string
+	err = conn.QueryRowContext(ctx,
+		"SELECT id FROM shell_output WHERE session_id = 'def456'").Scan(&updatedRowID)
+	if err != nil {
+		t.Fatalf("select id after update: %v", err)
+	}
+	if updatedRowID != rowID {
+		t.Fatalf("expected shell_output.id to stay %s, got %s", rowID, updatedRowID)
 	}
 
 	ids, err = ShellOutputAliveIDs(ctx, conn)

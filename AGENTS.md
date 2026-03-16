@@ -419,6 +419,11 @@ Before applying any migration to the live DB:
 Things to revisit periodically. The agent adds entries here when the user flags a mistake or suggests a different approach. Only the user removes entries.
 
 <!-- example: - 2026-03-14: user prefers X over Y for error handling -- revisit error style rules -->
+- 2026-03-16: user prefers deleting dead or test-only DB/query paths instead of keeping production wrappers and SQL files that no longer serve a runtime contract
+- 2026-03-16: user prefers every table to have a stable id column even when another field is unique, because mutable natural keys like skill names should not be primary keys
+- 2026-03-16: user prefers prompt-format instructions to live in prompt files when possible, and questions code-level prompt fragments unless they are required by API mechanics rather than model behavior
+- 2026-03-16: user prefers API-mechanical prompt/input workarounds to live at the LLM boundary rather than in domain-specific callers like task critic
+- 2026-03-16: user prefers deferring skill-event cleanup when it is low-priority, while still taking adjacent runtime cleanups and simplifications
 
 ## Fin
 

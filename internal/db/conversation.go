@@ -174,6 +174,7 @@ func UpsertConversationParticipant(ctx context.Context, db DBTX, conversationID,
 	_, err := db.ExecContext(
 		ctx,
 		queries.ConversationUpsertParticipant,
+		id.V7(),
 		conversationID,
 		contactID,
 		displayName,
@@ -196,6 +197,7 @@ func GetConversationParticipants(ctx context.Context, db *sql.DB, conversationID
 	for rows.Next() {
 		var p ConversationParticipant
 		err = rows.Scan(
+			&p.ID,
 			&p.ContactID,
 			&p.DisplayName,
 			&p.ContactName,

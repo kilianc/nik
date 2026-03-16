@@ -40,15 +40,18 @@ func TestReportHandler(t *testing.T) {
 		t.Fatal("expected non-empty result")
 	}
 
-	reports, err := svc.ListReports(ctx, testConvID, task.CreatedAt)
+	var reportContent string
+	err = svc.conn.QueryRowContext(ctx,
+		`SELECT content
+		 FROM task_report
+		 WHERE task_id = ?1`,
+		task.ID,
+	).Scan(&reportContent)
 	if err != nil {
-		t.Fatalf("reports: %v", err)
+		t.Fatalf("query task_report: %v", err)
 	}
-	if len(reports) != 1 {
-		t.Fatalf("expected 1 report, got %d", len(reports))
-	}
-	if reports[0].Content != "need config file" {
-		t.Fatalf("expected report content 'need config file', got %q", reports[0].Content)
+	if reportContent != "need config file" {
+		t.Fatalf("expected report content 'need config file', got %q", reportContent)
 	}
 }
 
@@ -56,7 +59,7 @@ func TestCancelHandlerNoRunner(t *testing.T) {
 	svc, _ := testDB(t)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, createParams{Goal: "test goal", Thinking: "low"})
+	task, err := svc.Create(ctx, createParams{Goal: "test goal", Thinking: "low", ConversationID: testConvID})
 	if err != nil {
 		t.Fatalf("create task: %v", err)
 	}

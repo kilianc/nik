@@ -30,6 +30,12 @@ type createParams struct {
 }
 
 func (s *Service) Create(ctx context.Context, p createParams) (db.Task, error) {
+	if p.ConversationID == "" {
+		return db.Task{}, fmt.Errorf("empty conversation_id")
+	}
+
+	now := time.Now().UTC()
+
 	ip := db.TaskInsertParams{
 		ID:             id.V7(),
 		ConversationID: p.ConversationID,
@@ -40,15 +46,21 @@ func (s *Service) Create(ctx context.Context, p createParams) (db.Task, error) {
 		Plan:           p.Plan,
 		Thinking:       p.Thinking,
 		Status:         "pending",
-		CreatedAt:      time.Now().UTC(),
+		CreatedAt:      now,
 	}
 
-	err := db.TaskInsert(ctx, s.conn, ip)
+	tx, err := s.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return db.Task{}, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	err = db.TaskInsert(ctx, tx, ip)
 	if err != nil {
 		return db.Task{}, err
 	}
 
-	return db.Task{
+	t := db.Task{
 		ID:             ip.ID,
 		ConversationID: p.ConversationID,
 		ContactID:      p.ContactID,
@@ -59,7 +71,29 @@ func (s *Service) Create(ctx context.Context, p createParams) (db.Task, error) {
 		Thinking:       p.Thinking,
 		Status:         ip.Status,
 		CreatedAt:      ip.CreatedAt,
-	}, nil
+	}
+
+	kind := "task_spawned"
+	if p.RetryForTaskID != "" {
+		kind = "task_retry"
+	}
+
+	err = db.InsertSystemMessage(ctx, tx, db.SystemMessageParams{
+		ConversationID: p.ConversationID,
+		Kind:           kind,
+		Body:           t,
+		SentAt:         now,
+	})
+	if err != nil {
+		return db.Task{}, fmt.Errorf("insert system message: %w", err)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return db.Task{}, fmt.Errorf("commit tx: %w", err)
+	}
+
+	return t, nil
 }
 
 func (s *Service) Get(ctx context.Context, taskID string) (db.Task, error) {
@@ -75,36 +109,104 @@ func (s *Service) Start(ctx context.Context, taskID, activationID string) error 
 }
 
 func (s *Service) UpdateStatus(ctx context.Context, taskID, status string) error {
-	return db.TaskUpdateStatus(ctx, s.conn, taskID, status)
+	tx, err := s.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	err = db.TaskUpdateStatus(ctx, tx, taskID, status)
+	if err != nil {
+		return err
+	}
+
+	if status == "cancelled" {
+		t, err := db.TaskGet(ctx, tx, taskID)
+		if err != nil {
+			return fmt.Errorf("get task for cancel message: %w", err)
+		}
+
+		err = db.InsertSystemMessage(ctx, tx, db.SystemMessageParams{
+			ConversationID: t.ConversationID,
+			Kind:           "task_cancelled",
+			Body:           t,
+			SentAt:         time.Now().UTC(),
+		})
+		if err != nil {
+			return fmt.Errorf("insert system message: %w", err)
+		}
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return fmt.Errorf("commit tx: %w", err)
+	}
+
+	return nil
 }
 
 func (s *Service) InsertReport(ctx context.Context, taskID, status, content string) error {
 	if status == "" {
 		status = "running"
 	}
-	return db.TaskReportInsert(ctx, s.conn, db.TaskReportInsertParams{
-		ID:        id.V7(),
+
+	now := time.Now().UTC()
+	reportID := id.V7()
+
+	tx, err := s.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	t, err := db.TaskGet(ctx, tx, taskID)
+	if err != nil {
+		return fmt.Errorf("get task for report: %w", err)
+	}
+
+	err = db.TaskReportInsert(ctx, tx, db.TaskReportInsertParams{
+		ID:        reportID,
 		TaskID:    taskID,
 		Status:    status,
 		Content:   content,
-		CreatedAt: time.Now().UTC(),
+		CreatedAt: now,
 	})
+	if err != nil {
+		return err
+	}
+
+	err = db.TaskUpdateLastReportAt(ctx, tx, taskID, now)
+	if err != nil {
+		return err
+	}
+
+	err = db.InsertSystemMessage(ctx, tx, db.SystemMessageParams{
+		ConversationID: t.ConversationID,
+		Kind:           "task_report",
+		Body: db.TaskReport{
+			ID:        reportID,
+			TaskID:    taskID,
+			Content:   content,
+			CreatedAt: now,
+			Goal:      t.Goal,
+			Status:    status,
+		},
+		SentAt: now,
+	})
+	if err != nil {
+		return fmt.Errorf("insert system message: %w", err)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return fmt.Errorf("commit tx: %w", err)
+	}
+
+	return nil
 }
 
 func (s *Service) LastReportStatus(ctx context.Context, taskID string) (string, error) {
 	return db.TaskReportLastStatus(ctx, s.conn, taskID)
-}
-
-func (s *Service) ListReports(ctx context.Context, conversationID string, since time.Time) ([]db.TaskReport, error) {
-	return db.TaskReportList(ctx, s.conn, conversationID, since)
-}
-
-func (s *Service) ListSpawned(ctx context.Context, conversationID string, since time.Time) ([]db.TaskSpawned, error) {
-	return db.TaskListSpawned(ctx, s.conn, conversationID, since)
-}
-
-func (s *Service) ListCancelled(ctx context.Context, conversationID string, since time.Time) ([]db.TaskCancelled, error) {
-	return db.TaskListCancelled(ctx, s.conn, conversationID, since)
 }
 
 func (s *Service) ListTasks(ctx context.Context, p db.TaskListParams) ([]db.TaskListRow, error) {

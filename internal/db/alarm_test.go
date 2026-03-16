@@ -521,6 +521,11 @@ func TestAlarmFireAtomicCommit(t *testing.T) {
 	}
 	defer conn.Close()
 
+	err = EnsureSystemContact(ctx, conn)
+	if err != nil {
+		t.Fatalf("ensure system contact: %v", err)
+	}
+
 	convID := seedConversation(t, ctx, conn, "whatsapp", "fire-atomic@g.us", "group")
 	now := time.Now().UTC().Truncate(time.Second)
 
@@ -534,7 +539,7 @@ func TestAlarmFireAtomicCommit(t *testing.T) {
 		t.Fatalf("create alarm: %v", err)
 	}
 
-	occ, err := AlarmFire(ctx, conn, alarm.ID, now)
+	occ, err := AlarmFire(ctx, conn, alarm, now)
 	if err != nil {
 		t.Fatalf("alarm fire: %v", err)
 	}

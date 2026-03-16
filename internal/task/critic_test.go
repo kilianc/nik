@@ -7,6 +7,7 @@ import (
 
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/db"
+	"github.com/kciuffolo/nik/internal/llm"
 )
 
 func TestExtractSkillNames(t *testing.T) {
@@ -120,6 +121,125 @@ func TestFallbackCriticPrompt(t *testing.T) {
 	}
 	if !strings.Contains(got, "JSON") {
 		t.Fatalf("expected JSON instruction in fallback prompt, got %q", got)
+	}
+}
+
+type fakeCriticCall struct {
+	instructions string
+	input        string
+}
+
+type fakeCriticCompleter struct {
+	actIDs  []string
+	results []llm.CompletionResult
+	calls   []fakeCriticCall
+}
+
+func (f *fakeCriticCompleter) Complete(_ context.Context, instructions string, getInput func() string, _ []llm.ToolDef, _ llm.ToolExecutor) (string, <-chan llm.CompletionResult) {
+	input := ""
+	if getInput != nil {
+		input = getInput()
+	}
+
+	f.calls = append(f.calls, fakeCriticCall{
+		instructions: instructions,
+		input:        input,
+	})
+
+	if len(f.actIDs) == 0 || len(f.results) == 0 {
+		panic("fakeCriticCompleter exhausted")
+	}
+
+	actID := f.actIDs[0]
+	f.actIDs = f.actIDs[1:]
+
+	result := f.results[0]
+	f.results = f.results[1:]
+
+	ch := make(chan llm.CompletionResult, 1)
+	ch <- result
+	close(ch)
+	return actID, ch
+}
+
+func TestRunCriticRetryKeepsPromptContextAndUsesRetryActivation(t *testing.T) {
+	svc, conn := testDB(t)
+	ctx := context.Background()
+
+	task, err := svc.Create(ctx, createParams{
+		Goal:           "evaluate build",
+		Thinking:       "low",
+		ConversationID: testConvID,
+	})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+
+	for _, actID := range []string{"critic-act-1", "critic-act-2"} {
+		_, err = conn.ExecContext(ctx,
+			"INSERT INTO activation (id, conversation_id, sources, model, created_at) VALUES (?, ?, '[\"critic\"]', 'test', datetime('now'))",
+			actID,
+			testConvID,
+		)
+		if err != nil {
+			t.Fatalf("insert critic activation %s: %v", actID, err)
+		}
+	}
+
+	fake := &fakeCriticCompleter{
+		actIDs: []string{"critic-act-1", "critic-act-2"},
+		results: []llm.CompletionResult{
+			{Output: "not json"},
+			{Output: `{"effectiveness": 4, "tool_feedback": "helped", "skill_feedback": "none", "suggestions": "none"}`},
+		},
+	}
+
+	runner := NewRunner(&config.Config{
+		Models: config.ModelsConfig{
+			Critic: config.CriticConfig{Enabled: true},
+		},
+	}, nil, svc, nil)
+	runner.SetCriticLLM(fake)
+
+	runner.RunCritic(ctx, db.Task{
+		ID:             task.ID,
+		ConversationID: testConvID,
+		Goal:           task.Goal,
+		Status:         "completed",
+	})
+
+	if len(fake.calls) != 2 {
+		t.Fatalf("expected 2 critic calls, got %d", len(fake.calls))
+	}
+
+	if fake.calls[0].instructions != fake.calls[1].instructions {
+		t.Fatal("expected retry to reuse the original critic instructions")
+	}
+
+	if fake.calls[0].input != "" {
+		t.Fatalf("expected first critic input to stay empty, got %q", fake.calls[0].input)
+	}
+
+	if fake.calls[1].input != criticRetryInput {
+		t.Fatalf("expected retry input %q, got %q", criticRetryInput, fake.calls[1].input)
+	}
+
+	var gotActID string
+	var effectiveness int
+	err = conn.QueryRowContext(ctx,
+		"SELECT activation_id, effectiveness FROM task_assessment WHERE task_id = ?1",
+		task.ID,
+	).Scan(&gotActID, &effectiveness)
+	if err != nil {
+		t.Fatalf("query task assessment: %v", err)
+	}
+
+	if gotActID != "critic-act-2" {
+		t.Fatalf("expected retry activation id critic-act-2, got %s", gotActID)
+	}
+
+	if effectiveness != 4 {
+		t.Fatalf("expected effectiveness 4, got %d", effectiveness)
 	}
 }
 

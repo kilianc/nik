@@ -16,7 +16,7 @@ type SkillEventInsertParams struct {
 	InstallHash string
 }
 
-func SkillEventInsert(ctx context.Context, db *sql.DB, p SkillEventInsertParams) (SkillEvent, error) {
+func SkillEventInsert(ctx context.Context, db DBTX, p SkillEventInsertParams) (SkillEvent, error) {
 	eid := id.V7()
 	now := time.Now().UTC()
 

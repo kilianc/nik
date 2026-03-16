@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -181,5 +182,23 @@ func TestBuildToolParamsIncludesDefinitions(t *testing.T) {
 	}
 	if params[0].OfFunction == nil || params[0].OfFunction.Name != "test_tool" {
 		t.Fatalf("expected function tool named test_tool, got %+v", params[0])
+	}
+}
+
+func TestEnsureJSONInput(t *testing.T) {
+	if got := ensureJSONInput("", false); got != "" {
+		t.Fatalf("expected empty input without json mode, got %q", got)
+	}
+
+	if got := ensureJSONInput("already json", true); got != "already json" {
+		t.Fatalf("expected non-empty input to pass through, got %q", got)
+	}
+
+	if got := ensureJSONInput("   ", true); got != jsonObjectInputHint {
+		t.Fatalf("expected json hint for blank input, got %q", got)
+	}
+
+	if !strings.Contains(strings.ToLower(jsonObjectInputHint), "json") {
+		t.Fatalf("expected json hint to mention json, got %q", jsonObjectInputHint)
 	}
 }

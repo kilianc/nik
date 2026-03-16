@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/kciuffolo/nik/internal/id"
 	"github.com/kciuffolo/nik/internal/queries"
 )
 
@@ -53,7 +54,7 @@ func UpdateMediaDescription(ctx context.Context, db DBTX, mediaID, description s
 }
 
 func UpsertMessageMedia(ctx context.Context, db DBTX, messageID, mediaID string) error {
-	_, err := db.ExecContext(ctx, queries.MessageMediaUpsert, messageID, mediaID)
+	_, err := db.ExecContext(ctx, queries.MessageMediaUpsert, id.V7(), messageID, mediaID)
 	if err != nil {
 		return fmt.Errorf("upsert message media %s/%s: %w", messageID, mediaID, err)
 	}

@@ -1,4 +1,13 @@
 -- ?1: conversation_id, ?2: before message id (empty to skip), ?3: limit
+WITH human_window AS (
+  SELECT sent_at
+  FROM message
+  WHERE conversation_id = ?1
+    AND (?2 = '' OR id < ?2)
+    AND platform != 'system'
+  ORDER BY sent_at DESC, id DESC
+  LIMIT ?3
+)
 SELECT
   m.id,
   m.conversation_id,
@@ -32,5 +41,5 @@ LEFT JOIN message_media mm ON mm.message_id = m.id
 LEFT JOIN media ON media.id = mm.media_id
 WHERE m.conversation_id = ?1
   AND (?2 = '' OR m.id < ?2)
-ORDER BY m.sent_at DESC, m.id DESC
-LIMIT ?3;
+  AND m.sent_at >= COALESCE((SELECT MIN(sent_at) FROM human_window), m.sent_at)
+ORDER BY m.sent_at DESC, m.id DESC;

@@ -566,6 +566,9 @@ func (s *Service) MarkRead(ctx context.Context, conversationID string, readAt ti
 		if msg.IsFromMe {
 			continue
 		}
+		if msg.Platform != conv.Platform {
+			continue
+		}
 		if conv.LastReadAt.Valid && !msg.SentAt.After(conv.LastReadAt.Time) {
 			continue
 		}
