@@ -937,8 +937,8 @@ func TestConversationHeaderUnifiedDM(t *testing.T) {
 	session := svc.ConversationHeader(ctx, conv)
 	out := strings.Join(session.Lines, "\n")
 
-	if !strings.Contains(out, "Conversation: "+conv.ID) {
-		t.Fatalf("expected Conversation ID in header, got %q", out)
+	if !strings.Contains(out, "id: "+conv.ID) {
+		t.Fatalf("expected id line in header, got %q", out)
 	}
 	if !strings.Contains(out, "Title:") {
 		t.Fatalf("expected Title in header, got %q", out)

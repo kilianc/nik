@@ -70,7 +70,7 @@ func (t *Timeline) Get(ctx context.Context, convID string) string {
 	entries := t.buildEntries(msgs, senderLabels)
 
 	var lines []string
-	lines = append(lines, "## Session", "")
+	lines = append(lines, "## Conversation", "")
 	lines = append(lines, session.Lines...)
 	lines = append(lines, renderTimeline(entries, readLine)...)
 

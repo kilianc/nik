@@ -692,7 +692,7 @@ func (s *Service) ConversationHeader(ctx context.Context, conv db.Conversation) 
 
 	session := ConversationHeader{
 		Lines: []string{
-			fmt.Sprintf("Conversation: %s", conv.ID),
+			fmt.Sprintf("id: %s", conv.ID),
 			fmt.Sprintf("Title: %s", title),
 			fmt.Sprintf("Platform: %s", conv.Platform),
 			fmt.Sprintf("Type: %s", conv.Kind),
