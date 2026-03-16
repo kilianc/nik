@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -20,6 +21,7 @@ import (
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/packages/param"
+	"github.com/openai/openai-go/v3/packages/ssestream"
 	"github.com/openai/openai-go/v3/responses"
 	"github.com/openai/openai-go/v3/shared"
 )
@@ -218,6 +220,7 @@ type CompletionResult struct {
 const (
 	maxRounds     = 75
 	loopThreshold = 4
+	maxRetries    = 3
 )
 
 func StaticInput(s string) func() string {
@@ -356,21 +359,31 @@ func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instru
 		params.Input = responses.ResponseNewParamsInputUnion{OfInputItemList: items}
 
 		var resp *responses.Response
+		var apiErr error
 
-		if useStreaming {
-			r, err := completeStreaming(ctx, client, params)
-			if err != nil {
-				retErr = fmt.Errorf("complete round %d: %w", round, err)
-				return CompletionResult{Usage: total, History: history, Extra: extra, Err: retErr}
+		for attempt := range maxRetries {
+			if attempt > 0 {
+				delay := retryDelay(attempt)
+				slog.Warn("server error, retrying", "pkg", "llm", "round", round, "attempt", attempt, "delay", delay)
+				time.Sleep(delay)
 			}
-			resp = r
-		} else {
-			r, err := client.Responses.New(ctx, params)
-			if err != nil {
-				retErr = fmt.Errorf("complete round %d: %w", round, err)
-				return CompletionResult{Usage: total, History: history, Extra: extra, Err: retErr}
+
+			if useStreaming {
+				resp, apiErr = completeStreaming(ctx, client, params)
+			} else {
+				var r *responses.Response
+				r, apiErr = client.Responses.New(ctx, params)
+				resp = r
 			}
-			resp = r
+
+			if apiErr == nil || !isServerError(apiErr) {
+				break
+			}
+		}
+
+		if apiErr != nil {
+			retErr = fmt.Errorf("complete round %d: %w", round, apiErr)
+			return CompletionResult{Usage: total, History: history, Extra: extra, Err: retErr}
 		}
 
 		extra.RawResponses = append(extra.RawResponses, resp.RawJSON())
@@ -513,6 +526,29 @@ func completeStreaming(ctx context.Context, client *openai.Client, params respon
 	}
 
 	return final, nil
+}
+
+func isServerError(err error) bool {
+	var apiErr *openai.Error
+	if errors.As(err, &apiErr) && apiErr.StatusCode >= 500 {
+		return true
+	}
+
+	var streamErr *ssestream.StreamError
+	if errors.As(err, &streamErr) && strings.Contains(streamErr.Message, "server_error") {
+		return true
+	}
+
+	return false
+}
+
+func retryDelay(attempt int) time.Duration {
+	switch attempt {
+	case 1:
+		return 5 * time.Second
+	default:
+		return 15 * time.Second
+	}
 }
 
 func (c *Client) Speech(ctx context.Context, text string, model string, voice string, instructions string, speed float64) (string, error) {
