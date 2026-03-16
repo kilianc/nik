@@ -99,6 +99,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	err = os.MkdirAll(cfg.TmpPath(), 0o755)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error creating tmp dir: %v\n", err)
+		os.Exit(1)
+	}
+
 	whatsappClient, err := whatsapp.NewClient(cfg.WappSessionDBPath(), mediaPath, cfg.MediaDir())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)

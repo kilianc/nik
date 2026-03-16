@@ -22,6 +22,7 @@ const runnerTimeout = 20 * time.Minute
 type taskPromptData struct {
 	Now      string
 	Home     string
+	Tmp      string
 	ToolDocs string
 	Skills   string
 	Plan     string
@@ -71,6 +72,7 @@ func (r *Runner) renderPrompt(t db.Task, tools []llm.ToolDef) string {
 	data := taskPromptData{
 		Now:      now,
 		Home:     r.cfg.Home,
+		Tmp:      r.cfg.TmpPath(),
 		ToolDocs: buildToolDocs(tools),
 		Skills:   buildSkillDocs(r.cfg),
 		Plan:     t.Plan,

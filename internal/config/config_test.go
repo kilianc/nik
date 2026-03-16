@@ -25,6 +25,14 @@ func TestMediaPathHandlesDefaultRelativeAndAbsolute(t *testing.T) {
 	}
 }
 
+func TestTmpPathUsesWorkspaceTmp(t *testing.T) {
+	c := Config{Home: "/tmp/nik"}
+
+	if got := c.TmpPath(); got != filepath.Join("/tmp/nik", "tmp") {
+		t.Fatalf("expected tmp path, got %q", got)
+	}
+}
+
 func TestTZFallsBackToLocalForInvalidTimezone(t *testing.T) {
 	c := Config{Timezone: "Invalid/Timezone"}
 	if c.TZ().String() != time.Local.String() {
