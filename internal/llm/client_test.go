@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/openai/openai-go/v3"
+	"github.com/openai/openai-go/v3/packages/ssestream"
 	"github.com/openai/openai-go/v3/responses"
 )
 
@@ -291,4 +293,72 @@ func TestPruneItems(t *testing.T) {
 			t.Fatalf("expected 3 items, got %d", len(got))
 		}
 	})
+}
+
+func TestIsServerError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "nil error",
+			err:  nil,
+			want: false,
+		},
+		{
+			name: "plain error",
+			err:  fmt.Errorf("something broke"),
+			want: false,
+		},
+		{
+			name: "openai 500",
+			err:  &openai.Error{StatusCode: 500},
+			want: true,
+		},
+		{
+			name: "openai 502",
+			err:  &openai.Error{StatusCode: 502},
+			want: true,
+		},
+		{
+			name: "openai 429 is not server error",
+			err:  &openai.Error{StatusCode: 429},
+			want: false,
+		},
+		{
+			name: "stream server_error",
+			err:  &ssestream.StreamError{Message: "server_error"},
+			want: true,
+		},
+		{
+			name: "stream INTERNAL_ERROR",
+			err:  &ssestream.StreamError{Message: "stream ID 1; INTERNAL_ERROR; received from peer"},
+			want: true,
+		},
+		{
+			name: "stream unrelated message",
+			err:  &ssestream.StreamError{Message: "connection reset"},
+			want: false,
+		},
+		{
+			name: "wrapped openai 503",
+			err:  fmt.Errorf("complete: %w", &openai.Error{StatusCode: 503}),
+			want: true,
+		},
+		{
+			name: "wrapped stream INTERNAL_ERROR",
+			err:  fmt.Errorf("stream: %w", &ssestream.StreamError{Message: "stream ID 1; INTERNAL_ERROR; received from peer"}),
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isServerError(tt.err)
+			if got != tt.want {
+				t.Errorf("isServerError() = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }

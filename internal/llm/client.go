@@ -610,8 +610,11 @@ func isServerError(err error) bool {
 	}
 
 	var streamErr *ssestream.StreamError
-	if errors.As(err, &streamErr) && strings.Contains(streamErr.Message, "server_error") {
-		return true
+	if errors.As(err, &streamErr) {
+		msg := streamErr.Message
+		if strings.Contains(msg, "server_error") || strings.Contains(msg, "INTERNAL_ERROR") {
+			return true
+		}
 	}
 
 	return false
