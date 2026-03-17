@@ -424,6 +424,7 @@ Things to revisit periodically. The agent adds entries here when the user flags 
 - 2026-03-16: user prefers prompt-format instructions to live in prompt files when possible, and questions code-level prompt fragments unless they are required by API mechanics rather than model behavior
 - 2026-03-16: user prefers API-mechanical prompt/input workarounds to live at the LLM boundary rather than in domain-specific callers like task critic
 - 2026-03-16: user prefers deferring skill-event cleanup when it is low-priority, while still taking adjacent runtime cleanups and simplifications
+- 2026-03-16: user prefers changes to land one commit at a time, with a review stop before each commit
 
 ## Fin
 
