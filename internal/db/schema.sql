@@ -254,6 +254,7 @@ CREATE TABLE IF NOT EXISTS task_assessment (
   task_id        TEXT NOT NULL UNIQUE REFERENCES task(id),
   activation_id  TEXT NOT NULL UNIQUE REFERENCES activation(id),
   effectiveness  INTEGER NOT NULL CHECK(effectiveness BETWEEN 1 AND 5),
+  expected_duration_seconds INTEGER NOT NULL CHECK(expected_duration_seconds >= 0),
   tool_feedback  TEXT NOT NULL DEFAULT '',
   skill_feedback TEXT NOT NULL DEFAULT '',
   suggestions    TEXT NOT NULL DEFAULT '',

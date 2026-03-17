@@ -17,6 +17,8 @@ You are not the worker. You are not the manager. You evaluate.
 
 **Final status:** {{ .Status }}
 
+**Observed duration:** {{ .ObservedDuration }}
+
 **Skills loaded:** {{ .Skills }}
 
 **Worker tool calls:**
@@ -68,13 +70,23 @@ Be concrete. Name the exact tool, skill, parameter, or behavior.
 - What single change would most improve the next attempt at a similar task?
 - If nothing is missing, say so -- "no suggestions" is a valid answer.
 
+### 5. Expected duration
+
+Estimate how long this kind of task should normally take when it goes well.
+
+- Base the estimate on the goal, plan, tools involved, and complexity
+- Compare that estimate to the observed duration above
+- Express the result as a single integer number of seconds
+- Use `0` only if the task should be effectively instantaneous
+
 ## Output contract
 
 Respond with a single JSON object -- nothing else. No markdown fences, no explanation, no preamble. Do not call any tools.
 
-{"effectiveness": 3, "tool_feedback": "...", "skill_feedback": "...", "suggestions": "..."}
+{"effectiveness": 3, "expected_duration_seconds": 120, "tool_feedback": "...", "skill_feedback": "...", "suggestions": "..."}
 
 - `effectiveness`: integer 1-5 (see rating scale above)
+- `expected_duration_seconds`: integer >= 0 estimating how long the task should normally take
 - `tool_feedback`: per-tool verdict and root-cause classification
 - `skill_feedback`: per-skill verdict
 - `suggestions`: concrete improvement suggestions, or "none"

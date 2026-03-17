@@ -188,6 +188,14 @@ func (r *Runner) Run(ctx context.Context, t db.Task) {
 
 	t.Status = finalStatus
 	t.ActivationID = actID
+
+	current, err := r.svc.Get(ctx, t.ID)
+	if err == nil {
+		t = current
+	} else {
+		slog.Warn("get task for critic", "pkg", "task", "task_id", t.ID, "error", err)
+	}
+
 	r.RunCritic(context.Background(), t)
 }
 

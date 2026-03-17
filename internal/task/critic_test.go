@@ -122,6 +122,9 @@ func TestFallbackCriticPrompt(t *testing.T) {
 	if !strings.Contains(got, "JSON") {
 		t.Fatalf("expected JSON instruction in fallback prompt, got %q", got)
 	}
+	if !strings.Contains(got, "expected_duration_seconds") {
+		t.Fatalf("expected expected_duration_seconds in fallback prompt, got %q", got)
+	}
 }
 
 type fakeCriticCall struct {
@@ -190,7 +193,7 @@ func TestRunCriticRetryKeepsPromptContextAndUsesRetryActivation(t *testing.T) {
 		actIDs: []string{"critic-act-1", "critic-act-2"},
 		results: []llm.CompletionResult{
 			{Output: "not json"},
-			{Output: `{"effectiveness": 4, "tool_feedback": "helped", "skill_feedback": "none", "suggestions": "none"}`},
+			{Output: `{"effectiveness": 4, "expected_duration_seconds": 180, "tool_feedback": "helped", "skill_feedback": "none", "suggestions": "none"}`},
 		},
 	}
 
@@ -226,10 +229,11 @@ func TestRunCriticRetryKeepsPromptContextAndUsesRetryActivation(t *testing.T) {
 
 	var gotActID string
 	var effectiveness int
+	var expectedDurationSeconds int
 	err = conn.QueryRowContext(ctx,
-		"SELECT activation_id, effectiveness FROM task_assessment WHERE task_id = ?1",
+		"SELECT activation_id, effectiveness, expected_duration_seconds FROM task_assessment WHERE task_id = ?1",
 		task.ID,
-	).Scan(&gotActID, &effectiveness)
+	).Scan(&gotActID, &effectiveness, &expectedDurationSeconds)
 	if err != nil {
 		t.Fatalf("query task assessment: %v", err)
 	}
@@ -241,11 +245,14 @@ func TestRunCriticRetryKeepsPromptContextAndUsesRetryActivation(t *testing.T) {
 	if effectiveness != 4 {
 		t.Fatalf("expected effectiveness 4, got %d", effectiveness)
 	}
+	if expectedDurationSeconds != 180 {
+		t.Fatalf("expected expected_duration_seconds 180, got %d", expectedDurationSeconds)
+	}
 }
 
 func TestParseCriticOutput(t *testing.T) {
 	t.Run("valid json", func(t *testing.T) {
-		out, err := parseCriticOutput(`{"effectiveness": 4, "tool_feedback": "shell helped", "skill_feedback": "web not useful", "suggestions": "add build skill"}`)
+		out, err := parseCriticOutput(`{"effectiveness": 4, "expected_duration_seconds": 90, "tool_feedback": "shell helped", "skill_feedback": "web not useful", "suggestions": "add build skill"}`)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -254,6 +261,9 @@ func TestParseCriticOutput(t *testing.T) {
 		}
 		if out.ToolFeedback != "shell helped" {
 			t.Fatalf("expected tool_feedback 'shell helped', got %q", out.ToolFeedback)
+		}
+		if out.ExpectedDurationSeconds != 90 {
+			t.Fatalf("expected expected_duration_seconds 90, got %d", out.ExpectedDurationSeconds)
 		}
 		if out.SkillFeedback != "web not useful" {
 			t.Fatalf("expected skill_feedback 'web not useful', got %q", out.SkillFeedback)
@@ -264,7 +274,7 @@ func TestParseCriticOutput(t *testing.T) {
 	})
 
 	t.Run("markdown fenced json", func(t *testing.T) {
-		input := "```json\n{\"effectiveness\": 5, \"tool_feedback\": \"ok\", \"skill_feedback\": \"ok\", \"suggestions\": \"none\"}\n```"
+		input := "```json\n{\"effectiveness\": 5, \"expected_duration_seconds\": 30, \"tool_feedback\": \"ok\", \"skill_feedback\": \"ok\", \"suggestions\": \"none\"}\n```"
 		out, err := parseCriticOutput(input)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -275,7 +285,7 @@ func TestParseCriticOutput(t *testing.T) {
 	})
 
 	t.Run("bare fenced json", func(t *testing.T) {
-		input := "```\n{\"effectiveness\": 3, \"tool_feedback\": \"ok\", \"skill_feedback\": \"ok\", \"suggestions\": \"none\"}\n```"
+		input := "```\n{\"effectiveness\": 3, \"expected_duration_seconds\": 45, \"tool_feedback\": \"ok\", \"skill_feedback\": \"ok\", \"suggestions\": \"none\"}\n```"
 		out, err := parseCriticOutput(input)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -286,16 +296,30 @@ func TestParseCriticOutput(t *testing.T) {
 	})
 
 	t.Run("effectiveness too low", func(t *testing.T) {
-		_, err := parseCriticOutput(`{"effectiveness": 0, "tool_feedback": "", "skill_feedback": "", "suggestions": ""}`)
+		_, err := parseCriticOutput(`{"effectiveness": 0, "expected_duration_seconds": 1, "tool_feedback": "", "skill_feedback": "", "suggestions": ""}`)
 		if err == nil {
 			t.Fatal("expected error for effectiveness 0")
 		}
 	})
 
 	t.Run("effectiveness too high", func(t *testing.T) {
-		_, err := parseCriticOutput(`{"effectiveness": 6, "tool_feedback": "", "skill_feedback": "", "suggestions": ""}`)
+		_, err := parseCriticOutput(`{"effectiveness": 6, "expected_duration_seconds": 1, "tool_feedback": "", "skill_feedback": "", "suggestions": ""}`)
 		if err == nil {
 			t.Fatal("expected error for effectiveness 6")
+		}
+	})
+
+	t.Run("missing expected duration", func(t *testing.T) {
+		_, err := parseCriticOutput(`{"effectiveness": 4, "tool_feedback": "", "skill_feedback": "", "suggestions": ""}`)
+		if err == nil {
+			t.Fatal("expected error for missing expected_duration_seconds")
+		}
+	})
+
+	t.Run("negative expected duration", func(t *testing.T) {
+		_, err := parseCriticOutput(`{"effectiveness": 4, "expected_duration_seconds": -1, "tool_feedback": "", "skill_feedback": "", "suggestions": ""}`)
+		if err == nil {
+			t.Fatal("expected error for negative expected_duration_seconds")
 		}
 	})
 
@@ -307,7 +331,7 @@ func TestParseCriticOutput(t *testing.T) {
 	})
 
 	t.Run("whitespace padded", func(t *testing.T) {
-		out, err := parseCriticOutput(`  {"effectiveness": 2, "tool_feedback": "x", "skill_feedback": "y", "suggestions": "z"}  `)
+		out, err := parseCriticOutput(`  {"effectiveness": 2, "expected_duration_seconds": 12, "tool_feedback": "x", "skill_feedback": "y", "suggestions": "z"}  `)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -317,7 +341,7 @@ func TestParseCriticOutput(t *testing.T) {
 	})
 
 	t.Run("object valued fields", func(t *testing.T) {
-		input := `{"effectiveness": 3, "tool_feedback": {"shell": {"verdict": "helped"}}, "skill_feedback": "ok", "suggestions": ["add build skill"]}`
+		input := `{"effectiveness": 3, "expected_duration_seconds": 300, "tool_feedback": {"shell": {"verdict": "helped"}}, "skill_feedback": "ok", "suggestions": ["add build skill"]}`
 		out, err := parseCriticOutput(input)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
