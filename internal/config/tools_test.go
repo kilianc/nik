@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -112,5 +113,29 @@ func TestConfigSetRejectsInvalidPurposeModelFields(t *testing.T) {
 	}
 	if cfg.Models.Critic.Model == "" {
 		t.Fatal("expected rollback to keep prior models.critic.model")
+	}
+}
+
+func TestConfigGetOmitsLegacyExaAPIKey(t *testing.T) {
+	cfg := &Config{
+		MediaDirValue: "media",
+		MaxHistory:    25,
+		Timezone:      "UTC",
+		Location:      "SF",
+	}
+
+	out, err := configGet(cfg)
+	if err != nil {
+		t.Fatalf("config get: %v", err)
+	}
+
+	var data map[string]any
+	err = json.Unmarshal([]byte(out), &data)
+	if err != nil {
+		t.Fatalf("unmarshal config get: %v", err)
+	}
+
+	if _, ok := data["exa_api_key"]; ok {
+		t.Fatal("expected config get to omit exa_api_key")
 	}
 }

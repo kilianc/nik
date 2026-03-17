@@ -89,4 +89,4 @@ Extract the tweet ID from any x.com or twitter.com URL (the long numeric string 
 
 ## Install
 
-Message the user to configure the Exa API key (`exa_api_key`) in config.yaml.
+Message the user to store the Exa API key in the vault under `exa_api_key`.

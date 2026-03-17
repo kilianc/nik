@@ -45,7 +45,6 @@ type Config struct {
 
 	OpenAIKey       string       `yaml:"openai_key"`
 	UseCodex        bool         `yaml:"use_codex"`
-	ExaAPIKey       string       `yaml:"exa_api_key"`
 	Models          ModelsConfig `yaml:"models"`
 	MediaDirValue   string       `yaml:"media_dir"`
 	PromptsDirValue string       `yaml:"prompts_dir"`
