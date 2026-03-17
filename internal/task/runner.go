@@ -7,8 +7,8 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"sort"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"text/template"
@@ -23,13 +23,13 @@ import (
 const runnerTimeout = 20 * time.Minute
 
 type taskPromptData struct {
-	Now      string
-	Home     string
-	Tmp      string
+	Now        string
+	Home       string
+	Tmp        string
 	TokenTraps string
-	ToolDocs string
-	Skills   string
-	Plan     string
+	ToolDocs   string
+	Skills     string
+	Plan       string
 }
 
 type Runner struct {
@@ -74,13 +74,13 @@ func (r *Runner) renderPrompt(t db.Task, tools []llm.ToolDef) string {
 	now := time.Now().In(loc).Format("Monday, January 2, 2006 3:04 PM")
 
 	data := taskPromptData{
-		Now:      now,
-		Home:     r.cfg.Home,
-		Tmp:      r.cfg.TmpPath(),
+		Now:        now,
+		Home:       r.cfg.Home,
+		Tmp:        r.cfg.TmpPath(),
 		TokenTraps: scanTokenTraps(r.cfg.Home),
-		ToolDocs: buildToolDocs(tools),
-		Skills:   buildSkillDocs(r.cfg),
-		Plan:     t.Plan,
+		ToolDocs:   buildToolDocs(tools),
+		Skills:     buildSkillDocs(r.cfg),
+		Plan:       t.Plan,
 	}
 
 	var buf strings.Builder
@@ -157,8 +157,8 @@ func scanTokenTraps(home string) string {
 	datePattern := regexp.MustCompile(`\d{4}-\d{2}-\d{2}`)
 
 	type datedDir struct {
-		Path  string
-		Count int
+		Path   string
+		Count  int
 		Latest string
 	}
 
@@ -173,9 +173,9 @@ func scanTokenTraps(home string) string {
 	}
 
 	var (
-		dateds  []datedDir
-		large   []largeFile
-		denses  []denseDir
+		dateds []datedDir
+		large  []largeFile
+		denses []denseDir
 	)
 
 	_ = filepath.WalkDir(home, func(path string, d fs.DirEntry, err error) error {
@@ -250,8 +250,8 @@ func scanTokenTraps(home string) string {
 
 		if isDated {
 			dateds = append(dateds, datedDir{
-				Path:  rel,
-				Count: fileCount,
+				Path:   rel,
+				Count:  fileCount,
 				Latest: latest,
 			})
 			return nil
