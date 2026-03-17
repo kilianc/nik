@@ -181,7 +181,7 @@ func formatToolCalls(calls []db.ToolCallInfo) string {
 		if tc.Error {
 			status = "ERROR"
 		}
-		fmt.Fprintf(&b, "- %s [%s] %dms\n", tc.Name, status, tc.DurationMS)
+		fmt.Fprintf(&b, "- round %d: %s [%s] %dms\n", tc.Round, tc.Name, status, tc.DurationMS)
 
 		if tc.Error && tc.Output != "" {
 			output := tc.Output

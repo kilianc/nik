@@ -38,7 +38,7 @@ func (r *Recorder) OnStart(ctx context.Context, model string) {
 	}
 }
 
-func (r *Recorder) OnToolCall(ctx context.Context, name string, args string, result string, duration time.Duration, isError bool) {
+func (r *Recorder) OnToolCall(ctx context.Context, name string, round int, args string, result string, duration time.Duration, isError bool) {
 	meta := metaFromCtx(ctx)
 	actID := meta["activation_id"]
 	if actID == "" {
@@ -48,6 +48,7 @@ func (r *Recorder) OnToolCall(ctx context.Context, name string, args string, res
 	err := db.ToolCallInsertOne(ctx, r.conn, db.ToolCallInsertParams{
 		ActivationID: actID,
 		Name:         name,
+		Round:        round,
 		Input:        args,
 		Output:       result,
 		Duration:     duration,
@@ -58,7 +59,7 @@ func (r *Recorder) OnToolCall(ctx context.Context, name string, args string, res
 	}
 }
 
-func (r *Recorder) OnFinish(ctx context.Context, model, reasoningEffort string, usage llm.Usage, toolCalls int, durationMS int64, output string, processErr error) {
+func (r *Recorder) OnFinish(ctx context.Context, model, reasoningEffort string, usage llm.Usage, rounds llm.RoundStats, toolCalls int, durationMS int64, output string, processErr error) {
 	meta := metaFromCtx(ctx)
 	actID := meta["activation_id"]
 	if actID == "" {
@@ -81,6 +82,9 @@ func (r *Recorder) OnFinish(ctx context.Context, model, reasoningEffort string, 
 		CachedTokens:    usage.CachedTokens,
 		ReasoningTokens: usage.ReasoningTokens,
 		CostUSD:         llm.ComputeCost(model, usage.InputTokens, usage.OutputTokens, usage.CachedTokens),
+		RoundCount:      rounds.RoundCount,
+		MaxInputTokens:  rounds.MaxInputTokensPerRound,
+		MaxTotalTokens:  rounds.MaxTotalTokensPerRound,
 		ToolCallCount:   toolCalls,
 		DurationMS:      durationMS,
 		Error:           errText,

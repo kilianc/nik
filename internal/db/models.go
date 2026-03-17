@@ -181,6 +181,7 @@ type Skill struct {
 
 type ToolCallInfo struct {
 	Name       string
+	Round      int
 	Input      string
 	Output     string
 	DurationMS int64
