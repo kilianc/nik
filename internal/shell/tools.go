@@ -242,10 +242,11 @@ func (s *Service) updateOutput(ctx context.Context, sid, output string, alive bo
 }
 
 func shellResult(sid, output string, alive bool, exitCode int) string {
-	truncated := len(output) > maxContextBytes
+	totalBytes := len(output)
+	truncated := totalBytes > maxContextBytes
 	contextOutput := output
 	if truncated {
-		contextOutput = output[len(output)-maxContextBytes:]
+		contextOutput = output[totalBytes-maxContextBytes:]
 	}
 
 	result := map[string]any{
@@ -254,7 +255,7 @@ func shellResult(sid, output string, alive bool, exitCode int) string {
 
 	if truncated {
 		result["truncated"] = true
-		result["total_bytes"] = len(output)
+		result["total_bytes"] = totalBytes
 	}
 
 	if alive {

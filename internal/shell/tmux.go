@@ -13,7 +13,7 @@ var sessionPrefix = "nik-"
 
 const (
 	maxCaptureBytes = 512 * 1024
-	maxContextBytes = 160 * 1024
+	maxContextBytes = 32 * 1024
 	historyLimit    = 50000
 	windowWidth     = 200
 	windowHeight    = 50
