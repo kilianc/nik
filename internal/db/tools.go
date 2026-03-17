@@ -9,7 +9,11 @@ import (
 	"github.com/kciuffolo/nik/internal/llm"
 )
 
-const maxQueryRows = 500
+const (
+	maxQueryRows         = 500
+	maxQueryContextBytes = 32 * 1024
+	maxQueryValueBytes   = 1024
+)
 
 var queryToolDef = llm.ToolDef{
 	Name:        "db_query",
@@ -67,11 +71,11 @@ func queryHandler(conn *sql.DB) llm.ToolExecutor {
 		}
 
 		var results []map[string]any
-		truncated := false
+		truncationReason := ""
 
 		for rows.Next() {
 			if len(results) >= maxQueryRows {
-				truncated = true
+				truncationReason = "rows"
 				break
 			}
 
@@ -92,6 +96,17 @@ func queryHandler(conn *sql.DB) llm.ToolExecutor {
 			}
 
 			results = append(results, row)
+
+			data, err := marshalQueryResult(results, "")
+			if err != nil {
+				return llm.ToolError(err), nil
+			}
+
+			if len(data) > maxQueryContextBytes {
+				results = results[:len(results)-1]
+				truncationReason = "context_bytes"
+				break
+			}
 		}
 
 		err = rows.Err()
@@ -99,17 +114,18 @@ func queryHandler(conn *sql.DB) llm.ToolExecutor {
 			return llm.ToolError(err), nil
 		}
 
-		out := map[string]any{
-			"rows":  results,
-			"count": len(results),
-		}
-		if truncated {
-			out["truncated"] = true
-		}
-
-		data, err := json.Marshal(out)
+		data, err := marshalQueryResult(results, truncationReason)
 		if err != nil {
 			return llm.ToolError(err), nil
+		}
+
+		for len(data) > maxQueryContextBytes && len(results) > 0 {
+			results = results[:len(results)-1]
+
+			data, err = marshalQueryResult(results, truncationReason)
+			if err != nil {
+				return llm.ToolError(err), nil
+			}
 		}
 
 		return string(data), nil
@@ -131,7 +147,9 @@ func isReadOnly(query string) bool {
 func normalizeValue(v any) any {
 	switch val := v.(type) {
 	case []byte:
-		return string(val)
+		return truncateString(string(val), maxQueryValueBytes)
+	case string:
+		return truncateString(val, maxQueryValueBytes)
 	case []any:
 		out := make([]any, len(val))
 		for i, item := range val {
@@ -141,4 +159,34 @@ func normalizeValue(v any) any {
 	default:
 		return v
 	}
+}
+
+func marshalQueryResult(results []map[string]any, truncationReason string) ([]byte, error) {
+	out := map[string]any{
+		"rows":  results,
+		"count": len(results),
+	}
+
+	if truncationReason != "" {
+		out["truncated"] = true
+		out["truncation_reason"] = truncationReason
+		out["max_bytes"] = maxQueryContextBytes
+	}
+
+	return json.Marshal(out)
+}
+
+func truncateString(s string, maxBytes int) string {
+	if len(s) <= maxBytes {
+		return s
+	}
+
+	const suffix = " [truncated]"
+
+	limit := maxBytes - len(suffix)
+	if limit <= 0 {
+		return suffix
+	}
+
+	return s[:limit] + suffix
 }
