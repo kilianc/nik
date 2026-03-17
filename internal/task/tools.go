@@ -11,7 +11,7 @@ import (
 
 const (
 	maxActivePerConversation = 5
-	maxRetriesPerGoal        = 3
+	maxRetriesPerGoal        = 5
 )
 
 var spawnToolDef = llm.ToolDef{
