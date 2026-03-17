@@ -255,3 +255,23 @@ models:
 		t.Fatal("expected error for invalid models.main.reasoning_effort")
 	}
 }
+
+func TestLoadIgnoresLegacyExaAPIKey(t *testing.T) {
+	dir := t.TempDir()
+	writeTestConfig(t, dir, `
+openai_key: sk-test
+exa_api_key: exa-old-key
+models:
+  main:
+    model: gpt-5
+`)
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	if cfg.Models.Main.Model != "gpt-5" {
+		t.Fatalf("expected models.main.model gpt-5, got %q", cfg.Models.Main.Model)
+	}
+}

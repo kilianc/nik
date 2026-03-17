@@ -97,7 +97,6 @@ func configGet(cfg *Config) (string, error) {
 				"verbosity":        cfg.Models.Critic.Verbosity,
 			},
 		},
-		"exa_api_key":                 cfg.ExaAPIKey,
 		"media_dir":                   cfg.MediaDirValue,
 		"max_history":                 cfg.MaxHistory,
 		"timezone":                    cfg.Timezone,
