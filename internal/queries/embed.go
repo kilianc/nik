@@ -184,13 +184,13 @@ var TaskUpdateLastReportAt string
 //go:embed task_tool_calls.sql
 var TaskToolCalls string
 
-// shell output queries
+// shell session queries
 
-//go:embed shell_output_upsert.sql
-var ShellOutputUpsert string
+//go:embed shell_session_upsert.sql
+var ShellSessionUpsert string
 
-//go:embed shell_output_update.sql
-var ShellOutputUpdate string
+//go:embed shell_session_update.sql
+var ShellSessionUpdate string
 
-//go:embed shell_output_alive.sql
-var ShellOutputAlive string
+//go:embed shell_session_alive.sql
+var ShellSessionAlive string

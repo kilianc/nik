@@ -206,8 +206,8 @@ func (s *Service) persistOutput(ctx context.Context, sid, activationID, command,
 		codePtr = &exitCode
 	}
 
-	err := db.ShellOutputUpsert(ctx, s.conn, db.ShellOutputUpsertParams{
-		SessionID:    sid,
+	err := db.ShellSessionUpsert(ctx, s.conn, db.ShellSessionUpsertParams{
+		ID:           sid,
 		ActivationID: activationID,
 		Command:      command,
 		Description:  description,
@@ -216,7 +216,7 @@ func (s *Service) persistOutput(ctx context.Context, sid, activationID, command,
 		Alive:        alive,
 	})
 	if err != nil {
-		slog.Warn("persist shell output", "pkg", "shell", "session_id", sid, "error", err)
+		slog.Warn("persist shell session", "pkg", "shell", "session_id", sid, "error", err)
 	}
 }
 
@@ -230,14 +230,14 @@ func (s *Service) updateOutput(ctx context.Context, sid, output string, alive bo
 		codePtr = &exitCode
 	}
 
-	err := db.ShellOutputUpdate(ctx, s.conn, db.ShellOutputUpdateParams{
-		SessionID: sid,
-		Output:    output,
-		ExitCode:  codePtr,
-		Alive:     alive,
+	err := db.ShellSessionUpdate(ctx, s.conn, db.ShellSessionUpdateParams{
+		ID:       sid,
+		Output:   output,
+		ExitCode: codePtr,
+		Alive:    alive,
 	})
 	if err != nil {
-		slog.Warn("update shell output", "pkg", "shell", "session_id", sid, "error", err)
+		slog.Warn("update shell session", "pkg", "shell", "session_id", sid, "error", err)
 	}
 }
 

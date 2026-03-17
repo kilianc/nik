@@ -25,7 +25,7 @@ func (s *Service) CheckSessions(ctx context.Context) {
 		return
 	}
 
-	ids, err := db.ShellOutputAliveIDs(ctx, s.conn)
+	ids, err := db.ShellSessionAliveIDs(ctx, s.conn)
 	if err != nil {
 		slog.Warn("check sessions", "pkg", "shell", "error", err)
 		return
@@ -41,11 +41,11 @@ func (s *Service) CheckSessions(ctx context.Context) {
 			code, _ := getExitCode(sid)
 			killSession(sid)
 
-			err = db.ShellOutputUpdate(ctx, s.conn, db.ShellOutputUpdateParams{
-				SessionID: sid,
-				Output:    out,
-				ExitCode:  &code,
-				Alive:     false,
+			err = db.ShellSessionUpdate(ctx, s.conn, db.ShellSessionUpdateParams{
+				ID:       sid,
+				Output:   out,
+				ExitCode: &code,
+				Alive:    false,
 			})
 			if err != nil {
 				slog.Warn("reap dead session", "pkg", "shell", "session_id", sid, "error", err)
@@ -65,10 +65,10 @@ func (s *Service) CheckSessions(ctx context.Context) {
 			out, _ := capturePane(sid)
 			killSession(sid)
 
-			err = db.ShellOutputUpdate(ctx, s.conn, db.ShellOutputUpdateParams{
-				SessionID: sid,
-				Output:    out,
-				Alive:     false,
+			err = db.ShellSessionUpdate(ctx, s.conn, db.ShellSessionUpdateParams{
+				ID:     sid,
+				Output: out,
+				Alive:  false,
 			})
 			if err != nil {
 				slog.Warn("kill stale session", "pkg", "shell", "session_id", sid, "error", err)
