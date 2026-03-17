@@ -77,6 +77,9 @@ type ActivationStatsUpdate struct {
 	CachedTokens    int64
 	ReasoningTokens int64
 	CostUSD         float64
+	RoundCount      int
+	MaxInputTokens  int64
+	MaxTotalTokens  int64
 	ToolCallCount   int
 	DurationMS      int64
 	Error           string
@@ -93,6 +96,9 @@ func ActivationUpdateStats(ctx context.Context, db DBTX, id string, s Activation
 		s.CachedTokens,
 		s.ReasoningTokens,
 		s.CostUSD,
+		s.RoundCount,
+		s.MaxInputTokens,
+		s.MaxTotalTokens,
 		s.ToolCallCount,
 		s.DurationMS,
 		s.Error,

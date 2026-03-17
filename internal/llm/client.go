@@ -28,8 +28,8 @@ import (
 
 type CompletionObserver interface {
 	OnStart(ctx context.Context, model string)
-	OnToolCall(ctx context.Context, name string, args string, result string, duration time.Duration, isError bool)
-	OnFinish(ctx context.Context, model string, reasoningEffort string, usage Usage, toolCalls int, durationMS int64, output string, processErr error)
+	OnToolCall(ctx context.Context, name string, round int, args string, result string, duration time.Duration, isError bool)
+	OnFinish(ctx context.Context, model string, reasoningEffort string, usage Usage, rounds RoundStats, toolCalls int, durationMS int64, output string, processErr error)
 	OnDetail(ctx context.Context, instructions string, userInput string, tools []string, reasoningSummaries []string)
 }
 
@@ -195,6 +195,12 @@ type Usage struct {
 	ReasoningTokens int64
 }
 
+type RoundStats struct {
+	RoundCount             int
+	MaxInputTokensPerRound int64
+	MaxTotalTokensPerRound int64
+}
+
 type CompletionExtra struct {
 	RawResponses       []string
 	ReasoningSummaries []string
@@ -278,6 +284,7 @@ func augmentCtxMeta(ctx context.Context, key, value string) context.Context {
 
 func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instructions string, getInput func() string, tools []ToolDef, executor ToolExecutor) CompletionResult {
 	total := Usage{}
+	rounds := RoundStats{}
 	extra := CompletionExtra{}
 
 	completeStart := time.Now()
@@ -289,7 +296,7 @@ func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instru
 
 	if c.observer != nil {
 		defer func() {
-			c.observer.OnFinish(ctx, *c.model, extra.ReasoningEffort, total, len(history), time.Since(completeStart).Milliseconds(), retOutput, retErr)
+			c.observer.OnFinish(ctx, *c.model, extra.ReasoningEffort, total, rounds, len(history), time.Since(completeStart).Milliseconds(), retOutput, retErr)
 
 			toolNames := make([]string, len(tools))
 			for i, t := range tools {
@@ -400,6 +407,14 @@ func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instru
 		total.CachedTokens += resp.Usage.InputTokensDetails.CachedTokens
 		total.ReasoningTokens += resp.Usage.OutputTokensDetails.ReasoningTokens
 
+		rounds.RoundCount++
+		if resp.Usage.InputTokens > rounds.MaxInputTokensPerRound {
+			rounds.MaxInputTokensPerRound = resp.Usage.InputTokens
+		}
+		if resp.Usage.TotalTokens > rounds.MaxTotalTokensPerRound {
+			rounds.MaxTotalTokensPerRound = resp.Usage.TotalTokens
+		}
+
 		for _, item := range resp.Output {
 			if item.Type != "reasoning" {
 				continue
@@ -496,7 +511,7 @@ func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instru
 			history = append(history, rec)
 
 			if c.observer != nil {
-				c.observer.OnToolCall(ctx, rec.Name, rec.Args, rec.Result, r.elapsed, rec.Error)
+				c.observer.OnToolCall(ctx, rec.Name, round, rec.Args, rec.Result, r.elapsed, rec.Error)
 			}
 
 			items = append(items, responses.ResponseInputItemParamOfFunctionCallOutput(call.CallID, r.result))

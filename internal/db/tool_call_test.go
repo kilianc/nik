@@ -28,6 +28,7 @@ func TestToolCallInsertOnePersistsRow(t *testing.T) {
 	err = ToolCallInsertOne(ctx, conn, ToolCallInsertParams{
 		ActivationID: actID,
 		Name:         "shell",
+		Round:        7,
 		Input:        `{"action":"run","command":"ls"}`,
 		Output:       "file1\nfile2",
 		Duration:     150 * time.Millisecond,
@@ -38,18 +39,22 @@ func TestToolCallInsertOnePersistsRow(t *testing.T) {
 	}
 
 	var name, input, output string
+	var round int
 	var durationMS int
 	var errFlag int
 
 	err = conn.QueryRowContext(ctx,
-		"SELECT name, input, output, duration_ms, error FROM tool_call WHERE activation_id = ?", actID,
-	).Scan(&name, &input, &output, &durationMS, &errFlag)
+		"SELECT name, round, input, output, duration_ms, error FROM tool_call WHERE activation_id = ?", actID,
+	).Scan(&name, &round, &input, &output, &durationMS, &errFlag)
 	if err != nil {
 		t.Fatalf("query tool call: %v", err)
 	}
 
 	if name != "shell" {
 		t.Fatalf("expected name 'shell', got %q", name)
+	}
+	if round != 7 {
+		t.Fatalf("expected round 7, got %d", round)
 	}
 	if durationMS != 150 {
 		t.Fatalf("expected duration_ms 150, got %d", durationMS)
@@ -81,6 +86,7 @@ func TestToolCallInsertOneErrorFlag(t *testing.T) {
 	err = ToolCallInsertOne(ctx, conn, ToolCallInsertParams{
 		ActivationID: actID,
 		Name:         "db_query",
+		Round:        2,
 		Input:        `{"sql":"SELECT bad"}`,
 		Output:       "no such table",
 		Duration:     30 * time.Millisecond,

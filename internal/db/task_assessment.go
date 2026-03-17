@@ -52,6 +52,7 @@ func TaskAllToolCalls(ctx context.Context, db *sql.DB, activationID string) ([]T
 
 		err = rows.Scan(
 			&tc.Name,
+			&tc.Round,
 			&tc.Input,
 			&tc.Output,
 			&tc.DurationMS,

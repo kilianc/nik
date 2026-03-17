@@ -13,6 +13,7 @@ import (
 type ToolCallInsertParams struct {
 	ActivationID string
 	Name         string
+	Round        int
 	Input        string
 	Output       string
 	Duration     time.Duration
@@ -29,6 +30,7 @@ func ToolCallInsertOne(ctx context.Context, db *sql.DB, p ToolCallInsertParams) 
 		id.V7(),
 		p.ActivationID,
 		p.Name,
+		p.Round,
 		p.Input,
 		p.Output,
 		p.Duration.Milliseconds(),

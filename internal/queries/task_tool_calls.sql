@@ -1,5 +1,6 @@
 SELECT
   tc.name,
+  tc.round,
   tc.input,
   tc.output,
   tc.duration_ms,
