@@ -241,12 +241,6 @@ func (s *Service) CheckStale(ctx context.Context) {
 	}
 }
 
-// RecentToolCalls returns the latest tool calls for a task activation,
-// used by task_status to show Nik what the worker has been doing.
-func (s *Service) RecentToolCalls(ctx context.Context, activationID string) ([]db.ToolCallInfo, error) {
-	return db.TaskRecentToolCalls(ctx, s.conn, activationID)
-}
-
 func (s *Service) AllToolCalls(ctx context.Context, activationID string) ([]db.ToolCallInfo, error) {
 	return db.TaskAllToolCalls(ctx, s.conn, activationID)
 }

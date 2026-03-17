@@ -3,8 +3,6 @@ package task
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"strings"
 	"time"
 
 	"github.com/kciuffolo/nik/internal/db"
@@ -47,7 +45,7 @@ var spawnToolDef = llm.ToolDef{
 
 var statusToolDef = llm.ToolDef{
 	Name:        "task_status",
-	Description: "Check on a running task. Returns status, goal, duration, and recent tool calls.",
+	Description: "Check on a task. Returns status, goal, plan, reports, and retry chain.",
 	Parameters: map[string]any{
 		"type": "object",
 		"properties": map[string]any{
@@ -305,33 +303,43 @@ func statusHandler(svc *Service) llm.ToolExecutor {
 			"task_id": t.ID,
 			"status":  t.Status,
 			"goal":    t.Goal,
+			"plan":    t.Plan,
 		}
 
-		if t.StartedAt.Valid {
-			if t.CompletedAt.Valid {
-				result["duration"] = t.CompletedAt.Time.Sub(t.StartedAt.Time).Truncate(time.Second).String()
-			} else {
-				result["duration"] = time.Since(t.StartedAt.Time).Truncate(time.Second).String()
-			}
-		}
-
-		if t.ActivationID != "" {
-			toolCalls, tcErr := svc.RecentToolCalls(ctx, t.ActivationID)
-			if tcErr == nil && len(toolCalls) > 0 {
-				formatted := make([]map[string]any, len(toolCalls))
-				for i, tc := range toolCalls {
-					formatted[i] = map[string]any{
-						"name":        tc.Name,
-						"round":       tc.Round,
-						"input":       tc.Input,
-						"output":      tc.Output,
-						"duration_ms": tc.DurationMS,
-						"error":       tc.Error,
-						"at":          tc.At.Format("15:04:05"),
-					}
+		reports, _ := svc.ReportsByTask(ctx, t.ID)
+		if len(reports) > 0 {
+			formatted := make([]map[string]any, len(reports))
+			for i, rpt := range reports {
+				formatted[i] = map[string]any{
+					"status":  rpt.Status,
+					"content": rpt.Content,
+					"at":      rpt.CreatedAt.Format("15:04:05"),
 				}
-				result["recent_tool_calls"] = formatted
 			}
+			result["reports"] = formatted
+		}
+
+		root := t.RetryForTaskID
+		if root == "" {
+			root = t.ID
+		}
+
+		chain, _ := svc.RetryChain(ctx, root)
+		if len(chain) > 1 {
+			formatted := make([]map[string]any, len(chain))
+			for i, entry := range chain {
+				e := map[string]any{
+					"attempt": entry.RetryNumber,
+					"status":  entry.Status,
+					"goal":    entry.Goal,
+				}
+				if len(entry.Reports) > 0 {
+					last := entry.Reports[len(entry.Reports)-1]
+					e["last_report"] = last.Content
+				}
+				formatted[i] = e
+			}
+			result["retry_chain"] = formatted
 		}
 
 		return llm.ToolResult(result), nil
@@ -427,16 +435,13 @@ func retryHandler(svc *Service, runner *Runner) llm.ToolExecutor {
 			goal = original.Goal
 		}
 
-		chain, _ := svc.RetryChain(ctx, root)
-		plan := buildRetryPlan(args.Plan, chain)
-
 		t, err := svc.Create(ctx, createParams{
 			ConversationID: original.ConversationID,
 			ContactID:      original.ContactID,
 			RetryForTaskID: root,
 			RetryNumber:    retryNumber,
 			Goal:           goal,
-			Plan:           plan,
+			Plan:           args.Plan,
 			Thinking:       original.Thinking,
 		})
 		if err != nil {
@@ -453,27 +458,6 @@ func retryHandler(svc *Service, runner *Runner) llm.ToolExecutor {
 			"retry_number": retryNumber,
 		}), nil
 	}
-}
-
-func buildRetryPlan(newPlan string, chain []db.RetryChainEntry) string {
-	if len(chain) == 0 {
-		return newPlan
-	}
-
-	var b strings.Builder
-	b.WriteString("## Previous attempts\n\n")
-	for _, entry := range chain {
-		fmt.Fprintf(&b, "### Attempt #%d (%s)\n", entry.RetryNumber, entry.Status)
-		fmt.Fprintf(&b, "Goal: %s\n", entry.Goal)
-		for _, r := range entry.Reports {
-			fmt.Fprintf(&b, "Report: %s\n", r.Content)
-		}
-		b.WriteByte('\n')
-	}
-	b.WriteString("---\n\n## New plan\n\n")
-	b.WriteString(newPlan)
-
-	return b.String()
 }
 
 func reportHandler(svc *Service, taskID string) llm.ToolExecutor {

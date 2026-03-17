@@ -138,7 +138,7 @@ type fakeCriticCompleter struct {
 	calls   []fakeCriticCall
 }
 
-func (f *fakeCriticCompleter) Complete(_ context.Context, instructions string, getInput func() string, _ []llm.ToolDef, _ llm.ToolExecutor) (string, <-chan llm.CompletionResult) {
+func (f *fakeCriticCompleter) Complete(_ context.Context, instructions string, getInput func() string, _ []llm.ToolDef, _ llm.ToolExecutor, _ ...llm.CompleteOption) (string, <-chan llm.CompletionResult) {
 	input := ""
 	if getInput != nil {
 		input = getInput()

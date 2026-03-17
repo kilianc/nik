@@ -33,8 +33,18 @@ type CompletionObserver interface {
 	OnDetail(ctx context.Context, instructions string, userInput string, tools []string, reasoningSummaries []string)
 }
 
+type CompleteOption func(*completeOpts)
+
+type completeOpts struct {
+	onIdle func(output string) string
+}
+
+func WithOnIdle(fn func(output string) string) CompleteOption {
+	return func(o *completeOpts) { o.onIdle = fn }
+}
+
 type Completer interface {
-	Complete(ctx context.Context, instructions string, getInput func() string, tools []ToolDef, executor ToolExecutor) (string, <-chan CompletionResult)
+	Complete(ctx context.Context, instructions string, getInput func() string, tools []ToolDef, executor ToolExecutor, opts ...CompleteOption) (string, <-chan CompletionResult)
 }
 
 const maxConcurrentSessions = 6
@@ -239,7 +249,7 @@ func StaticInput(s string) func() string {
 // Complete starts an LLM completion. getInput is called at the top of every
 // round; its return replaces the user message (items[0]). Returns the
 // activation ID and a channel that receives exactly one result.
-func (c *Client) Complete(ctx context.Context, instructions string, getInput func() string, tools []ToolDef, executor ToolExecutor) (string, <-chan CompletionResult) {
+func (c *Client) Complete(ctx context.Context, instructions string, getInput func() string, tools []ToolDef, executor ToolExecutor, opts ...CompleteOption) (string, <-chan CompletionResult) {
 	ch := make(chan CompletionResult, 1)
 
 	client := c.apiClient
@@ -251,6 +261,11 @@ func (c *Client) Complete(ctx context.Context, instructions string, getInput fun
 		ch <- CompletionResult{Err: fmt.Errorf("no client configured (need api key or codex auth)")}
 		close(ch)
 		return "", ch
+	}
+
+	var o completeOpts
+	for _, opt := range opts {
+		opt(&o)
 	}
 
 	actID := id.V7()
@@ -266,7 +281,7 @@ func (c *Client) Complete(ctx context.Context, instructions string, getInput fun
 		c.sem <- struct{}{}
 		defer func() { <-c.sem }()
 
-		result := c.completeLoop(ctx, client, instructions, getInput, tools, executor)
+		result := c.completeLoop(ctx, client, instructions, getInput, tools, executor, &o)
 		ch <- result
 	}()
 
@@ -283,7 +298,7 @@ func augmentCtxMeta(ctx context.Context, key, value string) context.Context {
 	return context.WithValue(ctx, "meta", m)
 }
 
-func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instructions string, getInput func() string, tools []ToolDef, executor ToolExecutor) CompletionResult {
+func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instructions string, getInput func() string, tools []ToolDef, executor ToolExecutor, opts *completeOpts) CompletionResult {
 	total := Usage{}
 	rounds := RoundStats{}
 	extra := CompletionExtra{}
@@ -450,6 +465,17 @@ func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instru
 
 		if len(calls) == 0 {
 			retOutput = resp.OutputText()
+
+			if opts.onIdle != nil {
+				followUp := opts.onIdle(retOutput)
+				if followUp != "" {
+					opts.onIdle = nil
+					items = append(items, responses.ResponseInputItemParamOfMessage(retOutput, responses.EasyInputMessageRoleAssistant))
+					items = append(items, responses.ResponseInputItemParamOfMessage(followUp, responses.EasyInputMessageRoleUser))
+					continue
+				}
+			}
+
 			return CompletionResult{Output: retOutput, Usage: total, History: history, Extra: extra}
 		}
 
