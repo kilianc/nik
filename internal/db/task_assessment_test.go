@@ -42,29 +42,35 @@ func TestTaskAssessmentInsertAndQuery(t *testing.T) {
 	}
 
 	err = TaskAssessmentInsert(ctx, conn, TaskAssessmentInsertParams{
-		TaskID:        taskID,
-		ActivationID:  criticActID,
-		Effectiveness: 4,
-		ToolFeedback:  "shell: helped run tests. db_query: ok.",
-		SkillFeedback: "web skill loaded but unused -- wrong skill for the task.",
-		Suggestions:   "add a build skill with cached dep resolution.",
+		TaskID:                  taskID,
+		ActivationID:            criticActID,
+		Effectiveness:           4,
+		ExpectedDurationSeconds: 120,
+		ToolFeedback:            "shell: helped run tests. db_query: ok.",
+		SkillFeedback:           "web skill loaded but unused -- wrong skill for the task.",
+		Suggestions:             "add a build skill with cached dep resolution.",
 	})
 	if err != nil {
 		t.Fatalf("insert assessment: %v", err)
 	}
 
 	var gotEffectiveness int
+	var gotExpectedDurationSeconds int
 	var gotToolFeedback, gotSkillFeedback, gotSuggestions string
 
 	err = conn.QueryRowContext(ctx,
-		"SELECT effectiveness, tool_feedback, skill_feedback, suggestions FROM task_assessment WHERE task_id = ?", taskID,
-	).Scan(&gotEffectiveness, &gotToolFeedback, &gotSkillFeedback, &gotSuggestions)
+		"SELECT effectiveness, expected_duration_seconds, tool_feedback, skill_feedback, suggestions FROM task_assessment WHERE task_id = ?",
+		taskID,
+	).Scan(&gotEffectiveness, &gotExpectedDurationSeconds, &gotToolFeedback, &gotSkillFeedback, &gotSuggestions)
 	if err != nil {
 		t.Fatalf("query assessment: %v", err)
 	}
 
 	if gotEffectiveness != 4 {
 		t.Fatalf("expected effectiveness 4, got %d", gotEffectiveness)
+	}
+	if gotExpectedDurationSeconds != 120 {
+		t.Fatalf("expected expected_duration_seconds 120, got %d", gotExpectedDurationSeconds)
 	}
 	if gotToolFeedback != "shell: helped run tests. db_query: ok." {
 		t.Fatalf("unexpected tool_feedback: %q", gotToolFeedback)
@@ -113,18 +119,20 @@ func TestTaskAssessmentUniquePerTask(t *testing.T) {
 	}
 
 	err = TaskAssessmentInsert(ctx, conn, TaskAssessmentInsertParams{
-		TaskID:        taskID,
-		ActivationID:  actID,
-		Effectiveness: 3,
+		TaskID:                  taskID,
+		ActivationID:            actID,
+		Effectiveness:           3,
+		ExpectedDurationSeconds: 60,
 	})
 	if err != nil {
 		t.Fatalf("first insert: %v", err)
 	}
 
 	err = TaskAssessmentInsert(ctx, conn, TaskAssessmentInsertParams{
-		TaskID:        taskID,
-		ActivationID:  actID2,
-		Effectiveness: 5,
+		TaskID:                  taskID,
+		ActivationID:            actID2,
+		Effectiveness:           5,
+		ExpectedDurationSeconds: 30,
 	})
 	if err == nil {
 		t.Fatal("expected UNIQUE constraint error on second insert for same task_id")

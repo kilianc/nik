@@ -11,12 +11,13 @@ import (
 )
 
 type TaskAssessmentInsertParams struct {
-	TaskID        string
-	ActivationID  string
-	Effectiveness int
-	ToolFeedback  string
-	SkillFeedback string
-	Suggestions   string
+	TaskID                  string
+	ActivationID            string
+	Effectiveness           int
+	ExpectedDurationSeconds int
+	ToolFeedback            string
+	SkillFeedback           string
+	Suggestions             string
 }
 
 func TaskAssessmentInsert(ctx context.Context, db *sql.DB, p TaskAssessmentInsertParams) error {
@@ -25,6 +26,7 @@ func TaskAssessmentInsert(ctx context.Context, db *sql.DB, p TaskAssessmentInser
 		p.TaskID,
 		p.ActivationID,
 		p.Effectiveness,
+		p.ExpectedDurationSeconds,
 		p.ToolFeedback,
 		p.SkillFeedback,
 		p.Suggestions,

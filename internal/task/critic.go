@@ -16,21 +16,23 @@ import (
 )
 
 type criticPromptData struct {
-	Now       string
-	Home      string
-	Goal      string
-	Plan      string
-	Status    string
-	ToolCalls string
-	Reports   string
-	Skills    string
+	Now              string
+	Home             string
+	Goal             string
+	Plan             string
+	Status           string
+	ObservedDuration string
+	ToolCalls        string
+	Reports          string
+	Skills           string
 }
 
 type assessOutput struct {
-	Effectiveness int    `json:"effectiveness"`
-	ToolFeedback  string `json:"tool_feedback"`
-	SkillFeedback string `json:"skill_feedback"`
-	Suggestions   string `json:"suggestions"`
+	Effectiveness           int    `json:"effectiveness"`
+	ExpectedDurationSeconds int    `json:"expected_duration_seconds"`
+	ToolFeedback            string `json:"tool_feedback"`
+	SkillFeedback           string `json:"skill_feedback"`
+	Suggestions             string `json:"suggestions"`
 }
 
 const criticTimeout = 5 * time.Minute
@@ -90,12 +92,13 @@ func (r *Runner) RunCritic(ctx context.Context, t db.Task) {
 	}
 
 	err = r.svc.InsertAssessment(ctx, db.TaskAssessmentInsertParams{
-		TaskID:        t.ID,
-		ActivationID:  actID,
-		Effectiveness: assessment.Effectiveness,
-		ToolFeedback:  assessment.ToolFeedback,
-		SkillFeedback: assessment.SkillFeedback,
-		Suggestions:   assessment.Suggestions,
+		TaskID:                  t.ID,
+		ActivationID:            actID,
+		Effectiveness:           assessment.Effectiveness,
+		ExpectedDurationSeconds: assessment.ExpectedDurationSeconds,
+		ToolFeedback:            assessment.ToolFeedback,
+		SkillFeedback:           assessment.SkillFeedback,
+		Suggestions:             assessment.Suggestions,
 	})
 	if err != nil {
 		slog.Warn("critic insert assessment", "pkg", "task", "task_id", t.ID, "error", err)
@@ -117,10 +120,11 @@ func parseCriticOutput(raw string) (assessOutput, error) {
 	}
 
 	var intermediate struct {
-		Effectiveness int             `json:"effectiveness"`
-		ToolFeedback  json.RawMessage `json:"tool_feedback"`
-		SkillFeedback json.RawMessage `json:"skill_feedback"`
-		Suggestions   json.RawMessage `json:"suggestions"`
+		Effectiveness           int             `json:"effectiveness"`
+		ExpectedDurationSeconds *int            `json:"expected_duration_seconds"`
+		ToolFeedback            json.RawMessage `json:"tool_feedback"`
+		SkillFeedback           json.RawMessage `json:"skill_feedback"`
+		Suggestions             json.RawMessage `json:"suggestions"`
 	}
 
 	err := json.Unmarshal([]byte(raw), &intermediate)
@@ -132,11 +136,20 @@ func parseCriticOutput(raw string) (assessOutput, error) {
 		return assessOutput{}, fmt.Errorf("effectiveness must be 1-5, got %d", intermediate.Effectiveness)
 	}
 
+	if intermediate.ExpectedDurationSeconds == nil {
+		return assessOutput{}, fmt.Errorf("expected_duration_seconds is required")
+	}
+
+	if *intermediate.ExpectedDurationSeconds < 0 {
+		return assessOutput{}, fmt.Errorf("expected_duration_seconds must be >= 0, got %d", *intermediate.ExpectedDurationSeconds)
+	}
+
 	out := assessOutput{
-		Effectiveness: intermediate.Effectiveness,
-		ToolFeedback:  coerceString(intermediate.ToolFeedback),
-		SkillFeedback: coerceString(intermediate.SkillFeedback),
-		Suggestions:   coerceString(intermediate.Suggestions),
+		Effectiveness:           intermediate.Effectiveness,
+		ExpectedDurationSeconds: *intermediate.ExpectedDurationSeconds,
+		ToolFeedback:            coerceString(intermediate.ToolFeedback),
+		SkillFeedback:           coerceString(intermediate.SkillFeedback),
+		Suggestions:             coerceString(intermediate.Suggestions),
 	}
 
 	return out, nil
@@ -242,14 +255,15 @@ func (r *Runner) renderCriticPrompt(t db.Task, toolCalls, reports, skills string
 	now := time.Now().In(loc).Format("Monday, January 2, 2006 3:04 PM")
 
 	data := criticPromptData{
-		Now:       now,
-		Home:      r.cfg.Home,
-		Goal:      t.Goal,
-		Plan:      t.Plan,
-		Status:    t.Status,
-		ToolCalls: toolCalls,
-		Reports:   reports,
-		Skills:    skills,
+		Now:              now,
+		Home:             r.cfg.Home,
+		Goal:             t.Goal,
+		Plan:             t.Plan,
+		Status:           t.Status,
+		ObservedDuration: observedDuration(t),
+		ToolCalls:        toolCalls,
+		Reports:          reports,
+		Skills:           skills,
 	}
 
 	var buf strings.Builder
@@ -263,6 +277,25 @@ func (r *Runner) renderCriticPrompt(t db.Task, toolCalls, reports, skills string
 }
 
 func fallbackCriticPrompt(t db.Task, toolCalls, reports string) string {
-	return fmt.Sprintf("Evaluate task %s.\nGoal: %s\nStatus: %s\n\nTool calls:\n%s\nReports:\n%s\n\nRespond with JSON: {\"effectiveness\": <1-5>, \"tool_feedback\": \"...\", \"skill_feedback\": \"...\", \"suggestions\": \"...\"}",
-		t.ID, t.Goal, t.Status, toolCalls, reports)
+	return fmt.Sprintf("Evaluate task %s.\nGoal: %s\nStatus: %s\nObserved duration: %s\n\nTool calls:\n%s\nReports:\n%s\n\nRespond with JSON: {\"effectiveness\": <1-5>, \"expected_duration_seconds\": <integer>, \"tool_feedback\": \"...\", \"skill_feedback\": \"...\", \"suggestions\": \"...\"}",
+		t.ID, t.Goal, t.Status, observedDuration(t), toolCalls, reports)
+}
+
+func observedDuration(t db.Task) string {
+	if !t.CompletedAt.Valid {
+		return "unknown"
+	}
+
+	start := t.CreatedAt
+	if t.StartedAt.Valid {
+		start = t.StartedAt.Time
+	}
+
+	duration := t.CompletedAt.Time.Sub(start)
+	if duration < 0 {
+		duration = 0
+	}
+
+	seconds := int(duration / time.Second)
+	return fmt.Sprintf("%d seconds", seconds)
 }
