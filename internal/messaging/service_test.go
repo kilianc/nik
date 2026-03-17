@@ -86,6 +86,22 @@ func (f *failingContactService) EnsureContactForMessage(_ context.Context, _ str
 	return "", errors.New("resolve failed")
 }
 
+type fakeReceiver struct{}
+
+func (fakeReceiver) ReceiveConversation(context.Context, Conversation) error { return nil }
+func (fakeReceiver) ReceiveMessage(context.Context, InboundMessage) error    { return nil }
+func (fakeReceiver) OnHistorySyncComplete(context.Context, string) error     { return nil }
+
+func TestAdapterContractsCompileAndExposePlatformName(t *testing.T) {
+	var _ MessageReceiver = (*fakeReceiver)(nil)
+	var _ MessagingPlatform = (*mockPlatform)(nil)
+
+	p := &mockPlatform{platform: "whatsapp"}
+	if p.Platform() != "whatsapp" {
+		t.Fatalf("expected platform name whatsapp, got %q", p.Platform())
+	}
+}
+
 func TestReceiveMessageFailsWhenContactResolutionFails(t *testing.T) {
 	ctx := context.Background()
 
