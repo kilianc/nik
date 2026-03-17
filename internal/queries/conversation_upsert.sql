@@ -15,7 +15,7 @@ INSERT INTO conversation (
   created_at,
   updated_at
 )
-VALUES (?1, ?2, ?3, ?4, ?5, ?7, COALESCE(?8, 0), COALESCE(?9, 0), ?10, COALESCE(?11, '[]'), ?6, datetime('now'), datetime('now'))
+VALUES (?1, ?2, ?3, ?4, ?5, ?7, COALESCE(?8, 0), COALESCE(?9, 0), ?10, COALESCE(?11, '[]'), NULLABLE_ISO8601_MS(?6), NOW_ISO8601_MS(), NOW_ISO8601_MS())
 ON CONFLICT (platform, external_conversation_id) DO UPDATE SET
   kind = excluded.kind,
   title = COALESCE(excluded.title, conversation.title),
@@ -30,4 +30,4 @@ ON CONFLICT (platform, external_conversation_id) DO UPDATE SET
     WHEN excluded.last_message_at > conversation.last_message_at THEN excluded.last_message_at
     ELSE conversation.last_message_at
   END,
-  updated_at = datetime('now');
+  updated_at = NOW_ISO8601_MS();

@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"time"
 
 	"github.com/kciuffolo/nik/internal/id"
 	"github.com/kciuffolo/nik/internal/queries"
@@ -46,8 +45,6 @@ func SkillList(ctx context.Context, db *sql.DB) ([]Skill, error) {
 }
 
 func SkillUpsert(ctx context.Context, db DBTX, p SkillUpsertParams) (Skill, error) {
-	now := time.Now().UTC()
-
 	var contentHash any
 	if p.ContentHash != "" {
 		contentHash = p.ContentHash
@@ -64,7 +61,6 @@ func SkillUpsert(ctx context.Context, db DBTX, p SkillUpsertParams) (Skill, erro
 		p.Status,
 		contentHash,
 		installHash,
-		now,
 	)
 
 	var s Skill

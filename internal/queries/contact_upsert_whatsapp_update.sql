@@ -14,8 +14,8 @@ SET
     ELSE phone_numbers
   END,
   last_message_at = CASE
-    WHEN last_message_at IS NULL OR ?3 > last_message_at THEN ?3
+    WHEN last_message_at IS NULL OR ISO8601_MS(?3) > last_message_at THEN ISO8601_MS(?3)
     ELSE last_message_at
   END,
-  updated_at = datetime('now')
+  updated_at = NOW_ISO8601_MS()
 WHERE EXISTS (SELECT 1 FROM json_each(whatsapp_ids) WHERE value = ?4);

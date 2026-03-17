@@ -19,7 +19,7 @@ func TestToolCallInsertOnePersistsRow(t *testing.T) {
 
 	actID := "act-tc-insert"
 	_, err = conn.ExecContext(ctx,
-		"INSERT INTO activation (id, conversation_id, sources, model, created_at) VALUES (?, ?, '[\"task\"]', 'gpt-4', datetime('now'))",
+		"INSERT INTO activation (id, conversation_id, sources, model, created_at) VALUES (?, ?, '[\"task\"]', 'gpt-4', NOW_ISO8601_MS())",
 		actID, convID)
 	if err != nil {
 		t.Fatalf("insert activation: %v", err)
@@ -72,7 +72,7 @@ func TestToolCallInsertOneErrorFlag(t *testing.T) {
 
 	actID := "act-tc-err"
 	_, err = conn.ExecContext(ctx,
-		"INSERT INTO activation (id, conversation_id, sources, model, created_at) VALUES (?, ?, '[\"task\"]', 'gpt-4', datetime('now'))",
+		"INSERT INTO activation (id, conversation_id, sources, model, created_at) VALUES (?, ?, '[\"task\"]', 'gpt-4', NOW_ISO8601_MS())",
 		actID, convID)
 	if err != nil {
 		t.Fatalf("insert activation: %v", err)

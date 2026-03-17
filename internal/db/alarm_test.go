@@ -52,7 +52,7 @@ func TestCreateAlarmPersistsRow(t *testing.T) {
 		originID        sql.NullString
 		goal            string
 		recurrence      sql.NullString
-		gotNextFireAt   string
+		gotNextFireAt   time.Time
 	)
 	err = conn.QueryRowContext(
 		ctx,
@@ -77,6 +77,9 @@ func TestCreateAlarmPersistsRow(t *testing.T) {
 	}
 	if recurrence.Valid {
 		t.Fatalf("expected null recurrence")
+	}
+	if !gotNextFireAt.Equal(fireAt) {
+		t.Fatalf("expected next_fire_at %s, got %s", fireAt, gotNextFireAt)
 	}
 }
 

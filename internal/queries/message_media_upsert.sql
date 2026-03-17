@@ -5,6 +5,6 @@ INSERT INTO message_media (
   media_id,
   created_at
 )
-VALUES (?1, ?2, ?3, datetime('now'))
+VALUES (?1, ?2, ?3, NOW_ISO8601_MS())
 ON CONFLICT (message_id) DO UPDATE SET
   media_id = excluded.media_id;

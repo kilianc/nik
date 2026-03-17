@@ -15,6 +15,7 @@ import (
 
 type DBTX interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
@@ -24,7 +25,66 @@ var schema string
 func init() {
 	sql.Register("sqlite3_nik", &sqlite3.SQLiteDriver{
 		ConnectHook: func(conn *sqlite3.SQLiteConn) error {
-			return conn.RegisterFunc("jaro_winkler_similarity", jaroWinklerSimilarity, true)
+			err := conn.RegisterFunc("jaro_winkler_similarity", jaroWinklerSimilarity, true)
+			if err != nil {
+				return err
+			}
+
+			err = conn.RegisterFunc("NOW_ISO8601_MS", func() string {
+				return ISO8601MS(time.Now())
+			}, false)
+			if err != nil {
+				return err
+			}
+
+			err = conn.RegisterFunc("ISO8601_MS", func(value any) (string, error) {
+				t, err := ParseTimeValue(value)
+				if err != nil {
+					return "", err
+				}
+
+				return ISO8601MS(t), nil
+			}, true)
+			if err != nil {
+				return err
+			}
+
+			err = conn.RegisterFunc("NULLABLE_ISO8601_MS", func(value any) (any, error) {
+				if value == nil {
+					return nil, nil
+				}
+
+				bytes, ok := value.([]byte)
+				if ok && bytes == nil {
+					return nil, nil
+				}
+
+				t, err := ParseTimeValue(value)
+				if err != nil {
+					return nil, err
+				}
+
+				return ISO8601MS(t), nil
+			}, true)
+			if err != nil {
+				return err
+			}
+
+			err = conn.RegisterFunc("IS_ISO8601_MS", func(value any) bool {
+				switch v := value.(type) {
+				case string:
+					return IsISO8601MS(v)
+				case []byte:
+					return IsISO8601MS(string(v))
+				default:
+					return false
+				}
+			}, true)
+			if err != nil {
+				return err
+			}
+
+			return nil
 		},
 	})
 }

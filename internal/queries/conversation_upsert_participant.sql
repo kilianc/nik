@@ -7,7 +7,7 @@ INSERT INTO conversation_participant (
   created_at,
   updated_at
 )
-VALUES (?1, ?2, ?3, ?4, datetime('now'), datetime('now'))
+VALUES (?1, ?2, ?3, ?4, NOW_ISO8601_MS(), NOW_ISO8601_MS())
 ON CONFLICT (conversation_id, contact_id) DO UPDATE SET
   display_name = COALESCE(excluded.display_name, conversation_participant.display_name),
-  updated_at = datetime('now');
+  updated_at = NOW_ISO8601_MS();

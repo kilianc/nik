@@ -177,7 +177,7 @@ func TestRunCriticRetryKeepsPromptContextAndUsesRetryActivation(t *testing.T) {
 
 	for _, actID := range []string{"critic-act-1", "critic-act-2"} {
 		_, err = conn.ExecContext(ctx,
-			"INSERT INTO activation (id, conversation_id, sources, model, created_at) VALUES (?, ?, '[\"critic\"]', 'test', datetime('now'))",
+			"INSERT INTO activation (id, conversation_id, sources, model, created_at) VALUES (?, ?, '[\"critic\"]', 'test', NOW_ISO8601_MS())",
 			actID,
 			testConvID,
 		)
