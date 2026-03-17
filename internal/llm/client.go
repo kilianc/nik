@@ -224,9 +224,10 @@ type CompletionResult struct {
 }
 
 const (
-	maxRounds     = 75
-	loopThreshold = 4
-	maxRetries    = 3
+	maxRounds       = 75
+	loopThreshold   = 4
+	maxRetries      = 3
+	maxHistoryPairs = 20
 )
 
 const jsonObjectInputHint = "Return a single json object only."
@@ -516,6 +517,12 @@ func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instru
 
 			items = append(items, responses.ResponseInputItemParamOfFunctionCallOutput(call.CallID, r.result))
 		}
+
+		before := len(items)
+		items = pruneItems(items, maxHistoryPairs)
+		if len(items) < before {
+			slog.Info("pruned tool history", "pkg", "llm", "round", round, "dropped_pairs", (before-len(items))/2)
+		}
 	}
 }
 
@@ -529,6 +536,19 @@ func ensureJSONInput(content string, jsonOutput bool) string {
 	}
 
 	return jsonObjectInputHint
+}
+
+func pruneItems(items responses.ResponseInputParam, maxPairs int) responses.ResponseInputParam {
+	pairCount := (len(items) - 1) / 2
+	if pairCount <= maxPairs {
+		return items
+	}
+
+	drop := (pairCount - maxPairs) * 2
+	pruned := make(responses.ResponseInputParam, 0, len(items)-drop)
+	pruned = append(pruned, items[0])
+	pruned = append(pruned, items[1+drop:]...)
+	return pruned
 }
 
 // completeStreaming uses the streaming API and collects the final completed

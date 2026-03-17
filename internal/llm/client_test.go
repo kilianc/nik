@@ -7,6 +7,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/openai/openai-go/v3/responses"
 )
 
 func TestIsImageMime(t *testing.T) {
@@ -201,4 +203,92 @@ func TestEnsureJSONInput(t *testing.T) {
 	if !strings.Contains(strings.ToLower(jsonObjectInputHint), "json") {
 		t.Fatalf("expected json hint to mention json, got %q", jsonObjectInputHint)
 	}
+}
+
+func TestPruneItems(t *testing.T) {
+	msg := responses.ResponseInputItemParamOfMessage("hello", responses.EasyInputMessageRoleUser)
+
+	makePair := func(id string) (responses.ResponseInputItemUnionParam, responses.ResponseInputItemUnionParam) {
+		fc := responses.ResponseInputItemParamOfFunctionCall(`{}`, id, "tool_"+id)
+		fco := responses.ResponseInputItemParamOfFunctionCallOutput(id, "result_"+id)
+		return fc, fco
+	}
+
+	buildItems := func(n int) responses.ResponseInputParam {
+		items := responses.ResponseInputParam{msg}
+		for i := range n {
+			fc, fco := makePair(fmt.Sprintf("call_%d", i))
+			items = append(items, fc, fco)
+		}
+		return items
+	}
+
+	t.Run("no-op under limit", func(t *testing.T) {
+		items := buildItems(15)
+		got := pruneItems(items, 20)
+		if len(got) != len(items) {
+			t.Fatalf("expected %d items, got %d", len(items), len(got))
+		}
+	})
+
+	t.Run("no-op at exact limit", func(t *testing.T) {
+		items := buildItems(20)
+		got := pruneItems(items, 20)
+		if len(got) != len(items) {
+			t.Fatalf("expected %d items, got %d", len(items), len(got))
+		}
+	})
+
+	t.Run("prunes one pair over limit", func(t *testing.T) {
+		items := buildItems(21)
+		got := pruneItems(items, 20)
+
+		wantLen := 1 + 20*2
+		if len(got) != wantLen {
+			t.Fatalf("expected %d items, got %d", wantLen, len(got))
+		}
+
+		if got[0].OfMessage == nil {
+			t.Fatalf("expected first item to be user message")
+		}
+
+		if got[1].OfFunctionCall == nil || got[1].OfFunctionCall.Name != "tool_call_1" {
+			t.Fatalf("expected oldest kept pair to be call_1, got %+v", got[1].OfFunctionCall)
+		}
+	})
+
+	t.Run("prunes many pairs", func(t *testing.T) {
+		items := buildItems(50)
+		got := pruneItems(items, 20)
+
+		wantLen := 1 + 20*2
+		if len(got) != wantLen {
+			t.Fatalf("expected %d items, got %d", wantLen, len(got))
+		}
+
+		if got[1].OfFunctionCall == nil || got[1].OfFunctionCall.Name != "tool_call_30" {
+			t.Fatalf("expected oldest kept pair to be call_30, got %+v", got[1].OfFunctionCall)
+		}
+
+		last := got[len(got)-1]
+		if last.OfFunctionCallOutput == nil || last.OfFunctionCallOutput.CallID != "call_49" {
+			t.Fatalf("expected last item to be output for call_49, got callID %q", last.OfFunctionCallOutput.CallID)
+		}
+	})
+
+	t.Run("zero pairs", func(t *testing.T) {
+		items := buildItems(0)
+		got := pruneItems(items, 20)
+		if len(got) != 1 {
+			t.Fatalf("expected 1 item (user msg only), got %d", len(got))
+		}
+	})
+
+	t.Run("one pair", func(t *testing.T) {
+		items := buildItems(1)
+		got := pruneItems(items, 20)
+		if len(got) != 3 {
+			t.Fatalf("expected 3 items, got %d", len(got))
+		}
+	})
 }
