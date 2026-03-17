@@ -13,11 +13,13 @@ import (
 type TaskAssessmentInsertParams struct {
 	TaskID                  string
 	ActivationID            string
-	Effectiveness           int
+	EffectivenessScore      int
+	EffectivenessFeedback   string
 	ExpectedDurationSeconds int
+	DurationFeedback        string
 	ToolFeedback            string
 	SkillFeedback           string
-	Suggestions             string
+	Recommendations         string
 }
 
 func TaskAssessmentInsert(ctx context.Context, db *sql.DB, p TaskAssessmentInsertParams) error {
@@ -25,11 +27,13 @@ func TaskAssessmentInsert(ctx context.Context, db *sql.DB, p TaskAssessmentInser
 		id.V7(),
 		p.TaskID,
 		p.ActivationID,
-		p.Effectiveness,
+		p.EffectivenessScore,
+		p.EffectivenessFeedback,
 		p.ExpectedDurationSeconds,
+		p.DurationFeedback,
 		p.ToolFeedback,
 		p.SkillFeedback,
-		p.Suggestions,
+		p.Recommendations,
 	)
 	if err != nil {
 		return fmt.Errorf("insert task assessment for %s: %w", p.TaskID, err)
