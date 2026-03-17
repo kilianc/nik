@@ -98,7 +98,7 @@ func AlarmUpdate(ctx context.Context, db DBTX, id string, p AlarmUpdateParams) e
 }
 
 func AlarmCancel(ctx context.Context, db *sql.DB, id string) error {
-	_, err := db.ExecContext(ctx, queries.AlarmCancel, id, time.Now())
+	_, err := db.ExecContext(ctx, queries.AlarmCancel, id)
 	return err
 }
 

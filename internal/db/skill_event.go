@@ -18,7 +18,7 @@ type SkillEventInsertParams struct {
 
 func SkillEventInsert(ctx context.Context, db DBTX, p SkillEventInsertParams) (SkillEvent, error) {
 	eid := id.V7()
-	now := time.Now().UTC()
+	now := time.Now()
 
 	var contentHash any
 	if p.ContentHash != "" {

@@ -85,7 +85,7 @@ func TestStartAndComplete(t *testing.T) {
 
 	actID := "act-start-test"
 	_, execErr := conn.ExecContext(ctx,
-		"INSERT INTO activation (id, conversation_id, sources, model, created_at) VALUES (?, ?, '[]', 'test', datetime('now'))",
+		"INSERT INTO activation (id, conversation_id, sources, model, created_at) VALUES (?, ?, '[]', 'test', NOW_ISO8601_MS())",
 		actID, testConvID)
 	if execErr != nil {
 		t.Fatalf("insert dummy activation: %v", execErr)

@@ -13,9 +13,9 @@ VALUES (
   'nik',
   json_array('nik'),
   json_array(?2),
-  ?3,
-  datetime('now'),
-  datetime('now')
+  ISO8601_MS(?3),
+  NOW_ISO8601_MS(),
+  NOW_ISO8601_MS()
 )
 ON CONFLICT (id) DO UPDATE SET
   name = CASE WHEN contact.name = '' THEN 'nik' ELSE contact.name END,
@@ -30,7 +30,7 @@ ON CONFLICT (id) DO UPDATE SET
     ELSE contact.whatsapp_ids
   END,
   last_message_at = CASE
-    WHEN contact.last_message_at IS NULL OR ?3 > contact.last_message_at THEN ?3
+    WHEN contact.last_message_at IS NULL OR ISO8601_MS(?3) > contact.last_message_at THEN ISO8601_MS(?3)
     ELSE contact.last_message_at
   END,
-  updated_at = datetime('now');
+  updated_at = NOW_ISO8601_MS();

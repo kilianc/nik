@@ -5,4 +5,4 @@ INSERT INTO task_report (
   content,
   created_at
 )
-VALUES (?1, ?2, ?3, ?4, ?5)
+VALUES (?1, ?2, ?3, ?4, ISO8601_MS(?5))

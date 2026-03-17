@@ -33,7 +33,6 @@ func ToolCallInsertOne(ctx context.Context, db *sql.DB, p ToolCallInsertParams) 
 		p.Output,
 		p.Duration.Milliseconds(),
 		errFlag,
-		time.Now().UTC(),
 	)
 	if err != nil {
 		return fmt.Errorf("insert tool_call %s: %w", p.Name, err)

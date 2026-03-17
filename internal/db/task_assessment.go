@@ -28,7 +28,6 @@ func TaskAssessmentInsert(ctx context.Context, db *sql.DB, p TaskAssessmentInser
 		p.ToolFeedback,
 		p.SkillFeedback,
 		p.Suggestions,
-		time.Now().UTC(),
 	)
 	if err != nil {
 		return fmt.Errorf("insert task assessment for %s: %w", p.TaskID, err)

@@ -12,7 +12,18 @@ INSERT INTO media (
   created_at,
   updated_at
 )
-VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, datetime('now'), datetime('now'))
+VALUES (
+  ?1,
+  ?2,
+  ?3,
+  ?4,
+  ?5,
+  ?6,
+  NULLABLE_ISO8601_MS(?7),
+  NULLABLE_ISO8601_MS(?8),
+  NOW_ISO8601_MS(),
+  NOW_ISO8601_MS()
+)
 ON CONFLICT (id) DO UPDATE SET
   mime_type = COALESCE(excluded.mime_type, media.mime_type),
   size_bytes = COALESCE(excluded.size_bytes, media.size_bytes),
@@ -21,4 +32,4 @@ ON CONFLICT (id) DO UPDATE SET
   transcript_text = COALESCE(excluded.transcript_text, media.transcript_text),
   described_at = COALESCE(excluded.described_at, media.described_at),
   transcribed_at = COALESCE(excluded.transcribed_at, media.transcribed_at),
-  updated_at = datetime('now');
+  updated_at = NOW_ISO8601_MS();

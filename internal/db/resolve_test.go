@@ -31,7 +31,7 @@ func TestResolveShortIDSingleMatch(t *testing.T) {
 
 	taskID := "01961234-5678-7000-8000-aabbccddeeff"
 	_, err = conn.ExecContext(ctx,
-		"INSERT INTO task (id, conversation_id, goal, status, thinking, created_at) VALUES (?, ?, 'test', 'pending', 'low', datetime('now'))",
+		"INSERT INTO task (id, conversation_id, goal, status, thinking, created_at) VALUES (?, ?, 'test', 'pending', 'low', NOW_ISO8601_MS())",
 		taskID, convID)
 	if err != nil {
 		t.Fatalf("insert task: %v", err)
@@ -81,7 +81,7 @@ func TestResolveShortIDMultipleMatches(t *testing.T) {
 		"01961234-5678-7000-8001-000000aaaaaa",
 	} {
 		_, err = conn.ExecContext(ctx,
-			"INSERT INTO task (id, conversation_id, goal, status, thinking, created_at) VALUES (?, ?, 'test', 'pending', 'low', datetime('now'))",
+			"INSERT INTO task (id, conversation_id, goal, status, thinking, created_at) VALUES (?, ?, 'test', 'pending', 'low', NOW_ISO8601_MS())",
 			id, convID)
 		if err != nil {
 			t.Fatalf("insert task %s: %v", id, err)

@@ -12,5 +12,5 @@ SET
   nicknames = CASE WHEN ?2 = 'nicknames' THEN ?4 ELSE nicknames END,
   emails = CASE WHEN ?2 = 'emails' THEN ?4 ELSE emails END,
   phone_numbers = CASE WHEN ?2 = 'phone_numbers' THEN ?4 ELSE phone_numbers END,
-  updated_at = datetime('now')
+  updated_at = NOW_ISO8601_MS()
 WHERE id = ?1;

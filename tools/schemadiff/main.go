@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/kciuffolo/nik/internal/db"
 )
 
 const schemaPath = "internal/db/schema.sql"
@@ -48,14 +48,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	live, err := sql.Open("sqlite3", fmt.Sprintf("file:%s?mode=ro", *dbPath))
+	live, err := sql.Open("sqlite3_nik", fmt.Sprintf("file:%s?mode=ro", *dbPath))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "open %s: %v\n", *dbPath, err)
 		os.Exit(1)
 	}
 	defer live.Close()
 
-	desired, err := sql.Open("sqlite3", ":memory:")
+	desired, err := sql.Open("sqlite3_nik", ":memory:")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "open in-memory db: %v\n", err)
 		os.Exit(1)

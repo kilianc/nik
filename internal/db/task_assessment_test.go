@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"testing"
+	"time"
 )
 
 func TestTaskAssessmentInsertAndQuery(t *testing.T) {
@@ -18,7 +19,7 @@ func TestTaskAssessmentInsertAndQuery(t *testing.T) {
 
 	actID := "act-assess-worker"
 	_, err = conn.ExecContext(ctx,
-		"INSERT INTO activation (id, conversation_id, sources, model, created_at) VALUES (?, ?, '[\"task\"]', 'gpt-4', datetime('now'))",
+		"INSERT INTO activation (id, conversation_id, sources, model, created_at) VALUES (?, ?, '[\"task\"]', 'gpt-4', NOW_ISO8601_MS())",
 		actID, convID)
 	if err != nil {
 		t.Fatalf("insert worker activation: %v", err)
@@ -26,7 +27,7 @@ func TestTaskAssessmentInsertAndQuery(t *testing.T) {
 
 	taskID := "task-assess-001"
 	_, err = conn.ExecContext(ctx,
-		"INSERT INTO task (id, conversation_id, goal, status, thinking, created_at) VALUES (?, ?, 'test goal', 'completed', 'low', datetime('now'))",
+		"INSERT INTO task (id, conversation_id, goal, status, thinking, created_at) VALUES (?, ?, 'test goal', 'completed', 'low', NOW_ISO8601_MS())",
 		taskID, convID)
 	if err != nil {
 		t.Fatalf("insert task: %v", err)
@@ -34,7 +35,7 @@ func TestTaskAssessmentInsertAndQuery(t *testing.T) {
 
 	criticActID := "act-assess-critic"
 	_, err = conn.ExecContext(ctx,
-		"INSERT INTO activation (id, conversation_id, sources, model, created_at) VALUES (?, ?, '[\"critic\"]', 'gpt-4.1-nano', datetime('now'))",
+		"INSERT INTO activation (id, conversation_id, sources, model, created_at) VALUES (?, ?, '[\"critic\"]', 'gpt-4.1-nano', NOW_ISO8601_MS())",
 		criticActID, convID)
 	if err != nil {
 		t.Fatalf("insert critic activation: %v", err)
@@ -89,7 +90,7 @@ func TestTaskAssessmentUniquePerTask(t *testing.T) {
 
 	actID := "act-assess-dup"
 	_, err = conn.ExecContext(ctx,
-		"INSERT INTO activation (id, conversation_id, sources, model, created_at) VALUES (?, ?, '[\"critic\"]', 'gpt-4.1-nano', datetime('now'))",
+		"INSERT INTO activation (id, conversation_id, sources, model, created_at) VALUES (?, ?, '[\"critic\"]', 'gpt-4.1-nano', NOW_ISO8601_MS())",
 		actID, convID)
 	if err != nil {
 		t.Fatalf("insert activation: %v", err)
@@ -97,7 +98,7 @@ func TestTaskAssessmentUniquePerTask(t *testing.T) {
 
 	actID2 := "act-assess-dup-2"
 	_, err = conn.ExecContext(ctx,
-		"INSERT INTO activation (id, conversation_id, sources, model, created_at) VALUES (?, ?, '[\"critic\"]', 'gpt-4.1-nano', datetime('now'))",
+		"INSERT INTO activation (id, conversation_id, sources, model, created_at) VALUES (?, ?, '[\"critic\"]', 'gpt-4.1-nano', NOW_ISO8601_MS())",
 		actID2, convID)
 	if err != nil {
 		t.Fatalf("insert activation 2: %v", err)
@@ -105,7 +106,7 @@ func TestTaskAssessmentUniquePerTask(t *testing.T) {
 
 	taskID := "task-assess-dup"
 	_, err = conn.ExecContext(ctx,
-		"INSERT INTO task (id, conversation_id, goal, status, thinking, created_at) VALUES (?, ?, 'goal', 'completed', 'low', datetime('now'))",
+		"INSERT INTO task (id, conversation_id, goal, status, thinking, created_at) VALUES (?, ?, 'goal', 'completed', 'low', NOW_ISO8601_MS())",
 		taskID, convID)
 	if err != nil {
 		t.Fatalf("insert task: %v", err)
@@ -143,22 +144,23 @@ func TestTaskAllToolCalls(t *testing.T) {
 
 	actID := "act-tc-test"
 	_, err = conn.ExecContext(ctx,
-		"INSERT INTO activation (id, conversation_id, sources, model, created_at) VALUES (?, ?, '[\"task\"]', 'gpt-4', datetime('now'))",
+		"INSERT INTO activation (id, conversation_id, sources, model, created_at) VALUES (?, ?, '[\"task\"]', 'gpt-4', NOW_ISO8601_MS())",
 		actID, convID)
 	if err != nil {
 		t.Fatalf("insert activation: %v", err)
 	}
 
 	_, err = conn.ExecContext(ctx,
-		"INSERT INTO tool_call (id, activation_id, name, input, output, duration_ms, error, created_at) VALUES ('tc1', ?, 'shell', '{\"action\":\"run\"}', 'ok', 100, 0, datetime('now'))",
+		"INSERT INTO tool_call (id, activation_id, name, input, output, duration_ms, error, created_at) VALUES ('tc1', ?, 'shell', '{\"action\":\"run\"}', 'ok', 100, 0, NOW_ISO8601_MS())",
 		actID)
 	if err != nil {
 		t.Fatalf("insert tool_call 1: %v", err)
 	}
 
+	nextCreatedAt := ISO8601MS(time.Now().Add(time.Second))
 	_, err = conn.ExecContext(ctx,
-		"INSERT INTO tool_call (id, activation_id, name, input, output, duration_ms, error, created_at) VALUES ('tc2', ?, 'db_query', '{\"sql\":\"SELECT 1\"}', 'error', 50, 1, datetime('now', '+1 second'))",
-		actID)
+		"INSERT INTO tool_call (id, activation_id, name, input, output, duration_ms, error, created_at) VALUES ('tc2', ?, 'db_query', '{\"sql\":\"SELECT 1\"}', 'error', 50, 1, ?)",
+		actID, nextCreatedAt)
 	if err != nil {
 		t.Fatalf("insert tool_call 2: %v", err)
 	}
@@ -200,22 +202,23 @@ func TestTaskReportsByTask(t *testing.T) {
 
 	taskID := "task-rpt-test"
 	_, err = conn.ExecContext(ctx,
-		"INSERT INTO task (id, conversation_id, goal, status, thinking, created_at) VALUES (?, ?, 'build', 'completed', 'low', datetime('now'))",
+		"INSERT INTO task (id, conversation_id, goal, status, thinking, created_at) VALUES (?, ?, 'build', 'completed', 'low', NOW_ISO8601_MS())",
 		taskID, convID)
 	if err != nil {
 		t.Fatalf("insert task: %v", err)
 	}
 
 	_, err = conn.ExecContext(ctx,
-		"INSERT INTO task_report (id, task_id, status, content, created_at) VALUES ('rpt1', ?, 'running', 'compiling...', datetime('now'))",
+		"INSERT INTO task_report (id, task_id, status, content, created_at) VALUES ('rpt1', ?, 'running', 'compiling...', NOW_ISO8601_MS())",
 		taskID)
 	if err != nil {
 		t.Fatalf("insert report 1: %v", err)
 	}
 
+	nextReportAt := ISO8601MS(time.Now().Add(time.Second))
 	_, err = conn.ExecContext(ctx,
-		"INSERT INTO task_report (id, task_id, status, content, created_at) VALUES ('rpt2', ?, 'completed', 'done', datetime('now', '+1 second'))",
-		taskID)
+		"INSERT INTO task_report (id, task_id, status, content, created_at) VALUES ('rpt2', ?, 'completed', 'done', ?)",
+		taskID, nextReportAt)
 	if err != nil {
 		t.Fatalf("insert report 2: %v", err)
 	}
