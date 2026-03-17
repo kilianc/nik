@@ -44,33 +44,49 @@ func TestTaskAssessmentInsertAndQuery(t *testing.T) {
 	err = TaskAssessmentInsert(ctx, conn, TaskAssessmentInsertParams{
 		TaskID:                  taskID,
 		ActivationID:            criticActID,
-		Effectiveness:           4,
+		EffectivenessScore:      4,
+		EffectivenessFeedback:   "completed on first try with clean output, one minor formatting issue.",
 		ExpectedDurationSeconds: 120,
+		DurationFeedback:        "observed 180s vs expected 120s -- 60s overhead from shell retries on flaky test.",
 		ToolFeedback:            "shell: helped run tests. db_query: ok.",
 		SkillFeedback:           "web skill loaded but unused -- wrong skill for the task.",
-		Suggestions:             "add a build skill with cached dep resolution.",
+		Recommendations:         "add a build skill with cached dep resolution.",
 	})
 	if err != nil {
 		t.Fatalf("insert assessment: %v", err)
 	}
 
-	var gotEffectiveness int
+	var gotEffectivenessScore int
 	var gotExpectedDurationSeconds int
-	var gotToolFeedback, gotSkillFeedback, gotSuggestions string
+	var gotEffectivenessFeedback, gotDurationFeedback, gotToolFeedback, gotSkillFeedback, gotRecommendations string
 
 	err = conn.QueryRowContext(ctx,
-		"SELECT effectiveness, expected_duration_seconds, tool_feedback, skill_feedback, suggestions FROM task_assessment WHERE task_id = ?",
+		"SELECT effectiveness_score, effectiveness_feedback, expected_duration_seconds, duration_feedback, tool_feedback, skill_feedback, recommendations FROM task_assessment WHERE task_id = ?",
 		taskID,
-	).Scan(&gotEffectiveness, &gotExpectedDurationSeconds, &gotToolFeedback, &gotSkillFeedback, &gotSuggestions)
+	).Scan(
+		&gotEffectivenessScore,
+		&gotEffectivenessFeedback,
+		&gotExpectedDurationSeconds,
+		&gotDurationFeedback,
+		&gotToolFeedback,
+		&gotSkillFeedback,
+		&gotRecommendations,
+	)
 	if err != nil {
 		t.Fatalf("query assessment: %v", err)
 	}
 
-	if gotEffectiveness != 4 {
-		t.Fatalf("expected effectiveness 4, got %d", gotEffectiveness)
+	if gotEffectivenessScore != 4 {
+		t.Fatalf("expected effectiveness_score 4, got %d", gotEffectivenessScore)
+	}
+	if gotEffectivenessFeedback != "completed on first try with clean output, one minor formatting issue." {
+		t.Fatalf("unexpected effectiveness_feedback: %q", gotEffectivenessFeedback)
 	}
 	if gotExpectedDurationSeconds != 120 {
 		t.Fatalf("expected expected_duration_seconds 120, got %d", gotExpectedDurationSeconds)
+	}
+	if gotDurationFeedback != "observed 180s vs expected 120s -- 60s overhead from shell retries on flaky test." {
+		t.Fatalf("unexpected duration_feedback: %q", gotDurationFeedback)
 	}
 	if gotToolFeedback != "shell: helped run tests. db_query: ok." {
 		t.Fatalf("unexpected tool_feedback: %q", gotToolFeedback)
@@ -78,8 +94,8 @@ func TestTaskAssessmentInsertAndQuery(t *testing.T) {
 	if gotSkillFeedback != "web skill loaded but unused -- wrong skill for the task." {
 		t.Fatalf("unexpected skill_feedback: %q", gotSkillFeedback)
 	}
-	if gotSuggestions != "add a build skill with cached dep resolution." {
-		t.Fatalf("unexpected suggestions: %q", gotSuggestions)
+	if gotRecommendations != "add a build skill with cached dep resolution." {
+		t.Fatalf("unexpected recommendations: %q", gotRecommendations)
 	}
 }
 
@@ -121,7 +137,7 @@ func TestTaskAssessmentUniquePerTask(t *testing.T) {
 	err = TaskAssessmentInsert(ctx, conn, TaskAssessmentInsertParams{
 		TaskID:                  taskID,
 		ActivationID:            actID,
-		Effectiveness:           3,
+		EffectivenessScore:      3,
 		ExpectedDurationSeconds: 60,
 	})
 	if err != nil {
@@ -131,7 +147,7 @@ func TestTaskAssessmentUniquePerTask(t *testing.T) {
 	err = TaskAssessmentInsert(ctx, conn, TaskAssessmentInsertParams{
 		TaskID:                  taskID,
 		ActivationID:            actID2,
-		Effectiveness:           5,
+		EffectivenessScore:      5,
 		ExpectedDurationSeconds: 30,
 	})
 	if err == nil {

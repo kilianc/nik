@@ -122,8 +122,20 @@ func TestFallbackCriticPrompt(t *testing.T) {
 	if !strings.Contains(got, "JSON") {
 		t.Fatalf("expected JSON instruction in fallback prompt, got %q", got)
 	}
+	if !strings.Contains(got, "effectiveness_score") {
+		t.Fatalf("expected effectiveness_score in fallback prompt, got %q", got)
+	}
+	if !strings.Contains(got, "effectiveness_feedback") {
+		t.Fatalf("expected effectiveness_feedback in fallback prompt, got %q", got)
+	}
 	if !strings.Contains(got, "expected_duration_seconds") {
 		t.Fatalf("expected expected_duration_seconds in fallback prompt, got %q", got)
+	}
+	if !strings.Contains(got, "duration_feedback") {
+		t.Fatalf("expected duration_feedback in fallback prompt, got %q", got)
+	}
+	if !strings.Contains(got, "recommendations") {
+		t.Fatalf("expected recommendations in fallback prompt, got %q", got)
 	}
 }
 
@@ -193,7 +205,7 @@ func TestRunCriticRetryKeepsPromptContextAndUsesRetryActivation(t *testing.T) {
 		actIDs: []string{"critic-act-1", "critic-act-2"},
 		results: []llm.CompletionResult{
 			{Output: "not json"},
-			{Output: `{"effectiveness": 4, "expected_duration_seconds": 180, "tool_feedback": "helped", "skill_feedback": "none", "suggestions": "none"}`},
+			{Output: `{"effectiveness_score": 4, "effectiveness_feedback": "clean first-try completion", "expected_duration_seconds": 180, "duration_feedback": "on track", "tool_feedback": "helped", "skill_feedback": "none", "recommendations": "none"}`},
 		},
 	}
 
@@ -228,12 +240,12 @@ func TestRunCriticRetryKeepsPromptContextAndUsesRetryActivation(t *testing.T) {
 	}
 
 	var gotActID string
-	var effectiveness int
+	var effectivenessScore int
 	var expectedDurationSeconds int
 	err = conn.QueryRowContext(ctx,
-		"SELECT activation_id, effectiveness, expected_duration_seconds FROM task_assessment WHERE task_id = ?1",
+		"SELECT activation_id, effectiveness_score, expected_duration_seconds FROM task_assessment WHERE task_id = ?1",
 		task.ID,
-	).Scan(&gotActID, &effectiveness, &expectedDurationSeconds)
+	).Scan(&gotActID, &effectivenessScore, &expectedDurationSeconds)
 	if err != nil {
 		t.Fatalf("query task assessment: %v", err)
 	}
@@ -242,8 +254,8 @@ func TestRunCriticRetryKeepsPromptContextAndUsesRetryActivation(t *testing.T) {
 		t.Fatalf("expected retry activation id critic-act-2, got %s", gotActID)
 	}
 
-	if effectiveness != 4 {
-		t.Fatalf("expected effectiveness 4, got %d", effectiveness)
+	if effectivenessScore != 4 {
+		t.Fatalf("expected effectiveness_score 4, got %d", effectivenessScore)
 	}
 	if expectedDurationSeconds != 180 {
 		t.Fatalf("expected expected_duration_seconds 180, got %d", expectedDurationSeconds)
@@ -252,72 +264,78 @@ func TestRunCriticRetryKeepsPromptContextAndUsesRetryActivation(t *testing.T) {
 
 func TestParseCriticOutput(t *testing.T) {
 	t.Run("valid json", func(t *testing.T) {
-		out, err := parseCriticOutput(`{"effectiveness": 4, "expected_duration_seconds": 90, "tool_feedback": "shell helped", "skill_feedback": "web not useful", "suggestions": "add build skill"}`)
+		out, err := parseCriticOutput(`{"effectiveness_score": 4, "effectiveness_feedback": "solid first-try result", "expected_duration_seconds": 90, "duration_feedback": "observed 95s vs expected 90s -- roughly equal", "tool_feedback": "shell helped", "skill_feedback": "web not useful", "recommendations": "add build skill"}`)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if out.Effectiveness != 4 {
-			t.Fatalf("expected effectiveness 4, got %d", out.Effectiveness)
+		if out.EffectivenessScore != 4 {
+			t.Fatalf("expected effectiveness_score 4, got %d", out.EffectivenessScore)
 		}
-		if out.ToolFeedback != "shell helped" {
-			t.Fatalf("expected tool_feedback 'shell helped', got %q", out.ToolFeedback)
+		if out.EffectivenessFeedback != "solid first-try result" {
+			t.Fatalf("expected effectiveness_feedback 'solid first-try result', got %q", out.EffectivenessFeedback)
 		}
 		if out.ExpectedDurationSeconds != 90 {
 			t.Fatalf("expected expected_duration_seconds 90, got %d", out.ExpectedDurationSeconds)
 		}
+		if out.DurationFeedback != "observed 95s vs expected 90s -- roughly equal" {
+			t.Fatalf("expected duration_feedback 'observed 95s vs expected 90s -- roughly equal', got %q", out.DurationFeedback)
+		}
+		if out.ToolFeedback != "shell helped" {
+			t.Fatalf("expected tool_feedback 'shell helped', got %q", out.ToolFeedback)
+		}
 		if out.SkillFeedback != "web not useful" {
 			t.Fatalf("expected skill_feedback 'web not useful', got %q", out.SkillFeedback)
 		}
-		if out.Suggestions != "add build skill" {
-			t.Fatalf("expected suggestions 'add build skill', got %q", out.Suggestions)
+		if out.Recommendations != "add build skill" {
+			t.Fatalf("expected recommendations 'add build skill', got %q", out.Recommendations)
 		}
 	})
 
 	t.Run("markdown fenced json", func(t *testing.T) {
-		input := "```json\n{\"effectiveness\": 5, \"expected_duration_seconds\": 30, \"tool_feedback\": \"ok\", \"skill_feedback\": \"ok\", \"suggestions\": \"none\"}\n```"
+		input := "```json\n{\"effectiveness_score\": 5, \"effectiveness_feedback\": \"nailed it\", \"expected_duration_seconds\": 30, \"duration_feedback\": \"fast\", \"tool_feedback\": \"ok\", \"skill_feedback\": \"ok\", \"recommendations\": \"none\"}\n```"
 		out, err := parseCriticOutput(input)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if out.Effectiveness != 5 {
-			t.Fatalf("expected effectiveness 5, got %d", out.Effectiveness)
+		if out.EffectivenessScore != 5 {
+			t.Fatalf("expected effectiveness_score 5, got %d", out.EffectivenessScore)
 		}
 	})
 
 	t.Run("bare fenced json", func(t *testing.T) {
-		input := "```\n{\"effectiveness\": 3, \"expected_duration_seconds\": 45, \"tool_feedback\": \"ok\", \"skill_feedback\": \"ok\", \"suggestions\": \"none\"}\n```"
+		input := "```\n{\"effectiveness_score\": 3, \"effectiveness_feedback\": \"partial\", \"expected_duration_seconds\": 45, \"duration_feedback\": \"ok\", \"tool_feedback\": \"ok\", \"skill_feedback\": \"ok\", \"recommendations\": \"none\"}\n```"
 		out, err := parseCriticOutput(input)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if out.Effectiveness != 3 {
-			t.Fatalf("expected effectiveness 3, got %d", out.Effectiveness)
+		if out.EffectivenessScore != 3 {
+			t.Fatalf("expected effectiveness_score 3, got %d", out.EffectivenessScore)
 		}
 	})
 
 	t.Run("effectiveness too low", func(t *testing.T) {
-		_, err := parseCriticOutput(`{"effectiveness": 0, "expected_duration_seconds": 1, "tool_feedback": "", "skill_feedback": "", "suggestions": ""}`)
+		_, err := parseCriticOutput(`{"effectiveness_score": 0, "expected_duration_seconds": 1, "duration_feedback": "", "tool_feedback": "", "skill_feedback": "", "recommendations": ""}`)
 		if err == nil {
-			t.Fatal("expected error for effectiveness 0")
+			t.Fatal("expected error for effectiveness_score 0")
 		}
 	})
 
 	t.Run("effectiveness too high", func(t *testing.T) {
-		_, err := parseCriticOutput(`{"effectiveness": 6, "expected_duration_seconds": 1, "tool_feedback": "", "skill_feedback": "", "suggestions": ""}`)
+		_, err := parseCriticOutput(`{"effectiveness_score": 6, "expected_duration_seconds": 1, "duration_feedback": "", "tool_feedback": "", "skill_feedback": "", "recommendations": ""}`)
 		if err == nil {
-			t.Fatal("expected error for effectiveness 6")
+			t.Fatal("expected error for effectiveness_score 6")
 		}
 	})
 
 	t.Run("missing expected duration", func(t *testing.T) {
-		_, err := parseCriticOutput(`{"effectiveness": 4, "tool_feedback": "", "skill_feedback": "", "suggestions": ""}`)
+		_, err := parseCriticOutput(`{"effectiveness_score": 4, "tool_feedback": "", "skill_feedback": "", "recommendations": ""}`)
 		if err == nil {
 			t.Fatal("expected error for missing expected_duration_seconds")
 		}
 	})
 
 	t.Run("negative expected duration", func(t *testing.T) {
-		_, err := parseCriticOutput(`{"effectiveness": 4, "expected_duration_seconds": -1, "tool_feedback": "", "skill_feedback": "", "suggestions": ""}`)
+		_, err := parseCriticOutput(`{"effectiveness_score": 4, "expected_duration_seconds": -1, "duration_feedback": "", "tool_feedback": "", "skill_feedback": "", "recommendations": ""}`)
 		if err == nil {
 			t.Fatal("expected error for negative expected_duration_seconds")
 		}
@@ -331,23 +349,23 @@ func TestParseCriticOutput(t *testing.T) {
 	})
 
 	t.Run("whitespace padded", func(t *testing.T) {
-		out, err := parseCriticOutput(`  {"effectiveness": 2, "expected_duration_seconds": 12, "tool_feedback": "x", "skill_feedback": "y", "suggestions": "z"}  `)
+		out, err := parseCriticOutput(`  {"effectiveness_score": 2, "effectiveness_feedback": "mostly failed", "expected_duration_seconds": 12, "duration_feedback": "ok", "tool_feedback": "x", "skill_feedback": "y", "recommendations": "z"}  `)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if out.Effectiveness != 2 {
-			t.Fatalf("expected effectiveness 2, got %d", out.Effectiveness)
+		if out.EffectivenessScore != 2 {
+			t.Fatalf("expected effectiveness_score 2, got %d", out.EffectivenessScore)
 		}
 	})
 
 	t.Run("object valued fields", func(t *testing.T) {
-		input := `{"effectiveness": 3, "expected_duration_seconds": 300, "tool_feedback": {"shell": {"verdict": "helped"}}, "skill_feedback": "ok", "suggestions": ["add build skill"]}`
+		input := `{"effectiveness_score": 3, "effectiveness_feedback": "partial", "expected_duration_seconds": 300, "duration_feedback": "slow -- retries", "tool_feedback": {"shell": {"verdict": "helped"}}, "skill_feedback": "ok", "recommendations": ["add build skill"]}`
 		out, err := parseCriticOutput(input)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if out.Effectiveness != 3 {
-			t.Fatalf("expected effectiveness 3, got %d", out.Effectiveness)
+		if out.EffectivenessScore != 3 {
+			t.Fatalf("expected effectiveness_score 3, got %d", out.EffectivenessScore)
 		}
 		if !strings.Contains(out.ToolFeedback, "shell") {
 			t.Fatalf("expected tool_feedback to contain 'shell', got %q", out.ToolFeedback)
@@ -355,8 +373,8 @@ func TestParseCriticOutput(t *testing.T) {
 		if out.SkillFeedback != "ok" {
 			t.Fatalf("expected skill_feedback 'ok', got %q", out.SkillFeedback)
 		}
-		if !strings.Contains(out.Suggestions, "add build skill") {
-			t.Fatalf("expected suggestions to contain 'add build skill', got %q", out.Suggestions)
+		if !strings.Contains(out.Recommendations, "add build skill") {
+			t.Fatalf("expected recommendations to contain 'add build skill', got %q", out.Recommendations)
 		}
 	})
 }

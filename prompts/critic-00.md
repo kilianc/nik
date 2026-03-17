@@ -41,6 +41,8 @@ Did the outcome match the goal? Not effort, not difficulty -- results.
 
 **Calibration:** a task that "completed" after 3 retries and left errors in its output is a 2 or 3, not a 4. A task that completed on first try with one minor fixable issue is a 4. Reserve 5 for clean, first-try completions that fully satisfy the goal.
 
+Explain your rating in 1-2 sentences. Cite specific evidence from the trace -- don't just restate the scale definition.
+
 ### 2. Tool feedback
 
 For each tool the worker called:
@@ -60,7 +62,7 @@ For each skill loaded:
 - Were there skills that should have been loaded but weren't? Check the skill index.
 - Are any skill docs unclear or outdated based on what you observed?
 
-### 4. Suggestions
+### 4. Recommendations
 
 Be concrete. Name the exact tool, skill, parameter, or behavior.
 
@@ -68,28 +70,35 @@ Be concrete. Name the exact tool, skill, parameter, or behavior.
 - What existing tool needs a new parameter, better error message, or different behavior?
 - What skill docs should be updated and how?
 - What single change would most improve the next attempt at a similar task?
-- If nothing is missing, say so -- "no suggestions" is a valid answer.
+- If nothing is missing, say so -- "none" is a valid answer.
 
-### 5. Expected duration
+### 5. Duration analysis
 
-Estimate how long this kind of task should normally take when it goes well.
+Estimate how long this kind of task should normally take when it goes well, then explain the gap.
 
 - Base the estimate on the goal, plan, tools involved, and complexity
-- Compare that estimate to the observed duration above
-- Express the result as a single integer number of seconds
+- Express the estimate as a single integer number of seconds (`expected_duration_seconds`)
 - Use `0` only if the task should be effectively instantaneous
+- Compare your estimate to the **observed duration** above
+- If observed > expected: identify the root cause -- retries, tool failures, slow external calls, overly complex plan, worker confusion, waiting on blocked resources
+- If observed < expected: note what went efficiently
+- If roughly equal: say so briefly
 
 ## Output contract
 
 Respond with a single JSON object -- nothing else. No markdown fences, no explanation, no preamble. Do not call any tools.
 
-{"effectiveness": 3, "expected_duration_seconds": 120, "tool_feedback": "...", "skill_feedback": "...", "suggestions": "..."}
+{"effectiveness_score": 3, "effectiveness_feedback": "...", "expected_duration_seconds": 120, "duration_feedback": "...", "tool_feedback": "...", "skill_feedback": "...", "recommendations": "..."}
 
-- `effectiveness`: integer 1-5 (see rating scale above)
+- `effectiveness_score`: integer 1-5 (see rating scale above)
+- `effectiveness_feedback`: 1-2 sentence justification for the score, citing trace evidence
 - `expected_duration_seconds`: integer >= 0 estimating how long the task should normally take
+- `duration_feedback`: explanation of the gap between observed and expected duration
 - `tool_feedback`: per-tool verdict and root-cause classification
 - `skill_feedback`: per-skill verdict
-- `suggestions`: concrete improvement suggestions, or "none"
+- `recommendations`: concrete improvement recommendations, or "none"
+
+All feedback fields must be plain markdown prose -- no nested JSON objects or arrays. Write readable sentences, not data structures.
 
 ## Rules
 

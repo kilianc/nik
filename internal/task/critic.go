@@ -28,11 +28,13 @@ type criticPromptData struct {
 }
 
 type assessOutput struct {
-	Effectiveness           int    `json:"effectiveness"`
+	EffectivenessScore      int    `json:"effectiveness_score"`
+	EffectivenessFeedback   string `json:"effectiveness_feedback"`
 	ExpectedDurationSeconds int    `json:"expected_duration_seconds"`
+	DurationFeedback        string `json:"duration_feedback"`
 	ToolFeedback            string `json:"tool_feedback"`
 	SkillFeedback           string `json:"skill_feedback"`
-	Suggestions             string `json:"suggestions"`
+	Recommendations         string `json:"recommendations"`
 }
 
 const criticTimeout = 5 * time.Minute
@@ -94,11 +96,13 @@ func (r *Runner) RunCritic(ctx context.Context, t db.Task) {
 	err = r.svc.InsertAssessment(ctx, db.TaskAssessmentInsertParams{
 		TaskID:                  t.ID,
 		ActivationID:            actID,
-		Effectiveness:           assessment.Effectiveness,
+		EffectivenessScore:      assessment.EffectivenessScore,
+		EffectivenessFeedback:   assessment.EffectivenessFeedback,
 		ExpectedDurationSeconds: assessment.ExpectedDurationSeconds,
+		DurationFeedback:        assessment.DurationFeedback,
 		ToolFeedback:            assessment.ToolFeedback,
 		SkillFeedback:           assessment.SkillFeedback,
-		Suggestions:             assessment.Suggestions,
+		Recommendations:         assessment.Recommendations,
 	})
 	if err != nil {
 		slog.Warn("critic insert assessment", "pkg", "task", "task_id", t.ID, "error", err)
@@ -120,11 +124,13 @@ func parseCriticOutput(raw string) (assessOutput, error) {
 	}
 
 	var intermediate struct {
-		Effectiveness           int             `json:"effectiveness"`
+		EffectivenessScore      int             `json:"effectiveness_score"`
+		EffectivenessFeedback   json.RawMessage `json:"effectiveness_feedback"`
 		ExpectedDurationSeconds *int            `json:"expected_duration_seconds"`
+		DurationFeedback        json.RawMessage `json:"duration_feedback"`
 		ToolFeedback            json.RawMessage `json:"tool_feedback"`
 		SkillFeedback           json.RawMessage `json:"skill_feedback"`
-		Suggestions             json.RawMessage `json:"suggestions"`
+		Recommendations         json.RawMessage `json:"recommendations"`
 	}
 
 	err := json.Unmarshal([]byte(raw), &intermediate)
@@ -132,8 +138,8 @@ func parseCriticOutput(raw string) (assessOutput, error) {
 		return assessOutput{}, fmt.Errorf("unmarshal critic output: %w", err)
 	}
 
-	if intermediate.Effectiveness < 1 || intermediate.Effectiveness > 5 {
-		return assessOutput{}, fmt.Errorf("effectiveness must be 1-5, got %d", intermediate.Effectiveness)
+	if intermediate.EffectivenessScore < 1 || intermediate.EffectivenessScore > 5 {
+		return assessOutput{}, fmt.Errorf("effectiveness_score must be 1-5, got %d", intermediate.EffectivenessScore)
 	}
 
 	if intermediate.ExpectedDurationSeconds == nil {
@@ -145,11 +151,13 @@ func parseCriticOutput(raw string) (assessOutput, error) {
 	}
 
 	out := assessOutput{
-		Effectiveness:           intermediate.Effectiveness,
+		EffectivenessScore:      intermediate.EffectivenessScore,
+		EffectivenessFeedback:   coerceString(intermediate.EffectivenessFeedback),
 		ExpectedDurationSeconds: *intermediate.ExpectedDurationSeconds,
+		DurationFeedback:        coerceString(intermediate.DurationFeedback),
 		ToolFeedback:            coerceString(intermediate.ToolFeedback),
 		SkillFeedback:           coerceString(intermediate.SkillFeedback),
-		Suggestions:             coerceString(intermediate.Suggestions),
+		Recommendations:         coerceString(intermediate.Recommendations),
 	}
 
 	return out, nil
@@ -277,7 +285,7 @@ func (r *Runner) renderCriticPrompt(t db.Task, toolCalls, reports, skills string
 }
 
 func fallbackCriticPrompt(t db.Task, toolCalls, reports string) string {
-	return fmt.Sprintf("Evaluate task %s.\nGoal: %s\nStatus: %s\nObserved duration: %s\n\nTool calls:\n%s\nReports:\n%s\n\nRespond with JSON: {\"effectiveness\": <1-5>, \"expected_duration_seconds\": <integer>, \"tool_feedback\": \"...\", \"skill_feedback\": \"...\", \"suggestions\": \"...\"}",
+	return fmt.Sprintf("Evaluate task %s.\nGoal: %s\nStatus: %s\nObserved duration: %s\n\nTool calls:\n%s\nReports:\n%s\n\nRespond with JSON: {\"effectiveness_score\": <1-5>, \"effectiveness_feedback\": \"...\", \"expected_duration_seconds\": <integer>, \"duration_feedback\": \"...\", \"tool_feedback\": \"...\", \"skill_feedback\": \"...\", \"recommendations\": \"...\"}\n\nAll feedback fields must be plain markdown prose -- no nested JSON.",
 		t.ID, t.Goal, t.Status, observedDuration(t), toolCalls, reports)
 }
 
