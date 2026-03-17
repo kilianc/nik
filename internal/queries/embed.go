@@ -181,9 +181,6 @@ var TaskReportLastStatus string
 //go:embed task_update_last_report_at.sql
 var TaskUpdateLastReportAt string
 
-//go:embed task_tool_calls.sql
-var TaskToolCalls string
-
 // shell session queries
 
 //go:embed shell_session_upsert.sql

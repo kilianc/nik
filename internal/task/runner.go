@@ -332,7 +332,8 @@ func (r *Runner) Run(ctx context.Context, t db.Task) {
 	defs, exec := llm.SplitTools(allTools)
 
 	instructions := r.renderPrompt(t, defs)
-	actID, ch := r.llm.Complete(ctx, instructions, llm.StaticInput(""), defs, exec)
+	nudge := r.buildNudge(t)
+	actID, ch := r.llm.Complete(ctx, instructions, llm.StaticInput(""), defs, exec, llm.WithOnIdle(nudge))
 
 	err := r.svc.Start(ctx, t.ID, actID)
 	if err != nil {
@@ -356,7 +357,7 @@ func (r *Runner) Run(ctx context.Context, t db.Task) {
 		return
 	}
 
-	finalStatus := "completed"
+	finalStatus := "failed"
 	reportStatus, err := r.svc.LastReportStatus(ctx, t.ID)
 	if err == nil && (reportStatus == "completed" || reportStatus == "failed") {
 		finalStatus = reportStatus
@@ -386,4 +387,20 @@ func (r *Runner) Cancel(taskID string) bool {
 
 	v.(context.CancelFunc)()
 	return true
+}
+
+func (r *Runner) buildNudge(t db.Task) func(string) string {
+	return func(_ string) string {
+		reportStatus, err := r.svc.LastReportStatus(context.Background(), t.ID)
+		if err == nil && (reportStatus == "completed" || reportStatus == "failed") {
+			return ""
+		}
+
+		nudge, err := os.ReadFile(filepath.Join(r.cfg.PromptsPath(), "task-01-nudge.md"))
+		if err != nil {
+			return ""
+		}
+
+		return string(nudge)
+	}
 }
