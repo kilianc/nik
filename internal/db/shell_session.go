@@ -5,12 +5,11 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/kciuffolo/nik/internal/id"
 	"github.com/kciuffolo/nik/internal/queries"
 )
 
-type ShellOutputUpsertParams struct {
-	SessionID    string
+type ShellSessionUpsertParams struct {
+	ID           string
 	ActivationID string
 	Command      string
 	Description  string
@@ -19,15 +18,14 @@ type ShellOutputUpsertParams struct {
 	Alive        bool
 }
 
-func ShellOutputUpsert(ctx context.Context, db DBTX, p ShellOutputUpsertParams) error {
+func ShellSessionUpsert(ctx context.Context, db DBTX, p ShellSessionUpsertParams) error {
 	aliveFlag := 0
 	if p.Alive {
 		aliveFlag = 1
 	}
 
-	_, err := db.ExecContext(ctx, queries.ShellOutputUpsert,
-		id.V7(),
-		p.SessionID,
+	_, err := db.ExecContext(ctx, queries.ShellSessionUpsert,
+		p.ID,
 		p.ActivationID,
 		p.Command,
 		p.Description,
@@ -36,40 +34,40 @@ func ShellOutputUpsert(ctx context.Context, db DBTX, p ShellOutputUpsertParams) 
 		aliveFlag,
 	)
 	if err != nil {
-		return fmt.Errorf("upsert shell output %s: %w", p.SessionID, err)
+		return fmt.Errorf("upsert shell session %s: %w", p.ID, err)
 	}
 
 	return nil
 }
 
-type ShellOutputUpdateParams struct {
-	SessionID string
-	Output    string
-	ExitCode  *int
-	Alive     bool
+type ShellSessionUpdateParams struct {
+	ID       string
+	Output   string
+	ExitCode *int
+	Alive    bool
 }
 
-func ShellOutputUpdate(ctx context.Context, db DBTX, p ShellOutputUpdateParams) error {
+func ShellSessionUpdate(ctx context.Context, db DBTX, p ShellSessionUpdateParams) error {
 	aliveFlag := 0
 	if p.Alive {
 		aliveFlag = 1
 	}
 
-	_, err := db.ExecContext(ctx, queries.ShellOutputUpdate,
-		p.SessionID,
+	_, err := db.ExecContext(ctx, queries.ShellSessionUpdate,
+		p.ID,
 		p.Output,
 		p.ExitCode,
 		aliveFlag,
 	)
 	if err != nil {
-		return fmt.Errorf("update shell output %s: %w", p.SessionID, err)
+		return fmt.Errorf("update shell session %s: %w", p.ID, err)
 	}
 
 	return nil
 }
 
-func ShellOutputAliveIDs(ctx context.Context, conn *sql.DB) ([]string, error) {
-	rows, err := conn.QueryContext(ctx, queries.ShellOutputAlive)
+func ShellSessionAliveIDs(ctx context.Context, conn *sql.DB) ([]string, error) {
+	rows, err := conn.QueryContext(ctx, queries.ShellSessionAlive)
 	if err != nil {
 		return nil, fmt.Errorf("list alive shell sessions: %w", err)
 	}

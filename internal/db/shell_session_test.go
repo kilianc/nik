@@ -35,7 +35,7 @@ func seedShellActivation(t *testing.T, conn DBTX) string {
 	return actID
 }
 
-func TestShellOutputUpsert(t *testing.T) {
+func TestShellSessionUpsert(t *testing.T) {
 	conn, err := OpenInMemory()
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -46,8 +46,8 @@ func TestShellOutputUpsert(t *testing.T) {
 	actID := seedShellActivation(t, conn)
 
 	code := 0
-	err = ShellOutputUpsert(ctx, conn, ShellOutputUpsertParams{
-		SessionID:    "abc123",
+	err = ShellSessionUpsert(ctx, conn, ShellSessionUpsertParams{
+		ID:           "abc123",
 		ActivationID: actID,
 		Command:      "echo hi",
 		Description:  "test command",
@@ -59,7 +59,7 @@ func TestShellOutputUpsert(t *testing.T) {
 		t.Fatalf("upsert: %v", err)
 	}
 
-	ids, err := ShellOutputAliveIDs(ctx, conn)
+	ids, err := ShellSessionAliveIDs(ctx, conn)
 	if err != nil {
 		t.Fatalf("alive ids: %v", err)
 	}
@@ -67,8 +67,8 @@ func TestShellOutputUpsert(t *testing.T) {
 		t.Fatalf("expected 0 alive, got %d", len(ids))
 	}
 
-	err = ShellOutputUpsert(ctx, conn, ShellOutputUpsertParams{
-		SessionID:    "def456",
+	err = ShellSessionUpsert(ctx, conn, ShellSessionUpsertParams{
+		ID:           "def456",
 		ActivationID: actID,
 		Command:      "sleep 60",
 		Description:  "long runner",
@@ -81,15 +81,15 @@ func TestShellOutputUpsert(t *testing.T) {
 
 	var rowID string
 	err = conn.QueryRowContext(ctx,
-		"SELECT id FROM shell_output WHERE session_id = 'def456'").Scan(&rowID)
+		"SELECT id FROM shell_session WHERE id = 'def456'").Scan(&rowID)
 	if err != nil {
 		t.Fatalf("select id after insert: %v", err)
 	}
-	if rowID == "" {
-		t.Fatal("expected shell_output.id to be set")
+	if rowID != "def456" {
+		t.Fatalf("expected shell_session.id def456, got %s", rowID)
 	}
 
-	ids, err = ShellOutputAliveIDs(ctx, conn)
+	ids, err = ShellSessionAliveIDs(ctx, conn)
 	if err != nil {
 		t.Fatalf("alive ids: %v", err)
 	}
@@ -98,11 +98,11 @@ func TestShellOutputUpsert(t *testing.T) {
 	}
 
 	exitCode := 0
-	err = ShellOutputUpdate(ctx, conn, ShellOutputUpdateParams{
-		SessionID: "def456",
-		Output:    "done",
-		ExitCode:  &exitCode,
-		Alive:     false,
+	err = ShellSessionUpdate(ctx, conn, ShellSessionUpdateParams{
+		ID:       "def456",
+		Output:   "done",
+		ExitCode: &exitCode,
+		Alive:    false,
 	})
 	if err != nil {
 		t.Fatalf("update: %v", err)
@@ -110,15 +110,15 @@ func TestShellOutputUpsert(t *testing.T) {
 
 	var updatedRowID string
 	err = conn.QueryRowContext(ctx,
-		"SELECT id FROM shell_output WHERE session_id = 'def456'").Scan(&updatedRowID)
+		"SELECT id FROM shell_session WHERE id = 'def456'").Scan(&updatedRowID)
 	if err != nil {
 		t.Fatalf("select id after update: %v", err)
 	}
 	if updatedRowID != rowID {
-		t.Fatalf("expected shell_output.id to stay %s, got %s", rowID, updatedRowID)
+		t.Fatalf("expected shell_session.id to stay %s, got %s", rowID, updatedRowID)
 	}
 
-	ids, err = ShellOutputAliveIDs(ctx, conn)
+	ids, err = ShellSessionAliveIDs(ctx, conn)
 	if err != nil {
 		t.Fatalf("alive ids after update: %v", err)
 	}
@@ -127,7 +127,7 @@ func TestShellOutputUpsert(t *testing.T) {
 	}
 }
 
-func TestShellOutputActivationIDPreserved(t *testing.T) {
+func TestShellSessionActivationIDPreserved(t *testing.T) {
 	conn, err := OpenInMemory()
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -137,8 +137,8 @@ func TestShellOutputActivationIDPreserved(t *testing.T) {
 	ctx := context.Background()
 	actID := seedShellActivation(t, conn)
 
-	err = ShellOutputUpsert(ctx, conn, ShellOutputUpsertParams{
-		SessionID:    "sess01",
+	err = ShellSessionUpsert(ctx, conn, ShellSessionUpsertParams{
+		ID:           "sess01",
 		ActivationID: actID,
 		Command:      "make build",
 		Description:  "build for Kevin",
@@ -151,7 +151,7 @@ func TestShellOutputActivationIDPreserved(t *testing.T) {
 
 	var got string
 	err = conn.QueryRowContext(ctx,
-		"SELECT activation_id FROM shell_output WHERE session_id = 'sess01'").Scan(&got)
+		"SELECT activation_id FROM shell_session WHERE id = 'sess01'").Scan(&got)
 	if err != nil {
 		t.Fatalf("select after insert: %v", err)
 	}
@@ -160,18 +160,18 @@ func TestShellOutputActivationIDPreserved(t *testing.T) {
 	}
 
 	exitCode := 0
-	err = ShellOutputUpdate(ctx, conn, ShellOutputUpdateParams{
-		SessionID: "sess01",
-		Output:    "done",
-		ExitCode:  &exitCode,
-		Alive:     false,
+	err = ShellSessionUpdate(ctx, conn, ShellSessionUpdateParams{
+		ID:       "sess01",
+		Output:   "done",
+		ExitCode: &exitCode,
+		Alive:    false,
 	})
 	if err != nil {
 		t.Fatalf("update: %v", err)
 	}
 
 	err = conn.QueryRowContext(ctx,
-		"SELECT activation_id FROM shell_output WHERE session_id = 'sess01'").Scan(&got)
+		"SELECT activation_id FROM shell_session WHERE id = 'sess01'").Scan(&got)
 	if err != nil {
 		t.Fatalf("select after update: %v", err)
 	}

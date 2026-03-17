@@ -203,9 +203,8 @@ CREATE TABLE IF NOT EXISTS task_report (
   CHECK (IS_ISO8601_MS(created_at))
 );
 
-CREATE TABLE IF NOT EXISTS shell_output (
+CREATE TABLE IF NOT EXISTS shell_session (
   id            TEXT PRIMARY KEY,
-  session_id    TEXT NOT NULL UNIQUE,
   activation_id TEXT NOT NULL REFERENCES activation(id),
   command       TEXT NOT NULL DEFAULT '',
   description   TEXT NOT NULL DEFAULT '',
