@@ -404,7 +404,11 @@ func retryHandler(svc *Service, runner *Runner) llm.ToolExecutor {
 
 		if original.Status == "pending" || original.Status == "running" {
 			runner.Cancel(original.ID)
-			svc.UpdateStatus(ctx, original.ID, "cancelled")
+
+			err = svc.UpdateStatus(ctx, original.ID, "cancelled")
+			if err != nil {
+				return llm.ToolError(err), nil
+			}
 		}
 
 		root := original.RetryForTaskID
