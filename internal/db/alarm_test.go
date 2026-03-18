@@ -431,6 +431,7 @@ func TestAlarmGet(t *testing.T) {
 		{"by id", "some alarm goal", "", false, true},
 		{"no match", "[NIK_JOURNAL] End of day journal", "[NIK_DIAGNOSTIC]", false, false},
 		{"ignores cancelled", "[NIK_BRIEFING] Morning briefing", "[NIK_BRIEFING]", true, false},
+		{"empty identifier", "any goal", "EMPTY", false, false},
 	}
 
 	for _, tt := range tests {
@@ -463,8 +464,11 @@ func TestAlarmGet(t *testing.T) {
 			}
 
 			query := tt.query
-			if query == "" {
+			switch query {
+			case "":
 				query = created.ID
+			case "EMPTY":
+				query = ""
 			}
 
 			found, ok, err := AlarmGet(ctx, conn, query)
