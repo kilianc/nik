@@ -6,6 +6,16 @@ import (
 	"testing"
 )
 
+func TestResolveShortIDRejectsInvalidTable(t *testing.T) {
+	_, err := ResolveShortID(context.Background(), nil, "message; DROP TABLE task", "abc")
+	if err == nil {
+		t.Fatal("expected error for invalid table")
+	}
+	if !strings.Contains(err.Error(), "invalid table") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestResolveShortIDFullUUID(t *testing.T) {
 	full := "01961234-5678-7000-8000-aabbccddeeff"
 
