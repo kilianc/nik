@@ -61,6 +61,10 @@ func describeMedia(ctx context.Context, call ToolCall, client *Client, home stri
 		args.FilePath = filepath.Join(home, args.FilePath)
 	}
 
+	if home != "" && !isUnderDir(args.FilePath, home) {
+		return ToolErrorf("file_path must be within %s", home), nil
+	}
+
 	ext := strings.ToLower(filepath.Ext(args.FilePath))
 	mimeType := mime.TypeByExtension(ext)
 
@@ -91,6 +95,14 @@ func describeMedia(ctx context.Context, call ToolCall, client *Client, home stri
 	}
 
 	return ToolResult(map[string]any{"type": "description", "text": text}), nil
+}
+
+func isUnderDir(path, base string) bool {
+	rel, err := filepath.Rel(filepath.Clean(base), filepath.Clean(path))
+	if err != nil {
+		return false
+	}
+	return !strings.HasPrefix(rel, "..")
 }
 
 func isAudioExt(ext string) bool {

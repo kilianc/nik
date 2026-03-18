@@ -98,6 +98,10 @@ func handleLoad(dirs []string, name string) (string, error) {
 		return `{"error":"empty name"}`, nil
 	}
 
+	if strings.ContainsAny(name, "/\\") || strings.Contains(name, "..") {
+		return llm.ToolErrorf("invalid skill name %q", name), nil
+	}
+
 	// search directories in reverse so workspace skills (last) take priority
 	for i := len(dirs) - 1; i >= 0; i-- {
 		path := filepath.Join(dirs[i], name, "SKILL.md")
