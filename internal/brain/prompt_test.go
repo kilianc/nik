@@ -31,32 +31,29 @@ func TestHTMLCommentStripping(t *testing.T) {
 }
 
 func TestBuildPromptDataBannedWords(t *testing.T) {
-	b := &Brain{
-		cfg: &config.Config{
-			Timezone:    "UTC",
-			BannedWords: []string{"forbidden", "blocked"},
-		},
+	tests := []struct {
+		name  string
+		words []string
+		want  int
+	}{
+		{"with words", []string{"forbidden", "blocked"}, 2},
+		{"empty", nil, 0},
 	}
 
-	data := b.buildPromptData(time.Now(), "")
-	if len(data.BannedWords) != 2 {
-		t.Fatalf("expected 2 banned words, got %d", len(data.BannedWords))
-	}
-	if data.BannedWords[0] != "forbidden" || data.BannedWords[1] != "blocked" {
-		t.Fatalf("unexpected banned words: %v", data.BannedWords)
-	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := &Brain{
+				cfg: &config.Config{
+					Timezone:    "UTC",
+					BannedWords: tt.words,
+				},
+			}
 
-func TestBuildPromptDataBannedWordsEmpty(t *testing.T) {
-	b := &Brain{
-		cfg: &config.Config{
-			Timezone: "UTC",
-		},
-	}
-
-	data := b.buildPromptData(time.Now(), "")
-	if len(data.BannedWords) != 0 {
-		t.Fatalf("expected 0 banned words, got %d", len(data.BannedWords))
+			data := b.buildPromptData(time.Now(), "")
+			if len(data.BannedWords) != tt.want {
+				t.Fatalf("expected %d banned words, got %d", tt.want, len(data.BannedWords))
+			}
+		})
 	}
 }
 

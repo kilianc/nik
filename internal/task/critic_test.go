@@ -11,42 +11,63 @@ import (
 )
 
 func TestExtractSkillNames(t *testing.T) {
-	calls := []db.ToolCallInfo{
-		{Name: "load_skill", Input: `{"action":"load","name":"web","reason":"fetch tweet"}`},
-		{Name: "shell", Input: `{"action":"run","command":"ls"}`},
-		{Name: "load_skill", Input: `{"action":"list","name":""}`},
-		{Name: "load_skill", Input: `{"action":"load","name":"journal","reason":"write entry"}`},
+	tests := []struct {
+		name  string
+		calls []db.ToolCallInfo
+		want  string
+	}{
+		{
+			"with skills",
+			[]db.ToolCallInfo{
+				{Name: "load_skill", Input: `{"action":"load","name":"web","reason":"fetch tweet"}`},
+				{Name: "shell", Input: `{"action":"run","command":"ls"}`},
+				{Name: "load_skill", Input: `{"action":"list","name":""}`},
+				{Name: "load_skill", Input: `{"action":"load","name":"journal","reason":"write entry"}`},
+			},
+			"web, journal",
+		},
+		{"empty", nil, "(none)"},
 	}
 
-	got := extractSkillNames(calls)
-	if got != "web, journal" {
-		t.Fatalf("expected 'web, journal', got %q", got)
-	}
-}
-
-func TestExtractSkillNamesEmpty(t *testing.T) {
-	got := extractSkillNames(nil)
-	if got != "(none)" {
-		t.Fatalf("expected '(none)', got %q", got)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractSkillNames(tt.calls)
+			if got != tt.want {
+				t.Fatalf("expected %q, got %q", tt.want, got)
+			}
+		})
 	}
 }
 
 func TestFormatToolCalls(t *testing.T) {
-	calls := []db.ToolCallInfo{
-		{Name: "shell", DurationMS: 120, Error: false},
-		{Name: "db_query", DurationMS: 50, Error: true, Output: "no such table: foo"},
+	tests := []struct {
+		name      string
+		calls     []db.ToolCallInfo
+		wantEmpty bool
+		wantSub   string
+	}{
+		{
+			"with calls",
+			[]db.ToolCallInfo{
+				{Name: "shell", DurationMS: 120, Error: false},
+				{Name: "db_query", DurationMS: 50, Error: true, Output: "no such table: foo"},
+			},
+			false,
+			"",
+		},
+		{"empty", nil, false, "(no tool calls recorded)"},
 	}
 
-	got := formatToolCalls(calls)
-	if got == "" {
-		t.Fatal("expected non-empty output")
-	}
-}
-
-func TestFormatToolCallsEmpty(t *testing.T) {
-	got := formatToolCalls(nil)
-	if got != "(no tool calls recorded)" {
-		t.Fatalf("expected placeholder, got %q", got)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := formatToolCalls(tt.calls)
+			if tt.wantSub != "" && got != tt.wantSub {
+				t.Fatalf("expected %q, got %q", tt.wantSub, got)
+			}
+			if tt.wantEmpty && got != "" {
+				t.Fatalf("expected empty, got %q", got)
+			}
+		})
 	}
 }
 

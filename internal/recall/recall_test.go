@@ -3,6 +3,7 @@ package recall
 import (
 	"context"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -23,46 +24,42 @@ func TestTokenEstimate(t *testing.T) {
 }
 
 func TestNumberRows(t *testing.T) {
-	input := `| date | type | entity | memory | conversation |
-|------|------|--------|--------|--------------|
-| 2026-02-13 | personal_fact | CT | phone number is +16129610041 | Terminus |
-| 2026-02-14 | preference | Kilian | prefers low-emoji responses | dm |`
-
-	numbered, rows := numberRows(input)
-
-	if len(rows) != 2 {
-		t.Fatalf("expected 2 rows, got %d", len(rows))
+	tests := []struct {
+		name         string
+		input        string
+		wantRows     int
+		wantNumbered bool
+	}{
+		{
+			"with data rows",
+			"| date | type | entity | memory | conversation |\n|------|------|--------|--------|--------------|\n| 2026-02-13 | personal_fact | CT | phone number is +16129610041 | Terminus |\n| 2026-02-14 | preference | Kilian | prefers low-emoji responses | dm |",
+			2,
+			true,
+		},
+		{"empty", "", 0, false},
+		{
+			"header only",
+			"| date | type | entity | memory | conversation |\n|------|------|--------|--------|--------------|",
+			0,
+			false,
+		},
 	}
 
-	if rows[0] != "| 2026-02-13 | personal_fact | CT | phone number is +16129610041 | Terminus |" {
-		t.Fatalf("unexpected row 0: %q", rows[0])
-	}
-	if rows[1] != "| 2026-02-14 | preference | Kilian | prefers low-emoji responses | dm |" {
-		t.Fatalf("unexpected row 1: %q", rows[1])
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			numbered, rows := numberRows(tt.input)
 
-	if !contains(numbered, "1:") || !contains(numbered, "2:") {
-		t.Fatalf("numbered output missing IDs:\n%s", numbered)
-	}
-}
+			if len(rows) != tt.wantRows {
+				t.Fatalf("expected %d rows, got %d", tt.wantRows, len(rows))
+			}
 
-func TestNumberRowsEmpty(t *testing.T) {
-	numbered, rows := numberRows("")
-	if len(rows) != 0 {
-		t.Fatalf("expected 0 rows, got %d", len(rows))
-	}
-	if numbered != "" {
-		t.Fatalf("expected empty numbered, got %q", numbered)
-	}
-}
-
-func TestNumberRowsHeaderOnly(t *testing.T) {
-	input := `| date | type | entity | memory | conversation |
-|------|------|--------|--------|--------------|`
-
-	_, rows := numberRows(input)
-	if len(rows) != 0 {
-		t.Fatalf("expected 0 rows for header-only input, got %d", len(rows))
+			if tt.wantNumbered && !strings.Contains(numbered, "1:") {
+				t.Fatalf("numbered output missing IDs:\n%s", numbered)
+			}
+			if !tt.wantNumbered && numbered != "" {
+				t.Fatalf("expected empty numbered, got %q", numbered)
+			}
+		})
 	}
 }
 
@@ -114,17 +111,4 @@ func TestParseSelectedIDs(t *testing.T) {
 			}
 		})
 	}
-}
-
-func contains(s, sub string) bool {
-	return len(s) >= len(sub) && searchString(s, sub)
-}
-
-func searchString(s, sub string) bool {
-	for i := 0; i <= len(s)-len(sub); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
 }

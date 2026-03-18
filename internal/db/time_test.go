@@ -18,16 +18,22 @@ func TestISO8601MS(t *testing.T) {
 }
 
 func TestIsISO8601MS(t *testing.T) {
-	if !IsISO8601MS("2026-03-16T22:04:05.123Z") {
-		t.Fatal("expected canonical timestamp to validate")
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		{"2026-03-16T22:04:05.123Z", true},
+		{"2026-03-16 22:04:05.123+00:00", false},
+		{"2026-03-16T22:04:05Z", false},
 	}
 
-	if IsISO8601MS("2026-03-16 22:04:05.123+00:00") {
-		t.Fatal("expected offset timestamp to fail validation")
-	}
-
-	if IsISO8601MS("2026-03-16T22:04:05Z") {
-		t.Fatal("expected second-precision timestamp to fail validation")
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := IsISO8601MS(tt.input)
+			if got != tt.want {
+				t.Fatalf("IsISO8601MS(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
 	}
 }
 

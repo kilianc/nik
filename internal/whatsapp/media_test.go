@@ -2,38 +2,42 @@ package whatsapp
 
 import "testing"
 
-func TestNormalizeMimeStripsParams(t *testing.T) {
-	got := normalizeMime("image/jpeg; charset=utf-8")
-	if got != "image/jpeg" {
-		t.Errorf("expected 'image/jpeg', got %q", got)
+func TestNormalizeMime(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"image/jpeg; charset=utf-8", "image/jpeg"},
+		{"", "application/octet-stream"},
+		{"audio/ogg", "audio/ogg"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := normalizeMime(tt.input)
+			if got != tt.want {
+				t.Errorf("expected %q, got %q", tt.want, got)
+			}
+		})
 	}
 }
 
-func TestNormalizeMimeDefaultsEmpty(t *testing.T) {
-	got := normalizeMime("")
-	if got != "application/octet-stream" {
-		t.Errorf("expected 'application/octet-stream', got %q", got)
+func TestExtensionFromMime(t *testing.T) {
+	tests := []struct {
+		mime string
+		want string
+	}{
+		{"image/png", ".png"},
+		{"application/x-unknown-type-zzz", ".bin"},
 	}
-}
 
-func TestNormalizeMimePassthrough(t *testing.T) {
-	got := normalizeMime("audio/ogg")
-	if got != "audio/ogg" {
-		t.Errorf("expected 'audio/ogg', got %q", got)
-	}
-}
-
-func TestExtensionFromMimeKnown(t *testing.T) {
-	ext := extensionFromMime("image/png")
-	if ext != ".png" {
-		t.Errorf("expected '.png', got %q", ext)
-	}
-}
-
-func TestExtensionFromMimeUnknown(t *testing.T) {
-	ext := extensionFromMime("application/x-unknown-type-zzz")
-	if ext != ".bin" {
-		t.Errorf("expected '.bin', got %q", ext)
+	for _, tt := range tests {
+		t.Run(tt.mime, func(t *testing.T) {
+			got := extensionFromMime(tt.mime)
+			if got != tt.want {
+				t.Errorf("expected %q, got %q", tt.want, got)
+			}
+		})
 	}
 }
 

@@ -7,84 +7,68 @@ import (
 	"testing"
 )
 
-func TestExtractAccountIDDirect(t *testing.T) {
-	claims := map[string]any{
-		"chatgpt_account_id": "acct-direct",
-	}
-	token := buildTestJWT(claims)
-
-	id := extractAccountID(token)
-	if id != "acct-direct" {
-		t.Errorf("extractAccountID = %q, want %q", id, "acct-direct")
-	}
-}
-
-func TestExtractAccountIDNested(t *testing.T) {
-	claims := map[string]any{
-		"https://api.openai.com/auth": map[string]any{
-			"chatgpt_account_id": "acct-nested",
+func TestExtractAccountID(t *testing.T) {
+	tests := []struct {
+		name   string
+		claims map[string]any
+		raw    string
+		want   string
+	}{
+		{
+			"direct claim",
+			map[string]any{"chatgpt_account_id": "acct-direct"},
+			"",
+			"acct-direct",
 		},
-	}
-	token := buildTestJWT(claims)
-
-	id := extractAccountID(token)
-	if id != "acct-nested" {
-		t.Errorf("extractAccountID = %q, want %q", id, "acct-nested")
-	}
-}
-
-func TestExtractAccountIDOrganizations(t *testing.T) {
-	claims := map[string]any{
-		"organizations": []any{
-			map[string]any{"id": "org-123"},
+		{
+			"nested claim",
+			map[string]any{"https://api.openai.com/auth": map[string]any{"chatgpt_account_id": "acct-nested"}},
+			"",
+			"acct-nested",
 		},
+		{
+			"organizations",
+			map[string]any{"organizations": []any{map[string]any{"id": "org-123"}}},
+			"",
+			"org-123",
+		},
+		{"invalid token", nil, "not-a-jwt", ""},
+		{"empty token", nil, "", ""},
 	}
-	token := buildTestJWT(claims)
 
-	id := extractAccountID(token)
-	if id != "org-123" {
-		t.Errorf("extractAccountID = %q, want %q", id, "org-123")
-	}
-}
-
-func TestExtractAccountIDInvalidToken(t *testing.T) {
-	id := extractAccountID("not-a-jwt")
-	if id != "" {
-		t.Errorf("extractAccountID = %q, want empty", id)
-	}
-}
-
-func TestExtractAccountIDEmptyToken(t *testing.T) {
-	id := extractAccountID("")
-	if id != "" {
-		t.Errorf("extractAccountID = %q, want empty", id)
-	}
-}
-
-func TestExtractCodeFromURL(t *testing.T) {
-	state := "test-state"
-	input := "http://localhost:1455/auth/callback?code=abc123&state=test-state"
-
-	code := extractCode(input, state)
-	if code != "abc123" {
-		t.Errorf("extractCode = %q, want %q", code, "abc123")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			token := tt.raw
+			if tt.claims != nil {
+				token = buildTestJWT(tt.claims)
+			}
+			got := extractAccountID(token)
+			if got != tt.want {
+				t.Errorf("extractAccountID = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 
-func TestExtractCodeStateMismatch(t *testing.T) {
-	code := extractCode(
-		"http://localhost:1455/auth/callback?code=abc123&state=wrong-state",
-		"expected-state",
-	)
-	if code != "" {
-		t.Errorf("extractCode = %q, want empty on state mismatch", code)
+func TestExtractCode(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		state string
+		want  string
+	}{
+		{"valid url", "http://localhost:1455/auth/callback?code=abc123&state=test-state", "test-state", "abc123"},
+		{"state mismatch", "http://localhost:1455/auth/callback?code=abc123&state=wrong-state", "expected-state", ""},
+		{"bare input", "just-a-code", "state", ""},
 	}
-}
 
-func TestExtractCodeBareInput(t *testing.T) {
-	code := extractCode("just-a-code", "state")
-	if code != "" {
-		t.Errorf("extractCode = %q, want empty for bare input", code)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractCode(tt.input, tt.state)
+			if got != tt.want {
+				t.Errorf("extractCode = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 
