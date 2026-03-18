@@ -27,11 +27,16 @@ func SkillChangeReflex(cfg *config.Config, conn *sql.DB) func(ctx context.Contex
 			content := string(raw)
 			contentHash := sha256.Sum256(raw)
 			installSection := extractInstallSection(content)
-			installHash := sha256.Sum256([]byte(installSection))
+
+			var installHashStr string
+			if installSection != "" {
+				h := sha256.Sum256([]byte(installSection))
+				installHashStr = hex.EncodeToString(h[:])
+			}
 
 			fsSkills[s.Name] = fsSkill{
 				contentHash: hex.EncodeToString(contentHash[:]),
-				installHash: hex.EncodeToString(installHash[:]),
+				installHash: installHashStr,
 			}
 		})
 		if err != nil {
@@ -65,8 +70,8 @@ func SkillChangeReflex(cfg *config.Config, conn *sql.DB) func(ctx context.Contex
 				continue
 			}
 
-			contentChanged := !prev.ContentHash.Valid || prev.ContentHash.String != fs.contentHash
-			installChanged := !prev.InstallHash.Valid || prev.InstallHash.String != fs.installHash
+			contentChanged := prev.ContentHash.String != fs.contentHash
+			installChanged := prev.InstallHash.String != fs.installHash
 
 			if !contentChanged && !installChanged {
 				continue

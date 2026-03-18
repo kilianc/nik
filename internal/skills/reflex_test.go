@@ -302,6 +302,36 @@ func TestSkillChangeReflexRecoversFromDBWipe(t *testing.T) {
 	}
 }
 
+func TestSkillChangeReflexNullInstallHashWhenNoInstallSection(t *testing.T) {
+	h, reflex := setupReflexTest(t)
+
+	writeSkillFile(t, h.skillsDir, "shell", "---\nname: shell\nsummary: shell tool\n---\n# Shell\nRun commands\n")
+	writeSkillFile(t, h.skillsDir, "journal", "---\nname: journal\nsummary: daily journal\ninstall: true\n---\n# Journal\n\n## Install\nCreate alarm at 11:30pm\n")
+
+	reflex(h.ctx)
+
+	skills, err := db.SkillList(h.ctx, h.conn)
+	if err != nil {
+		t.Fatalf("list skills: %v", err)
+	}
+	if len(skills) != 2 {
+		t.Fatalf("expected 2 skills, got %d", len(skills))
+	}
+
+	for _, s := range skills {
+		switch s.Name {
+		case "shell":
+			if s.InstallHash.Valid {
+				t.Fatalf("expected NULL install_hash for shell, got %q", s.InstallHash.String)
+			}
+		case "journal":
+			if !s.InstallHash.Valid || s.InstallHash.String == "" {
+				t.Fatalf("expected non-empty install_hash for journal")
+			}
+		}
+	}
+}
+
 func TestExtractInstallSection(t *testing.T) {
 	tests := []struct {
 		name    string

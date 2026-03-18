@@ -186,23 +186,27 @@ func renderSkillEvent(msg db.Message) entry {
 	var s db.Skill
 	_ = json.Unmarshal([]byte(msg.Body), &s)
 
-	var header, detail string
+	hasInstall := s.InstallHash.Valid && s.InstallHash.String != ""
+
+	var header string
+	lines := []string{}
+
 	switch msg.Kind {
 	case "skill_added":
 		header = "[Skill added]"
-		detail = "has install requirements, load and run ## Install"
+		lines = append(lines, header, "name: "+s.Name)
+		if hasInstall {
+			lines = append(lines, "MANDATORY: call load_skill for this skill and execute every step in ## Install")
+		}
 	case "skill_removed":
 		header = "[Skill removed]"
-		detail = "ask user before cleaning up resources"
+		lines = append(lines, header, "name: "+s.Name, "ask user before cleaning up resources")
 	case "skill_changed":
 		header = "[Skill changed]"
-		detail = "install requirements changed, load and run ## Install"
-	}
-
-	lines := []string{
-		header,
-		"name: " + s.Name,
-		detail,
+		lines = append(lines, header, "name: "+s.Name)
+		if hasInstall {
+			lines = append(lines, "MANDATORY: install requirements changed, call load_skill and re-evaluate ## Install idempotently (check existing state, no duplicate alarms)")
+		}
 	}
 
 	return entry{at: msg.SentAt, from: "skill", text: padLines(lines)}
