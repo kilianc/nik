@@ -6,9 +6,20 @@ import (
 	"fmt"
 )
 
+var allowedTables = map[string]bool{
+	"task":  true,
+	"alarm": true,
+}
+
 // ResolveShortID finds a full ID from a short suffix in the given table.
 // Returns an error if zero or multiple matches are found.
+// The table parameter is interpolated into SQL, so it is restricted to an
+// allowlist to prevent injection if a future caller passes untrusted input.
 func ResolveShortID(ctx context.Context, db *sql.DB, table, shortID string) (string, error) {
+	if !allowedTables[table] {
+		return "", fmt.Errorf("resolve short id: invalid table %q", table)
+	}
+
 	if len(shortID) >= 36 {
 		return shortID, nil
 	}
