@@ -327,6 +327,9 @@ func (r *Runner) Run(ctx context.Context, t db.Task) {
 		"sources":         `["task"]`,
 	})
 
+	// Workers inherit the spawning conversation's privilege level. Without
+	// this check, any allowed conversation could spawn a task with shell and
+	// db_query access, bypassing the brain's privilege controls.
 	tools := r.tools
 	if !r.cfg.IsPrivileged(t.ConversationID) {
 		tools = filterUnprivileged(tools)

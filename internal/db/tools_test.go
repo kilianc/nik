@@ -11,14 +11,40 @@ import (
 )
 
 func TestIsReadOnlyRecognizesAllowedPrefixes(t *testing.T) {
-	if !isReadOnly("select 1") {
-		t.Fatalf("expected SELECT query to be read-only")
+	allowed := []string{
+		"select 1",
+		"SELECT * FROM message",
+		"  with x as (select 1) select * from x",
+		"DESCRIBE foo",
+		"SELECT 1;",
+		"SELECT 1 ;  ",
+		"PRAGMA table_info(message)",
+		"PRAGMA main.table_info(message)",
+		"PRAGMA foreign_key_list(task)",
+		"PRAGMA integrity_check",
 	}
-	if !isReadOnly("  with x as (select 1) select * from x") {
-		t.Fatalf("expected WITH query to be read-only")
+	for _, q := range allowed {
+		if !isReadOnly(q) {
+			t.Fatalf("expected %q to be read-only", q)
+		}
 	}
-	if isReadOnly("delete from message") {
-		t.Fatalf("expected DELETE query to be rejected")
+
+	rejected := []string{
+		"delete from message",
+		"DROP TABLE message",
+		"UPDATE contact SET name = 'x'",
+		"INSERT INTO message (id) VALUES ('x')",
+		"SELECT 1; DROP TABLE message",
+		"SELECT 1; DELETE FROM contact",
+		"PRAGMA journal_mode=WAL",
+		"PRAGMA foreign_keys=OFF",
+		"PRAGMA journal_mode",
+		"PRAGMA",
+	}
+	for _, q := range rejected {
+		if isReadOnly(q) {
+			t.Fatalf("expected %q to be rejected", q)
+		}
 	}
 }
 
