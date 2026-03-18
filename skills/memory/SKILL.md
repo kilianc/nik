@@ -92,11 +92,13 @@ Good memories (specific, durable, actionable):
 **NOT memories** (skip these):
 
 - Reactions, emotions, excitement, opinions ("expresses excitement", "appreciates")
-- What someone asked you to do or what you did/said/built
+- Task execution details — what tools you used, steps you took, commands you ran, what you said or built
 - Anything about your tools, skills, capabilities, demos, or limitations
 - Scheduled tasks, alarms, reminders, or recurring reports someone asked you to set up — those live in the alarm system, not in memories
 - Greetings, small talk, system messages, tool calls
 - Vague or one-time observations
+
+If collaborative work produced a durable outcome about the person (a purchase, a decision, a choice), extract the outcome — not the task details.
 
 Only extract facts you would tell a colleague taking over this relationship.
 
