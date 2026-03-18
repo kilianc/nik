@@ -292,10 +292,13 @@ func (s *Service) Reply(ctx context.Context, conversationID string, body string)
 
 	delay := delayFn(body)
 	if delay > 0 {
+		timer := time.NewTimer(delay)
+		defer timer.Stop()
+
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(delay):
+		case <-timer.C:
 		}
 	}
 
@@ -369,10 +372,13 @@ func (s *Service) SendImage(ctx context.Context, conversationID string, imagePat
 
 	delay := delayFn(caption)
 	if delay > 0 {
+		timer := time.NewTimer(delay)
+		defer timer.Stop()
+
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(delay):
+		case <-timer.C:
 		}
 	}
 

@@ -263,6 +263,7 @@ func messageEntry(msg db.Message, sender string, database *sql.DB) entry {
 	if msg.IsFromMe {
 		sender = "YOU"
 	} else if sender == "" {
+		// should be impossible — senderLabels is built from the same msg slice
 		panic("message " + msg.ID + " has no sender label")
 	}
 
