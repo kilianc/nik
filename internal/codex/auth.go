@@ -143,7 +143,11 @@ func (a *Auth) refresh() error {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("refresh token: %s", string(body))
+		excerpt := string(body)
+		if len(excerpt) > 200 {
+			excerpt = excerpt[:200] + "…"
+		}
+		return fmt.Errorf("refresh token (HTTP %d): %s", resp.StatusCode, excerpt)
 	}
 
 	var tokenResp tokenResponse
