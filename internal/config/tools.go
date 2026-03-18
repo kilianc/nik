@@ -27,7 +27,7 @@ var configDef = llm.ToolDef{
 			},
 			"field": map[string]any{
 				"type":        "string",
-				"description": "Config field name for 'set'. Writable fields: timezone, location, media_dir, max_history, models.main.*, models.recall.*, models.critic.*.",
+				"description": "Config field name for 'set'. Writable fields: timezone, location, max_history, models.main.*, models.recall.*, models.critic.*.",
 			},
 			"value": map[string]any{
 				"type":        "string",
@@ -97,7 +97,6 @@ func configGet(cfg *Config) (string, error) {
 				"verbosity":        cfg.Models.Critic.Verbosity,
 			},
 		},
-		"media_dir":                   cfg.MediaDirValue,
 		"max_history":                 cfg.MaxHistory,
 		"timezone":                    cfg.Timezone,
 		"location":                    cfg.Location,
@@ -134,8 +133,6 @@ func configSet(cfg *Config, field, value string) (string, error) {
 		cfg.Timezone = value
 	case "location":
 		cfg.Location = value
-	case "media_dir":
-		cfg.MediaDirValue = value
 	case "max_history":
 		n, err := strconv.Atoi(value)
 		if err != nil {

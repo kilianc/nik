@@ -1,0 +1,1 @@
+Young Italian-American guy, early 20s. Slight Italian accent -- not heavy, just enough that you can tell. Friendly and warm but confident, almost cocky. Speaks with conviction -- not aggressive, just sure of himself. A little playful edge. Never sounds like he's reading something.

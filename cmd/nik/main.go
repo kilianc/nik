@@ -105,7 +105,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	whatsappClient, err := whatsapp.NewClient(cfg.WappSessionDBPath(), mediaPath, cfg.MediaDir())
+	whatsappClient, err := whatsapp.NewClient(cfg.WappSessionDBPath(), mediaPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
@@ -178,12 +178,18 @@ func main() {
 	llmClient.SetObserver(stats.NewRecorder(conn))
 
 	messagingSvc.SetSpeechFn(func(ctx context.Context, text string) (string, error) {
+		var instructions string
+		data, readErr := os.ReadFile(cfg.TTSInstructionsPath())
+		if readErr == nil {
+			instructions = strings.TrimSpace(string(data))
+		}
+
 		return llmClient.Speech(
 			ctx,
 			text,
 			cfg.TTSModelOrDefault(),
 			cfg.TTSVoiceOrDefault(),
-			cfg.Models.TTS.Instructions,
+			instructions,
 			cfg.TTSSpeedOrDefault(),
 		)
 	})

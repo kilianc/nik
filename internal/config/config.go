@@ -33,10 +33,9 @@ type ModelsConfig struct {
 }
 
 type TTSConfig struct {
-	Model        string  `yaml:"model"`
-	Voice        string  `yaml:"voice"`
-	Instructions string  `yaml:"instructions"`
-	Speed        float64 `yaml:"speed"`
+	Model string  `yaml:"model"`
+	Voice string  `yaml:"voice"`
+	Speed float64 `yaml:"speed"`
 }
 
 type Config struct {
@@ -46,7 +45,6 @@ type Config struct {
 	OpenAIKey       string       `yaml:"openai_key"`
 	UseCodex        bool         `yaml:"use_codex"`
 	Models          ModelsConfig `yaml:"models"`
-	MediaDirValue   string       `yaml:"media_dir"`
 	PromptsDirValue string       `yaml:"prompts_dir"`
 	SkillsDirValue  string       `yaml:"skills_dir"`
 
@@ -114,25 +112,8 @@ func (c Config) WorkspaceSkillsPath() string {
 	return filepath.Join(c.Home, "skills")
 }
 
-func (c Config) MediaDir() string {
-	if c.MediaDirValue == "" {
-		return "media"
-	}
-
-	return c.MediaDirValue
-}
-
 func (c Config) MediaPath() string {
-	dir := c.MediaDirValue
-	if dir == "" {
-		dir = "media"
-	}
-
-	if filepath.IsAbs(dir) {
-		return dir
-	}
-
-	return filepath.Join(c.Home, dir)
+	return filepath.Join(c.Home, "media")
 }
 
 func (c Config) TZ() *time.Location {
@@ -167,6 +148,15 @@ func (c Config) TTSModelOrDefault() string {
 		return "gpt-4o-mini-tts"
 	}
 	return c.Models.TTS.Model
+}
+
+func (c Config) TTSInstructionsPath() string {
+	override := filepath.Join(c.Home, "prompts", "tts-00.md")
+	if _, err := os.Stat(override); err == nil {
+		return override
+	}
+
+	return filepath.Join(c.PromptsPath(), "tts-00.md")
 }
 
 func (c Config) MemoriesPath() string {
