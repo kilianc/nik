@@ -19,10 +19,8 @@ models:
     model: gpt-4o-mini-tts
     voice: ash
     speed: 1.0
-    instructions: ""      # optional voice style instructions
 
 # paths (relative to home dir)
-media_dir: media
 prompts_dir: ../prompts
 skills_dir: ../skills
 

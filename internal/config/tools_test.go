@@ -118,10 +118,9 @@ func TestConfigSetRejectsInvalidPurposeModelFields(t *testing.T) {
 
 func TestConfigGetOmitsLegacyExaAPIKey(t *testing.T) {
 	cfg := &Config{
-		MediaDirValue: "media",
-		MaxHistory:    25,
-		Timezone:      "UTC",
-		Location:      "SF",
+		MaxHistory: 25,
+		Timezone:   "UTC",
+		Location:   "SF",
 	}
 
 	out, err := configGet(cfg)

@@ -29,11 +29,10 @@ type Client struct {
 	wm        *whatsmeow.Client
 	container *sqlstore.Container
 	mediaPath string
-	mediaDir  string
 	handlers  []func(any)
 }
 
-func NewClient(sessionPath string, mediaPath string, mediaDir string) (*Client, error) {
+func NewClient(sessionPath string, mediaPath string) (*Client, error) {
 	dsn := fmt.Sprintf("file:%s?_foreign_keys=on", sessionPath)
 	container, err := sqlstore.New(context.Background(), "sqlite3", dsn, newWaLogger("whatsmeow/db"))
 	if err != nil {
@@ -54,7 +53,6 @@ func NewClient(sessionPath string, mediaPath string, mediaDir string) (*Client, 
 		wm:        wm,
 		container: container,
 		mediaPath: mediaPath,
-		mediaDir:  mediaDir,
 	}, nil
 }
 

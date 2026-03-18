@@ -7,21 +7,46 @@ import (
 	"time"
 )
 
-func TestMediaPathHandlesDefaultRelativeAndAbsolute(t *testing.T) {
+func TestTTSInstructionsPathPrefersWorkspaceOverride(t *testing.T) {
+	dir := t.TempDir()
+	promptsDir := filepath.Join(dir, "builtin")
+	err := os.MkdirAll(promptsDir, 0o755)
+	if err != nil {
+		t.Fatalf("mkdir prompts: %v", err)
+	}
+	err = os.WriteFile(filepath.Join(promptsDir, "tts-00.md"), []byte("builtin"), 0o644)
+	if err != nil {
+		t.Fatalf("write builtin tts: %v", err)
+	}
+
+	c := Config{Home: dir, PromptsDirValue: promptsDir}
+
+	got := c.TTSInstructionsPath()
+	if got != filepath.Join(promptsDir, "tts-00.md") {
+		t.Fatalf("expected builtin path, got %q", got)
+	}
+
+	wsPrompts := filepath.Join(dir, "prompts")
+	err = os.MkdirAll(wsPrompts, 0o755)
+	if err != nil {
+		t.Fatalf("mkdir workspace prompts: %v", err)
+	}
+	err = os.WriteFile(filepath.Join(wsPrompts, "tts-00.md"), []byte("override"), 0o644)
+	if err != nil {
+		t.Fatalf("write workspace tts: %v", err)
+	}
+
+	got = c.TTSInstructionsPath()
+	if got != filepath.Join(wsPrompts, "tts-00.md") {
+		t.Fatalf("expected workspace override path %q, got %q", filepath.Join(wsPrompts, "tts-00.md"), got)
+	}
+}
+
+func TestMediaPathJoinsHomeAndMedia(t *testing.T) {
 	c := Config{Home: "/tmp/nik"}
 
 	if got := c.MediaPath(); got != filepath.Join("/tmp/nik", "media") {
-		t.Fatalf("expected default media path, got %q", got)
-	}
-
-	c.MediaDirValue = "files"
-	if got := c.MediaPath(); got != filepath.Join("/tmp/nik", "files") {
-		t.Fatalf("expected relative media path, got %q", got)
-	}
-
-	c.MediaDirValue = "/var/tmp/media"
-	if got := c.MediaPath(); got != "/var/tmp/media" {
-		t.Fatalf("expected absolute media path, got %q", got)
+		t.Fatalf("expected media path under home, got %q", got)
 	}
 }
 
