@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -107,7 +108,7 @@ func AlarmGet(ctx context.Context, db DBTX, identifier string) (Alarm, bool, err
 	row := db.QueryRowContext(ctx, queries.AlarmGet, identifier)
 
 	a, err := scanAlarm(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return Alarm{}, false, nil
 	}
 	if err != nil {
