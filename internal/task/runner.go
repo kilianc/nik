@@ -327,8 +327,13 @@ func (r *Runner) Run(ctx context.Context, t db.Task) {
 		"sources":         `["task"]`,
 	})
 
+	tools := r.tools
+	if !r.cfg.IsPrivileged(t.ConversationID) {
+		tools = filterUnprivileged(tools)
+	}
+
 	reportTool := BuildReportTool(r.svc, t.ID)
-	allTools := append(r.tools, reportTool)
+	allTools := append(tools, reportTool)
 	defs, exec := llm.SplitTools(allTools)
 
 	instructions := r.renderPrompt(t, defs)
@@ -387,6 +392,16 @@ func (r *Runner) Cancel(taskID string) bool {
 
 	v.(context.CancelFunc)()
 	return true
+}
+
+func filterUnprivileged(tools []llm.Tool) []llm.Tool {
+	var out []llm.Tool
+	for _, t := range tools {
+		if !t.Privileged {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 func (r *Runner) buildNudge(t db.Task) func(string) string {
