@@ -2,7 +2,6 @@
 name: web
 summary: Search the web, fetch URLs, and read tweets.
 tools: [shell]
-install: true
 ---
 
 # Web

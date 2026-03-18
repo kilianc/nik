@@ -4,7 +4,6 @@ summary: >
   Morning news research session and topic management.
   Load when someone mentions an interest or when a briefing alarm fires.
 tools: [shell, alarm, db_query, load_skill]
-install: true
 ---
 
 # Briefing

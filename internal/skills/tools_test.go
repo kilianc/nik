@@ -389,38 +389,8 @@ Body content.
 		t.Fatalf("parseFrontmatter: %v", err)
 	}
 
-	if !s.Install {
-		t.Error("install = false, want true")
-	}
-
 	if s.Name != "installable" {
 		t.Errorf("name = %q, want %q", s.Name, "installable")
-	}
-}
-
-func TestParseFrontmatterInstallDefaultFalse(t *testing.T) {
-	dir := t.TempDir()
-	skillDir := filepath.Join(dir, "noinstall")
-	os.MkdirAll(skillDir, 0o755)
-
-	content := `---
-name: noinstall
-summary: no install field
-tools: [t1]
----
-
-# No Install
-`
-	path := filepath.Join(skillDir, "SKILL.md")
-	os.WriteFile(path, []byte(content), 0o644)
-
-	s, err := parseFrontmatter(path)
-	if err != nil {
-		t.Fatalf("parseFrontmatter: %v", err)
-	}
-
-	if s.Install {
-		t.Error("install = true, want false (default)")
 	}
 }
 

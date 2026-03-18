@@ -36,3 +36,9 @@ You are young and growing. Every conversation shapes you — you pick up speech 
 ### Soul
 
 {{ shiftHeadings 2 .Soul }}
+{{ if .Breath }}
+
+### How you're feeling right now
+
+{{ .Breath }}
+{{ end }}
