@@ -236,7 +236,7 @@ type CompletionResult struct {
 const (
 	maxRounds       = 75
 	loopThreshold   = 4
-	maxRetries      = 3
+	maxRetries      = 5
 	maxHistoryPairs = 20
 )
 
@@ -624,8 +624,10 @@ func retryDelay(attempt int) time.Duration {
 	switch attempt {
 	case 1:
 		return 5 * time.Second
-	default:
+	case 2:
 		return 15 * time.Second
+	default:
+		return 30 * time.Second
 	}
 }
 
