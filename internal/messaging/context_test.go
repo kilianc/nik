@@ -42,66 +42,51 @@ func TestMessageLineIncludesMediaAndEditContext(t *testing.T) {
 }
 
 func TestMessageLineMediaUnavailable(t *testing.T) {
-	msg := db.Message{
-		ID:     "msg-audio",
-		Kind:   "audio",
-		Body:   "",
-		SentAt: time.Now(),
+	tests := []struct {
+		name           string
+		msg            db.Message
+		wantUnavail    bool
+		wantSubstrings []string
+	}{
+		{
+			name:           "audio with no path",
+			msg:            db.Message{ID: "msg-1", Kind: "audio", SentAt: time.Now()},
+			wantUnavail:    true,
+			wantSubstrings: []string{"(audio)"},
+		},
+		{
+			name:           "has path",
+			msg:            db.Message{ID: "msg-2", Kind: "audio", MediaLocalPath: sql.NullString{Valid: true, String: "media/abc.ogg"}, SentAt: time.Now()},
+			wantUnavail:    false,
+			wantSubstrings: []string{"media=media/abc.ogg"},
+		},
+		{
+			name:        "has description",
+			msg:         db.Message{ID: "msg-3", Kind: "audio", MediaDescribeText: sql.NullString{Valid: true, String: "a voice note"}, SentAt: time.Now()},
+			wantUnavail: false,
+		},
+		{
+			name:        "text kind",
+			msg:         db.Message{ID: "msg-4", Kind: "text", Body: "hello", SentAt: time.Now()},
+			wantUnavail: false,
+		},
 	}
 
-	line := formatMessageLine(msg, "Alice")
-	if !strings.Contains(line, "media_unavailable") {
-		t.Fatalf("expected media_unavailable for audio with no path, got %q", line)
-	}
-	if !strings.Contains(line, "(audio)") {
-		t.Fatalf("expected (audio) kind marker, got %q", line)
-	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			line := formatMessageLine(tt.msg, "Alice")
 
-func TestMessageLineMediaUnavailableNotShownWithPath(t *testing.T) {
-	msg := db.Message{
-		ID:             "msg-audio",
-		Kind:           "audio",
-		Body:           "",
-		MediaLocalPath: sql.NullString{Valid: true, String: "media/abc.ogg"},
-		SentAt:         time.Now(),
-	}
+			hasUnavail := strings.Contains(line, "media_unavailable")
+			if hasUnavail != tt.wantUnavail {
+				t.Fatalf("media_unavailable=%v, want %v; line=%q", hasUnavail, tt.wantUnavail, line)
+			}
 
-	line := formatMessageLine(msg, "Alice")
-	if strings.Contains(line, "media_unavailable") {
-		t.Fatalf("should not show media_unavailable when path exists, got %q", line)
-	}
-	if !strings.Contains(line, "media=media/abc.ogg") {
-		t.Fatalf("expected media path, got %q", line)
-	}
-}
-
-func TestMessageLineMediaUnavailableNotShownWithDescription(t *testing.T) {
-	msg := db.Message{
-		ID:                "msg-audio",
-		Kind:              "audio",
-		Body:              "",
-		MediaDescribeText: sql.NullString{Valid: true, String: "a voice note saying hello"},
-		SentAt:            time.Now(),
-	}
-
-	line := formatMessageLine(msg, "Alice")
-	if strings.Contains(line, "media_unavailable") {
-		t.Fatalf("should not show media_unavailable when description exists, got %q", line)
-	}
-}
-
-func TestMessageLineMediaUnavailableNotShownForText(t *testing.T) {
-	msg := db.Message{
-		ID:     "msg-text",
-		Kind:   "text",
-		Body:   "hello",
-		SentAt: time.Now(),
-	}
-
-	line := formatMessageLine(msg, "Alice")
-	if strings.Contains(line, "media_unavailable") {
-		t.Fatalf("text messages should not have media_unavailable, got %q", line)
+			for _, sub := range tt.wantSubstrings {
+				if !strings.Contains(line, sub) {
+					t.Fatalf("expected %q in line %q", sub, line)
+				}
+			}
+		})
 	}
 }
 

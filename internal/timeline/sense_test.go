@@ -3,12 +3,10 @@ package timeline
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/kciuffolo/nik/internal/alarms"
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/contacts"
 	"github.com/kciuffolo/nik/internal/db"
@@ -84,48 +82,67 @@ func insertMsg(t *testing.T, conn *sql.DB, convID string, id string, extMsgID st
 	}
 }
 
-func TestMessageEntryReactionToText(t *testing.T) {
-	conn, convID := setupTestDB(t)
+func TestMessageEntryReaction(t *testing.T) {
+	longBody := strings.Repeat("a", 250)
 
-	now := time.Date(2026, 3, 14, 9, 12, 30, 0, time.UTC)
-	insertMsg(t, conn, convID, "target-1", "ext-target-1", "text", "personal", now)
-
-	reaction := db.Message{
-		ID: "react-1", Kind: "reaction", Body: "📚",
-		IsFromMe: true, Platform: "whatsapp",
-		ContextStanzaID: sql.NullString{Valid: true, String: "ext-target-1"},
-		SentAt:          now.Add(time.Second),
+	tests := []struct {
+		name       string
+		targetID   string
+		targetKind string
+		targetBody string
+		emoji      string
+		wantText   string
+		wantFrom   string
+	}{
+		{
+			"to text",
+			"ext-target-1", "text", "personal", "📚",
+			`(📚) (reacting to [09:12:30] Sender: "personal")`,
+			"YOU",
+		},
+		{
+			"to media",
+			"ext-target-2", "image", "", "❤️",
+			"(❤️) (reacting to [09:12:30] Sender: (image))",
+			"YOU",
+		},
+		{
+			"removed reaction",
+			"ext-target-3", "text", "personal", "",
+			`(removed reaction) (reacting to [09:12:30] Sender: "personal")`,
+			"YOU",
+		},
+		{
+			"truncates long body",
+			"ext-target-4", "text", longBody, "🔥",
+			`(🔥) (reacting to [09:12:30] Sender: "` + longBody[:200] + `…")`,
+			"YOU",
+		},
 	}
 
-	e := messageEntry(reaction, "", conn)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			conn, convID := setupTestDB(t)
 
-	want := `(📚) (reacting to [09:12:30] Sender: "personal")`
-	if e.text != want {
-		t.Fatalf("got %q, want %q", e.text, want)
-	}
-	if e.from != "YOU" {
-		t.Fatalf("expected sender YOU, got %q", e.from)
-	}
-}
+			now := time.Date(2026, 3, 14, 9, 12, 30, 0, time.UTC)
+			insertMsg(t, conn, convID, "target-"+tt.name, tt.targetID, tt.targetKind, tt.targetBody, now)
 
-func TestMessageEntryReactionToMedia(t *testing.T) {
-	conn, convID := setupTestDB(t)
+			reaction := db.Message{
+				ID: "react-" + tt.name, Kind: "reaction", Body: tt.emoji,
+				IsFromMe: true, Platform: "whatsapp",
+				ContextStanzaID: sql.NullString{Valid: true, String: tt.targetID},
+				SentAt:          now.Add(time.Second),
+			}
 
-	now := time.Date(2026, 3, 14, 9, 12, 30, 0, time.UTC)
-	insertMsg(t, conn, convID, "target-2", "ext-target-2", "image", "", now)
+			e := messageEntry(reaction, "", conn)
 
-	reaction := db.Message{
-		ID: "react-2", Kind: "reaction", Body: "❤️",
-		IsFromMe: true, Platform: "whatsapp",
-		ContextStanzaID: sql.NullString{Valid: true, String: "ext-target-2"},
-		SentAt:          now.Add(time.Second),
-	}
-
-	e := messageEntry(reaction, "", conn)
-
-	want := "(❤️) (reacting to [09:12:30] Sender: (image))"
-	if e.text != want {
-		t.Fatalf("got %q, want %q", e.text, want)
+			if e.text != tt.wantText {
+				t.Fatalf("got %q, want %q", e.text, tt.wantText)
+			}
+			if tt.wantFrom != "" && e.from != tt.wantFrom {
+				t.Fatalf("expected from %q, got %q", tt.wantFrom, e.from)
+			}
+		})
 	}
 }
 
@@ -143,49 +160,6 @@ func TestMessageEntryReactionTargetMissing(t *testing.T) {
 
 	if e.text != "(👍)" {
 		t.Fatalf("expected fallback without target, got %q", e.text)
-	}
-}
-
-func TestMessageEntryRemovedReaction(t *testing.T) {
-	conn, convID := setupTestDB(t)
-
-	now := time.Date(2026, 3, 14, 9, 12, 30, 0, time.UTC)
-	insertMsg(t, conn, convID, "target-3", "ext-target-3", "text", "personal", now)
-
-	reaction := db.Message{
-		ID: "react-4", Kind: "reaction", Body: "",
-		IsFromMe: true, Platform: "whatsapp",
-		ContextStanzaID: sql.NullString{Valid: true, String: "ext-target-3"},
-		SentAt:          now.Add(time.Second),
-	}
-
-	e := messageEntry(reaction, "", conn)
-
-	want := `(removed reaction) (reacting to [09:12:30] Sender: "personal")`
-	if e.text != want {
-		t.Fatalf("got %q, want %q", e.text, want)
-	}
-}
-
-func TestMessageEntryReactionTruncatesLongBody(t *testing.T) {
-	conn, convID := setupTestDB(t)
-
-	now := time.Date(2026, 3, 14, 9, 12, 30, 0, time.UTC)
-	longBody := strings.Repeat("a", 250)
-	insertMsg(t, conn, convID, "target-4", "ext-target-4", "text", longBody, now)
-
-	reaction := db.Message{
-		ID: "react-5", Kind: "reaction", Body: "🔥",
-		IsFromMe: true, Platform: "whatsapp",
-		ContextStanzaID: sql.NullString{Valid: true, String: "ext-target-4"},
-		SentAt:          now.Add(time.Second),
-	}
-
-	e := messageEntry(reaction, "", conn)
-
-	want := `(🔥) (reacting to [09:12:30] Sender: "` + longBody[:200] + `…")`
-	if e.text != want {
-		t.Fatalf("got %q, want %q", e.text, want)
 	}
 }
 
@@ -318,101 +292,5 @@ func TestRenderUsesSystemMessagesOnly(t *testing.T) {
 	}
 	if !strings.Contains(out, "goal: check build") {
 		t.Fatalf("expected rendered timeline to include task goal, got %q", out)
-	}
-}
-
-func TestRenderSystemMessage(t *testing.T) {
-	now := time.Now().UTC()
-
-	tests := []struct {
-		name     string
-		kind     string
-		body     any
-		wantFrom string
-		wantSub  string
-	}{
-		{
-			name:     "task_report",
-			kind:     "task_report",
-			body:     db.TaskReport{TaskID: "aaaa-bbbb-cccc-dddd", Goal: "do thing", Status: "running", Content: "working on it"},
-			wantFrom: "task",
-			wantSub:  "[Task report]",
-		},
-		{
-			name:     "task_spawned",
-			kind:     "task_spawned",
-			body:     db.Task{ID: "aaaa-bbbb-cccc-dddd", Goal: "do thing"},
-			wantFrom: "system",
-			wantSub:  "[Task spawned]",
-		},
-		{
-			name:     "task_cancelled",
-			kind:     "task_cancelled",
-			body:     db.Task{ID: "aaaa-bbbb-cccc-dddd", Goal: "do thing"},
-			wantFrom: "system",
-			wantSub:  "[Task cancelled]",
-		},
-		{
-			name:     "alarm_fired",
-			kind:     "alarm_fired",
-			body:     db.Alarm{ID: "aaaa-bbbb-cccc-dddd", Goal: "check email"},
-			wantFrom: "alarm",
-			wantSub:  "[One-off alarm fired]",
-		},
-		{
-			name:     "alarm_stale",
-			kind:     "alarm_stale",
-			body:     db.Alarm{ID: "aaaa-bbbb-cccc-dddd", Goal: "check email"},
-			wantFrom: "alarm",
-			wantSub:  "[Alarm needs rescheduling]",
-		},
-		{
-			name:     "alarm_created",
-			kind:     "alarm_created",
-			body:     db.Alarm{ID: "aaaa-bbbb-cccc-dddd", Goal: "check email"},
-			wantFrom: "system",
-			wantSub:  "[Alarm created]",
-		},
-		{
-			name:     "alarm_updated",
-			kind:     "alarm_updated",
-			body:     alarms.AlarmUpdated{Alarm: db.Alarm{ID: "aaaa-bbbb-cccc-dddd", Goal: "check email"}, Note: "done"},
-			wantFrom: "system",
-			wantSub:  "note: done",
-		},
-		{
-			name:     "skill_added",
-			kind:     "skill_added",
-			body:     db.Skill{Name: "journal", Status: "active"},
-			wantFrom: "skill",
-			wantSub:  "[Skill added]",
-		},
-		{
-			name:     "skill_removed",
-			kind:     "skill_removed",
-			body:     db.Skill{Name: "journal", Status: "removed"},
-			wantFrom: "skill",
-			wantSub:  "[Skill removed]",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			bodyJSON, _ := json.Marshal(tt.body)
-			msg := db.Message{
-				Kind:   tt.kind,
-				Body:   string(bodyJSON),
-				SentAt: now,
-			}
-
-			e := renderSystemMessage(msg)
-
-			if e.from != tt.wantFrom {
-				t.Errorf("from = %q, want %q", e.from, tt.wantFrom)
-			}
-			if !strings.Contains(e.text, tt.wantSub) {
-				t.Errorf("text = %q, want substring %q", e.text, tt.wantSub)
-			}
-		})
 	}
 }

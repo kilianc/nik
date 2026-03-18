@@ -25,30 +25,27 @@ func TestBuildToolsReturnsAlarmTools(t *testing.T) {
 	}
 }
 
-func TestAlarmHandlerValidatesGoal(t *testing.T) {
+func TestAlarmHandlerValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    string
+		wantSub string
+	}{
+		{"empty goal", `{"origin_contact_id":"contact-1","goal":"","fire_at":"2026-01-01T00:00:00Z"}`, "empty goal"},
+		{"empty origin_contact_id", `{"origin_contact_id":"","goal":"check in","fire_at":"2026-01-01T00:00:00Z"}`, "empty origin_contact_id"},
+	}
+
 	handler := alarmHandler(&Service{})
 
-	out, err := handler(context.Background(), llm.ToolCall{
-		Arguments: `{"origin_contact_id":"contact-1","goal":"","fire_at":"2026-01-01T00:00:00Z"}`,
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.Contains(out, "empty goal") {
-		t.Fatalf("expected empty goal validation, got %q", out)
-	}
-}
-
-func TestAlarmHandlerValidatesOriginContactID(t *testing.T) {
-	handler := alarmHandler(&Service{})
-
-	out, err := handler(context.Background(), llm.ToolCall{
-		Arguments: `{"origin_contact_id":"","goal":"check in","fire_at":"2026-01-01T00:00:00Z"}`,
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.Contains(out, "empty origin_contact_id") {
-		t.Fatalf("expected empty origin_contact_id validation, got %q", out)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out, err := handler(context.Background(), llm.ToolCall{Arguments: tt.args})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !strings.Contains(out, tt.wantSub) {
+				t.Fatalf("expected %q in output, got %q", tt.wantSub, out)
+			}
+		})
 	}
 }

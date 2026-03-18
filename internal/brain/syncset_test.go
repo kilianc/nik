@@ -5,27 +5,26 @@ import (
 	"testing"
 )
 
-func TestSyncSetTrySetFirstCallSucceeds(t *testing.T) {
-	s := NewSyncSet()
-	if !s.TrySet("a") {
-		t.Fatal("first TrySet should return true")
+func TestSyncSetTrySet(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(s *SyncSet)
+		want  bool
+	}{
+		{"first call succeeds", func(s *SyncSet) {}, true},
+		{"duplicate fails", func(s *SyncSet) { s.TrySet("a") }, false},
+		{"after delete succeeds", func(s *SyncSet) { s.TrySet("a"); s.Delete("a") }, true},
 	}
-}
 
-func TestSyncSetTrySetDuplicateFails(t *testing.T) {
-	s := NewSyncSet()
-	s.TrySet("a")
-	if s.TrySet("a") {
-		t.Fatal("duplicate TrySet should return false")
-	}
-}
-
-func TestSyncSetDeleteAllowsReuse(t *testing.T) {
-	s := NewSyncSet()
-	s.TrySet("a")
-	s.Delete("a")
-	if !s.TrySet("a") {
-		t.Fatal("TrySet after Delete should return true")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := NewSyncSet()
+			tt.setup(s)
+			got := s.TrySet("a")
+			if got != tt.want {
+				t.Fatalf("TrySet = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 

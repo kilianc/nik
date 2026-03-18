@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kciuffolo/nik/internal/alarms"
 	"github.com/kciuffolo/nik/internal/db"
 )
 
@@ -20,85 +21,162 @@ func skillMessage(kind string, skill db.Skill) db.Message {
 	}
 }
 
-func TestRenderSkillEventAddedWithInstall(t *testing.T) {
-	msg := skillMessage("skill_added", db.Skill{
-		Name:        "breathing",
-		InstallHash: sql.NullString{String: "abc123", Valid: true},
-	})
-
-	e := renderSkillEvent(msg)
-
-	if !strings.Contains(e.text, "MANDATORY") {
-		t.Fatalf("expected MANDATORY directive, got: %s", e.text)
+func TestRenderSkillEvent(t *testing.T) {
+	tests := []struct {
+		name       string
+		kind       string
+		skill      db.Skill
+		wantSubs   []string
+		wantAbsent []string
+	}{
+		{
+			"added with install",
+			"skill_added",
+			db.Skill{Name: "breathing", InstallHash: sql.NullString{String: "abc123", Valid: true}},
+			[]string{"MANDATORY", "load_skill", "[Skill added]"},
+			nil,
+		},
+		{
+			"added without install",
+			"skill_added",
+			db.Skill{Name: "shell"},
+			[]string{"[Skill added]", "shell"},
+			[]string{"MANDATORY"},
+		},
+		{
+			"changed with install",
+			"skill_changed",
+			db.Skill{Name: "journal", InstallHash: sql.NullString{String: "def456", Valid: true}},
+			[]string{"MANDATORY", "idempotently", "no duplicate alarms"},
+			nil,
+		},
+		{
+			"changed without install",
+			"skill_changed",
+			db.Skill{Name: "config"},
+			nil,
+			[]string{"MANDATORY"},
+		},
+		{
+			"removed",
+			"skill_removed",
+			db.Skill{Name: "journal"},
+			[]string{"[Skill removed]", "ask user"},
+			nil,
+		},
 	}
-	if !strings.Contains(e.text, "load_skill") {
-		t.Fatalf("expected load_skill instruction, got: %s", e.text)
-	}
-	if !strings.Contains(e.text, "[Skill added]") {
-		t.Fatalf("expected [Skill added] header, got: %s", e.text)
-	}
-}
 
-func TestRenderSkillEventAddedWithoutInstall(t *testing.T) {
-	msg := skillMessage("skill_added", db.Skill{
-		Name: "shell",
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			msg := skillMessage(tt.kind, tt.skill)
+			e := renderSkillEvent(msg)
 
-	e := renderSkillEvent(msg)
-
-	if strings.Contains(e.text, "MANDATORY") {
-		t.Fatalf("expected no MANDATORY directive for skill without install, got: %s", e.text)
-	}
-	if !strings.Contains(e.text, "[Skill added]") {
-		t.Fatalf("expected [Skill added] header, got: %s", e.text)
-	}
-	if !strings.Contains(e.text, "shell") {
-		t.Fatalf("expected skill name in output, got: %s", e.text)
-	}
-}
-
-func TestRenderSkillEventChangedWithInstall(t *testing.T) {
-	msg := skillMessage("skill_changed", db.Skill{
-		Name:        "journal",
-		InstallHash: sql.NullString{String: "def456", Valid: true},
-	})
-
-	e := renderSkillEvent(msg)
-
-	if !strings.Contains(e.text, "MANDATORY") {
-		t.Fatalf("expected MANDATORY directive, got: %s", e.text)
-	}
-	if !strings.Contains(e.text, "idempotently") {
-		t.Fatalf("expected idempotent language, got: %s", e.text)
-	}
-	if !strings.Contains(e.text, "no duplicate alarms") {
-		t.Fatalf("expected duplicate alarm warning, got: %s", e.text)
-	}
-}
-
-func TestRenderSkillEventChangedWithoutInstall(t *testing.T) {
-	msg := skillMessage("skill_changed", db.Skill{
-		Name: "config",
-	})
-
-	e := renderSkillEvent(msg)
-
-	if strings.Contains(e.text, "MANDATORY") {
-		t.Fatalf("expected no MANDATORY directive for skill without install, got: %s", e.text)
+			for _, sub := range tt.wantSubs {
+				if !strings.Contains(e.text, sub) {
+					t.Fatalf("expected %q in output, got: %s", sub, e.text)
+				}
+			}
+			for _, absent := range tt.wantAbsent {
+				if strings.Contains(e.text, absent) {
+					t.Fatalf("expected %q absent from output, got: %s", absent, e.text)
+				}
+			}
+		})
 	}
 }
 
-func TestRenderSkillEventRemoved(t *testing.T) {
-	msg := skillMessage("skill_removed", db.Skill{
-		Name: "journal",
-	})
+func TestRenderSystemMessage(t *testing.T) {
+	now := time.Now().UTC()
 
-	e := renderSkillEvent(msg)
-
-	if !strings.Contains(e.text, "[Skill removed]") {
-		t.Fatalf("expected [Skill removed] header, got: %s", e.text)
+	tests := []struct {
+		name     string
+		kind     string
+		body     any
+		wantFrom string
+		wantSub  string
+	}{
+		{
+			name:     "task_report",
+			kind:     "task_report",
+			body:     db.TaskReport{TaskID: "aaaa-bbbb-cccc-dddd", Goal: "do thing", Status: "running", Content: "working on it"},
+			wantFrom: "task",
+			wantSub:  "[Task report]",
+		},
+		{
+			name:     "task_spawned",
+			kind:     "task_spawned",
+			body:     db.Task{ID: "aaaa-bbbb-cccc-dddd", Goal: "do thing"},
+			wantFrom: "system",
+			wantSub:  "[Task spawned]",
+		},
+		{
+			name:     "task_cancelled",
+			kind:     "task_cancelled",
+			body:     db.Task{ID: "aaaa-bbbb-cccc-dddd", Goal: "do thing"},
+			wantFrom: "system",
+			wantSub:  "[Task cancelled]",
+		},
+		{
+			name:     "alarm_fired",
+			kind:     "alarm_fired",
+			body:     db.Alarm{ID: "aaaa-bbbb-cccc-dddd", Goal: "check email"},
+			wantFrom: "alarm",
+			wantSub:  "[One-off alarm fired]",
+		},
+		{
+			name:     "alarm_stale",
+			kind:     "alarm_stale",
+			body:     db.Alarm{ID: "aaaa-bbbb-cccc-dddd", Goal: "check email"},
+			wantFrom: "alarm",
+			wantSub:  "[Alarm needs rescheduling]",
+		},
+		{
+			name:     "alarm_created",
+			kind:     "alarm_created",
+			body:     db.Alarm{ID: "aaaa-bbbb-cccc-dddd", Goal: "check email"},
+			wantFrom: "system",
+			wantSub:  "[Alarm created]",
+		},
+		{
+			name:     "alarm_updated",
+			kind:     "alarm_updated",
+			body:     alarms.AlarmUpdated{Alarm: db.Alarm{ID: "aaaa-bbbb-cccc-dddd", Goal: "check email"}, Note: "done"},
+			wantFrom: "system",
+			wantSub:  "note: done",
+		},
+		{
+			name:     "skill_added",
+			kind:     "skill_added",
+			body:     db.Skill{Name: "journal", Status: "active"},
+			wantFrom: "skill",
+			wantSub:  "[Skill added]",
+		},
+		{
+			name:     "skill_removed",
+			kind:     "skill_removed",
+			body:     db.Skill{Name: "journal", Status: "removed"},
+			wantFrom: "skill",
+			wantSub:  "[Skill removed]",
+		},
 	}
-	if !strings.Contains(e.text, "ask user") {
-		t.Fatalf("expected user confirmation directive, got: %s", e.text)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bodyJSON, _ := json.Marshal(tt.body)
+			msg := db.Message{
+				Kind:   tt.kind,
+				Body:   string(bodyJSON),
+				SentAt: now,
+			}
+
+			e := renderSystemMessage(msg)
+
+			if e.from != tt.wantFrom {
+				t.Errorf("from = %q, want %q", e.from, tt.wantFrom)
+			}
+			if !strings.Contains(e.text, tt.wantSub) {
+				t.Errorf("text = %q, want substring %q", e.text, tt.wantSub)
+			}
+		})
 	}
 }

@@ -9,18 +9,31 @@ import (
 	"github.com/kciuffolo/nik/internal/id"
 )
 
-func TestMetaFromCtxReturnsEmpty(t *testing.T) {
-	m := metaFromCtx(context.Background())
-	if len(m) != 0 {
-		t.Fatalf("expected empty map, got %v", m)
+func TestMetaFromCtx(t *testing.T) {
+	tests := []struct {
+		name string
+		ctx  context.Context
+		want map[string]string
+	}{
+		{"empty", context.Background(), nil},
+		{"with value", context.WithValue(context.Background(), "meta", map[string]string{"activation_id": "abc"}), map[string]string{"activation_id": "abc"}},
 	}
-}
 
-func TestMetaFromCtxReturnsValue(t *testing.T) {
-	ctx := context.WithValue(context.Background(), "meta", map[string]string{"activation_id": "abc"})
-	m := metaFromCtx(ctx)
-	if m["activation_id"] != "abc" {
-		t.Fatalf("expected 'abc', got %q", m["activation_id"])
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := metaFromCtx(tt.ctx)
+			if tt.want == nil {
+				if len(m) != 0 {
+					t.Fatalf("expected empty map, got %v", m)
+				}
+				return
+			}
+			for k, v := range tt.want {
+				if m[k] != v {
+					t.Fatalf("expected %q=%q, got %q", k, v, m[k])
+				}
+			}
+		})
 	}
 }
 

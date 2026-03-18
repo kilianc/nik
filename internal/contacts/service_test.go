@@ -9,17 +9,22 @@ import (
 	"github.com/kciuffolo/nik/internal/db"
 )
 
-func TestPhoneFromWhatsAppIDExtractsNumber(t *testing.T) {
-	got := phoneFromWhatsAppID("12345@s.whatsapp.net")
-	if got != "12345" {
-		t.Fatalf("expected phone number 12345, got %q", got)
+func TestPhoneFromWhatsAppID(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"12345@s.whatsapp.net", "12345"},
+		{"99999@lid", "99999"},
 	}
-}
 
-func TestPhoneFromWhatsAppIDReturnsLIDUser(t *testing.T) {
-	got := phoneFromWhatsAppID("99999@lid")
-	if got != "99999" {
-		t.Fatalf("expected 99999, got %q", got)
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := phoneFromWhatsAppID(tt.input)
+			if got != tt.want {
+				t.Fatalf("expected %q, got %q", tt.want, got)
+			}
+		})
 	}
 }
 

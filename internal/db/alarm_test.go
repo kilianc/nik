@@ -419,135 +419,67 @@ func TestAlarmUpdateRecurrence(t *testing.T) {
 	}
 }
 
-func TestAlarmGetByGoalPrefix(t *testing.T) {
-	ctx := context.Background()
-
-	conn, err := OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
-
-	convID := seedConversation(t, ctx, conn, "whatsapp", "alarm-get@g.us", "group")
-	fireAt := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
-
-	created, err := CreateAlarm(ctx, conn, CreateAlarmParams{
-		OriginConversationID: convID,
-		Goal:                 "[NIK_DIAGNOSTIC] System diagnostic -- load diagnostic skill",
-		Recurrence:           "every day",
-		NextFireAt:           fireAt,
-	})
-	if err != nil {
-		t.Fatalf("create alarm: %v", err)
+func TestAlarmGet(t *testing.T) {
+	tests := []struct {
+		name      string
+		goal      string
+		query     string
+		cancel    bool
+		wantFound bool
+	}{
+		{"by goal prefix", "[NIK_DIAGNOSTIC] System diagnostic", "[NIK_DIAGNOSTIC]", false, true},
+		{"by id", "some alarm goal", "", false, true},
+		{"no match", "[NIK_JOURNAL] End of day journal", "[NIK_DIAGNOSTIC]", false, false},
+		{"ignores cancelled", "[NIK_BRIEFING] Morning briefing", "[NIK_BRIEFING]", true, false},
 	}
 
-	found, ok, err := AlarmGet(ctx, conn, "[NIK_DIAGNOSTIC]")
-	if err != nil {
-		t.Fatalf("alarm get by prefix: %v", err)
-	}
-	if !ok {
-		t.Fatalf("expected alarm to be found")
-	}
-	if found.ID != created.ID {
-		t.Fatalf("expected id %q, got %q", created.ID, found.ID)
-	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
 
-func TestAlarmGetByID(t *testing.T) {
-	ctx := context.Background()
+			conn, err := OpenInMemory()
+			if err != nil {
+				t.Fatalf("open in-memory db: %v", err)
+			}
+			defer conn.Close()
 
-	conn, err := OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
+			convID := seedConversation(t, ctx, conn, "whatsapp", "alarm-get@g.us", "group")
+			fireAt := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
 
-	convID := seedConversation(t, ctx, conn, "whatsapp", "alarm-get-id@g.us", "group")
-	fireAt := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
+			created, err := CreateAlarm(ctx, conn, CreateAlarmParams{
+				OriginConversationID: convID,
+				Goal:                 tt.goal,
+				NextFireAt:           fireAt,
+			})
+			if err != nil {
+				t.Fatalf("create alarm: %v", err)
+			}
 
-	created, err := CreateAlarm(ctx, conn, CreateAlarmParams{
-		OriginConversationID: convID,
-		Goal:                 "some alarm goal",
-		NextFireAt:           fireAt,
-	})
-	if err != nil {
-		t.Fatalf("create alarm: %v", err)
-	}
+			if tt.cancel {
+				err = AlarmCancel(ctx, conn, created.ID)
+				if err != nil {
+					t.Fatalf("cancel alarm: %v", err)
+				}
+			}
 
-	found, ok, err := AlarmGet(ctx, conn, created.ID)
-	if err != nil {
-		t.Fatalf("alarm get by id: %v", err)
-	}
-	if !ok {
-		t.Fatalf("expected alarm to be found by id")
-	}
-	if found.Goal != "some alarm goal" {
-		t.Fatalf("expected goal %q, got %q", "some alarm goal", found.Goal)
-	}
-}
+			query := tt.query
+			if query == "" {
+				query = created.ID
+			}
 
-func TestAlarmGetNoMatch(t *testing.T) {
-	ctx := context.Background()
+			found, ok, err := AlarmGet(ctx, conn, query)
+			if err != nil {
+				t.Fatalf("alarm get: %v", err)
+			}
 
-	conn, err := OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
+			if ok != tt.wantFound {
+				t.Fatalf("expected found=%v, got %v", tt.wantFound, ok)
+			}
 
-	convID := seedConversation(t, ctx, conn, "whatsapp", "alarm-get-no@g.us", "group")
-	fireAt := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
-
-	_, err = CreateAlarm(ctx, conn, CreateAlarmParams{
-		OriginConversationID: convID,
-		Goal:                 "[NIK_JOURNAL] End of day journal",
-		NextFireAt:           fireAt,
-	})
-	if err != nil {
-		t.Fatalf("create alarm: %v", err)
-	}
-
-	_, ok, err := AlarmGet(ctx, conn, "[NIK_DIAGNOSTIC]")
-	if err != nil {
-		t.Fatalf("alarm get: %v", err)
-	}
-	if ok {
-		t.Fatalf("expected no match for different prefix")
-	}
-}
-
-func TestAlarmGetIgnoresCancelled(t *testing.T) {
-	ctx := context.Background()
-
-	conn, err := OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
-
-	convID := seedConversation(t, ctx, conn, "whatsapp", "alarm-get-cancel@g.us", "group")
-	fireAt := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
-
-	alarm, err := CreateAlarm(ctx, conn, CreateAlarmParams{
-		OriginConversationID: convID,
-		Goal:                 "[NIK_BRIEFING] Morning briefing",
-		NextFireAt:           fireAt,
-	})
-	if err != nil {
-		t.Fatalf("create alarm: %v", err)
-	}
-
-	err = AlarmCancel(ctx, conn, alarm.ID)
-	if err != nil {
-		t.Fatalf("cancel alarm: %v", err)
-	}
-
-	_, ok, err := AlarmGet(ctx, conn, "[NIK_BRIEFING]")
-	if err != nil {
-		t.Fatalf("alarm get: %v", err)
-	}
-	if ok {
-		t.Fatalf("expected cancelled alarm to be excluded")
+			if tt.wantFound && found.ID != created.ID {
+				t.Fatalf("expected id %q, got %q", created.ID, found.ID)
+			}
+		})
 	}
 }
 

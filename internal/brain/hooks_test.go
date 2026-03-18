@@ -48,30 +48,23 @@ func TestParseHookReplace(t *testing.T) {
 	}
 }
 
-func TestParseHookMissingModels(t *testing.T) {
-	raw := "---\nsection: identity\nmode: append\n---\ncontent"
-
-	_, ok := parseHook(raw)
-	if ok {
-		t.Fatal("expected parse failure for missing models")
+func TestParseHookFailures(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+	}{
+		{"missing models", "---\nsection: identity\nmode: append\n---\ncontent"},
+		{"missing section", "---\nmodels: [gpt-5.4]\nmode: append\n---\ncontent"},
+		{"no frontmatter", "just some markdown without frontmatter"},
 	}
-}
 
-func TestParseHookMissingSection(t *testing.T) {
-	raw := "---\nmodels: [gpt-5.4]\nmode: append\n---\ncontent"
-
-	_, ok := parseHook(raw)
-	if ok {
-		t.Fatal("expected parse failure for missing section")
-	}
-}
-
-func TestParseHookNoFrontmatter(t *testing.T) {
-	raw := "just some markdown without frontmatter"
-
-	_, ok := parseHook(raw)
-	if ok {
-		t.Fatal("expected parse failure for no frontmatter")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, ok := parseHook(tt.raw)
+			if ok {
+				t.Fatal("expected parse failure")
+			}
+		})
 	}
 }
 

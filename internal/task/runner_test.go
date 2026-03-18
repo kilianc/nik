@@ -17,27 +17,36 @@ import (
 )
 
 func TestBuildToolDocs(t *testing.T) {
-	tools := []llm.ToolDef{
-		{Name: "shell", Description: "run commands"},
-		{Name: "db_query", Description: "query database"},
+	tests := []struct {
+		name      string
+		tools     []llm.ToolDef
+		wantEmpty bool
+		wantSubs  []string
+	}{
+		{
+			name:     "with tools",
+			tools:    []llm.ToolDef{{Name: "shell", Description: "run commands"}, {Name: "db_query", Description: "query database"}},
+			wantSubs: []string{"shell", "db_query"},
+		},
+		{
+			name:      "nil",
+			tools:     nil,
+			wantEmpty: true,
+		},
 	}
 
-	got := buildToolDocs(tools)
-	if got == "" {
-		t.Fatal("expected non-empty tool docs")
-	}
-
-	for _, name := range []string{"shell", "db_query"} {
-		if !strings.Contains(got, name) {
-			t.Fatalf("expected tool docs to contain %q", name)
-		}
-	}
-}
-
-func TestBuildToolDocsEmpty(t *testing.T) {
-	got := buildToolDocs(nil)
-	if got != "" {
-		t.Fatalf("expected empty string for no tools, got %q", got)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := buildToolDocs(tt.tools)
+			if tt.wantEmpty && got != "" {
+				t.Fatalf("expected empty, got %q", got)
+			}
+			for _, sub := range tt.wantSubs {
+				if !strings.Contains(got, sub) {
+					t.Fatalf("expected %q in output", sub)
+				}
+			}
+		})
 	}
 }
 
@@ -141,28 +150,22 @@ func TestScanTokenTrapsEmptyHome(t *testing.T) {
 	}
 }
 
-func TestRunCriticNoOpWhenDisabled(t *testing.T) {
-	svc, _ := testDB(t)
-
-	cfg := &config.Config{}
-	runner := NewRunner(cfg, nil, svc, nil)
-
-	task := db.Task{ID: "task-noop", Goal: "test"}
-	runner.RunCritic(t.Context(), task)
-}
-
-func TestRunCriticNoOpWhenNilLLM(t *testing.T) {
-	svc, _ := testDB(t)
-
-	cfg := &config.Config{
-		Models: config.ModelsConfig{
-			Critic: config.CriticConfig{Enabled: true},
-		},
+func TestRunCriticNoOp(t *testing.T) {
+	tests := []struct {
+		name string
+		cfg  *config.Config
+	}{
+		{"disabled", &config.Config{}},
+		{"nil llm", &config.Config{Models: config.ModelsConfig{Critic: config.CriticConfig{Enabled: true}}}},
 	}
-	runner := NewRunner(cfg, nil, svc, nil)
 
-	task := db.Task{ID: "task-noop-llm", Goal: "test"}
-	runner.RunCritic(t.Context(), task)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, _ := testDB(t)
+			runner := NewRunner(tt.cfg, nil, svc, nil)
+			runner.RunCritic(t.Context(), db.Task{ID: "task-noop", Goal: "test"})
+		})
+	}
 }
 
 func TestCancelReturnsFalseForUnknownTask(t *testing.T) {
@@ -203,43 +206,44 @@ func TestWaitBlocksUntilRunnersDone(t *testing.T) {
 func TestFilterUnprivileged(t *testing.T) {
 	handler := func(context.Context, llm.ToolCall) (string, error) { return "", nil }
 
-	tools := []llm.Tool{
-		{Def: llm.ToolDef{Name: "shell"}, Handler: handler, Privileged: true},
-		{Def: llm.ToolDef{Name: "db_query"}, Handler: handler, Privileged: true},
-		{Def: llm.ToolDef{Name: "describe_media"}, Handler: handler},
-		{Def: llm.ToolDef{Name: "load_skill"}, Handler: handler},
+	tests := []struct {
+		name  string
+		tools []llm.Tool
+		want  int
+	}{
+		{
+			"mixed",
+			[]llm.Tool{
+				{Def: llm.ToolDef{Name: "shell"}, Handler: handler, Privileged: true},
+				{Def: llm.ToolDef{Name: "db_query"}, Handler: handler, Privileged: true},
+				{Def: llm.ToolDef{Name: "describe_media"}, Handler: handler},
+				{Def: llm.ToolDef{Name: "load_skill"}, Handler: handler},
+			},
+			2,
+		},
+		{
+			"all public",
+			[]llm.Tool{
+				{Def: llm.ToolDef{Name: "describe_media"}, Handler: handler},
+				{Def: llm.ToolDef{Name: "load_skill"}, Handler: handler},
+			},
+			2,
+		},
+		{"nil", nil, 0},
 	}
 
-	got := filterUnprivileged(tools)
-	if len(got) != 2 {
-		t.Fatalf("expected 2 unprivileged tools, got %d", len(got))
-	}
-
-	for _, tool := range got {
-		if tool.Privileged {
-			t.Fatalf("privileged tool %q should have been filtered", tool.Def.Name)
-		}
-	}
-}
-
-func TestFilterUnprivilegedAllPublic(t *testing.T) {
-	handler := func(context.Context, llm.ToolCall) (string, error) { return "", nil }
-
-	tools := []llm.Tool{
-		{Def: llm.ToolDef{Name: "describe_media"}, Handler: handler},
-		{Def: llm.ToolDef{Name: "load_skill"}, Handler: handler},
-	}
-
-	got := filterUnprivileged(tools)
-	if len(got) != 2 {
-		t.Fatalf("expected all 2 tools, got %d", len(got))
-	}
-}
-
-func TestFilterUnprivilegedNil(t *testing.T) {
-	got := filterUnprivileged(nil)
-	if len(got) != 0 {
-		t.Fatalf("expected 0 tools for nil input, got %d", len(got))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := filterUnprivileged(tt.tools)
+			if len(got) != tt.want {
+				t.Fatalf("expected %d tools, got %d", tt.want, len(got))
+			}
+			for _, tool := range got {
+				if tool.Privileged {
+					t.Fatalf("privileged tool %q should have been filtered", tool.Def.Name)
+				}
+			}
+		})
 	}
 }
 
