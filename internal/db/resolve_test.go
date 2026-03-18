@@ -16,6 +16,24 @@ func TestResolveShortIDRejectsInvalidTable(t *testing.T) {
 	}
 }
 
+func TestResolveShortIDRejectsEmpty(t *testing.T) {
+	ctx := context.Background()
+
+	conn, err := OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	_, err = ResolveShortID(ctx, conn, "task", "")
+	if err == nil {
+		t.Fatal("expected error for empty short id")
+	}
+	if !strings.Contains(err.Error(), "no task found") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestResolveShortIDFullUUID(t *testing.T) {
 	full := "01961234-5678-7000-8000-aabbccddeeff"
 

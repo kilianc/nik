@@ -25,7 +25,7 @@ func ResolveShortID(ctx context.Context, db *sql.DB, table, shortID string) (str
 	}
 
 	query := fmt.Sprintf(
-		"SELECT id FROM %s WHERE id LIKE '%%' || ?1 ORDER BY created_at DESC LIMIT 2",
+		"SELECT id FROM %s WHERE ?1 != '' AND id LIKE '%%' || ?1 ORDER BY created_at DESC LIMIT 2",
 		table,
 	)
 
