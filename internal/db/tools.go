@@ -17,7 +17,7 @@ const (
 
 var queryToolDef = llm.ToolDef{
 	Name:        "db_query",
-	Description: "Run a read-only SQL query against nik's SQLite database. Only SELECT, WITH, SHOW, DESCRIBE, and PRAGMA are allowed.",
+	Description: "Run a read-only SQL query against nik's SQLite database. Only SELECT, WITH, SHOW, DESCRIBE, and read-only PRAGMA (table_info, table_list, foreign_key_list, etc.) are allowed. Single statement only.",
 	Parameters: map[string]any{
 		"type": "object",
 		"properties": map[string]any{
@@ -56,7 +56,7 @@ func queryHandler(conn *sql.DB) llm.ToolExecutor {
 		}
 
 		if !isReadOnly(args.Query) {
-			return `{"error":"only SELECT, WITH, SHOW, DESCRIBE, and PRAGMA statements are allowed"}`, nil
+			return `{"error":"only single SELECT, WITH, SHOW, DESCRIBE, or read-only PRAGMA statements are allowed"}`, nil
 		}
 
 		rows, err := conn.QueryContext(ctx, args.Query)
@@ -132,16 +132,69 @@ func queryHandler(conn *sql.DB) llm.ToolExecutor {
 	}
 }
 
-var readOnlyPrefixes = []string{"SELECT", "WITH", "SHOW", "DESCRIBE", "PRAGMA"}
+var readOnlyPrefixes = []string{"SELECT", "WITH", "SHOW", "DESCRIBE"}
 
+// safePragmas lists PRAGMA commands that only read metadata.
+// State-mutating pragmas (journal_mode, foreign_keys, etc.) are excluded
+// because they can alter DB behaviour through the db_query tool.
+var safePragmas = map[string]bool{
+	"TABLE_INFO":        true,
+	"TABLE_LIST":        true,
+	"TABLE_XINFO":       true,
+	"FOREIGN_KEY_LIST":  true,
+	"FOREIGN_KEY_CHECK": true,
+	"INDEX_LIST":        true,
+	"INDEX_INFO":        true,
+	"DATABASE_LIST":     true,
+	"COMPILE_OPTIONS":   true,
+	"INTEGRITY_CHECK":   true,
+	"QUICK_CHECK":       true,
+}
+
+// isReadOnly rejects multi-statement queries to prevent piggy-backed writes
+// (e.g. "SELECT 1; DROP TABLE x") — mattn/go-sqlite3 executes all statements
+// passed to QueryContext, so a prefix check alone is not sufficient.
 func isReadOnly(query string) bool {
-	upper := strings.ToUpper(strings.TrimSpace(query))
+	trimmed := strings.TrimRight(strings.TrimSpace(query), ";")
+	if strings.Contains(trimmed, ";") {
+		return false
+	}
+
+	upper := strings.ToUpper(strings.TrimSpace(trimmed))
+
 	for _, prefix := range readOnlyPrefixes {
 		if strings.HasPrefix(upper, prefix) {
 			return true
 		}
 	}
+
+	if strings.HasPrefix(upper, "PRAGMA") {
+		return isSafePragma(upper)
+	}
+
 	return false
+}
+
+func isSafePragma(upper string) bool {
+	rest := strings.TrimSpace(strings.TrimPrefix(upper, "PRAGMA"))
+	name := strings.FieldsFunc(rest, func(r rune) bool {
+		return r == '(' || r == ' ' || r == '.'
+	})
+	if len(name) == 0 {
+		return false
+	}
+
+	pragmaName := name[0]
+	if strings.Contains(rest, ".") {
+		parts := strings.SplitN(rest, ".", 2)
+		if len(parts) == 2 {
+			pragmaName = strings.FieldsFunc(parts[1], func(r rune) bool {
+				return r == '(' || r == ' '
+			})[0]
+		}
+	}
+
+	return safePragmas[pragmaName]
 }
 
 func normalizeValue(v any) any {
