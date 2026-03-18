@@ -170,6 +170,31 @@ func TestReplyHandlerBannedWordPrevalidation(t *testing.T) {
 	}
 }
 
+func TestReplyHandlerBlocksImagePathTraversal(t *testing.T) {
+	cfg := &config.Config{
+		Home:                 "/home/nik",
+		AllowConversationIDs: map[string]string{"owner": "conv-123"},
+	}
+	svc := &Service{cfg: cfg}
+	handler := replyHandler(svc)
+
+	ctx := context.WithValue(
+		context.Background(),
+		"meta",
+		map[string]string{"conversation_id": "conv-123"},
+	)
+
+	out, err := handler(ctx, llm.ToolCall{
+		Arguments: `{"conversation_id":"conv-123","contact_id":"","messages":[{"text":"look","image_path":"/etc/passwd","voice":false}]}`,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "must be within") {
+		t.Fatalf("expected path containment error, got %q", out)
+	}
+}
+
 func TestReplyHandlerBlocksDisallowedConversation(t *testing.T) {
 	cfg := &config.Config{
 		AllowConversationIDs: map[string]string{"owner": "allowed-conv"},

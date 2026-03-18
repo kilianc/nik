@@ -394,6 +394,41 @@ Body content.
 	}
 }
 
+func TestHandleLoadRejectsPathTraversal(t *testing.T) {
+	dir := t.TempDir()
+
+	cases := []string{
+		"../../../etc",
+		"foo/bar",
+		"valid\\..\\etc",
+		"..%2f..%2fetc",
+	}
+	for _, name := range cases {
+		out, err := handleLoad([]string{dir}, name)
+		if err != nil {
+			t.Fatalf("unexpected error for %q: %v", name, err)
+		}
+		if !strings.Contains(out, "invalid skill name") {
+			t.Fatalf("expected invalid skill name error for %q, got %q", name, out)
+		}
+	}
+}
+
+func TestHandleLoadAcceptsValidName(t *testing.T) {
+	dir := t.TempDir()
+	skillDir := filepath.Join(dir, "vault")
+	os.MkdirAll(skillDir, 0o755)
+	os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# Vault"), 0o644)
+
+	out, err := handleLoad([]string{dir}, "vault")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "# Vault") {
+		t.Fatalf("expected skill content, got %q", out)
+	}
+}
+
 func writeSkill(t *testing.T, dir, folder, name, summary, tools string) {
 	t.Helper()
 	skillDir := filepath.Join(dir, folder)

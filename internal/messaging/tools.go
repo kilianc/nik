@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/kciuffolo/nik/internal/llm"
@@ -209,6 +210,12 @@ func replyHandler(svc *Service) llm.ToolExecutor {
 			if err != nil {
 				return llm.ToolError(err), nil
 			}
+
+			if p := strings.TrimSpace(msg.ImagePath); p != "" && svc.cfg != nil {
+				if !isUnderDir(p, svc.cfg.Home) {
+					return llm.ToolErrorf("image_path must be within %s", svc.cfg.Home), nil
+				}
+			}
 		}
 
 		for _, msg := range args.Messages {
@@ -355,6 +362,14 @@ func updateMediaDescriptionHandler(svc *Service) llm.ToolExecutor {
 
 		return `{"ok":true}`, nil
 	}
+}
+
+func isUnderDir(path, base string) bool {
+	rel, err := filepath.Rel(filepath.Clean(base), filepath.Clean(path))
+	if err != nil {
+		return false
+	}
+	return !strings.HasPrefix(rel, "..")
 }
 
 func contextMetaValue(ctx context.Context, key string) string {
