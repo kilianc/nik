@@ -217,7 +217,8 @@ func stare(ctx context.Context, id string, maxWait int) (output string, alive bo
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
-	deadline := time.After(time.Duration(maxWait) * time.Second)
+	deadline := time.NewTimer(time.Duration(maxWait) * time.Second)
+	defer deadline.Stop()
 
 	for {
 		select {
@@ -226,7 +227,7 @@ func stare(ctx context.Context, id string, maxWait int) (output string, alive bo
 			c, _ := getExitCode(id)
 			return out, false, c
 
-		case <-deadline:
+		case <-deadline.C:
 			out, _ := capturePane(id)
 			if !isAlive(id) {
 				c, _ := getExitCode(id)
