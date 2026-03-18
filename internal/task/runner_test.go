@@ -2,6 +2,7 @@ package task
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -196,6 +197,49 @@ func TestWaitBlocksUntilRunnersDone(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("Wait did not return within timeout")
+	}
+}
+
+func TestFilterUnprivileged(t *testing.T) {
+	handler := func(context.Context, llm.ToolCall) (string, error) { return "", nil }
+
+	tools := []llm.Tool{
+		{Def: llm.ToolDef{Name: "shell"}, Handler: handler, Privileged: true},
+		{Def: llm.ToolDef{Name: "db_query"}, Handler: handler, Privileged: true},
+		{Def: llm.ToolDef{Name: "describe_media"}, Handler: handler},
+		{Def: llm.ToolDef{Name: "load_skill"}, Handler: handler},
+	}
+
+	got := filterUnprivileged(tools)
+	if len(got) != 2 {
+		t.Fatalf("expected 2 unprivileged tools, got %d", len(got))
+	}
+
+	for _, tool := range got {
+		if tool.Privileged {
+			t.Fatalf("privileged tool %q should have been filtered", tool.Def.Name)
+		}
+	}
+}
+
+func TestFilterUnprivilegedAllPublic(t *testing.T) {
+	handler := func(context.Context, llm.ToolCall) (string, error) { return "", nil }
+
+	tools := []llm.Tool{
+		{Def: llm.ToolDef{Name: "describe_media"}, Handler: handler},
+		{Def: llm.ToolDef{Name: "load_skill"}, Handler: handler},
+	}
+
+	got := filterUnprivileged(tools)
+	if len(got) != 2 {
+		t.Fatalf("expected all 2 tools, got %d", len(got))
+	}
+}
+
+func TestFilterUnprivilegedNil(t *testing.T) {
+	got := filterUnprivileged(nil)
+	if len(got) != 0 {
+		t.Fatalf("expected 0 tools for nil input, got %d", len(got))
 	}
 }
 
