@@ -113,7 +113,9 @@ func (a *Adapter) handleMessage(evt *events.Message) error {
 
 	editType := string(evt.Info.Edit)
 	if isUnknownEditType(editType) {
-		panic(fmt.Sprintf("unknown whatsapp edit type %q for message %s", editType, evt.Info.ID))
+		slog.Warn("unknown whatsapp edit type, skipping message",
+			"pkg", "whatsapp", "edit_type", editType, "message_id", evt.Info.ID)
+		return nil
 	}
 
 	if editType != "" {
