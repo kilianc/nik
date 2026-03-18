@@ -144,7 +144,8 @@ func TestReplyToolDefHasVoiceField(t *testing.T) {
 
 func TestReplyHandlerBannedWordPrevalidation(t *testing.T) {
 	cfg := &config.Config{
-		BannedWords: []string{"goblin"},
+		AllowConversationIDs: map[string]string{"test": "conv-123"},
+		BannedWords:          []string{"goblin"},
 	}
 	svc := &Service{cfg: cfg}
 	handler := replyHandler(svc)
@@ -166,6 +167,59 @@ func TestReplyHandlerBannedWordPrevalidation(t *testing.T) {
 
 	if !strings.Contains(out, "banned word") {
 		t.Fatalf("expected banned word error, got %q", out)
+	}
+}
+
+func TestReplyHandlerBlocksDisallowedConversation(t *testing.T) {
+	cfg := &config.Config{
+		AllowConversationIDs: map[string]string{"owner": "allowed-conv"},
+	}
+	svc := &Service{cfg: cfg}
+	handler := replyHandler(svc)
+
+	ctx := context.WithValue(
+		context.Background(),
+		"meta",
+		map[string]string{"conversation_id": "allowed-conv"},
+	)
+
+	out, err := handler(ctx, llm.ToolCall{
+		Arguments: `{"conversation_id":"not-allowed-conv","contact_id":"","messages":[{"text":"hi","image_path":"","voice":false}]}`,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "allow list") {
+		t.Fatalf("expected allow list error, got %q", out)
+	}
+}
+
+func TestReplyHandlerAllowsContextConversation(t *testing.T) {
+	cfg := &config.Config{
+		AllowConversationIDs: map[string]string{"owner": "allowed-conv"},
+	}
+	svc := &Service{cfg: cfg}
+	handler := replyHandler(svc)
+
+	ctx := context.WithValue(
+		context.Background(),
+		"meta",
+		map[string]string{"conversation_id": "allowed-conv"},
+	)
+
+	// use voice=true with no speechFn: this triggers "not configured" before
+	// touching the DB, confirming the allow check passed
+	out, err := handler(ctx, llm.ToolCall{
+		Arguments: `{"conversation_id":"","contact_id":"","messages":[{"text":"hi","image_path":"","voice":true}]}`,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(out, "allow list") {
+		t.Fatalf("expected to pass allow check, got %q", out)
+	}
+	if !strings.Contains(out, "not configured") {
+		t.Fatalf("expected 'not configured' (past allow check), got %q", out)
 	}
 }
 

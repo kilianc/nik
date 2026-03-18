@@ -196,6 +196,14 @@ func replyHandler(svc *Service) llm.ToolExecutor {
 			return `{"error":"missing conversation_id and contact_id"}`, nil
 		}
 
+		// Prevent the LLM from messaging conversations outside the allow list.
+		// The context conversation is guaranteed to be allowed (timeline only
+		// produces stimuli for allowed conversations), but explicit or
+		// contact-resolved conversation IDs must be verified.
+		if svc.cfg != nil && !svc.cfg.IsAllowed(args.ConversationID) {
+			return llm.ToolErrorf("conversation %s is not in the allow list", args.ConversationID), nil
+		}
+
 		for _, msg := range args.Messages {
 			err = svc.checkBannedWords(msg.Text)
 			if err != nil {
