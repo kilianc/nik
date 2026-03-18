@@ -120,7 +120,11 @@ func exchangeCode(code, verifier, redirectURI, savePath string) (*Auth, error) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("token exchange failed: %s", string(body))
+		excerpt := string(body)
+		if len(excerpt) > 200 {
+			excerpt = excerpt[:200] + "…"
+		}
+		return nil, fmt.Errorf("token exchange (HTTP %d): %s", resp.StatusCode, excerpt)
 	}
 
 	var tokenResp tokenResponse
