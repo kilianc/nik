@@ -191,6 +191,15 @@ func (c Config) PrivilegedIDs() []string {
 	return ids
 }
 
+func (c Config) IsAllowed(id string) bool {
+	for _, v := range c.AllowConversationIDs {
+		if v == id {
+			return true
+		}
+	}
+	return false
+}
+
 func (c Config) IsPrivileged(id string) bool {
 	for _, v := range c.PrivilegedConversationIDs {
 		if v == id {

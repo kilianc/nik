@@ -256,6 +256,25 @@ models:
 	}
 }
 
+func TestIsAllowed(t *testing.T) {
+	cfg := Config{
+		AllowConversationIDs: map[string]string{"owner": "conv-1", "friend": "conv-2"},
+	}
+
+	if !cfg.IsAllowed("conv-1") {
+		t.Fatal("expected conv-1 to be allowed")
+	}
+	if !cfg.IsAllowed("conv-2") {
+		t.Fatal("expected conv-2 to be allowed")
+	}
+	if cfg.IsAllowed("conv-999") {
+		t.Fatal("expected conv-999 to not be allowed")
+	}
+	if cfg.IsAllowed("") {
+		t.Fatal("expected empty string to not be allowed")
+	}
+}
+
 func TestLoadIgnoresLegacyExaAPIKey(t *testing.T) {
 	dir := t.TempDir()
 	writeTestConfig(t, dir, `
