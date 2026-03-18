@@ -19,8 +19,5 @@
     "tmpl",
     "Wapp",
     "whatsmeow"
-  ],
-  "workbench.editorAssociations": {
-    "{**/workspace/**/*.md}": "vscode.markdown.preview.editor",
-  }
+  ]
 }

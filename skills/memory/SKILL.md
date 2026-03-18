@@ -4,7 +4,6 @@ summary: >
   Extract durable facts from conversations into memories/latest.md (incremental via cursor),
   and compact the file daily. Load when a memory alarm fires or on request.
 tools: [db_query, shell]
-install: true
 ---
 
 # Memory

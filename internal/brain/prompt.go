@@ -18,6 +18,7 @@ var htmlCommentRe = regexp.MustCompile(`(?s)<!--.*?-->\n?`)
 type promptData struct {
 	Now             nowData
 	Soul            string
+	Breath          string
 	Recall          string
 	WorkerTools     string
 	NikTools        string
@@ -36,7 +37,6 @@ type skillSummaryData struct {
 	Name    string
 	Summary string
 	Tools   string
-	Install bool
 }
 
 var sectionFiles = []struct {
@@ -173,6 +173,13 @@ func (b *Brain) buildPromptData(now time.Time, recall string) promptData {
 		slog.Warn("load soul", "pkg", "brain", "error", err)
 	}
 
+	breathData, err := os.ReadFile(filepath.Join(b.cfg.Home, "breathing", "latest.md"))
+	if err == nil {
+		data.Breath = strings.TrimSpace(string(breathData))
+	} else if !os.IsNotExist(err) {
+		slog.Warn("load breath", "pkg", "brain", "error", err)
+	}
+
 	dirs := []string{b.cfg.SkillsPath(), b.cfg.WorkspaceSkillsPath()}
 
 	preloaded, err := skills.PreloadedSkills(dirs...)
@@ -194,7 +201,6 @@ func (b *Brain) buildPromptData(now time.Time, recall string) promptData {
 			Name:    s.Name,
 			Summary: s.Summary,
 			Tools:   strings.Join(s.Tools, ", "),
-			Install: s.Install,
 		})
 	}
 

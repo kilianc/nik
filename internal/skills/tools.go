@@ -43,7 +43,6 @@ type SkillSummary struct {
 	Summary string   `json:"summary"`
 	Tools   []string `json:"tools"`
 	Preload bool     `json:"preload"`
-	Install bool     `json:"install"`
 }
 
 func BuildTools(cfg *config.Config) []llm.Tool {
@@ -227,8 +226,6 @@ func parseFrontmatter(path string) (SkillSummary, error) {
 			}
 			inDesc = false
 			inTools = false
-			val := strings.TrimSpace(strings.TrimPrefix(line, "install:"))
-			s.Install = val == "true"
 			continue
 		}
 

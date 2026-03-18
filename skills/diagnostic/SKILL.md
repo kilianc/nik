@@ -5,7 +5,6 @@ summary: >
   for anything that needs credentials, verifies alarm chains and skill
   outputs, checks data integrity. Load when the diagnostic alarm fires.
 tools: [db_query, shell, alarm, load_skill]
-install: true
 ---
 
 # Diagnostic
