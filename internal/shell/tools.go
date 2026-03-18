@@ -88,7 +88,7 @@ func (s *Service) shellHandler() llm.ToolExecutor {
 		case "read", "send":
 			return s.handleInteract(ctx, args)
 		case "kill":
-			return handleKill(args)
+			return s.handleKill(ctx, args)
 		default:
 			return llm.ToolErrorf("unknown action %q", args.Action), nil
 		}
@@ -183,15 +183,20 @@ func (s *Service) handleInteract(ctx context.Context, args shellArgs) (string, e
 	return shellResult(args.SessionID, output, alive, code), nil
 }
 
-func handleKill(args shellArgs) (string, error) {
+func (s *Service) handleKill(ctx context.Context, args shellArgs) (string, error) {
 	if args.SessionID == "" {
 		return `{"error":"empty session_id"}`, nil
 	}
+
+	out, _ := capturePane(args.SessionID)
+	code, _ := getExitCode(args.SessionID)
 
 	err := killSession(args.SessionID)
 	if err != nil {
 		return llm.ToolError(err), nil
 	}
+
+	s.updateOutput(ctx, args.SessionID, out, false, code)
 
 	return `{"ok":true}`, nil
 }
