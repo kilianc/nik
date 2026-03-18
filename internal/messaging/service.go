@@ -107,10 +107,14 @@ func (s *Service) ReceiveMessage(ctx context.Context, msg InboundMessage) error 
 	}
 
 	var dmRecipientID string
+	var dmTitle string
 	if !msg.IsGroup && msg.ExternalConversationID != "" {
 		recipient, err := db.GetContact(ctx, s.db, msg.ExternalConversationID)
-		if err == nil && recipient.ID != contactID {
-			dmRecipientID = recipient.ID
+		if err == nil {
+			dmTitle = recipient.Name
+			if recipient.ID != contactID {
+				dmRecipientID = recipient.ID
+			}
 		}
 	}
 
@@ -129,7 +133,7 @@ func (s *Service) ReceiveMessage(ctx context.Context, msg InboundMessage) error 
 		Platform:               msg.Platform,
 		ExternalConversationID: msg.ExternalConversationID,
 		Kind:                   inferConversationKind(msg),
-		Title:                  "",
+		Title:                  dmTitle,
 		LastMessageAt:          &sentAt,
 	})
 	if err != nil {
@@ -666,6 +670,7 @@ func (s *Service) ResolveConversation(ctx context.Context, contactID string) (st
 		Platform:               "whatsapp",
 		ExternalConversationID: jid,
 		Kind:                   "dm",
+		Title:                  contact.Name,
 		LastMessageAt:          &now,
 	})
 	if err != nil {
