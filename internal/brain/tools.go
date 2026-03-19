@@ -33,6 +33,14 @@ func (b *Brain) RegisterTools(ts ...llm.Tool) {
 	}
 }
 
+func (b *Brain) ToolNames() []string {
+	names := make([]string, 0, len(b.toolDefs))
+	for _, d := range b.toolDefs {
+		names = append(names, d.Name)
+	}
+	return names
+}
+
 func (b *Brain) toolsForContext(ctx context.Context) []llm.ToolDef {
 	meta, _ := ctx.Value("meta").(map[string]string)
 	isPrivileged := b.isPrivilegedContext(meta)
