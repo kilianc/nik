@@ -499,6 +499,86 @@ func TestWalkSkillDirsBlocksSymlinkEscape(t *testing.T) {
 	}
 }
 
+func TestStripInstallSection(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "no install section",
+			input: "# Skill\n\nBody content.\n",
+			want:  "# Skill\n\nBody content.\n",
+		},
+		{
+			name:  "install at end",
+			input: "# Skill\n\nBody content.\n\n## Install\n\nCreate an alarm.\n",
+			want:  "# Skill\n\nBody content.\n",
+		},
+		{
+			name:  "install in middle",
+			input: "# Skill\n\nBody.\n\n## Install\n\nCreate an alarm.\n\n## Behavior\n\nDo things.\n",
+			want:  "# Skill\n\nBody.\n\n## Behavior\n\nDo things.\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := stripInstallSection(tt.input)
+			if got != tt.want {
+				t.Errorf("stripInstallSection =\n%q\nwant\n%q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPreloadedSkillsStripsInstall(t *testing.T) {
+	dir := t.TempDir()
+
+	skillDir := filepath.Join(dir, "myskill")
+	os.MkdirAll(skillDir, 0o755)
+	os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(`---
+name: myskill
+preload: true
+summary: a skill
+tools: [t1]
+---
+
+# My Skill
+
+Body content.
+
+## Install
+
+Create a recurring alarm.
+
+## Behavior
+
+Do things.
+`), 0o644)
+
+	result, err := PreloadedSkills(dir)
+	if err != nil {
+		t.Fatalf("PreloadedSkills: %v", err)
+	}
+
+	if len(result) != 1 {
+		t.Fatalf("got %d preloaded skills, want 1", len(result))
+	}
+
+	if strings.Contains(result[0].Content, "## Install") {
+		t.Errorf("content should not contain install section, got: %q", result[0].Content)
+	}
+
+	if !strings.Contains(result[0].Content, "Body content.") {
+		t.Errorf("content missing body, got: %q", result[0].Content)
+	}
+
+	if !strings.Contains(result[0].Content, "## Behavior") {
+		t.Errorf("content missing behavior section, got: %q", result[0].Content)
+	}
+}
+
 func writeSkill(t *testing.T, dir, folder, name, summary, tools string) {
 	t.Helper()
 	skillDir := filepath.Join(dir, folder)
