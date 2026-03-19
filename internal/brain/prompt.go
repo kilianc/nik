@@ -2,9 +2,9 @@ package brain
 
 import (
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"text/template"
@@ -73,9 +73,13 @@ func shiftHeadings(n int, content string) string {
 }
 
 func (b *Brain) loadInstructions(now time.Time, recall string, retry bool) (string, error) {
-	dir := b.cfg.PromptsPath()
+	promptRoot, err := os.OpenRoot(b.cfg.PromptsPath())
+	if err != nil {
+		return "", fmt.Errorf("open prompts root: %w", err)
+	}
+	defer promptRoot.Close()
 
-	baseData, err := os.ReadFile(filepath.Join(dir, "nik-00-base.md"))
+	baseData, err := readFromRoot(promptRoot, "nik-00-base.md")
 	if err != nil {
 		return "", fmt.Errorf("read prompt nik-00-base.md: %w", err)
 	}
@@ -88,7 +92,7 @@ func (b *Brain) loadInstructions(now time.Time, recall string, retry bool) (stri
 	hooks := loadHooks(b.cfg.Home, b.cfg.Models.Main.Model)
 
 	for _, s := range sectionFiles {
-		data, readErr := os.ReadFile(filepath.Join(dir, s.file))
+		data, readErr := readFromRoot(promptRoot, s.file)
 		if readErr != nil {
 			return "", fmt.Errorf("read prompt %s: %w", s.file, readErr)
 		}
@@ -113,7 +117,7 @@ func (b *Brain) loadInstructions(now time.Time, recall string, retry bool) (stri
 	result := htmlCommentRe.ReplaceAllString(buf.String(), "")
 
 	if retry {
-		nudge, nudgeErr := os.ReadFile(filepath.Join(dir, "nik-05-retry.md"))
+		nudge, nudgeErr := readFromRoot(promptRoot, "nik-05-retry.md")
 		if nudgeErr != nil {
 			slog.Warn("load retry nudge", "pkg", "brain", "error", nudgeErr)
 		} else {
@@ -122,6 +126,16 @@ func (b *Brain) loadInstructions(now time.Time, recall string, retry bool) (stri
 	}
 
 	return result, nil
+}
+
+func readFromRoot(root *os.Root, name string) ([]byte, error) {
+	f, err := root.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	return io.ReadAll(f)
 }
 
 func (b *Brain) buildPromptData(now time.Time, recall string) promptData {
@@ -166,18 +180,25 @@ func (b *Brain) buildPromptData(now time.Time, recall string) promptData {
 
 	data.BannedWords = b.cfg.BannedWords
 
-	soulData, err := os.ReadFile(filepath.Join(b.cfg.Home, "soul", "latest.md"))
-	if err == nil {
-		data.Soul = strings.TrimSpace(string(soulData))
-	} else if !os.IsNotExist(err) {
-		slog.Warn("load soul", "pkg", "brain", "error", err)
-	}
+	homeRoot, err := os.OpenRoot(b.cfg.Home)
+	if err != nil {
+		slog.Warn("open home root", "pkg", "brain", "error", err)
+	} else {
+		soulData, soulErr := readFromRoot(homeRoot, "soul/latest.md")
+		if soulErr == nil {
+			data.Soul = strings.TrimSpace(string(soulData))
+		} else if !os.IsNotExist(soulErr) {
+			slog.Warn("load soul", "pkg", "brain", "error", soulErr)
+		}
 
-	breathData, err := os.ReadFile(filepath.Join(b.cfg.Home, "breathing", "latest.md"))
-	if err == nil {
-		data.Breath = strings.TrimSpace(string(breathData))
-	} else if !os.IsNotExist(err) {
-		slog.Warn("load breath", "pkg", "brain", "error", err)
+		breathData, breathErr := readFromRoot(homeRoot, "breathing/latest.md")
+		if breathErr == nil {
+			data.Breath = strings.TrimSpace(string(breathData))
+		} else if !os.IsNotExist(breathErr) {
+			slog.Warn("load breath", "pkg", "brain", "error", breathErr)
+		}
+
+		homeRoot.Close()
 	}
 
 	dirs := []string{b.cfg.SkillsPath(), b.cfg.WorkspaceSkillsPath()}

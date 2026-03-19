@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"strings"
 	"text/template"
 	"time"
@@ -245,9 +243,7 @@ func extractSkillNames(calls []db.ToolCallInfo) string {
 }
 
 func (r *Runner) renderCriticPrompt(t db.Task, toolCalls, reports, skills string) string {
-	tmplPath := filepath.Join(r.cfg.PromptsPath(), "critic-00.md")
-
-	raw, err := os.ReadFile(tmplPath)
+	raw, err := readFromPromptsRoot(r.cfg.PromptsPath(), "critic-00.md")
 	if err != nil {
 		slog.Warn("load critic prompt template", "pkg", "task", "error", err)
 		return fallbackCriticPrompt(t, toolCalls, reports)

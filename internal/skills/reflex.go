@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"log/slog"
-	"os"
 	"strings"
 
 	"github.com/kciuffolo/nik/internal/config"
@@ -18,14 +17,9 @@ func SkillChangeReflex(cfg *config.Config, conn *sql.DB) func(ctx context.Contex
 		dirs := []string{cfg.SkillsPath(), cfg.WorkspaceSkillsPath()}
 
 		fsSkills := map[string]fsSkill{}
-		err := walkSkillDirs(dirs, func(path string, s SkillSummary) {
-			raw, readErr := os.ReadFile(path)
-			if readErr != nil {
-				return
-			}
-
-			content := string(raw)
-			contentHash := sha256.Sum256(raw)
+		err := walkSkillDirs(dirs, func(s SkillSummary, data []byte) {
+			content := string(data)
+			contentHash := sha256.Sum256(data)
 			installSection := extractInstallSection(content)
 
 			var installHashStr string

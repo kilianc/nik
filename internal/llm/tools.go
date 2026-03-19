@@ -3,7 +3,9 @@ package llm
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"mime"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -53,23 +55,36 @@ func describeMedia(ctx context.Context, call ToolCall, client *Client, home stri
 	if err != nil {
 		return ToolError(err), nil
 	}
+
 	if args.FilePath == "" {
-		return `{"error":"empty file_path"}`, nil
+		return ToolErrorf("empty file_path"), nil
 	}
 
-	if !filepath.IsAbs(args.FilePath) && home != "" {
-		args.FilePath = filepath.Join(home, args.FilePath)
+	if home == "" {
+		return ToolErrorf("describe_media requires a home directory"), nil
 	}
 
-	if home != "" && !isUnderDir(args.FilePath, home) {
-		return ToolErrorf("file_path must be within %s", home), nil
+	if filepath.IsAbs(args.FilePath) {
+		return ToolErrorf("absolute paths not allowed, use a relative path"), nil
 	}
+
+	root, err := os.OpenRoot(home)
+	if err != nil {
+		return ToolError(err), nil
+	}
+	defer root.Close()
 
 	ext := strings.ToLower(filepath.Ext(args.FilePath))
 	mimeType := mime.TypeByExtension(ext)
 
 	if isAudioExt(ext) {
-		text, err := client.Transcribe(ctx, args.FilePath)
+		f, err := root.Open(args.FilePath)
+		if err != nil {
+			return ToolError(err), nil
+		}
+		defer f.Close()
+
+		text, err := client.Transcribe(ctx, f)
 		if err != nil {
 			return ToolError(err), nil
 		}
@@ -89,20 +104,23 @@ func describeMedia(ctx context.Context, call ToolCall, client *Client, home stri
 		question = "Describe this content concisely."
 	}
 
-	text, err := client.Describe(ctx, args.FilePath, mimeType, question)
+	f, err := root.Open(args.FilePath)
+	if err != nil {
+		return ToolError(err), nil
+	}
+
+	data, readErr := io.ReadAll(f)
+	f.Close()
+	if readErr != nil {
+		return ToolError(readErr), nil
+	}
+
+	text, err := client.Describe(ctx, data, filepath.Base(args.FilePath), mimeType, question)
 	if err != nil {
 		return ToolError(err), nil
 	}
 
 	return ToolResult(map[string]any{"type": "description", "text": text}), nil
-}
-
-func isUnderDir(path, base string) bool {
-	rel, err := filepath.Rel(filepath.Clean(base), filepath.Clean(path))
-	if err != nil {
-		return false
-	}
-	return !strings.HasPrefix(rel, "..")
 }
 
 func isAudioExt(ext string) bool {

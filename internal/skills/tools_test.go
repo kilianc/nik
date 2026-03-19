@@ -8,11 +8,7 @@ import (
 )
 
 func TestParseFrontmatter(t *testing.T) {
-	dir := t.TempDir()
-	skillDir := filepath.Join(dir, "test_skill")
-	os.MkdirAll(skillDir, 0o755)
-
-	content := `---
+	content := []byte(`---
 name: test_skill
 summary: >
   Load this skill to test frontmatter parsing.
@@ -22,11 +18,9 @@ tools: [tool_a, tool_b]
 # Test Skill
 
 Some content here.
-`
-	path := filepath.Join(skillDir, "SKILL.md")
-	os.WriteFile(path, []byte(content), 0o644)
+`)
 
-	s, err := parseFrontmatter(path)
+	s, err := parseFrontmatter(content)
 	if err != nil {
 		t.Fatalf("parseFrontmatter: %v", err)
 	}
@@ -45,11 +39,7 @@ Some content here.
 }
 
 func TestParseFrontmatterBlockTools(t *testing.T) {
-	dir := t.TempDir()
-	skillDir := filepath.Join(dir, "block")
-	os.MkdirAll(skillDir, 0o755)
-
-	content := `---
+	content := []byte(`---
 name: block
 summary: block test
 tools:
@@ -59,11 +49,9 @@ tools:
 ---
 
 # Block
-`
-	path := filepath.Join(skillDir, "SKILL.md")
-	os.WriteFile(path, []byte(content), 0o644)
+`)
 
-	s, err := parseFrontmatter(path)
+	s, err := parseFrontmatter(content)
 	if err != nil {
 		t.Fatalf("parseFrontmatter: %v", err)
 	}
@@ -101,11 +89,7 @@ func TestListSkills(t *testing.T) {
 }
 
 func TestParseFrontmatterPreload(t *testing.T) {
-	dir := t.TempDir()
-	skillDir := filepath.Join(dir, "preloaded")
-	os.MkdirAll(skillDir, 0o755)
-
-	content := `---
+	content := []byte(`---
 name: preloaded
 preload: true
 summary: a preloaded skill
@@ -115,11 +99,9 @@ tools: [tool_x]
 # Preloaded
 
 Body content.
-`
-	path := filepath.Join(skillDir, "SKILL.md")
-	os.WriteFile(path, []byte(content), 0o644)
+`)
 
-	s, err := parseFrontmatter(path)
+	s, err := parseFrontmatter(content)
 	if err != nil {
 		t.Fatalf("parseFrontmatter: %v", err)
 	}
@@ -134,22 +116,16 @@ Body content.
 }
 
 func TestParseFrontmatterPreloadDefaultFalse(t *testing.T) {
-	dir := t.TempDir()
-	skillDir := filepath.Join(dir, "normal")
-	os.MkdirAll(skillDir, 0o755)
-
-	content := `---
+	content := []byte(`---
 name: normal
 summary: no preload field
 tools: [t1]
 ---
 
 # Normal
-`
-	path := filepath.Join(skillDir, "SKILL.md")
-	os.WriteFile(path, []byte(content), 0o644)
+`)
 
-	s, err := parseFrontmatter(path)
+	s, err := parseFrontmatter(content)
 	if err != nil {
 		t.Fatalf("parseFrontmatter: %v", err)
 	}
@@ -366,11 +342,7 @@ func TestPreloadedSkillsWorkspaceOverride(t *testing.T) {
 }
 
 func TestParseFrontmatterInstall(t *testing.T) {
-	dir := t.TempDir()
-	skillDir := filepath.Join(dir, "installable")
-	os.MkdirAll(skillDir, 0o755)
-
-	content := `---
+	content := []byte(`---
 name: installable
 install: true
 summary: a skill with install requirements
@@ -380,11 +352,9 @@ tools: [create_alarm]
 # Installable
 
 Body content.
-`
-	path := filepath.Join(skillDir, "SKILL.md")
-	os.WriteFile(path, []byte(content), 0o644)
+`)
 
-	s, err := parseFrontmatter(path)
+	s, err := parseFrontmatter(content)
 	if err != nil {
 		t.Fatalf("parseFrontmatter: %v", err)
 	}
@@ -401,15 +371,14 @@ func TestHandleLoadRejectsPathTraversal(t *testing.T) {
 		"../../../etc",
 		"foo/bar",
 		"valid\\..\\etc",
-		"..%2f..%2fetc",
 	}
 	for _, name := range cases {
 		out, err := handleLoad([]string{dir}, name, nil)
 		if err != nil {
 			t.Fatalf("unexpected error for %q: %v", name, err)
 		}
-		if !strings.Contains(out, "invalid skill name") {
-			t.Fatalf("expected invalid skill name error for %q, got %q", name, out)
+		if !strings.Contains(out, "not found") {
+			t.Fatalf("expected not found error for %q, got %q", name, out)
 		}
 	}
 }
@@ -477,6 +446,56 @@ tools: [shell]
 	}
 	if strings.Contains(out, "warning") {
 		t.Fatalf("should not warn when all tools present, got %q", out)
+	}
+}
+
+func TestHandleLoadBlocksSymlinkEscape(t *testing.T) {
+	dir := t.TempDir()
+	outside := t.TempDir()
+
+	skillDir := filepath.Join(outside, "secret")
+	os.MkdirAll(skillDir, 0o755)
+	os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# Secret"), 0o644)
+
+	err := os.Symlink(outside, filepath.Join(dir, "escape"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out, loadErr := handleLoad([]string{dir}, "escape/secret", nil)
+	if loadErr != nil {
+		t.Fatalf("unexpected error: %v", loadErr)
+	}
+	if !strings.Contains(out, "not found") {
+		t.Fatalf("expected not found for symlink escape, got %q", out)
+	}
+}
+
+func TestWalkSkillDirsBlocksSymlinkEscape(t *testing.T) {
+	dir := t.TempDir()
+	outside := t.TempDir()
+
+	skillDir := filepath.Join(outside, "secret")
+	os.MkdirAll(skillDir, 0o755)
+	os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\nname: secret\nsummary: escaped\n---\n"), 0o644)
+
+	err := os.Symlink(skillDir, filepath.Join(dir, "escape"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var found []string
+	walkErr := walkSkillDirs([]string{dir}, func(s SkillSummary, _ []byte) {
+		found = append(found, s.Name)
+	})
+	if walkErr != nil {
+		t.Fatalf("walk error: %v", walkErr)
+	}
+
+	for _, name := range found {
+		if name == "secret" {
+			t.Fatalf("symlink escape should have been blocked, but found skill %q", name)
+		}
 	}
 }
 

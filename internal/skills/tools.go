@@ -2,9 +2,11 @@ package skills
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -98,20 +100,28 @@ func handleLoad(dirs []string, name string, availableTools func() []string) (str
 		return `{"error":"empty name"}`, nil
 	}
 
-	if strings.ContainsAny(name, "/\\") || strings.Contains(name, "..") {
-		return llm.ToolErrorf("invalid skill name %q", name), nil
-	}
-
 	for i := len(dirs) - 1; i >= 0; i-- {
-		path := filepath.Join(dirs[i], name, "SKILL.md")
-
-		data, err := os.ReadFile(path)
+		root, err := os.OpenRoot(dirs[i])
 		if err != nil {
 			continue
 		}
 
+		relPath := filepath.Join(name, "SKILL.md")
+		f, openErr := root.Open(relPath)
+		if openErr != nil {
+			root.Close()
+			continue
+		}
+
+		data, readErr := io.ReadAll(f)
+		f.Close()
+		root.Close()
+		if readErr != nil {
+			continue
+		}
+
 		content := string(data)
-		warning := checkToolPrereqs(path, availableTools)
+		warning := checkToolPrereqs(data, availableTools)
 		if warning != "" {
 			content = warning + "\n" + content
 		}
@@ -122,12 +132,12 @@ func handleLoad(dirs []string, name string, availableTools func() []string) (str
 	return llm.ToolErrorf("skill %q not found", name), nil
 }
 
-func checkToolPrereqs(path string, availableTools func() []string) string {
+func checkToolPrereqs(data []byte, availableTools func() []string) string {
 	if availableTools == nil {
 		return ""
 	}
 
-	s, err := parseFrontmatter(path)
+	s, err := parseFrontmatter(data)
 	if err != nil || len(s.Tools) == 0 {
 		return ""
 	}
@@ -153,15 +163,29 @@ func checkToolPrereqs(path string, availableTools func() []string) string {
 }
 
 // walkSkillDirs iterates skill directories, parses frontmatter from each
-// SKILL.md, and calls fn for each unique skill. Later directories override
+// SKILL.md, and calls fn for each unique skill. All filesystem access goes
+// through os.OpenRoot for traversal resistance. Later directories override
 // earlier ones when skills share a name.
-func walkSkillDirs(dirs []string, fn func(path string, s SkillSummary)) error {
+func walkSkillDirs(dirs []string, fn func(s SkillSummary, data []byte)) error {
 	for _, dir := range dirs {
-		entries, err := os.ReadDir(dir)
+		root, err := os.OpenRoot(dir)
 		if err != nil {
 			if os.IsNotExist(err) {
 				continue
 			}
+			return fmt.Errorf("open skills root %s: %w", dir, err)
+		}
+
+		dirFile, err := root.Open(".")
+		if err != nil {
+			root.Close()
+			return fmt.Errorf("read skills dir %s: %w", dir, err)
+		}
+
+		entries, err := dirFile.ReadDir(-1)
+		dirFile.Close()
+		if err != nil {
+			root.Close()
 			return fmt.Errorf("read skills dir %s: %w", dir, err)
 		}
 
@@ -170,15 +194,27 @@ func walkSkillDirs(dirs []string, fn func(path string, s SkillSummary)) error {
 				continue
 			}
 
-			path := filepath.Join(dir, entry.Name(), "SKILL.md")
-
-			s, err := parseFrontmatter(path)
-			if err != nil {
+			relPath := filepath.Join(entry.Name(), "SKILL.md")
+			f, openErr := root.Open(relPath)
+			if openErr != nil {
 				continue
 			}
 
-			fn(path, s)
+			data, readErr := io.ReadAll(f)
+			f.Close()
+			if readErr != nil {
+				continue
+			}
+
+			s, parseErr := parseFrontmatter(data)
+			if parseErr != nil {
+				continue
+			}
+
+			fn(s, data)
 		}
+
+		root.Close()
 	}
 
 	return nil
@@ -189,7 +225,7 @@ func ListSkills(dirs ...string) ([]SkillSummary, error) {
 	seen := map[string]int{}
 	var summaries []SkillSummary
 
-	err := walkSkillDirs(dirs, func(_ string, s SkillSummary) {
+	err := walkSkillDirs(dirs, func(s SkillSummary, _ []byte) {
 		if idx, ok := seen[s.Name]; ok {
 			summaries[idx] = s
 		} else {
@@ -203,17 +239,11 @@ func ListSkills(dirs ...string) ([]SkillSummary, error) {
 
 // parseFrontmatter extracts name, summary, and tools from YAML frontmatter.
 // Handles simple scalar and flow/block sequence formats without a YAML dependency.
-func parseFrontmatter(path string) (SkillSummary, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return SkillSummary{}, err
-	}
-	defer f.Close()
-
-	scanner := bufio.NewScanner(f)
+func parseFrontmatter(data []byte) (SkillSummary, error) {
+	scanner := bufio.NewScanner(bytes.NewReader(data))
 
 	if !scanner.Scan() || strings.TrimSpace(scanner.Text()) != "---" {
-		return SkillSummary{}, fmt.Errorf("no frontmatter in %s", path)
+		return SkillSummary{}, fmt.Errorf("no frontmatter")
 	}
 
 	var s SkillSummary
@@ -324,13 +354,8 @@ func PreloadedSkills(dirs ...string) ([]PreloadedSkill, error) {
 	seen := map[string]int{}
 	var result []PreloadedSkill
 
-	err := walkSkillDirs(dirs, func(path string, s SkillSummary) {
+	err := walkSkillDirs(dirs, func(s SkillSummary, data []byte) {
 		if !s.Preload {
-			return
-		}
-
-		data, readErr := os.ReadFile(path)
-		if readErr != nil {
 			return
 		}
 

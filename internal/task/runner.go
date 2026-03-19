@@ -3,6 +3,7 @@ package task
 import (
 	"context"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -56,9 +57,7 @@ func (r *Runner) SetCriticLLM(c llm.Completer) {
 }
 
 func (r *Runner) renderPrompt(t db.Task, tools []llm.ToolDef) string {
-	tmplPath := filepath.Join(r.cfg.PromptsPath(), "task-00.md")
-
-	raw, err := os.ReadFile(tmplPath)
+	raw, err := readFromPromptsRoot(r.cfg.PromptsPath(), "task-00.md")
 	if err != nil {
 		slog.Warn("load task prompt template", "pkg", "task", "error", err)
 		return fmt.Sprintf("Goal: %s\n\n%s", t.Goal, t.Plan)
@@ -414,11 +413,27 @@ func (r *Runner) buildNudge(t db.Task) func(string) string {
 			return ""
 		}
 
-		nudge, err := os.ReadFile(filepath.Join(r.cfg.PromptsPath(), "task-01-nudge.md"))
+		nudge, err := readFromPromptsRoot(r.cfg.PromptsPath(), "task-01-nudge.md")
 		if err != nil {
 			return ""
 		}
 
 		return string(nudge)
 	}
+}
+
+func readFromPromptsRoot(promptsDir, name string) ([]byte, error) {
+	root, err := os.OpenRoot(promptsDir)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+
+	f, err := root.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	return io.ReadAll(f)
 }

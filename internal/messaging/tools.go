@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -35,7 +36,7 @@ var replyToolDef = llm.ToolDef{
 						},
 						"image_path": map[string]any{
 							"type":        "string",
-							"description": "Absolute path to an image file to send. Omit or pass empty string for text-only.",
+							"description": "Path to an image file relative to workspace. Omit or pass empty string for text-only.",
 						},
 						"voice": map[string]any{
 							"type":        "boolean",
@@ -212,8 +213,19 @@ func replyHandler(svc *Service) llm.ToolExecutor {
 			}
 
 			if p := strings.TrimSpace(msg.ImagePath); p != "" && svc.cfg != nil {
-				if !isUnderDir(p, svc.cfg.Home) {
-					return llm.ToolErrorf("image_path must be within %s", svc.cfg.Home), nil
+				if filepath.IsAbs(p) {
+					return llm.ToolErrorf("image_path must be relative to workspace"), nil
+				}
+
+				root, rootErr := os.OpenRoot(svc.cfg.Home)
+				if rootErr != nil {
+					return llm.ToolError(rootErr), nil
+				}
+
+				_, statErr := root.Stat(p)
+				root.Close()
+				if statErr != nil {
+					return llm.ToolErrorf("image_path: %v", statErr), nil
 				}
 			}
 		}
@@ -230,7 +242,8 @@ func replyHandler(svc *Service) llm.ToolExecutor {
 				}
 				err = svc.SendAudio(ctx, args.ConversationID, audioPath, true, msg.Text)
 			case strings.TrimSpace(msg.ImagePath) != "":
-				err = svc.SendImage(ctx, args.ConversationID, msg.ImagePath, msg.Text)
+				absPath := filepath.Join(svc.cfg.Home, strings.TrimSpace(msg.ImagePath))
+				err = svc.SendImage(ctx, args.ConversationID, absPath, msg.Text)
 			default:
 				err = svc.Reply(ctx, args.ConversationID, msg.Text)
 			}
@@ -362,14 +375,6 @@ func updateMediaDescriptionHandler(svc *Service) llm.ToolExecutor {
 
 		return `{"ok":true}`, nil
 	}
-}
-
-func isUnderDir(path, base string) bool {
-	rel, err := filepath.Rel(filepath.Clean(base), filepath.Clean(path))
-	if err != nil {
-		return false
-	}
-	return !strings.HasPrefix(rel, "..")
 }
 
 func contextMetaValue(ctx context.Context, key string) string {
