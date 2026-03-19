@@ -55,6 +55,10 @@ wapp-history-dump:
 timeline:
 	@go run ./tools/timeline -home $(NIK_HOME) $(ARGS)
 
+.PHONY: trigger
+trigger:
+	@go run ./tools/trigger -home $(NIK_HOME) $(ARGS)
+
 .PHONY: call
 call:
 	@cd $(NIK_HOME) && go run ../tools/call $(ARGS)

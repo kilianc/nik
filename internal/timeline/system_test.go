@@ -158,6 +158,13 @@ func TestRenderSystemMessage(t *testing.T) {
 			wantFrom: "skill",
 			wantSub:  "[Skill removed]",
 		},
+		{
+			name:     "trigger",
+			kind:     "trigger",
+			body:     map[string]string{"skill": "breathing"},
+			wantFrom: "system",
+			wantSub:  "[Trigger] load breathing skill",
+		},
 	}
 
 	for _, tt := range tests {

@@ -35,6 +35,8 @@ func renderSystemMessage(msg db.Message) entry {
 		return renderAlarmUpdated(msg)
 	case "skill_added", "skill_removed", "skill_changed":
 		return renderSkillEvent(msg)
+	case "trigger":
+		return renderTrigger(msg)
 	default:
 		return entry{at: msg.SentAt, from: "system", text: "[" + msg.Kind + "] " + msg.Body}
 	}
@@ -210,6 +212,20 @@ func renderSkillEvent(msg db.Message) entry {
 	}
 
 	return entry{at: msg.SentAt, from: "skill", text: padLines(lines)}
+}
+
+func renderTrigger(msg db.Message) entry {
+	var t struct {
+		Skill string `json:"skill"`
+	}
+	_ = json.Unmarshal([]byte(msg.Body), &t)
+
+	lines := []string{
+		"[Trigger] load " + t.Skill + " skill",
+		"MANDATORY: load this skill with load_skill and follow all instructions.",
+	}
+
+	return entry{at: msg.SentAt, from: "system", text: padLines(lines)}
 }
 
 func padLines(lines []string) string {
