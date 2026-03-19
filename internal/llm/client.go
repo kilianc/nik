@@ -350,7 +350,8 @@ func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instru
 	}
 
 	m := *c.model
-	if strings.Contains(m, "spark") || strings.Contains(m, "nano") || strings.Contains(m, "4.1-mini") {
+	noReasoning := (strings.Contains(m, "spark") || strings.Contains(m, "nano") || strings.Contains(m, "4.1-mini")) && !strings.Contains(m, "5.4")
+	if noReasoning {
 		params.Reasoning = shared.ReasoningParam{}
 		params.Text = responses.ResponseTextConfigParam{}
 	}
