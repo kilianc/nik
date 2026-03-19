@@ -27,7 +27,7 @@ var configDef = llm.ToolDef{
 			},
 			"field": map[string]any{
 				"type":        "string",
-				"description": "Config field name for 'set'. Writable fields: timezone, location, max_history, models.main.*, models.recall.*, models.critic.*.",
+				"description": "Config field name for 'set'. Writable fields: timezone, location, max_history, models.main.*, models.task.*, models.recall.*, models.critic.*.",
 			},
 			"value": map[string]any{
 				"type":        "string",
@@ -84,6 +84,11 @@ func configGet(cfg *Config) (string, error) {
 				"model":            cfg.Models.Main.Model,
 				"reasoning_effort": cfg.Models.Main.ReasoningEffort,
 				"verbosity":        cfg.Models.Main.Verbosity,
+			},
+			"task": map[string]any{
+				"model":            cfg.Models.Task.Model,
+				"reasoning_effort": cfg.Models.Task.ReasoningEffort,
+				"verbosity":        cfg.Models.Task.Verbosity,
 			},
 			"recall": map[string]any{
 				"model":            cfg.Models.Recall.Model,
@@ -151,6 +156,18 @@ func configSet(cfg *Config, field, value string) (string, error) {
 			return llm.ToolErrorf("invalid models.main.verbosity %q (low, medium, high, or empty)", value), nil
 		}
 		cfg.Models.Main.Verbosity = value
+	case "models.task.model":
+		cfg.Models.Task.Model = value
+	case "models.task.reasoning_effort":
+		if !isValidReasoningEffort(value) {
+			return llm.ToolErrorf("invalid models.task.reasoning_effort %q (none, minimal, low, medium, high, xhigh, or empty)", value), nil
+		}
+		cfg.Models.Task.ReasoningEffort = value
+	case "models.task.verbosity":
+		if !isValidVerbosity(value) {
+			return llm.ToolErrorf("invalid models.task.verbosity %q (low, medium, high, or empty)", value), nil
+		}
+		cfg.Models.Task.Verbosity = value
 	case "models.recall.model":
 		cfg.Models.Recall.Model = value
 	case "models.recall.reasoning_effort":

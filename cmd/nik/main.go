@@ -128,9 +128,9 @@ func main() {
 		return
 	}
 
-	var llmOpts []llm.ClientOption
+	var authOpts []llm.ClientOption
 	if cfg.OpenAIKey != "" {
-		llmOpts = append(llmOpts, llm.WithAPIKey(cfg.OpenAIKey))
+		authOpts = append(authOpts, llm.WithAPIKey(cfg.OpenAIKey))
 	}
 	if cfg.UseCodex {
 		auth, err := codex.LoadOrLogin("")
@@ -138,12 +138,14 @@ func main() {
 			fmt.Fprintf(os.Stderr, "codex auth error: %v\n", err)
 			os.Exit(1)
 		}
-		llmOpts = append(llmOpts, llm.WithCodex(auth))
+		authOpts = append(authOpts, llm.WithCodex(auth))
 		slog.Info("codex auth ready", "account_id", auth.AccountID)
 	}
-	llmOpts = append(llmOpts, llm.WithReasoningEffort(&cfg.Models.Main.ReasoningEffort))
-	llmOpts = append(llmOpts, llm.WithVerbosity(&cfg.Models.Main.Verbosity))
-	llmClient := llm.NewClient(&cfg.Models.Main.Model, llmOpts...)
+
+	mainOpts := append([]llm.ClientOption{}, authOpts...)
+	mainOpts = append(mainOpts, llm.WithReasoningEffort(&cfg.Models.Main.ReasoningEffort))
+	mainOpts = append(mainOpts, llm.WithVerbosity(&cfg.Models.Main.Verbosity))
+	llmClient := llm.NewClient(&cfg.Models.Main.Model, mainOpts...)
 
 	var recallClient *llm.Client
 	if cfg.Models.Recall.Model != "" && cfg.OpenAIKey != "" {
@@ -156,17 +158,23 @@ func main() {
 		slog.Info("recall client ready", "model", cfg.Models.Recall.Model)
 	}
 
+	taskLLMClient := llmClient
+	if cfg.Models.Task.Model != "" {
+		taskOpts := append([]llm.ClientOption{}, authOpts...)
+		taskOpts = append(taskOpts, llm.WithReasoningEffort(&cfg.Models.Task.ReasoningEffort))
+		taskOpts = append(taskOpts, llm.WithVerbosity(&cfg.Models.Task.Verbosity))
+		taskLLMClient = llm.NewClient(&cfg.Models.Task.Model, taskOpts...)
+		slog.Info("task client ready", "model", cfg.Models.Task.Model)
+	}
+
 	alarmSvc := alarms.New(conn)
 	recallSvc := recall.NewService(cfg, recallClient)
 	taskSvc := task.NewService(conn)
 	shellSvc := shell.NewService(conn, cfg.Home)
 
-	// worker tools: subset available to background task runners.
-	// workers can execute commands, query the DB, describe media, and load skills.
-	// they cannot message users, manage tasks, or set alarms -- only nik does that.
 	var taskTools []llm.Tool
 	taskTools = append(taskTools, shellSvc.BuildTools()...)
-	taskTools = append(taskTools, llm.BuildTools(llmClient, cfg.Home)...)
+	taskTools = append(taskTools, llm.BuildTools(taskLLMClient, cfg.Home)...)
 	taskTools = append(taskTools, db.BuildTools(conn)...)
 	taskTools = append(taskTools, skills.BuildTools(cfg)...)
 
@@ -176,6 +184,9 @@ func main() {
 	}
 
 	llmClient.SetObserver(stats.NewRecorder(conn))
+	if taskLLMClient != llmClient {
+		taskLLMClient.SetObserver(stats.NewRecorder(conn))
+	}
 
 	messagingSvc.SetSpeechFn(func(ctx context.Context, text string) (string, error) {
 		var instructions string
@@ -194,7 +205,7 @@ func main() {
 		)
 	})
 
-	taskRunner := task.NewRunner(cfg, llmClient, taskSvc, taskTools)
+	taskRunner := task.NewRunner(cfg, taskLLMClient, taskSvc, taskTools)
 
 	if cfg.Models.Critic.Enabled && cfg.OpenAIKey != "" {
 		criticOpts := []llm.ClientOption{

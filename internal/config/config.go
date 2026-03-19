@@ -27,6 +27,7 @@ type CriticConfig struct {
 
 type ModelsConfig struct {
 	Main   ModelConfig  `yaml:"main"`
+	Task   ModelConfig  `yaml:"task"`
 	Recall ModelConfig  `yaml:"recall"`
 	Critic CriticConfig `yaml:"critic"`
 	TTS    TTSConfig    `yaml:"tts"`
@@ -340,6 +341,11 @@ func validateConfig(cfg Config) error {
 	}
 
 	err := validatePurposeModel("main", cfg.Models.Main)
+	if err != nil {
+		return err
+	}
+
+	err = validatePurposeModel("task", cfg.Models.Task)
 	if err != nil {
 		return err
 	}

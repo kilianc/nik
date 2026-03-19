@@ -6,6 +6,10 @@ models:
     model: gpt-5.4
     reasoning_effort: ""  # none, minimal, low, medium, high, xhigh (empty = model default)
     verbosity: ""         # low, medium, high (empty = model default)
+  task:
+    model: ""             # model for task workers (empty = use main model)
+    reasoning_effort: ""
+    verbosity: ""
   recall:
     model: ""             # model for recall pre-filtering (empty = skip recall)
     reasoning_effort: ""  # none, minimal, low, medium, high, xhigh (empty = model default)

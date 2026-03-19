@@ -36,9 +36,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	var llmOpts []llm.ClientOption
+	var authOpts []llm.ClientOption
 	if cfg.OpenAIKey != "" {
-		llmOpts = append(llmOpts, llm.WithAPIKey(cfg.OpenAIKey))
+		authOpts = append(authOpts, llm.WithAPIKey(cfg.OpenAIKey))
 	}
 	if cfg.UseCodex {
 		auth, err := codex.LoadOrLogin("")
@@ -46,11 +46,13 @@ func main() {
 			fmt.Fprintf(os.Stderr, "codex auth error: %v\n", err)
 			os.Exit(1)
 		}
-		llmOpts = append(llmOpts, llm.WithCodex(auth))
+		authOpts = append(authOpts, llm.WithCodex(auth))
 	}
-	llmOpts = append(llmOpts, llm.WithReasoningEffort(&cfg.Models.Main.ReasoningEffort))
-	llmOpts = append(llmOpts, llm.WithVerbosity(&cfg.Models.Main.Verbosity))
-	llmClient := llm.NewClient(&cfg.Models.Main.Model, llmOpts...)
+
+	mainOpts := append([]llm.ClientOption{}, authOpts...)
+	mainOpts = append(mainOpts, llm.WithReasoningEffort(&cfg.Models.Main.ReasoningEffort))
+	mainOpts = append(mainOpts, llm.WithVerbosity(&cfg.Models.Main.Verbosity))
+	llmClient := llm.NewClient(&cfg.Models.Main.Model, mainOpts...)
 
 	conn, err := db.Open(cfg.DBPath(), cfg.TZ())
 	if err != nil {
@@ -60,7 +62,15 @@ func main() {
 		defer conn.Close()
 	}
 
-	tools := buildTools(cfg, llmClient, conn)
+	taskLLMClient := llmClient
+	if cfg.Models.Task.Model != "" {
+		taskOpts := append([]llm.ClientOption{}, authOpts...)
+		taskOpts = append(taskOpts, llm.WithReasoningEffort(&cfg.Models.Task.ReasoningEffort))
+		taskOpts = append(taskOpts, llm.WithVerbosity(&cfg.Models.Task.Verbosity))
+		taskLLMClient = llm.NewClient(&cfg.Models.Task.Model, taskOpts...)
+	}
+
+	tools := buildTools(cfg, llmClient, taskLLMClient, conn)
 
 	handler, ok := tools[toolName]
 	if !ok {
@@ -88,7 +98,7 @@ func main() {
 	fmt.Println(result)
 }
 
-func buildTools(cfg *config.Config, llmClient *llm.Client, conn *sql.DB) map[string]llm.ToolExecutor {
+func buildTools(cfg *config.Config, llmClient, taskLLMClient *llm.Client, conn *sql.DB) map[string]llm.ToolExecutor {
 	tools := map[string]llm.ToolExecutor{}
 
 	for _, t := range llm.BuildTools(llmClient, cfg.Home) {
@@ -97,6 +107,9 @@ func buildTools(cfg *config.Config, llmClient *llm.Client, conn *sql.DB) map[str
 
 	if conn != nil {
 		llmClient.SetObserver(stats.NewRecorder(conn))
+		if taskLLMClient != llmClient {
+			taskLLMClient.SetObserver(stats.NewRecorder(conn))
+		}
 
 		contactsSvc := contacts.NewService(conn)
 		msgSvc := messaging.NewService(&config.Config{}, conn, contactsSvc)
@@ -126,11 +139,11 @@ func buildTools(cfg *config.Config, llmClient *llm.Client, conn *sql.DB) map[str
 		shellSvc := shell.NewService(conn, cfg.Home)
 		var taskToolList []llm.Tool
 		taskToolList = append(taskToolList, shellSvc.BuildTools()...)
-		taskToolList = append(taskToolList, llm.BuildTools(llmClient, cfg.Home)...)
+		taskToolList = append(taskToolList, llm.BuildTools(taskLLMClient, cfg.Home)...)
 		taskToolList = append(taskToolList, db.BuildTools(conn)...)
 		taskToolList = append(taskToolList, skills.BuildTools(cfg)...)
 
-		taskRunner := task.NewRunner(cfg, llmClient, taskSvc, taskToolList)
+		taskRunner := task.NewRunner(cfg, taskLLMClient, taskSvc, taskToolList)
 		for _, t := range task.BuildTools(taskSvc, taskRunner) {
 			tools[t.Def.Name] = t.Handler
 		}

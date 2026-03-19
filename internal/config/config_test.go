@@ -281,6 +281,49 @@ models:
 	}
 }
 
+func TestLoadRejectsInvalidTaskSettings(t *testing.T) {
+	dir := t.TempDir()
+	writeTestConfig(t, dir, `
+openai_key: sk-test
+models:
+  main:
+    model: gpt-5
+  task:
+    reasoning_effort: turbo
+`)
+
+	_, err := Load(dir)
+	if err == nil {
+		t.Fatal("expected error for invalid models.task.reasoning_effort")
+	}
+}
+
+func TestLoadAcceptsTaskModel(t *testing.T) {
+	dir := t.TempDir()
+	writeTestConfig(t, dir, `
+openai_key: sk-test
+models:
+  main:
+    model: gpt-5
+  task:
+    model: gpt-4.1-mini
+    reasoning_effort: low
+    verbosity: medium
+`)
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	if cfg.Models.Task.Model != "gpt-4.1-mini" {
+		t.Fatalf("expected models.task.model gpt-4.1-mini, got %q", cfg.Models.Task.Model)
+	}
+	if cfg.Models.Task.ReasoningEffort != "low" {
+		t.Fatalf("expected models.task.reasoning_effort low, got %q", cfg.Models.Task.ReasoningEffort)
+	}
+}
+
 func TestIsAllowed(t *testing.T) {
 	cfg := Config{
 		AllowConversationIDs: map[string]string{"owner": "conv-1", "friend": "conv-2"},
