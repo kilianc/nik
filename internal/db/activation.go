@@ -86,6 +86,19 @@ type ActivationStatsUpdate struct {
 	Output          string
 }
 
+func ActivationUpdateDetail(ctx context.Context, db DBTX, id string, instructions string, tools []string) error {
+	_, err := db.ExecContext(ctx, queries.ActivationUpdateDetail,
+		id,
+		instructions,
+		MarshalStringSlice(tools),
+	)
+	if err != nil {
+		return fmt.Errorf("update activation detail %s: %w", id, err)
+	}
+
+	return nil
+}
+
 func ActivationUpdateStats(ctx context.Context, db DBTX, id string, s ActivationStatsUpdate) error {
 	_, err := db.ExecContext(ctx, queries.ActivationUpdateStats,
 		id,

@@ -125,8 +125,13 @@ var ActivationInsert string
 //go:embed activation_update_stats.sql
 var ActivationUpdateStats string
 
-//go:embed activation_detail_insert.sql
-var ActivationDetailInsert string
+//go:embed activation_update_detail.sql
+var ActivationUpdateDetail string
+
+// activation round queries
+
+//go:embed activation_round_insert.sql
+var ActivationRoundInsert string
 
 // tool call queries
 

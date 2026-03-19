@@ -28,9 +28,10 @@ import (
 
 type CompletionObserver interface {
 	OnStart(ctx context.Context, model string)
-	OnToolCall(ctx context.Context, name string, round int, args string, result string, duration time.Duration, isError bool)
+	OnRound(ctx context.Context, round int, userInput string, modelOutput string, reasoningSummaries []string) string
+	OnToolCall(ctx context.Context, activationRoundID string, name string, args string, result string, duration time.Duration, isError bool)
 	OnFinish(ctx context.Context, model string, reasoningEffort string, usage Usage, rounds RoundStats, toolCalls int, durationMS int64, output string, processErr error)
-	OnDetail(ctx context.Context, instructions string, userInput string, tools []string, reasoningSummaries []string)
+	OnDetail(ctx context.Context, instructions string, tools []string)
 }
 
 type CompleteOption func(*completeOpts)
@@ -212,9 +213,8 @@ type RoundStats struct {
 }
 
 type CompletionExtra struct {
-	RawResponses       []string
-	ReasoningSummaries []string
-	ReasoningEffort    string
+	RawResponses    []string
+	ReasoningEffort string
 }
 
 type ToolCallRecord struct {
@@ -308,8 +308,6 @@ func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instru
 	var retOutput string
 	var history []ToolCallRecord
 
-	var lastInput string
-
 	if c.observer != nil {
 		defer func() {
 			c.observer.OnFinish(ctx, *c.model, extra.ReasoningEffort, total, rounds, len(history), time.Since(completeStart).Milliseconds(), retOutput, retErr)
@@ -318,7 +316,7 @@ func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instru
 			for i, t := range tools {
 				toolNames[i] = t.Name
 			}
-			c.observer.OnDetail(ctx, instructions, lastInput, toolNames, extra.ReasoningSummaries)
+			c.observer.OnDetail(ctx, instructions, toolNames)
 		}()
 	}
 
@@ -366,9 +364,10 @@ func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instru
 	var consecutiveRepeats int
 
 	for round := 0; ; round++ {
+		var userInput string
 		if getInput != nil {
 			content := ensureJSONInput(getInput(), c.jsonOutput)
-			lastInput = content
+			userInput = content
 			msg := responses.ResponseInputItemParamOfMessage(content, responses.EasyInputMessageRoleUser)
 			if round == 0 {
 				items = append(items, msg)
@@ -432,15 +431,24 @@ func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instru
 			rounds.MaxTotalTokensPerRound = resp.Usage.TotalTokens
 		}
 
+		// TODO: check if len(roundSummaries) is always 1 -- if so, simplify to single TEXT column
+		var roundSummaries []string
 		for _, item := range resp.Output {
 			if item.Type != "reasoning" {
 				continue
 			}
 			for _, s := range item.AsReasoning().Summary {
 				if s.Text != "" {
-					extra.ReasoningSummaries = append(extra.ReasoningSummaries, s.Text)
+					roundSummaries = append(roundSummaries, s.Text)
 				}
 			}
+		}
+
+		modelOutput := resp.OutputText()
+
+		var roundID string
+		if c.observer != nil {
+			roundID = c.observer.OnRound(ctx, round, userInput, modelOutput, roundSummaries)
 		}
 
 		if resp.Status == responses.ResponseStatusIncomplete {
@@ -465,7 +473,7 @@ func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instru
 		}
 
 		if len(calls) == 0 {
-			retOutput = resp.OutputText()
+			retOutput = modelOutput
 
 			if opts.onIdle != nil {
 				followUp := opts.onIdle(retOutput)
@@ -539,7 +547,7 @@ func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instru
 			history = append(history, rec)
 
 			if c.observer != nil {
-				c.observer.OnToolCall(ctx, rec.Name, round, rec.Args, rec.Result, r.elapsed, rec.Error)
+				c.observer.OnToolCall(ctx, roundID, rec.Name, rec.Args, rec.Result, r.elapsed, rec.Error)
 			}
 
 			items = append(items, responses.ResponseInputItemParamOfFunctionCallOutput(call.CallID, r.result))

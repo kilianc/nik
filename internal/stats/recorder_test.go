@@ -74,6 +74,51 @@ func TestRecorderOnStart(t *testing.T) {
 	})
 }
 
+func TestRecorderOnRound(t *testing.T) {
+	t.Run("no meta noops", func(t *testing.T) {
+		r := NewRecorder(nil)
+		got := r.OnRound(context.Background(), 0, "input", "output", nil)
+		if got != "" {
+			t.Fatalf("expected empty string, got %q", got)
+		}
+	})
+
+	t.Run("writes round", func(t *testing.T) {
+		conn, err := db.OpenInMemory()
+		if err != nil {
+			t.Fatalf("open: %v", err)
+		}
+		defer conn.Close()
+
+		ctx := context.Background()
+		convID := seedStatsConversation(t, ctx, conn)
+		actID := id.V7()
+
+		meta := map[string]string{
+			"activation_id":   actID,
+			"conversation_id": convID,
+		}
+		ctx = context.WithValue(ctx, "meta", meta)
+
+		r := NewRecorder(conn)
+		r.OnStart(ctx, "gpt-4o")
+
+		roundID := r.OnRound(ctx, 0, "hello", "thinking", []string{"considered"})
+		if roundID == "" {
+			t.Fatal("expected non-empty round ID")
+		}
+
+		var userInput string
+		err = conn.QueryRowContext(ctx, `SELECT user_input FROM activation_round WHERE id = ?1`, roundID).Scan(&userInput)
+		if err != nil {
+			t.Fatalf("query round: %v", err)
+		}
+		if userInput != "hello" {
+			t.Errorf("expected user_input 'hello', got %q", userInput)
+		}
+	})
+}
+
 func seedStatsConversation(t *testing.T, ctx context.Context, conn db.DBTX) string {
 	t.Helper()
 
