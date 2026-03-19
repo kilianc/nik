@@ -1,6 +1,7 @@
 package brain
 
 import (
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -18,13 +19,27 @@ type promptHook struct {
 }
 
 func loadHooks(home, model string) []promptHook {
-	dir := filepath.Join(home, "prompts")
+	root, err := os.OpenRoot(home)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			slog.Warn("open hooks root", "pkg", "brain", "error", err)
+		}
+		return nil
+	}
+	defer root.Close()
 
-	entries, err := os.ReadDir(dir)
+	dirFile, err := root.Open("prompts")
 	if err != nil {
 		if !os.IsNotExist(err) {
 			slog.Warn("read hooks dir", "pkg", "brain", "error", err)
 		}
+		return nil
+	}
+
+	entries, err := dirFile.ReadDir(-1)
+	dirFile.Close()
+	if err != nil {
+		slog.Warn("read hooks dir", "pkg", "brain", "error", err)
 		return nil
 	}
 
@@ -35,7 +50,14 @@ func loadHooks(home, model string) []promptHook {
 			continue
 		}
 
-		raw, readErr := os.ReadFile(filepath.Join(dir, e.Name()))
+		f, openErr := root.Open(filepath.Join("prompts", e.Name()))
+		if openErr != nil {
+			slog.Warn("read hook file", "pkg", "brain", "file", e.Name(), "error", openErr)
+			continue
+		}
+
+		raw, readErr := io.ReadAll(f)
+		f.Close()
 		if readErr != nil {
 			slog.Warn("read hook file", "pkg", "brain", "file", e.Name(), "error", readErr)
 			continue

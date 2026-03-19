@@ -675,40 +675,29 @@ func (c *Client) Speech(ctx context.Context, text string, model string, voice st
 	return outPath, nil
 }
 
-func (c *Client) Transcribe(ctx context.Context, filePath string) (string, error) {
+func (c *Client) Transcribe(ctx context.Context, f *os.File) (string, error) {
 	if c.apiClient == nil {
-		return "", fmt.Errorf("transcribe %s: requires api key", filePath)
+		return "", fmt.Errorf("transcribe: requires api key")
 	}
-
-	f, err := os.Open(filePath)
-	if err != nil {
-		return "", fmt.Errorf("open audio file %s: %w", filePath, err)
-	}
-	defer f.Close()
 
 	resp, err := c.apiClient.Audio.Transcriptions.New(ctx, openai.AudioTranscriptionNewParams{
 		File:  f,
 		Model: openai.AudioModelWhisper1,
 	})
 	if err != nil {
-		return "", fmt.Errorf("transcribe %s: %w", filePath, err)
+		return "", fmt.Errorf("transcribe %s: %w", f.Name(), err)
 	}
 
 	return resp.Text, nil
 }
 
-func (c *Client) Describe(ctx context.Context, filePath, mimeType, question string) (string, error) {
+func (c *Client) Describe(ctx context.Context, data []byte, filename, mimeType, question string) (string, error) {
 	if c.apiClient == nil {
-		return "", fmt.Errorf("describe %s: requires api key", filePath)
+		return "", fmt.Errorf("describe %s: requires api key", filename)
 	}
 
 	if question == "" {
 		question = "Describe this content concisely."
-	}
-
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		return "", fmt.Errorf("read file %s: %w", filePath, err)
 	}
 
 	var content responses.ResponseInputMessageContentListParam
@@ -725,7 +714,7 @@ func (c *Client) Describe(ctx context.Context, filePath, mimeType, question stri
 			{OfInputText: &responses.ResponseInputTextParam{Text: question}},
 			{OfInputFile: &responses.ResponseInputFileParam{
 				FileData: param.NewOpt(dataURL),
-				Filename: param.NewOpt(filepath.Base(filePath)),
+				Filename: param.NewOpt(filename),
 			}},
 		}
 	}
@@ -739,7 +728,7 @@ func (c *Client) Describe(ctx context.Context, filePath, mimeType, question stri
 		Input: responses.ResponseNewParamsInputUnion{OfInputItemList: items},
 	})
 	if err != nil {
-		return "", fmt.Errorf("describe %s: %w", filePath, err)
+		return "", fmt.Errorf("describe %s: %w", filename, err)
 	}
 
 	return resp.OutputText(), nil

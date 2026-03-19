@@ -2,6 +2,8 @@ package llm
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -30,44 +32,42 @@ func TestDescribeMediaRequiresFilePath(t *testing.T) {
 	}
 }
 
-func TestDescribeMediaResolvesRelativePath(t *testing.T) {
+func TestDescribeMediaRequiresHome(t *testing.T) {
 	out, err := describeMedia(
 		context.Background(),
-		ToolCall{Arguments: `{"file_path":"media/abc123.oga","question":""}`},
-		&Client{},
-		"/home/nik",
+		ToolCall{Arguments: `{"file_path":"media/test.png","question":""}`},
+		nil,
+		"",
 	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-
-	if strings.Contains(out, "media/media/") {
-		t.Fatalf("path was doubled: %q", out)
-	}
-	if !strings.Contains(out, "/home/nik/media/abc123.oga") {
-		t.Fatalf("expected resolved path in error, got %q", out)
+	if !strings.Contains(out, "requires a home directory") {
+		t.Fatalf("expected home directory error, got %q", out)
 	}
 }
 
-func TestDescribeMediaLeavesAbsolutePathAlone(t *testing.T) {
+func TestDescribeMediaRejectsAbsolutePath(t *testing.T) {
+	home := t.TempDir()
+
 	out, err := describeMedia(
 		context.Background(),
-		ToolCall{Arguments: `{"file_path":"/home/nik/media/abc123.oga","question":""}`},
+		ToolCall{Arguments: `{"file_path":"/etc/passwd","question":""}`},
 		&Client{},
-		"/home/nik",
+		home,
 	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-
-	if !strings.Contains(out, "/home/nik/media/abc123.oga") {
-		t.Fatalf("expected absolute path preserved, got %q", out)
+	if !strings.Contains(out, "absolute paths not allowed") {
+		t.Fatalf("expected absolute path error, got %q", out)
 	}
 }
 
 func TestDescribeMediaBlocksPathTraversal(t *testing.T) {
+	home := t.TempDir()
+
 	cases := []string{
-		"/etc/passwd",
 		"../../../etc/passwd",
 		"media/../../etc/passwd",
 	}
@@ -76,28 +76,69 @@ func TestDescribeMediaBlocksPathTraversal(t *testing.T) {
 			context.Background(),
 			ToolCall{Arguments: `{"file_path":"` + fp + `","question":""}`},
 			&Client{},
-			"/home/nik",
+			home,
 		)
 		if err != nil {
 			t.Fatalf("unexpected error for %q: %v", fp, err)
 		}
-		if !strings.Contains(out, "must be within") {
-			t.Fatalf("expected path containment error for %q, got %q", fp, out)
+		if !strings.Contains(out, "error") {
+			t.Fatalf("expected error for %q, got %q", fp, out)
 		}
 	}
 }
 
-func TestIsUnderDir(t *testing.T) {
-	if !isUnderDir("/home/nik/media/file.ogg", "/home/nik") {
-		t.Fatal("expected /home/nik/media/file.ogg under /home/nik")
+func TestDescribeMediaBlocksSymlinkEscape(t *testing.T) {
+	home := t.TempDir()
+
+	outside := t.TempDir()
+	err := os.WriteFile(filepath.Join(outside, "secret.txt"), []byte("secret"), 0o644)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !isUnderDir("/home/nik/file.txt", "/home/nik") {
-		t.Fatal("expected /home/nik/file.txt under /home/nik")
+
+	err = os.Symlink(outside, filepath.Join(home, "escape"))
+	if err != nil {
+		t.Fatal(err)
 	}
-	if isUnderDir("/etc/passwd", "/home/nik") {
-		t.Fatal("expected /etc/passwd not under /home/nik")
+
+	out, err := describeMedia(
+		context.Background(),
+		ToolCall{Arguments: `{"file_path":"escape/secret.txt","question":""}`},
+		&Client{},
+		home,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if isUnderDir("/home/nik/../etc/passwd", "/home/nik") {
-		t.Fatal("expected traversal path not under /home/nik")
+	if !strings.Contains(out, "error") {
+		t.Fatalf("expected error for symlink escape, got %q", out)
+	}
+}
+
+func TestDescribeMediaOpensValidFile(t *testing.T) {
+	home := t.TempDir()
+
+	err := os.MkdirAll(filepath.Join(home, "media"), 0o755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = os.WriteFile(filepath.Join(home, "media", "test.png"), []byte("fake-png"), 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out, descErr := describeMedia(
+		context.Background(),
+		ToolCall{Arguments: `{"file_path":"media/test.png","question":"what is this?"}`},
+		&Client{},
+		home,
+	)
+	if descErr != nil {
+		t.Fatalf("unexpected error: %v", descErr)
+	}
+
+	// Client has no apiClient, so Describe returns an error about needing an API key.
+	if !strings.Contains(out, "requires api key") {
+		t.Fatalf("expected api key error (file was opened successfully), got %q", out)
 	}
 }

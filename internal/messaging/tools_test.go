@@ -2,6 +2,8 @@ package messaging
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -170,9 +172,10 @@ func TestReplyHandlerBannedWordPrevalidation(t *testing.T) {
 	}
 }
 
-func TestReplyHandlerBlocksImagePathTraversal(t *testing.T) {
+func TestReplyHandlerBlocksAbsoluteImagePath(t *testing.T) {
+	home := t.TempDir()
 	cfg := &config.Config{
-		Home:                 "/home/nik",
+		Home:                 home,
 		AllowConversationIDs: map[string]string{"owner": "conv-123"},
 	}
 	svc := &Service{cfg: cfg}
@@ -190,8 +193,72 @@ func TestReplyHandlerBlocksImagePathTraversal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(out, "must be within") {
-		t.Fatalf("expected path containment error, got %q", out)
+	if !strings.Contains(out, "must be relative") {
+		t.Fatalf("expected relative path error, got %q", out)
+	}
+}
+
+func TestReplyHandlerBlocksImagePathTraversal(t *testing.T) {
+	home := t.TempDir()
+	cfg := &config.Config{
+		Home:                 home,
+		AllowConversationIDs: map[string]string{"owner": "conv-123"},
+	}
+	svc := &Service{cfg: cfg}
+	handler := replyHandler(svc)
+
+	ctx := context.WithValue(
+		context.Background(),
+		"meta",
+		map[string]string{"conversation_id": "conv-123"},
+	)
+
+	out, err := handler(ctx, llm.ToolCall{
+		Arguments: `{"conversation_id":"conv-123","contact_id":"","messages":[{"text":"look","image_path":"../../../etc/passwd","voice":false}]}`,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "error") {
+		t.Fatalf("expected error for traversal path, got %q", out)
+	}
+}
+
+func TestReplyHandlerBlocksImagePathSymlinkEscape(t *testing.T) {
+	home := t.TempDir()
+	outside := t.TempDir()
+
+	err := os.WriteFile(filepath.Join(outside, "secret.png"), []byte("img"), 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = os.Symlink(outside, filepath.Join(home, "escape"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &config.Config{
+		Home:                 home,
+		AllowConversationIDs: map[string]string{"owner": "conv-123"},
+	}
+	svc := &Service{cfg: cfg}
+	handler := replyHandler(svc)
+
+	ctx := context.WithValue(
+		context.Background(),
+		"meta",
+		map[string]string{"conversation_id": "conv-123"},
+	)
+
+	out, err := handler(ctx, llm.ToolCall{
+		Arguments: `{"conversation_id":"conv-123","contact_id":"","messages":[{"text":"look","image_path":"escape/secret.png","voice":false}]}`,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "error") {
+		t.Fatalf("expected error for symlink escape, got %q", out)
 	}
 }
 

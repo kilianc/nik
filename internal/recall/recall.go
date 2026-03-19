@@ -3,6 +3,7 @@ package recall
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"strconv"
@@ -32,7 +33,7 @@ func (s *Service) Recall(ctx context.Context, stimulus string) string {
 		return ""
 	}
 
-	data, err := os.ReadFile(s.cfg.MemoriesPath())
+	data, err := readMemories(s.cfg.Home)
 	if err != nil && !os.IsNotExist(err) {
 		slog.Warn("recall read memories file", "pkg", "recall", "err", err)
 	}
@@ -168,4 +169,20 @@ func parseSelectedIDs(output string, maxID int) []int {
 
 func tokenEstimate(s string) int {
 	return len(s) / charsPerToken
+}
+
+func readMemories(home string) ([]byte, error) {
+	root, err := os.OpenRoot(home)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+
+	f, err := root.Open("memories/latest.md")
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	return io.ReadAll(f)
 }
