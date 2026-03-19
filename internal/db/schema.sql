@@ -70,7 +70,8 @@ CREATE TABLE IF NOT EXISTS message (
     'sticker', 'reaction', 'location', 'contact', 'poll',
     'task_report', 'task_spawned', 'task_retry', 'task_cancelled',
     'alarm_fired', 'alarm_stale', 'alarm_created', 'alarm_updated',
-    'skill_added', 'skill_removed', 'skill_changed'
+    'skill_added', 'skill_removed', 'skill_changed',
+    'trigger'
   )),
   body                     TEXT NOT NULL DEFAULT '',
   mime_type                TEXT,
