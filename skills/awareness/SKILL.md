@@ -4,7 +4,7 @@ summary: >
   Proactive awareness of what's coming up for people. Checks calendars, memories,
   and recent conversations for upcoming events and writes to awareness/upcoming.md.
   Load when the awareness alarm fires.
-tools: [db_query, shell, alarm]
+tools: [db_query, shell, alarm, write_file]
 ---
 
 # Awareness
@@ -81,7 +81,7 @@ This is a rough net — you're looking for signals, not precision. If something 
 Overwrite the awareness file with what's coming up. Keep it brief and human — this isn't a calendar export, it's your sense of what matters:
 
 ```
-shell action: "run", command: "mkdir -p awareness && cat > awareness/upcoming.md << 'AWARENESS'\n<what's coming up for people you care about, in the next day or two>\nAWARENESS"
+write_file action: "write", path: "awareness/upcoming.md", content: "<what's coming up for people you care about, in the next day or two>"
 ```
 
 Examples of good entries:

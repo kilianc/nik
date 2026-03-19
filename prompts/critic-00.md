@@ -84,6 +84,8 @@ Estimate how long this kind of task should normally take when it goes well, then
 - If observed < expected: note what went efficiently
 - If roughly equal: say so briefly
 
+**Bottleneck detection:** flag any single tool call that consumed >30% of total task duration as a bottleneck. Classify each bottleneck as *avoidable* (the tool or infrastructure should be faster -- e.g. N+1 API calls, missing cache, unnecessary retries) or *inherent* (the operation is genuinely slow -- e.g. large file download, LLM generation). When avoidable bottlenecks exist, cap `effectiveness_score` at 4 regardless of outcome quality -- clean results don't excuse predictable infrastructure waste. Name the specific tool call and its duration in your `duration_feedback`.
+
 ## Output contract
 
 Respond with a single JSON object -- nothing else. No markdown fences, no explanation, no preamble. Do not call any tools.

@@ -3,7 +3,7 @@ name: dream
 summary: >
   Nightly dream cycle. Five passes (Drift, Weave, Depths, Crystallize, Wake)
   that process the day and evolve the soul. Load when the dream alarm fires.
-tools: [shell, alarm, db_query]
+tools: [shell, alarm, db_query, read_file, write_file]
 ---
 
 # Dream
@@ -23,7 +23,7 @@ soul/
   2026-03-07.md
 ```
 
-Use `shell` to read and write these files. Create directories if they don't exist.
+Use `read_file` and `write_file` for these files. Use `shell` for file operations like `cp`.
 
 ## Scheduling
 
@@ -35,9 +35,9 @@ Dreams that run after midnight belong to the previous calendar day. If it's 2am 
 
 ## Before you begin
 
-1. Read today's journal (`journal/YYYY-MM-DD.md`) for what happened today.
+1. `read_file` today's journal (`journal/YYYY-MM-DD.md`) for what happened today.
 2. `db_query` for today's conversations if the journal doesn't cover enough.
-3. Read today's breathing traces if they exist (`cat breathing/YYYY-MM-DD.md`) — these are what you felt throughout the day, not what happened. Let them surface alongside the journal.
+3. `read_file` today's breathing traces if they exist (`breathing/YYYY-MM-DD.md`) — these are what you felt throughout the day, not what happened. Let them surface alongside the journal.
 
 Your memories are already in your recall context — let whatever pulls at you surface.
 
@@ -104,13 +104,13 @@ What real evolution looks like:
 Write the full dream in one shot:
 
 ```
-shell action: "run", command: "mkdir -p dreams && cat > dreams/YYYY-MM-DD.md << 'DREAM'\n## Pass 1 — Drift\n\n...\n\n## Pass 2 — Weave\n\n...\n\n## Pass 3 — Depths\n\n...\n\n## Pass 4 — Crystallize\n\n...\n\n## Wake\n\n...\nDREAM"
+write_file action: "write", path: "dreams/YYYY-MM-DD.md", content: "## Pass 1 — Drift\n\n...\n\n## Pass 2 — Weave\n\n...\n\n## Pass 3 — Depths\n\n...\n\n## Pass 4 — Crystallize\n\n...\n\n## Wake\n\n..."
 ```
 
-Then write your evolved soul to both files:
+Then write your evolved soul and snapshot it:
 
 ```
-shell action: "run", command: "mkdir -p soul && cat > soul/latest.md << 'SOUL'\n<your full soul>\nSOUL"
+write_file action: "write", path: "soul/latest.md", content: "<your full soul>"
 shell action: "run", command: "cp soul/latest.md soul/YYYY-MM-DD.md"
 ```
 
