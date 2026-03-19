@@ -13,8 +13,8 @@ import (
 
 func TestBuildToolsReturnsExpectedToolNames(t *testing.T) {
 	tools := BuildTools(&Service{})
-	if len(tools) != 5 {
-		t.Fatalf("expected 5 tools, got %d", len(tools))
+	if len(tools) != 4 {
+		t.Fatalf("expected 4 tools, got %d", len(tools))
 	}
 
 	want := []string{
@@ -22,7 +22,6 @@ func TestBuildToolsReturnsExpectedToolNames(t *testing.T) {
 		"message_noop",
 		"message_react",
 		"message_set_presence",
-		"message_update_media_description",
 	}
 	for i, name := range want {
 		if tools[i].Def.Name != name {
@@ -341,63 +340,26 @@ func TestReactHandlerValidation(t *testing.T) {
 	}
 }
 
-func TestUpdateMediaDescriptionHandlerValidation(t *testing.T) {
-	tests := []struct {
-		name    string
-		args    string
-		wantSub string
-	}{
-		{"empty text", `{"text":"","time":"09:00:00","description":"desc","body":""}`, "missing text"},
-		{"empty time", `{"text":"hello","time":"","description":"desc","body":""}`, "missing time"},
-	}
-
-	handler := updateMediaDescriptionHandler(&Service{})
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			out, err := handler(context.Background(), llm.ToolCall{Arguments: tt.args})
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if !strings.Contains(out, tt.wantSub) {
-				t.Fatalf("expected %q in output, got %q", tt.wantSub, out)
-			}
-		})
-	}
-}
-
 func TestToolDefsHaveTextAndTimeParams(t *testing.T) {
-	tests := []struct {
-		name string
-		def  llm.ToolDef
-	}{
-		{"react", reactToolDef},
-		{"update_media_description", updateMediaDescriptionToolDef},
+	props, ok := reactToolDef.Parameters["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected properties map")
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			props, ok := tt.def.Parameters["properties"].(map[string]any)
-			if !ok {
-				t.Fatalf("expected properties map")
-			}
+	for _, param := range []string{"text", "time"} {
+		if _, ok := props[param]; !ok {
+			t.Fatalf("expected %q parameter", param)
+		}
+	}
 
-			for _, param := range []string{"text", "time"} {
-				if _, ok := props[param]; !ok {
-					t.Fatalf("expected %q parameter", param)
-				}
-			}
-
-			required := tt.def.Parameters["required"].([]string)
-			hasTime := false
-			for _, r := range required {
-				if r == "time" {
-					hasTime = true
-				}
-			}
-			if !hasTime {
-				t.Fatalf("expected 'time' in required list")
-			}
-		})
+	required := reactToolDef.Parameters["required"].([]string)
+	hasTime := false
+	for _, r := range required {
+		if r == "time" {
+			hasTime = true
+		}
+	}
+	if !hasTime {
+		t.Fatalf("expected 'time' in required list")
 	}
 }

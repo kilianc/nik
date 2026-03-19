@@ -257,6 +257,9 @@ func renderEntries(entries []entry) []string {
 
 func messageEntry(msg db.Message, sender string, database *sql.DB) entry {
 	if msg.Platform == "system" {
+		if msg.Kind == "media_processed" {
+			return renderMediaProcessed(msg, database)
+		}
 		return renderSystemMessage(msg)
 	}
 
@@ -318,7 +321,7 @@ func targetSnippet(msg db.Message, sender string) string {
 		body = body[:targetSnippetTruncateLen] + "…"
 	}
 
-	return prefix + `"` + body + `"`
+	return prefix + body
 }
 
 func resolveContactName(ctx context.Context, database *sql.DB, msg db.Message) string {

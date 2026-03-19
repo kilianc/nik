@@ -10,10 +10,11 @@ import (
 )
 
 type SystemMessageParams struct {
-	ConversationID string
-	Kind           string
-	Body           any
-	SentAt         time.Time
+	ConversationID  string
+	Kind            string
+	Body            any
+	SentAt          time.Time
+	ContextStanzaID string
 }
 
 func InsertSystemMessage(ctx context.Context, db DBTX, p SystemMessageParams) error {
@@ -24,7 +25,7 @@ func InsertSystemMessage(ctx context.Context, db DBTX, p SystemMessageParams) er
 		return fmt.Errorf("marshal system message body: %w", err)
 	}
 
-	return InsertMessage(ctx, db, InsertMessageParams{
+	params := InsertMessageParams{
 		ID:                     msgID,
 		ConversationID:         p.ConversationID,
 		ContactID:              SystemContactID,
@@ -36,5 +37,11 @@ func InsertSystemMessage(ctx context.Context, db DBTX, p SystemMessageParams) er
 		Body:                   string(bodyJSON),
 		ContextMentionedIDs:    "[]",
 		SentAt:                 p.SentAt,
-	})
+	}
+
+	if p.ContextStanzaID != "" {
+		params.ContextStanzaID = p.ContextStanzaID
+	}
+
+	return InsertMessage(ctx, db, params)
 }

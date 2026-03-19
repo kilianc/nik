@@ -7,7 +7,6 @@ tools:
   - message_noop
   - message_react
   - message_set_presence
-  - message_update_media_description
 ---
 
 # Messaging
@@ -38,10 +37,10 @@ React to a specific message with one emoji.
 - `emoji` -- reaction emoji
 
 Examples:
-- Reply `where? (replying to [09:12:45] Bob: "ok")` → react to original: text="ok", time="09:12:45"
-- Reaction `(👍) (reacting to [09:12:30] Alice: "hello")` → react to original: text="hello", time="09:12:30"
-- Edit `hello (edit of [09:12:30] Alice: "helo")` → react to edit: text="hello", time="09:12:35"
-- Edit `hello (edit of [09:12:30] Alice: "helo")` → react to original: text="helo", time="09:12:30"
+- Reply `where? (replying to [09:12:45] Bob: ok)` → react to original: text="ok", time="09:12:45"
+- Reaction `(👍) (reacting to [09:12:30] Alice: hello)` → react to original: text="hello", time="09:12:30"
+- Edit `hello (edit of [09:12:30] Alice: helo)` → react to edit: text="hello", time="09:12:35"
+- Edit `hello (edit of [09:12:30] Alice: helo)` → react to original: text="helo", time="09:12:30"
 
 ### message_noop
 
@@ -57,16 +56,6 @@ Set account-level presence for a platform.
 
 - `platform` -- platform name (e.g. "whatsapp")
 - `available` -- true for online, false for offline
-
-### message_update_media_description
-
-Persist a media description or transcript for a message. Call this after
-`describe_media` to save the result. Same matching as `message_react`.
-
-- `text` -- exact message content as shown after sender name in timeline
-- `time` -- timestamp in HH:MM:SS from the timeline brackets
-- `description` -- description or transcript text
-- `body` -- optional replacement body text (empty = skip)
 
 ## Behavior
 

@@ -74,6 +74,106 @@ func TestMessageMediaRoundTrip(t *testing.T) {
 	}
 }
 
+func TestMediaResolveByPath(t *testing.T) {
+	ctx := context.Background()
+
+	conn, err := OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	messageID := seedMessageForMediaTest(t, ctx, conn)
+
+	mimeType := "image/jpeg"
+	localPath := "media/resolve-test.jpg"
+	err = UpsertMedia(ctx, conn, UpsertMediaParams{
+		ID:        "resolve-media-1",
+		MimeType:  &mimeType,
+		LocalPath: &localPath,
+	})
+	if err != nil {
+		t.Fatalf("upsert media: %v", err)
+	}
+
+	err = UpsertMessageMedia(ctx, conn, messageID, "resolve-media-1")
+	if err != nil {
+		t.Fatalf("upsert message_media: %v", err)
+	}
+
+	r, err := MediaResolveByPath(ctx, conn, "media/resolve-test.jpg")
+	if err != nil {
+		t.Fatalf("resolve by path: %v", err)
+	}
+
+	if r.MediaID != "resolve-media-1" {
+		t.Fatalf("expected media id resolve-media-1, got %s", r.MediaID)
+	}
+	if r.MessageID != messageID {
+		t.Fatalf("expected message id %s, got %s", messageID, r.MessageID)
+	}
+	if r.ConversationID == "" {
+		t.Fatalf("expected non-empty conversation id")
+	}
+	if r.Platform != "whatsapp" {
+		t.Fatalf("expected platform whatsapp, got %s", r.Platform)
+	}
+	if r.ExternalMessageID != "media-msg-1" {
+		t.Fatalf("expected external message id media-msg-1, got %s", r.ExternalMessageID)
+	}
+
+	_, err = MediaResolveByPath(ctx, conn, "media/nonexistent.jpg")
+	if err == nil {
+		t.Fatalf("expected error for nonexistent path")
+	}
+}
+
+func TestUpdateMediaTranscript(t *testing.T) {
+	ctx := context.Background()
+
+	conn, err := OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	mimeType := "audio/ogg"
+	localPath := "media/transcript-test.ogg"
+	err = UpsertMedia(ctx, conn, UpsertMediaParams{
+		ID:        "transcript-media-1",
+		MimeType:  &mimeType,
+		LocalPath: &localPath,
+	})
+	if err != nil {
+		t.Fatalf("upsert media: %v", err)
+	}
+
+	now := time.Now()
+	rows, err := UpdateMediaTranscript(ctx, conn, "transcript-media-1", "hello from audio", now)
+	if err != nil {
+		t.Fatalf("update transcript: %v", err)
+	}
+	if rows != 1 {
+		t.Fatalf("expected 1 row affected, got %d", rows)
+	}
+
+	var transcriptText string
+	var transcribedAt string
+	err = conn.QueryRowContext(ctx,
+		"SELECT transcript_text, transcribed_at FROM media WHERE id = ?1",
+		"transcript-media-1",
+	).Scan(&transcriptText, &transcribedAt)
+	if err != nil {
+		t.Fatalf("query transcript: %v", err)
+	}
+	if transcriptText != "hello from audio" {
+		t.Fatalf("expected transcript 'hello from audio', got %q", transcriptText)
+	}
+	if transcribedAt == "" {
+		t.Fatalf("expected non-empty transcribed_at")
+	}
+}
+
 func seedMessageForMediaTest(t *testing.T, ctx context.Context, conn *sql.DB) string {
 	t.Helper()
 

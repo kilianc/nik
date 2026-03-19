@@ -182,7 +182,7 @@ These run on schedule via alarms — the brain activates them like any other sti
 
 Domain packages define tools via `BuildTools()` and register them at startup. The brain makes them available to the LLM during activations. Some tools are privileged (owner-only).
 
-**messaging** -- `message_reply`, `message_react`, `message_set_presence`, `message_update_media_description`
+**messaging** -- `message_reply`, `message_react`, `message_set_presence`
 
 **shell** -- `shell` (tmux: run, read, send, kill, list)
 

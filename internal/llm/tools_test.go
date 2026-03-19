@@ -8,6 +8,16 @@ import (
 	"testing"
 )
 
+func TestBuildToolsReturnsDescribeMedia(t *testing.T) {
+	tools := BuildTools(nil, "", nil)
+	if len(tools) != 1 {
+		t.Fatalf("expected 1 tool, got %d", len(tools))
+	}
+	if tools[0].Def.Name != "describe_media" {
+		t.Fatalf("expected describe_media, got %q", tools[0].Def.Name)
+	}
+}
+
 func TestIsAudioExtRecognizesSupportedExtensions(t *testing.T) {
 	if !isAudioExt(".ogg") {
 		t.Fatalf("expected .ogg to be supported")
@@ -21,8 +31,7 @@ func TestDescribeMediaRequiresFilePath(t *testing.T) {
 	out, err := describeMedia(
 		context.Background(),
 		ToolCall{Arguments: `{"file_path":"","question":""}`},
-		nil,
-		"",
+		nil, "", nil,
 	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -36,8 +45,7 @@ func TestDescribeMediaRequiresHome(t *testing.T) {
 	out, err := describeMedia(
 		context.Background(),
 		ToolCall{Arguments: `{"file_path":"media/test.png","question":""}`},
-		nil,
-		"",
+		nil, "", nil,
 	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -53,8 +61,7 @@ func TestDescribeMediaRejectsAbsolutePath(t *testing.T) {
 	out, err := describeMedia(
 		context.Background(),
 		ToolCall{Arguments: `{"file_path":"/etc/passwd","question":""}`},
-		&Client{},
-		home,
+		&Client{}, home, nil,
 	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -75,8 +82,7 @@ func TestDescribeMediaBlocksPathTraversal(t *testing.T) {
 		out, err := describeMedia(
 			context.Background(),
 			ToolCall{Arguments: `{"file_path":"` + fp + `","question":""}`},
-			&Client{},
-			home,
+			&Client{}, home, nil,
 		)
 		if err != nil {
 			t.Fatalf("unexpected error for %q: %v", fp, err)
@@ -104,8 +110,7 @@ func TestDescribeMediaBlocksSymlinkEscape(t *testing.T) {
 	out, err := describeMedia(
 		context.Background(),
 		ToolCall{Arguments: `{"file_path":"escape/secret.txt","question":""}`},
-		&Client{},
-		home,
+		&Client{}, home, nil,
 	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -130,15 +135,20 @@ func TestDescribeMediaOpensValidFile(t *testing.T) {
 	out, descErr := describeMedia(
 		context.Background(),
 		ToolCall{Arguments: `{"file_path":"media/test.png","question":"what is this?"}`},
-		&Client{},
-		home,
+		&Client{}, home, nil,
 	)
 	if descErr != nil {
 		t.Fatalf("unexpected error: %v", descErr)
 	}
 
-	// Client has no apiClient, so Describe returns an error about needing an API key.
 	if !strings.Contains(out, "requires api key") {
 		t.Fatalf("expected api key error (file was opened successfully), got %q", out)
+	}
+}
+
+func TestPersistMediaNilUpdater(t *testing.T) {
+	ok := persistMedia(context.Background(), nil, "media/test.png", "desc", false)
+	if ok {
+		t.Fatalf("expected false when updater is nil")
 	}
 }

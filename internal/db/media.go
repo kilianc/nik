@@ -53,6 +53,40 @@ func UpdateMediaDescription(ctx context.Context, db DBTX, mediaID, description s
 	return result.RowsAffected()
 }
 
+func UpdateMediaTranscript(ctx context.Context, db DBTX, mediaID, transcript string, transcribedAt time.Time) (int64, error) {
+	result, err := db.ExecContext(ctx, queries.MediaUpdateTranscript, transcript, transcribedAt, mediaID)
+	if err != nil {
+		return 0, fmt.Errorf("update media transcript %s: %w", mediaID, err)
+	}
+
+	return result.RowsAffected()
+}
+
+type MediaResolution struct {
+	MediaID           string
+	MessageID         string
+	ConversationID    string
+	Platform          string
+	ExternalMessageID string
+}
+
+func MediaResolveByPath(ctx context.Context, db DBTX, localPath string) (MediaResolution, error) {
+	var r MediaResolution
+
+	err := db.QueryRowContext(ctx, queries.MediaResolveByPath, localPath).Scan(
+		&r.MediaID,
+		&r.MessageID,
+		&r.ConversationID,
+		&r.Platform,
+		&r.ExternalMessageID,
+	)
+	if err != nil {
+		return MediaResolution{}, fmt.Errorf("resolve media by path %s: %w", localPath, err)
+	}
+
+	return r, nil
+}
+
 func UpsertMessageMedia(ctx context.Context, db DBTX, messageID, mediaID string) error {
 	_, err := db.ExecContext(ctx, queries.MessageMediaUpsert, id.V7(), messageID, mediaID)
 	if err != nil {
