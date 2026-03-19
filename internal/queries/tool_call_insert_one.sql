@@ -1,8 +1,8 @@
 INSERT INTO tool_call (
   id,
   activation_id,
+  activation_round_id,
   name,
-  round,
   input,
   output,
   duration_ms,

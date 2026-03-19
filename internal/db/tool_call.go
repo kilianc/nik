@@ -11,13 +11,13 @@ import (
 )
 
 type ToolCallInsertParams struct {
-	ActivationID string
-	Name         string
-	Round        int
-	Input        string
-	Output       string
-	Duration     time.Duration
-	IsError      bool
+	ActivationID      string
+	ActivationRoundID string
+	Name              string
+	Input             string
+	Output            string
+	Duration          time.Duration
+	IsError           bool
 }
 
 func ToolCallInsertOne(ctx context.Context, db *sql.DB, p ToolCallInsertParams) error {
@@ -26,11 +26,16 @@ func ToolCallInsertOne(ctx context.Context, db *sql.DB, p ToolCallInsertParams) 
 		errFlag = 1
 	}
 
+	var roundID any
+	if p.ActivationRoundID != "" {
+		roundID = p.ActivationRoundID
+	}
+
 	_, err := db.ExecContext(ctx, queries.ToolCallInsertOne,
 		id.V7(),
 		p.ActivationID,
+		roundID,
 		p.Name,
-		p.Round,
 		p.Input,
 		p.Output,
 		p.Duration.Milliseconds(),

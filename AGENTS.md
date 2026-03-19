@@ -123,8 +123,7 @@ contact ──┬── conversation_participant ──┬── conversation
                │
                └── origin_conversation_id → conversation
 
-conversation ── activation ──┬── tool_call
-                             ├── activation_detail
+conversation ── activation ──┬── activation_round ── tool_call
                              ├── shell_output
                              └── task (activation_id = spawning activation)
 
@@ -141,7 +140,7 @@ Location: `workspace/nik.log` (slog text format). Key events to grep for:
 - `no terminal tool call, retrying` -- brain loop stall
 - `activation_id` appears in both DB rows and log lines -- use it to correlate
 
-Activation detail (instructions, user input, tools, reasoning) is stored in the `activation_detail` DB table, queryable via `db_query`.
+Activation instructions and tools are stored on the `activation` row. Per-round data (user input, model output, reasoning summaries) is in `activation_round`, with tool calls linked via `activation_round_id`.
 
 ### Tracing recipes
 
@@ -167,11 +166,14 @@ ORDER BY created_at DESC LIMIT 20;
 **What did nik think and do in an activation:**
 
 ```sql
-SELECT ad.instructions, ad.user_input, ad.tools, ad.reasoning_summaries
-FROM activation_detail ad WHERE ad.activation_id = '<act_id>';
+SELECT instructions, tools FROM activation WHERE id = '<act_id>';
 
-SELECT name, input, output, duration_ms, error, created_at
-FROM tool_call WHERE activation_id = '<act_id>' ORDER BY created_at;
+SELECT ar.round, ar.user_input, ar.model_output, ar.reasoning_summaries,
+       tc.name, tc.input, tc.output, tc.duration_ms, tc.error
+FROM activation_round ar
+LEFT JOIN tool_call tc ON tc.activation_round_id = ar.id
+WHERE ar.activation_id = '<act_id>'
+ORDER BY ar.round, tc.created_at;
 ```
 
 **Task lifecycle -- goal, reports, worker tool calls:**
@@ -212,7 +214,7 @@ WHERE a.id LIKE '%<short_id>' ORDER BY ao.fired_at DESC LIMIT 10;
 1. **Anchor** -- find the message or event that triggered the bug (conversation_id + time window, or body text search)
 2. **Expand** -- join to conversation, contact, participants to understand who/where
 3. **Trace activation** -- find activation(s) by conversation_id + created_at window
-4. **Inspect reasoning** -- activation_detail for full prompt context and reasoning summaries
+4. **Inspect reasoning** -- activation_round for per-round user input, model output, and reasoning summaries; activation row for instructions and tools
 5. **Audit tool calls** -- tool_call rows for the activation, check errors, inspect input/output
 6. **Follow tasks** -- task -> task_report -> worker activation (task.activation_id) -> worker tool_calls
 7. **Check logs** -- grep nik.log for the activation_id to see runtime errors, timing, retries

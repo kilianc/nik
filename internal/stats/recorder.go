@@ -38,7 +38,29 @@ func (r *Recorder) OnStart(ctx context.Context, model string) {
 	}
 }
 
-func (r *Recorder) OnToolCall(ctx context.Context, name string, round int, args string, result string, duration time.Duration, isError bool) {
+func (r *Recorder) OnRound(ctx context.Context, round int, userInput string, modelOutput string, reasoningSummaries []string) string {
+	meta := metaFromCtx(ctx)
+	actID := meta["activation_id"]
+	if actID == "" {
+		return ""
+	}
+
+	roundID, err := db.ActivationRoundInsert(ctx, r.conn, db.ActivationRoundInsertParams{
+		ActivationID:       actID,
+		Round:              round,
+		UserInput:          userInput,
+		ModelOutput:        modelOutput,
+		ReasoningSummaries: reasoningSummaries,
+	})
+	if err != nil {
+		slog.Warn("record activation round", "pkg", "stats", "activation_id", actID, "round", round, "error", err)
+		return ""
+	}
+
+	return roundID
+}
+
+func (r *Recorder) OnToolCall(ctx context.Context, activationRoundID string, name string, args string, result string, duration time.Duration, isError bool) {
 	meta := metaFromCtx(ctx)
 	actID := meta["activation_id"]
 	if actID == "" {
@@ -46,13 +68,13 @@ func (r *Recorder) OnToolCall(ctx context.Context, name string, round int, args 
 	}
 
 	err := db.ToolCallInsertOne(ctx, r.conn, db.ToolCallInsertParams{
-		ActivationID: actID,
-		Name:         name,
-		Round:        round,
-		Input:        args,
-		Output:       result,
-		Duration:     duration,
-		IsError:      isError,
+		ActivationID:      actID,
+		ActivationRoundID: activationRoundID,
+		Name:              name,
+		Input:             args,
+		Output:            result,
+		Duration:          duration,
+		IsError:           isError,
 	})
 	if err != nil {
 		slog.Warn("record tool call", "pkg", "stats", "activation_id", actID, "error", err)
@@ -71,7 +93,6 @@ func (r *Recorder) OnFinish(ctx context.Context, model, reasoningEffort string, 
 		errText = processErr.Error()
 	}
 
-	// detach so the write completes even if the activation context is canceled
 	ctx = context.WithoutCancel(ctx)
 
 	err := db.ActivationUpdateStats(ctx, r.conn, actID, db.ActivationStatsUpdate{
@@ -95,7 +116,7 @@ func (r *Recorder) OnFinish(ctx context.Context, model, reasoningEffort string, 
 	}
 }
 
-func (r *Recorder) OnDetail(ctx context.Context, instructions string, userInput string, tools []string, reasoningSummaries []string) {
+func (r *Recorder) OnDetail(ctx context.Context, instructions string, tools []string) {
 	meta := metaFromCtx(ctx)
 	actID := meta["activation_id"]
 	if actID == "" {
@@ -104,15 +125,9 @@ func (r *Recorder) OnDetail(ctx context.Context, instructions string, userInput 
 
 	ctx = context.WithoutCancel(ctx)
 
-	err := db.ActivationDetailInsert(ctx, r.conn, db.ActivationDetailParams{
-		ActivationID:       actID,
-		Instructions:       instructions,
-		UserInput:          userInput,
-		Tools:              tools,
-		ReasoningSummaries: reasoningSummaries,
-	})
+	err := db.ActivationUpdateDetail(ctx, r.conn, actID, instructions, tools)
 	if err != nil {
-		slog.Warn("insert activation detail", "pkg", "stats", "activation_id", actID, "error", err)
+		slog.Warn("update activation detail", "pkg", "stats", "activation_id", actID, "error", err)
 	}
 }
 
@@ -124,5 +139,4 @@ func metaFromCtx(ctx context.Context) map[string]string {
 	return meta
 }
 
-// compile-time check
 var _ llm.CompletionObserver = (*Recorder)(nil)

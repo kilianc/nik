@@ -161,20 +161,33 @@ CREATE TABLE IF NOT EXISTS activation (
   duration_ms                INTEGER NOT NULL DEFAULT 0,
   error                      TEXT NOT NULL DEFAULT '',
   output                     TEXT NOT NULL DEFAULT '',
+  instructions               TEXT NOT NULL DEFAULT '',
+  tools                      TEXT NOT NULL DEFAULT '[]',
   created_at                 TIMESTAMP NOT NULL DEFAULT (NOW_ISO8601_MS()),
   CHECK (IS_ISO8601_MS(created_at))
 );
 
+CREATE TABLE IF NOT EXISTS activation_round (
+  id                  TEXT PRIMARY KEY,
+  activation_id       TEXT NOT NULL REFERENCES activation(id),
+  round               INTEGER NOT NULL,
+  user_input          TEXT NOT NULL DEFAULT '',
+  model_output        TEXT NOT NULL DEFAULT '',
+  reasoning_summaries TEXT NOT NULL DEFAULT '[]',
+  created_at          TIMESTAMP NOT NULL DEFAULT (NOW_ISO8601_MS()),
+  CHECK (IS_ISO8601_MS(created_at))
+);
+
 CREATE TABLE IF NOT EXISTS tool_call (
-  id            TEXT PRIMARY KEY,
-  activation_id TEXT NOT NULL REFERENCES activation(id),
-  name          TEXT NOT NULL,
-  round         INTEGER NOT NULL DEFAULT 0,
-  input         TEXT NOT NULL DEFAULT '',
-  output        TEXT NOT NULL DEFAULT '',
-  duration_ms   INTEGER NOT NULL DEFAULT 0,
-  error         INTEGER NOT NULL DEFAULT 0,
-  created_at    TIMESTAMP NOT NULL DEFAULT (NOW_ISO8601_MS()),
+  id                  TEXT PRIMARY KEY,
+  activation_id       TEXT NOT NULL REFERENCES activation(id),
+  activation_round_id TEXT REFERENCES activation_round(id),
+  name                TEXT NOT NULL,
+  input               TEXT NOT NULL DEFAULT '',
+  output              TEXT NOT NULL DEFAULT '',
+  duration_ms         INTEGER NOT NULL DEFAULT 0,
+  error               INTEGER NOT NULL DEFAULT 0,
+  created_at          TIMESTAMP NOT NULL DEFAULT (NOW_ISO8601_MS()),
   CHECK (IS_ISO8601_MS(created_at))
 );
 
@@ -220,15 +233,6 @@ CREATE TABLE IF NOT EXISTS shell_session (
   updated_at    TIMESTAMP NOT NULL DEFAULT (NOW_ISO8601_MS()),
   CHECK (IS_ISO8601_MS(created_at)),
   CHECK (IS_ISO8601_MS(updated_at))
-);
-
-CREATE TABLE IF NOT EXISTS activation_detail (
-  id                  TEXT PRIMARY KEY,
-  activation_id       TEXT NOT NULL UNIQUE REFERENCES activation(id),
-  instructions        TEXT NOT NULL DEFAULT '',
-  user_input          TEXT NOT NULL DEFAULT '',
-  tools               TEXT NOT NULL DEFAULT '[]',
-  reasoning_summaries TEXT NOT NULL DEFAULT '[]'
 );
 
 CREATE TABLE IF NOT EXISTS skill (
