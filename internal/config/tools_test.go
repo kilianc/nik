@@ -81,6 +81,57 @@ func TestConfigSetSupportsPurposeModelFields(t *testing.T) {
 	}
 }
 
+func TestConfigSetSupportsTaskModelFields(t *testing.T) {
+	cfg := &Config{
+		Home:      t.TempDir(),
+		OpenAIKey: "sk-test",
+		Models: ModelsConfig{
+			Main: ModelConfig{Model: "gpt-5"},
+		},
+	}
+
+	out, err := configSet(cfg, "models.task.model", "gpt-4.1-mini")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, `"ok":true`) {
+		t.Fatalf("expected ok response, got %q", out)
+	}
+	if cfg.Models.Task.Model != "gpt-4.1-mini" {
+		t.Fatalf("expected models.task.model gpt-4.1-mini, got %q", cfg.Models.Task.Model)
+	}
+
+	out, err = configSet(cfg, "models.task.reasoning_effort", "high")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, `"ok":true`) {
+		t.Fatalf("expected ok response, got %q", out)
+	}
+	if cfg.Models.Task.ReasoningEffort != "high" {
+		t.Fatalf("expected models.task.reasoning_effort high, got %q", cfg.Models.Task.ReasoningEffort)
+	}
+
+	out, err = configSet(cfg, "models.task.verbosity", "low")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, `"ok":true`) {
+		t.Fatalf("expected ok response, got %q", out)
+	}
+	if cfg.Models.Task.Verbosity != "low" {
+		t.Fatalf("expected models.task.verbosity low, got %q", cfg.Models.Task.Verbosity)
+	}
+
+	out, err = configSet(cfg, "models.task.reasoning_effort", "turbo")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "invalid models.task.reasoning_effort") {
+		t.Fatalf("expected validation error, got %q", out)
+	}
+}
+
 func TestConfigSetRejectsInvalidPurposeModelFields(t *testing.T) {
 	cfg := &Config{
 		Home:      t.TempDir(),
@@ -113,6 +164,39 @@ func TestConfigSetRejectsInvalidPurposeModelFields(t *testing.T) {
 	}
 	if cfg.Models.Critic.Model == "" {
 		t.Fatal("expected rollback to keep prior models.critic.model")
+	}
+}
+
+func TestConfigGetIncludesTaskModel(t *testing.T) {
+	cfg := &Config{
+		Models: ModelsConfig{
+			Task: ModelConfig{Model: "gpt-4.1-mini", ReasoningEffort: "low"},
+		},
+	}
+
+	out, err := configGet(cfg)
+	if err != nil {
+		t.Fatalf("config get: %v", err)
+	}
+
+	var data map[string]any
+	err = json.Unmarshal([]byte(out), &data)
+	if err != nil {
+		t.Fatalf("unmarshal config get: %v", err)
+	}
+
+	models, ok := data["models"].(map[string]any)
+	if !ok {
+		t.Fatal("expected models key in config get output")
+	}
+
+	taskSection, ok := models["task"].(map[string]any)
+	if !ok {
+		t.Fatal("expected models.task key in config get output")
+	}
+
+	if taskSection["model"] != "gpt-4.1-mini" {
+		t.Fatalf("expected task model gpt-4.1-mini, got %v", taskSection["model"])
 	}
 }
 
