@@ -42,7 +42,7 @@ func TaskAssessmentInsert(ctx context.Context, db *sql.DB, p TaskAssessmentInser
 	return nil
 }
 
-func TaskAllToolCalls(ctx context.Context, db *sql.DB, activationID string) ([]ToolCallInfo, error) {
+func TaskAssessmentToolCallList(ctx context.Context, db *sql.DB, activationID string) ([]ToolCallInfo, error) {
 	rows, err := db.QueryContext(ctx, queries.TaskAssessmentToolCalls, activationID)
 	if err != nil {
 		return nil, fmt.Errorf("query tool calls for activation %s: %w", activationID, err)
@@ -81,7 +81,7 @@ type TaskReportRow struct {
 	CreatedAt time.Time
 }
 
-func TaskReportsByTask(ctx context.Context, db *sql.DB, taskID string) ([]TaskReportRow, error) {
+func TaskReportList(ctx context.Context, db *sql.DB, taskID string) ([]TaskReportRow, error) {
 	rows, err := db.QueryContext(ctx, queries.TaskReportByTask, taskID)
 	if err != nil {
 		return nil, fmt.Errorf("query reports for task %s: %w", taskID, err)

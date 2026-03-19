@@ -1075,7 +1075,7 @@ func TestResolveConversation(t *testing.T) {
 		t.Fatalf("expected kind dm, got %q", conv.Kind)
 	}
 
-	participants, err := db.GetConversationParticipants(ctx, conn, convID)
+	participants, err := db.ConversationParticipantList(ctx, conn, convID)
 	if err != nil {
 		t.Fatalf("get participants: %v", err)
 	}

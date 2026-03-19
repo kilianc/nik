@@ -166,8 +166,14 @@ func MarkConversationsRead(ctx context.Context, db *sql.DB, p MarkConversationsR
 	return fmt.Errorf("mark conversations read: no filter provided")
 }
 
-func UpsertConversationParticipant(ctx context.Context, db DBTX, conversationID, contactID string, displayName *string) error {
-	if contactID == "" {
+type ConversationParticipantUpsertParams struct {
+	ConversationID string
+	ContactID      string
+	DisplayName    *string
+}
+
+func ConversationParticipantUpsert(ctx context.Context, db DBTX, p ConversationParticipantUpsertParams) error {
+	if p.ContactID == "" {
 		return fmt.Errorf("empty contact_id")
 	}
 
@@ -175,18 +181,18 @@ func UpsertConversationParticipant(ctx context.Context, db DBTX, conversationID,
 		ctx,
 		queries.ConversationUpsertParticipant,
 		id.V7(),
-		conversationID,
-		contactID,
-		displayName,
+		p.ConversationID,
+		p.ContactID,
+		p.DisplayName,
 	)
 	if err != nil {
-		return fmt.Errorf("upsert conversation participant %s/%s: %w", conversationID, contactID, err)
+		return fmt.Errorf("upsert conversation participant %s/%s: %w", p.ConversationID, p.ContactID, err)
 	}
 
 	return nil
 }
 
-func GetConversationParticipants(ctx context.Context, db *sql.DB, conversationID string) ([]ConversationParticipant, error) {
+func ConversationParticipantList(ctx context.Context, db *sql.DB, conversationID string) ([]ConversationParticipant, error) {
 	rows, err := db.QueryContext(ctx, queries.ConversationGetParticipants, conversationID)
 	if err != nil {
 		return nil, fmt.Errorf("get conversation participants %s: %w", conversationID, err)

@@ -361,9 +361,9 @@ All queries live in `internal/queries/*.sql` files with exact executable SQL (po
 
 **Query function design:** one Go function per entity operation. Never create multiple `DoSomethingByX` / `DoSomethingByY` variants that differ only in lookup column. Instead, use a single function with a params struct and dispatch internally based on which fields are populated. Multiple `.sql` files behind a single Go function is fine.
 
-**No SQL query variants for optional columns.** Don't create a new `.sql` file that differs from an existing one only by including an extra nullable column. Extend the existing query to accept the column as a nullable parameter instead — callers pass `nil` when unused.
+**One SQL file per CRUD verb per entity.** Each entity gets at most one INSERT, one SELECT-single, one SELECT-list, one UPDATE, and one DELETE `.sql` file. Use `COALESCE`/nullable params to handle field-level optionality within a single file — callers pass `nil` when unused. Only split into separate files when there is a real security or performance need (e.g. different WHERE-clause index patterns, fundamentally different return shapes).
 
-Good — `GetContact` already does this (`get_contact.sql` uses `WHERE id = ?1 OR EXISTS (SELECT 1 FROM json_each(whatsapp_ids) WHERE value = ?1) OR ...`). `GetMessagesByConversation` dispatches between two SQL files based on `beforeID`.
+Good — `GetContact` already does this (`contact_get.sql` uses `WHERE id = ?1 OR EXISTS (SELECT 1 FROM json_each(whatsapp_ids) WHERE value = ?1) OR ...`). `MarkConversationsRead` dispatches between two SQL files because the WHERE clauses target different indexes (`id` vs `platform`).
 
 **Service layering:** `db/` is the only package that touches `internal/queries`. It owns model types (`db/models.go`), scan helpers, and query functions. Domain packages (`internal/<name>/`) hold services, tools, and reflexes — they call `db.*` functions for all persistence.
 

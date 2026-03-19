@@ -47,7 +47,11 @@ func (s *Service) EnsureContactForMessage(ctx context.Context, platform string, 
 			}
 
 			for _, id := range externalIDs[1:] {
-				_ = db.AddWhatsAppID(ctx, s.db, self.ID, id, phoneFromWhatsAppID(id))
+				_ = db.ContactAddWhatsAppID(ctx, s.db, db.ContactAddWhatsAppIDParams{
+					ContactID: self.ID,
+					JID:       id,
+					Phone:     phoneFromWhatsAppID(id),
+				})
 			}
 
 			return self.ID, nil
@@ -69,14 +73,22 @@ func (s *Service) EnsureContactForMessage(ctx context.Context, platform string, 
 			}
 
 			for _, id := range externalIDs[1:] {
-				_ = db.AddWhatsAppID(ctx, s.db, created.ID, id, phoneFromWhatsAppID(id))
+				_ = db.ContactAddWhatsAppID(ctx, s.db, db.ContactAddWhatsAppIDParams{
+					ContactID: created.ID,
+					JID:       id,
+					Phone:     phoneFromWhatsAppID(id),
+				})
 			}
 
 			return created.ID, nil
 		}
 
 		for _, id := range externalIDs {
-			_ = db.AddWhatsAppID(ctx, s.db, matched.ID, id, phoneFromWhatsAppID(id))
+			_ = db.ContactAddWhatsAppID(ctx, s.db, db.ContactAddWhatsAppIDParams{
+				ContactID: matched.ID,
+				JID:       id,
+				Phone:     phoneFromWhatsAppID(id),
+			})
 		}
 
 		return matched.ID, nil

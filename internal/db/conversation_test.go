@@ -74,7 +74,7 @@ func TestConversationGroupMetadataRoundTrip(t *testing.T) {
 	}
 }
 
-func TestGetConversationParticipantsIncludesContactProfile(t *testing.T) {
+func TestConversationParticipantListIncludesContactProfile(t *testing.T) {
 	ctx := context.Background()
 
 	conn, err := OpenInMemory()
@@ -115,12 +115,16 @@ func TestGetConversationParticipantsIncludesContactProfile(t *testing.T) {
 	conversationID := conversation.ID
 
 	displayName := "Ali"
-	err = UpsertConversationParticipant(ctx, conn, conversationID, contact.ID, &displayName)
+	err = ConversationParticipantUpsert(ctx, conn, ConversationParticipantUpsertParams{
+		ConversationID: conversationID,
+		ContactID:      contact.ID,
+		DisplayName:    &displayName,
+	})
 	if err != nil {
 		t.Fatalf("upsert conversation participant: %v", err)
 	}
 
-	participants, err := GetConversationParticipants(ctx, conn, conversationID)
+	participants, err := ConversationParticipantList(ctx, conn, conversationID)
 	if err != nil {
 		t.Fatalf("get conversation participants: %v", err)
 	}
@@ -159,12 +163,18 @@ func TestUpsertConversationParticipantDeduplicatesByContactID(t *testing.T) {
 
 	conversationID := seedConversation(t, ctx, conn, "whatsapp", "group@g.us", "group")
 
-	err = UpsertConversationParticipant(ctx, conn, conversationID, contact.ID, nil)
+	err = ConversationParticipantUpsert(ctx, conn, ConversationParticipantUpsertParams{
+		ConversationID: conversationID,
+		ContactID:      contact.ID,
+	})
 	if err != nil {
 		t.Fatalf("upsert participant first: %v", err)
 	}
 
-	err = UpsertConversationParticipant(ctx, conn, conversationID, contact.ID, nil)
+	err = ConversationParticipantUpsert(ctx, conn, ConversationParticipantUpsertParams{
+		ConversationID: conversationID,
+		ContactID:      contact.ID,
+	})
 	if err != nil {
 		t.Fatalf("upsert participant second: %v", err)
 	}
@@ -182,7 +192,7 @@ func TestUpsertConversationParticipantDeduplicatesByContactID(t *testing.T) {
 		t.Fatalf("expected non-empty participant id")
 	}
 
-	participants, err := GetConversationParticipants(ctx, conn, conversationID)
+	participants, err := ConversationParticipantList(ctx, conn, conversationID)
 	if err != nil {
 		t.Fatalf("get participants: %v", err)
 	}
