@@ -281,7 +281,7 @@ func TestRenderUsesSystemMessagesOnly(t *testing.T) {
 	}
 
 	out := strings.Join(rendered, "\n")
-	if !strings.Contains(out, "[Task report]") {
+	if !strings.Contains(out, "[task report]") {
 		t.Fatalf("expected rendered timeline to include task report, got %q", out)
 	}
 	if !strings.Contains(out, "goal: check build") {

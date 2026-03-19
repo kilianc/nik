@@ -871,14 +871,14 @@ func TestConversationHeaderUnifiedDM(t *testing.T) {
 	if !strings.Contains(out, "id: "+conv.ID) {
 		t.Fatalf("expected id line in header, got %q", out)
 	}
-	if !strings.Contains(out, "Title:") {
-		t.Fatalf("expected Title in header, got %q", out)
+	if !strings.Contains(out, "title:") {
+		t.Fatalf("expected title in header, got %q", out)
 	}
-	if !strings.Contains(out, "Platform: whatsapp") {
-		t.Fatalf("expected Platform in header, got %q", out)
+	if !strings.Contains(out, "platform: whatsapp") {
+		t.Fatalf("expected platform in header, got %q", out)
 	}
-	if !strings.Contains(out, "Type: dm") {
-		t.Fatalf("expected Type in header, got %q", out)
+	if !strings.Contains(out, "type: dm") {
+		t.Fatalf("expected type in header, got %q", out)
 	}
 	if strings.Contains(out, "Announce mode") {
 		t.Fatalf("should not contain Announce mode, got %q", out)
