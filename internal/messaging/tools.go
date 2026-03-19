@@ -118,41 +118,12 @@ var setPresenceToolDef = llm.ToolDef{
 	},
 }
 
-var updateMediaDescriptionToolDef = llm.ToolDef{
-	Name:        "message_update_media_description",
-	Description: "Persist media description for a message and optionally replace body text.",
-	Parameters: map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"text": map[string]any{
-				"type":        "string",
-				"description": "Exact message content as shown after sender name in timeline, before any to [...] context.",
-			},
-			"time": map[string]any{
-				"type":        "string",
-				"description": "Timestamp in HH:MM:SS from the timeline brackets.",
-			},
-			"description": map[string]any{
-				"type":        "string",
-				"description": "Description or transcript text.",
-			},
-			"body": map[string]any{
-				"type":        "string",
-				"description": "Optional replacement body text (pass empty string to skip).",
-			},
-		},
-		"required":             []string{"text", "time", "description", "body"},
-		"additionalProperties": false,
-	},
-}
-
 func BuildTools(svc *Service) []llm.Tool {
 	return []llm.Tool{
 		{Def: replyToolDef, Handler: replyHandler(svc)},
 		{Def: noopToolDef, Handler: noopHandler()},
 		{Def: reactToolDef, Handler: reactHandler(svc)},
 		{Def: setPresenceToolDef, Handler: setPresenceHandler(svc)},
-		{Def: updateMediaDescriptionToolDef, Handler: updateMediaDescriptionHandler(svc)},
 	}
 }
 
@@ -328,47 +299,6 @@ func setPresenceHandler(svc *Service) llm.ToolExecutor {
 		}
 
 		err = svc.SetPresence(ctx, args.Platform, args.Available)
-		if err != nil {
-			return llm.ToolError(err), nil
-		}
-
-		return `{"ok":true}`, nil
-	}
-}
-
-func updateMediaDescriptionHandler(svc *Service) llm.ToolExecutor {
-	return func(ctx context.Context, call llm.ToolCall) (string, error) {
-		var args struct {
-			Text        string `json:"text"`
-			Time        string `json:"time"`
-			Description string `json:"description"`
-			Body        string `json:"body"`
-		}
-
-		err := json.Unmarshal([]byte(call.Arguments), &args)
-		if err != nil {
-			return llm.ToolError(err), nil
-		}
-
-		if strings.TrimSpace(args.Text) == "" {
-			return `{"error":"missing text"}`, nil
-		}
-
-		if strings.TrimSpace(args.Time) == "" {
-			return `{"error":"missing time"}`, nil
-		}
-
-		conversationID := contextMetaValue(ctx, "conversation_id")
-		if conversationID == "" {
-			return `{"error":"missing conversation_id in context"}`, nil
-		}
-
-		msg, err := svc.FindMessage(ctx, conversationID, args.Text, args.Time)
-		if err != nil {
-			return llm.ToolError(err), nil
-		}
-
-		err = svc.UpdateMediaDescription(ctx, msg.ID, args.Description, args.Body)
 		if err != nil {
 			return llm.ToolError(err), nil
 		}

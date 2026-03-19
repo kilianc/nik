@@ -607,38 +607,6 @@ func (s *Service) MarkRead(ctx context.Context, conversationID string, readAt ti
 	return platform.MarkRead(ctx, unread)
 }
 
-func (s *Service) UpdateMediaDescription(ctx context.Context, messageID, description, body string) error {
-	if description == "" {
-		return fmt.Errorf("empty description")
-	}
-
-	msg, err := db.GetMessage(ctx, s.db, db.GetMessageParams{ID: messageID})
-	if err != nil {
-		return err
-	}
-
-	if !msg.MediaID.Valid {
-		return fmt.Errorf("message %s has no media", messageID)
-	}
-
-	rows, err := db.UpdateMediaDescription(ctx, s.db, msg.MediaID.String, description, time.Now())
-	if err != nil {
-		return err
-	}
-	if rows == 0 {
-		return fmt.Errorf("media %s not found", msg.MediaID.String)
-	}
-
-	if body != "" {
-		err = db.UpdateMessageBody(ctx, s.db, messageID, body)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
 func (s *Service) ConversationWithMessages(ctx context.Context, conversationID string, maxHistory int) (db.Conversation, []db.Message, error) {
 	conv, err := db.GetConversation(ctx, s.db, db.GetConversationParams{ID: conversationID})
 	if err != nil {
@@ -913,6 +881,32 @@ func (s *Service) FindMessage(ctx context.Context, conversationID, text, at stri
 		return db.Message{}, fmt.Errorf("no message matching text=%q time=%s", text, at)
 	}
 	return matches[len(matches)-1], nil
+}
+
+func (s *Service) PersistMediaResult(ctx context.Context, localPath, text string, isTranscript bool) error {
+	res, err := db.MediaResolveByPath(ctx, s.db, localPath)
+	if err != nil {
+		return fmt.Errorf("no media record for %s", localPath)
+	}
+
+	now := time.Now()
+
+	if isTranscript {
+		_, err = db.UpdateMediaTranscript(ctx, s.db, res.MediaID, text, now)
+	} else {
+		_, err = db.UpdateMediaDescription(ctx, s.db, res.MediaID, text, now)
+	}
+	if err != nil {
+		return err
+	}
+
+	return db.InsertSystemMessage(ctx, s.db, db.SystemMessageParams{
+		ConversationID:  res.ConversationID,
+		Kind:            "media_processed",
+		Body:            struct{ FilePath string }{localPath},
+		ContextStanzaID: res.MessageID,
+		SentAt:          now,
+	})
 }
 
 func (s *Service) DB() *sql.DB { return s.db }

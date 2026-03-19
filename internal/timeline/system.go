@@ -1,6 +1,8 @@
 package timeline
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"strconv"
 	"strings"
@@ -226,6 +228,22 @@ func renderTrigger(msg db.Message) entry {
 	}
 
 	return entry{at: msg.SentAt, from: "system", text: padLines(lines)}
+}
+
+func renderMediaProcessed(msg db.Message, database *sql.DB) entry {
+	text := "[media described]"
+
+	if msg.ContextStanzaID.Valid && database != nil {
+		target, err := db.GetMessage(context.Background(), database, db.GetMessageParams{
+			ID: msg.ContextStanzaID.String,
+		})
+		if err == nil {
+			targetSender := resolveContactName(context.Background(), database, target)
+			text += " (from " + targetSnippet(target, targetSender) + ")"
+		}
+	}
+
+	return entry{at: msg.SentAt, from: "system", text: text}
 }
 
 func padLines(lines []string) string {

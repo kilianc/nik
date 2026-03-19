@@ -65,7 +65,7 @@ func TestHasTerminalCall(t *testing.T) {
 		},
 		{
 			name:    "non-terminal messaging tools are not terminal",
-			history: []llm.ToolCallRecord{{Name: "message_set_presence"}, {Name: "message_update_media_description"}},
+			history: []llm.ToolCallRecord{{Name: "message_set_presence"}, {Name: "describe_media"}},
 			want:    false,
 		},
 	}

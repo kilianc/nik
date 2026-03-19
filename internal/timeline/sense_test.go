@@ -97,7 +97,7 @@ func TestMessageEntryReaction(t *testing.T) {
 		{
 			"to text",
 			"ext-target-1", "text", "personal", "📚",
-			`(📚) (reacting to [09:12:30] Sender: "personal")`,
+			`(📚) (reacting to [09:12:30] Sender: personal)`,
 			"YOU",
 		},
 		{
@@ -109,13 +109,13 @@ func TestMessageEntryReaction(t *testing.T) {
 		{
 			"removed reaction",
 			"ext-target-3", "text", "personal", "",
-			`(removed reaction) (reacting to [09:12:30] Sender: "personal")`,
+			`(removed reaction) (reacting to [09:12:30] Sender: personal)`,
 			"YOU",
 		},
 		{
 			"truncates long body",
 			"ext-target-4", "text", longBody, "🔥",
-			`(🔥) (reacting to [09:12:30] Sender: "` + longBody[:200] + `…")`,
+			`(🔥) (reacting to [09:12:30] Sender: ` + longBody[:200] + `…)`,
 			"YOU",
 		},
 	}
@@ -178,7 +178,7 @@ func TestMessageEntryReplyContext(t *testing.T) {
 
 	e := messageEntry(reply, "Alice", conn)
 
-	want := `where? (replying to [09:12:30] Sender: "ok")`
+	want := `where? (replying to [09:12:30] Sender: ok)`
 	if e.text != want {
 		t.Fatalf("got %q, want %q", e.text, want)
 	}
@@ -221,7 +221,7 @@ func TestMessageEntryReplyOutOfWindow(t *testing.T) {
 
 	e := messageEntry(reply, "Alice", conn)
 
-	want := `yes! (replying to [08:30:15] Sender: "how about saturday?")`
+	want := `yes! (replying to [08:30:15] Sender: how about saturday?)`
 	if e.text != want {
 		t.Fatalf("got %q, want %q", e.text, want)
 	}

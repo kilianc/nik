@@ -102,10 +102,6 @@ func main() {
 func buildTools(cfg *config.Config, llmClient, taskLLMClient *llm.Client, conn *sql.DB) map[string]llm.ToolExecutor {
 	tools := map[string]llm.ToolExecutor{}
 
-	for _, t := range llm.BuildTools(llmClient, cfg.Home) {
-		tools[t.Def.Name] = t.Handler
-	}
-
 	if conn != nil {
 		llmClient.SetObserver(stats.NewRecorder(conn))
 		if taskLLMClient != llmClient {
@@ -120,10 +116,12 @@ func buildTools(cfg *config.Config, llmClient, taskLLMClient *llm.Client, conn *
 		}
 
 		for _, t := range messaging.BuildTools(msgSvc) {
-			if t.Def.Name != "message_update_media_description" && t.Def.Name != "message_noop" {
-				continue
+			if t.Def.Name == "message_noop" {
+				tools[t.Def.Name] = t.Handler
 			}
+		}
 
+		for _, t := range llm.BuildTools(llmClient, cfg.Home, msgSvc) {
 			tools[t.Def.Name] = t.Handler
 		}
 
@@ -140,7 +138,7 @@ func buildTools(cfg *config.Config, llmClient, taskLLMClient *llm.Client, conn *
 		shellSvc := shell.NewService(conn, cfg.Home)
 		var taskToolList []llm.Tool
 		taskToolList = append(taskToolList, shellSvc.BuildTools()...)
-		taskToolList = append(taskToolList, llm.BuildTools(taskLLMClient, cfg.Home)...)
+		taskToolList = append(taskToolList, llm.BuildTools(taskLLMClient, cfg.Home, nil)...)
 		taskToolList = append(taskToolList, db.BuildTools(conn)...)
 		taskToolList = append(taskToolList, fs.BuildTools(cfg.Home)...)
 		taskToolList = append(taskToolList, skills.BuildTools(cfg, nil)...)

@@ -4,15 +4,20 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"mime"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
+type MediaDescriptionUpdater interface {
+	PersistMediaResult(ctx context.Context, localPath, text string, isTranscript bool) error
+}
+
 var describeMediaDef = ToolDef{
 	Name:        "describe_media",
-	Description: "Describe or transcribe a media file on disk. For audio, returns a transcript. For images, documents, and stickers, returns a visual/content description. Does not support video files. Returns the description text.",
+	Description: "Describe or transcribe a media file on disk. Persists the result automatically. For audio, transcribes. For images, documents, and stickers, describes visually. Does not support video.",
 	Parameters: map[string]any{
 		"type": "object",
 		"properties": map[string]any{
@@ -30,22 +35,18 @@ var describeMediaDef = ToolDef{
 	},
 }
 
-func describeMediaHandler(client *Client, home string) ToolExecutor {
-	return func(ctx context.Context, call ToolCall) (string, error) {
-		return describeMedia(ctx, call, client, home)
-	}
-}
-
-func BuildTools(client *Client, home string) []Tool {
+func BuildTools(client *Client, home string, updater MediaDescriptionUpdater) []Tool {
 	return []Tool{
 		{
-			Def:     describeMediaDef,
-			Handler: describeMediaHandler(client, home),
+			Def: describeMediaDef,
+			Handler: func(ctx context.Context, call ToolCall) (string, error) {
+				return describeMedia(ctx, call, client, home, updater)
+			},
 		},
 	}
 }
 
-func describeMedia(ctx context.Context, call ToolCall, client *Client, home string) (string, error) {
+func describeMedia(ctx context.Context, call ToolCall, client *Client, home string, updater MediaDescriptionUpdater) (string, error) {
 	var args struct {
 		FilePath string `json:"file_path"`
 		Question string `json:"question"`
@@ -88,7 +89,9 @@ func describeMedia(ctx context.Context, call ToolCall, client *Client, home stri
 		if err != nil {
 			return ToolError(err), nil
 		}
-		return ToolResult(map[string]any{"type": "transcript", "text": text}), nil
+
+		persisted := persistMedia(ctx, updater, args.FilePath, text, true)
+		return describeResult("transcript", text, persisted), nil
 	}
 
 	if mimeType == "" {
@@ -120,7 +123,30 @@ func describeMedia(ctx context.Context, call ToolCall, client *Client, home stri
 		return ToolError(err), nil
 	}
 
-	return ToolResult(map[string]any{"type": "description", "text": text}), nil
+	persisted := persistMedia(ctx, updater, args.FilePath, text, false)
+	return describeResult("description", text, persisted), nil
+}
+
+func describeResult(kind, text string, persisted bool) string {
+	result := map[string]any{"ok": true, "type": kind, "persisted": persisted}
+	if !persisted {
+		result["text"] = text
+	}
+	return ToolResult(result)
+}
+
+func persistMedia(ctx context.Context, updater MediaDescriptionUpdater, localPath, text string, isTranscript bool) bool {
+	if updater == nil {
+		return false
+	}
+
+	err := updater.PersistMediaResult(ctx, localPath, text, isTranscript)
+	if err != nil {
+		slog.Warn("persist media description", "path", localPath, "error", err)
+		return false
+	}
+
+	return true
 }
 
 func isAudioExt(ext string) bool {

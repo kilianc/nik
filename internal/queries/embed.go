@@ -67,6 +67,12 @@ var MediaUpsert string
 //go:embed media_update_description.sql
 var MediaUpdateDescription string
 
+//go:embed media_update_transcript.sql
+var MediaUpdateTranscript string
+
+//go:embed media_resolve_by_path.sql
+var MediaResolveByPath string
+
 //go:embed message_media_upsert.sql
 var MessageMediaUpsert string
 
