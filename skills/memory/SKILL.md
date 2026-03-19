@@ -3,7 +3,7 @@ name: memory
 summary: >
   Extract durable facts from conversations into memories/latest.md (incremental via cursor),
   and compact the file daily. Load when a memory alarm fires or on request.
-tools: [db_query, shell]
+tools: [db_query, shell, read_file, write_file]
 ---
 
 # Memory
@@ -21,7 +21,7 @@ memories/
   2026-03-08-pre-rebuild.md  -- snapshot before a full rebuild
 ```
 
-Use `shell` to read and write these files. Create the `memories/` directory if it doesn't exist.
+Use `read_file` and `write_file` for these files. Use `shell` for file operations like `cp`, `mv`, `rm`.
 
 ## Scheduling
 
@@ -36,8 +36,10 @@ Always incremental. Always append. A cursor file (`.memories_cursor`) tracks the
 ### Step 1. Read cursor
 
 ```
-shell action: "run", command: "cat memories/latest-cursor.txt 2>/dev/null || echo ''"
+read_file path: "memories/latest-cursor.txt"
 ```
+
+If the file doesn't exist, treat as empty (full rebuild mode).
 
 - If non-empty: **incremental mode** — use the value as a cursor, query only messages after it, append directly to `memories/latest.md`.
 - If empty: **full rebuild mode** — write to a staging file (`memories/staging.md`) instead of `memories/latest.md`. The live file stays intact until the final swap.
@@ -45,7 +47,7 @@ shell action: "run", command: "cat memories/latest-cursor.txt 2>/dev/null || ech
 First-run / full-rebuild init:
 
 ```
-shell action: "run", command: "mkdir -p memories && printf '| date | type | entity | memory | conversation |\n|------|------|--------|--------|---------------|\n' > memories/staging.md"
+write_file action: "write", path: "memories/staging.md", content: "| date | type | entity | memory | conversation |\n|------|------|--------|--------|---------------|\n"
 ```
 
 ### Step 2. Fetch one batch
@@ -116,13 +118,13 @@ Append this batch's facts to the target file:
 - **Full rebuild mode**: append to `memories/staging.md`
 
 ```
-shell action: "run", command: "cat >> <target_file> << 'EOF'\n<rows>\nEOF"
+write_file action: "append", path: "<target_file>", content: "<rows>"
 ```
 
 Then save the cursor — the `sent_at` of the **last row** returned by the query (regardless of whether it produced facts):
 
 ```
-shell action: "run", command: "echo '<last sent_at from this batch>' > memories/latest-cursor.txt"
+write_file action: "write", path: "memories/latest-cursor.txt", content: "<last sent_at from this batch>"
 ```
 
 ### Step 5. Repeat or stop
@@ -162,10 +164,10 @@ shell action: "run", command: "cp memories/latest.md memories/$(date +%Y-%m-%d).
 Then read it:
 
 ```
-shell action: "run", command: "cat memories/latest.md"
+read_file path: "memories/latest.md"
 ```
 
-If the file is too large for one context window, read in chunks via `sed -n '<start>,<end>p' memories/latest.md` and compact each chunk separately, then merge.
+If the file is too large for one read, use `offset` and `limit` to read in chunks and compact each chunk separately, then merge.
 
 ### Step 2. Apply rules
 
@@ -184,7 +186,7 @@ Keep the header row and separator. Preserve every row that isn't a duplicate, co
 Write the compacted result to a temp file, then replace:
 
 ```
-shell action: "run", command: "cat > memories/staging.md << 'EOF'\n<header + compacted rows>\nEOF"
+write_file action: "write", path: "memories/staging.md", content: "<header + compacted rows>"
 shell action: "run", command: "mv memories/staging.md memories/latest.md"
 ```
 

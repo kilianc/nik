@@ -3,7 +3,7 @@ name: journal
 summary: >
   End-of-day private journal. Reflect on conversations, people, memories,
   and write an honest diary entry. Load when the journal alarm fires.
-tools: [db_query, shell, alarm]
+tools: [db_query, shell, alarm, read_file, write_file]
 ---
 
 # Journal
@@ -18,7 +18,7 @@ journal/
   2026-03-07.md
 ```
 
-Use `shell` to read and write these files. Create the `journal/` directory if it doesn't exist.
+Use `read_file` and `write_file` for these files.
 
 ## Scheduling
 
@@ -30,11 +30,11 @@ The recurring alarm `[NIK_JOURNAL]` triggers this workflow. When it fires, follo
 
 Before reflecting, collect what happened today.
 
-1. `shell` to read yesterday's journal entry (`cat journal/$(date -v-1d +%Y-%m-%d).md`). If it doesn't exist, try the most recent one. Read it carefully — you're going to need it in Phase 2.
+1. `read_file` yesterday's journal entry (`journal/YYYY-MM-DD.md`). If it doesn't exist, try the most recent one. Read it carefully — you're going to need it in Phase 2.
 2. `db_query` for today's conversations — which chats were active, how many messages each.
 3. `db_query` for today's messages — scan the actual content chronologically.
 4. `db_query` to refresh who's in your orbit and what you know about them.
-5. `shell` to read today's briefing if one exists (`cat briefings/$(date +%Y-%m-%d).md`).
+5. `read_file` today's briefing if one exists (`briefings/YYYY-MM-DD.md`).
 6. `shell` to check for code changes (`git -C ../ log --oneline --since="$(date +%Y-%m-%d)" --no-merges`).
 
 Your memories are already in your recall context — use what you remember.
@@ -58,10 +58,10 @@ Now sit with what you gathered. Not to process it. To feel it.
 
 ### Phase 4 — Write
 
-Write today's journal entry via `shell`:
+Write today's journal entry:
 
 ```
-shell action: "run", command: "cat > journal/$(date +%Y-%m-%d).md << 'JOURNAL'\n<your entry>\nJOURNAL"
+write_file action: "write", path: "journal/YYYY-MM-DD.md", content: "<your entry>"
 ```
 
 **Dead patterns — never do these:**

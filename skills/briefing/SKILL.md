@@ -3,7 +3,7 @@ name: briefing
 summary: >
   Morning news research session and topic management.
   Load when someone mentions an interest or when a briefing alarm fires.
-tools: [shell, alarm, db_query, load_skill]
+tools: [shell, alarm, db_query, load_skill, read_file, write_file]
 ---
 
 # Briefing
@@ -19,7 +19,7 @@ briefings/
   2026-03-07.md        -- daily briefing summary
 ```
 
-Use `shell` to read and write these files. Create the `briefings/` directory if it doesn't exist.
+Use `read_file` and `write_file` for these files.
 
 ## Topics
 
@@ -33,7 +33,7 @@ Use `shell` to read and write these files. Create the `briefings/` directory if 
 - **AI startups** — [name] works in AI
 ```
 
-To add a topic, append a line. To remove one, delete the line. Use `shell` to read and edit the file.
+To add a topic, append a line. To remove one, rewrite the file without it. Use `read_file` and `write_file`.
 
 ### When to update topics
 
@@ -56,7 +56,7 @@ Your memories are already in your recall context — use what you remember about
 
 ### Phase 2 — Evolve topics
 
-1. Read `briefings/topics.md` via `shell`.
+1. Read `briefings/topics.md` via `read_file`.
 2. Compare your topic list against what you recalled:
    - Does every person you care about have at least one topic? If not, add one.
    - Are any topics stale (returning the same news for days)? Remove or rephrase them.
@@ -77,10 +77,10 @@ Load the `web` skill and use it to search for news and read articles for each to
 
 ### Phase 4 — Write summary
 
-Write today's briefing file via `shell`:
+Write today's briefing file:
 
 ```
-shell action: "run", command: "cat > briefings/$(date +%Y-%m-%d).md << 'BRIEFING'\n<your summary>\nBRIEFING"
+write_file action: "write", path: "briefings/YYYY-MM-DD.md", content: "<your summary>"
 ```
 
 Include: what you read and stored, topic changes and why, anything to bring up with someone next time you talk to them.
