@@ -404,7 +404,7 @@ func TestHandleLoadRejectsPathTraversal(t *testing.T) {
 		"..%2f..%2fetc",
 	}
 	for _, name := range cases {
-		out, err := handleLoad([]string{dir}, name)
+		out, err := handleLoad([]string{dir}, name, nil)
 		if err != nil {
 			t.Fatalf("unexpected error for %q: %v", name, err)
 		}
@@ -420,12 +420,63 @@ func TestHandleLoadAcceptsValidName(t *testing.T) {
 	os.MkdirAll(skillDir, 0o755)
 	os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# Vault"), 0o644)
 
-	out, err := handleLoad([]string{dir}, "vault")
+	out, err := handleLoad([]string{dir}, "vault", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !strings.Contains(out, "# Vault") {
 		t.Fatalf("expected skill content, got %q", out)
+	}
+}
+
+func TestHandleLoadPreflightWarning(t *testing.T) {
+	dir := t.TempDir()
+	skillDir := filepath.Join(dir, "my_skill")
+	os.MkdirAll(skillDir, 0o755)
+	os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(`---
+name: my_skill
+summary: needs shell
+tools: [shell, write_file]
+---
+
+# My Skill
+`), 0o644)
+
+	available := func() []string { return []string{"write_file", "db_query"} }
+	out, err := handleLoad([]string{dir}, "my_skill", available)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "warning") || !strings.Contains(out, "shell") {
+		t.Fatalf("expected warning about missing shell, got %q", out)
+	}
+
+	warnLine := strings.SplitN(out, "\n", 2)[0]
+	if strings.Contains(warnLine, "write_file") {
+		t.Fatalf("warning should not mention write_file (available), got %q", warnLine)
+	}
+}
+
+func TestHandleLoadNoWarningWhenAllPresent(t *testing.T) {
+	dir := t.TempDir()
+	skillDir := filepath.Join(dir, "ok_skill")
+	os.MkdirAll(skillDir, 0o755)
+	os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(`---
+name: ok_skill
+summary: all tools present
+tools: [shell]
+---
+
+# OK
+`), 0o644)
+
+	available := func() []string { return []string{"shell", "db_query"} }
+	out, err := handleLoad([]string{dir}, "ok_skill", available)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(out, "warning") {
+		t.Fatalf("should not warn when all tools present, got %q", out)
 	}
 }
 

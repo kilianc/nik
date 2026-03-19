@@ -45,16 +45,16 @@ type SkillSummary struct {
 	Preload bool     `json:"preload"`
 }
 
-func BuildTools(cfg *config.Config) []llm.Tool {
+func BuildTools(cfg *config.Config, availableTools func() []string) []llm.Tool {
 	return []llm.Tool{
 		{
 			Def:     loadSkillDef,
-			Handler: loadSkillHandler(cfg),
+			Handler: loadSkillHandler(cfg, availableTools),
 		},
 	}
 }
 
-func loadSkillHandler(cfg *config.Config) llm.ToolExecutor {
+func loadSkillHandler(cfg *config.Config, availableTools func() []string) llm.ToolExecutor {
 	return func(ctx context.Context, call llm.ToolCall) (string, error) {
 		var args struct {
 			Action string `json:"action"`
@@ -72,7 +72,7 @@ func loadSkillHandler(cfg *config.Config) llm.ToolExecutor {
 		case "list":
 			return handleList(dirs)
 		case "load":
-			return handleLoad(dirs, args.Name)
+			return handleLoad(dirs, args.Name, availableTools)
 		default:
 			return llm.ToolErrorf("unknown action %q", args.Action), nil
 		}
@@ -93,7 +93,7 @@ func handleList(dirs []string) (string, error) {
 	return string(data), nil
 }
 
-func handleLoad(dirs []string, name string) (string, error) {
+func handleLoad(dirs []string, name string, availableTools func() []string) (string, error) {
 	if name == "" {
 		return `{"error":"empty name"}`, nil
 	}
@@ -102,7 +102,6 @@ func handleLoad(dirs []string, name string) (string, error) {
 		return llm.ToolErrorf("invalid skill name %q", name), nil
 	}
 
-	// search directories in reverse so workspace skills (last) take priority
 	for i := len(dirs) - 1; i >= 0; i-- {
 		path := filepath.Join(dirs[i], name, "SKILL.md")
 
@@ -111,10 +110,46 @@ func handleLoad(dirs []string, name string) (string, error) {
 			continue
 		}
 
-		return string(data), nil
+		content := string(data)
+		warning := checkToolPrereqs(path, availableTools)
+		if warning != "" {
+			content = warning + "\n" + content
+		}
+
+		return content, nil
 	}
 
 	return llm.ToolErrorf("skill %q not found", name), nil
+}
+
+func checkToolPrereqs(path string, availableTools func() []string) string {
+	if availableTools == nil {
+		return ""
+	}
+
+	s, err := parseFrontmatter(path)
+	if err != nil || len(s.Tools) == 0 {
+		return ""
+	}
+
+	names := availableTools()
+	have := make(map[string]bool, len(names))
+	for _, n := range names {
+		have[n] = true
+	}
+
+	var missing []string
+	for _, t := range s.Tools {
+		if !have[t] {
+			missing = append(missing, t)
+		}
+	}
+
+	if len(missing) == 0 {
+		return ""
+	}
+
+	return fmt.Sprintf("warning: skill %s declares tools %v which are not available in this activation", s.Name, missing)
 }
 
 // walkSkillDirs iterates skill directories, parses frontmatter from each

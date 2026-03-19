@@ -17,6 +17,7 @@ import (
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/contacts"
 	"github.com/kciuffolo/nik/internal/db"
+	"github.com/kciuffolo/nik/internal/fs"
 	"github.com/kciuffolo/nik/internal/llm"
 	niklog "github.com/kciuffolo/nik/internal/log"
 	"github.com/kciuffolo/nik/internal/messaging"
@@ -176,9 +177,11 @@ func main() {
 	taskTools = append(taskTools, shellSvc.BuildTools()...)
 	taskTools = append(taskTools, llm.BuildTools(taskLLMClient, cfg.Home)...)
 	taskTools = append(taskTools, db.BuildTools(conn)...)
-	taskTools = append(taskTools, skills.BuildTools(cfg)...)
-
+	taskTools = append(taskTools, fs.BuildTools(cfg.Home)...)
 	var workerToolNames []string
+	workerToolSupplier := func() []string { return workerToolNames }
+	taskTools = append(taskTools, skills.BuildTools(cfg, workerToolSupplier)...)
+
 	for _, t := range taskTools {
 		workerToolNames = append(workerToolNames, t.Def.Name)
 	}
@@ -238,7 +241,8 @@ func main() {
 	b.RegisterTools(messaging.BuildTools(messagingSvc)...)
 	b.RegisterTools(alarms.BuildTools(alarmSvc)...)
 	b.RegisterTools(db.BuildTools(conn)...)
-	b.RegisterTools(skills.BuildTools(cfg)...)
+	b.RegisterTools(fs.BuildTools(cfg.Home)...)
+	b.RegisterTools(skills.BuildTools(cfg, b.ToolNames)...)
 	b.RegisterTools(task.BuildTools(taskSvc, taskRunner)...)
 
 	brainDone := make(chan struct{})

@@ -13,6 +13,7 @@ import (
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/contacts"
 	"github.com/kciuffolo/nik/internal/db"
+	"github.com/kciuffolo/nik/internal/fs"
 	"github.com/kciuffolo/nik/internal/llm"
 	"github.com/kciuffolo/nik/internal/messaging"
 	"github.com/kciuffolo/nik/internal/shell"
@@ -141,7 +142,8 @@ func buildTools(cfg *config.Config, llmClient, taskLLMClient *llm.Client, conn *
 		taskToolList = append(taskToolList, shellSvc.BuildTools()...)
 		taskToolList = append(taskToolList, llm.BuildTools(taskLLMClient, cfg.Home)...)
 		taskToolList = append(taskToolList, db.BuildTools(conn)...)
-		taskToolList = append(taskToolList, skills.BuildTools(cfg)...)
+		taskToolList = append(taskToolList, fs.BuildTools(cfg.Home)...)
+		taskToolList = append(taskToolList, skills.BuildTools(cfg, nil)...)
 
 		taskRunner := task.NewRunner(cfg, taskLLMClient, taskSvc, taskToolList)
 		for _, t := range task.BuildTools(taskSvc, taskRunner) {
@@ -153,7 +155,18 @@ func buildTools(cfg *config.Config, llmClient, taskLLMClient *llm.Client, conn *
 		tools[t.Def.Name] = t.Handler
 	}
 
-	for _, t := range skills.BuildTools(cfg) {
+	for _, t := range fs.BuildTools(cfg.Home) {
+		tools[t.Def.Name] = t.Handler
+	}
+
+	toolNamesFn := func() []string {
+		names := make([]string, 0, len(tools))
+		for n := range tools {
+			names = append(names, n)
+		}
+		return names
+	}
+	for _, t := range skills.BuildTools(cfg, toolNamesFn) {
 		tools[t.Def.Name] = t.Handler
 	}
 
