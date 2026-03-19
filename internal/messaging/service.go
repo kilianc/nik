@@ -687,18 +687,18 @@ func (s *Service) ConversationHeader(ctx context.Context, conv db.Conversation) 
 	session := ConversationHeader{
 		Lines: []string{
 			fmt.Sprintf("id: %s", conv.ID),
-			fmt.Sprintf("Title: %s", title),
-			fmt.Sprintf("Platform: %s", conv.Platform),
-			fmt.Sprintf("Type: %s", conv.Kind),
+			fmt.Sprintf("title: %s", title),
+			fmt.Sprintf("platform: %s", conv.Platform),
+			fmt.Sprintf("type: %s", conv.Kind),
 		},
 	}
 
 	if conv.Topic.Valid && strings.TrimSpace(conv.Topic.String) != "" {
-		session.Lines = append(session.Lines, fmt.Sprintf("Topic: %s", conv.Topic.String))
+		session.Lines = append(session.Lines, fmt.Sprintf("topic: %s", conv.Topic.String))
 	}
 
 	if len(participants) > 0 {
-		session.Lines = append(session.Lines, "", "Participants:")
+		session.Lines = append(session.Lines, "", "participants:")
 		for i, p := range participants {
 			fallbackName := fmt.Sprintf("participant-%d", i+1)
 			name := participantName(p, fallbackName)
