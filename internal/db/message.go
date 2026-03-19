@@ -68,14 +68,20 @@ func GetMessage(ctx context.Context, db *sql.DB, p GetMessageParams) (Message, e
 	return scanMessage(row)
 }
 
-func GetMessagesByConversation(ctx context.Context, db *sql.DB, conversationID, beforeID string, limit int) ([]Message, error) {
-	if limit <= 0 {
-		limit = 20
+type MessageListParams struct {
+	ConversationID string
+	BeforeID       string
+	Limit          int
+}
+
+func MessageList(ctx context.Context, db *sql.DB, p MessageListParams) ([]Message, error) {
+	if p.Limit <= 0 {
+		p.Limit = 20
 	}
 
-	rows, err := db.QueryContext(ctx, queries.MessageList, conversationID, beforeID, limit)
+	rows, err := db.QueryContext(ctx, queries.MessageList, p.ConversationID, p.BeforeID, p.Limit)
 	if err != nil {
-		return nil, fmt.Errorf("get messages by conversation %s: %w", conversationID, err)
+		return nil, fmt.Errorf("get messages by conversation %s: %w", p.ConversationID, err)
 	}
 	defer rows.Close()
 

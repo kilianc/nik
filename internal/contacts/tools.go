@@ -65,7 +65,12 @@ func updateContactHandler(conn *sql.DB) llm.ToolExecutor {
 			}
 		}
 
-		err = db.UpdateContactField(ctx, conn, args.ContactID, args.Field, args.Value, arrayValue)
+		err = db.ContactUpdateField(ctx, conn, db.ContactUpdateFieldParams{
+			ID:         args.ContactID,
+			Field:      args.Field,
+			Value:      args.Value,
+			ArrayValue: arrayValue,
+		})
 		if err != nil {
 			return llm.ToolError(err), nil
 		}

@@ -198,13 +198,19 @@ func (s *Service) ReceiveMessage(ctx context.Context, msg InboundMessage) error 
 		return err
 	}
 
-	err = db.UpsertConversationParticipant(ctx, tx, conversationID, contactID, nil)
+	err = db.ConversationParticipantUpsert(ctx, tx, db.ConversationParticipantUpsertParams{
+		ConversationID: conversationID,
+		ContactID:      contactID,
+	})
 	if err != nil {
 		return err
 	}
 
 	if dmRecipientID != "" {
-		err = db.UpsertConversationParticipant(ctx, tx, conversationID, dmRecipientID, nil)
+		err = db.ConversationParticipantUpsert(ctx, tx, db.ConversationParticipantUpsertParams{
+			ConversationID: conversationID,
+			ContactID:      dmRecipientID,
+		})
 		if err != nil {
 			return err
 		}
@@ -566,7 +572,10 @@ func (s *Service) MarkRead(ctx context.Context, conversationID string, readAt ti
 		return err
 	}
 
-	msgs, err := db.GetMessagesByConversation(ctx, s.db, conversationID, "", 50)
+	msgs, err := db.MessageList(ctx, s.db, db.MessageListParams{
+		ConversationID: conversationID,
+		Limit:          50,
+	})
 	if err != nil {
 		return err
 	}
@@ -613,7 +622,10 @@ func (s *Service) ConversationWithMessages(ctx context.Context, conversationID s
 		return db.Conversation{}, nil, err
 	}
 
-	msgs, err := db.GetMessagesByConversation(ctx, s.db, conversationID, "", maxHistory)
+	msgs, err := db.MessageList(ctx, s.db, db.MessageListParams{
+		ConversationID: conversationID,
+		Limit:          maxHistory,
+	})
 	if err != nil {
 		return db.Conversation{}, nil, err
 	}
@@ -653,7 +665,10 @@ func (s *Service) ResolveConversation(ctx context.Context, contactID string) (st
 		return "", fmt.Errorf("get conversation for contact %s: %w", contactID, err)
 	}
 
-	err = db.UpsertConversationParticipant(ctx, s.db, conv.ID, contactID, nil)
+	err = db.ConversationParticipantUpsert(ctx, s.db, db.ConversationParticipantUpsertParams{
+		ConversationID: conv.ID,
+		ContactID:      contactID,
+	})
 	if err != nil {
 		return "", fmt.Errorf("link participant for contact %s: %w", contactID, err)
 	}
@@ -662,7 +677,7 @@ func (s *Service) ResolveConversation(ctx context.Context, contactID string) (st
 }
 
 func (s *Service) ConversationHeader(ctx context.Context, conv db.Conversation) ConversationHeader {
-	participants, err := db.GetConversationParticipants(ctx, s.db, conv.ID)
+	participants, err := db.ConversationParticipantList(ctx, s.db, conv.ID)
 	if err != nil || len(participants) == 0 {
 		participants = nil
 	}
@@ -865,7 +880,10 @@ func participantName(p db.ConversationParticipant, fallback string) string {
 }
 
 func (s *Service) FindMessage(ctx context.Context, conversationID, text, at string) (db.Message, error) {
-	msgs, err := db.GetMessagesByConversation(ctx, s.db, conversationID, "", 200)
+	msgs, err := db.MessageList(ctx, s.db, db.MessageListParams{
+		ConversationID: conversationID,
+		Limit:          200,
+	})
 	if err != nil {
 		return db.Message{}, fmt.Errorf("get messages: %w", err)
 	}
@@ -892,9 +910,17 @@ func (s *Service) PersistMediaResult(ctx context.Context, localPath, text string
 	now := time.Now()
 
 	if isTranscript {
-		_, err = db.UpdateMediaTranscript(ctx, s.db, res.MediaID, text, now)
+		_, err = db.MediaUpdate(ctx, s.db, db.MediaUpdateParams{
+			ID:             res.MediaID,
+			TranscriptText: &text,
+			TranscribedAt:  &now,
+		})
 	} else {
-		_, err = db.UpdateMediaDescription(ctx, s.db, res.MediaID, text, now)
+		_, err = db.MediaUpdate(ctx, s.db, db.MediaUpdateParams{
+			ID:           res.MediaID,
+			DescribeText: &text,
+			DescribedAt:  &now,
+		})
 	}
 	if err != nil {
 		return err

@@ -59,7 +59,7 @@ func scanContact(s scanner) (Contact, error) {
 }
 
 func GetContact(ctx context.Context, db *sql.DB, identifier string) (Contact, error) {
-	row := db.QueryRowContext(ctx, queries.GetContact, identifier)
+	row := db.QueryRowContext(ctx, queries.ContactGet, identifier)
 	return scanContact(row)
 }
 
@@ -122,32 +122,45 @@ func upsertSelfContactWhatsApp(ctx context.Context, db *sql.DB, p UpsertContactP
 	return GetContact(ctx, db, p.SelfID)
 }
 
-func UpdateContactField(ctx context.Context, db *sql.DB, id, field, value string, arrayValue []string) error {
-	if id == "" {
+type ContactUpdateFieldParams struct {
+	ID         string
+	Field      string
+	Value      string
+	ArrayValue []string
+}
+
+func ContactUpdateField(ctx context.Context, db *sql.DB, p ContactUpdateFieldParams) error {
+	if p.ID == "" {
 		return fmt.Errorf("empty contact_id")
 	}
 
-	switch field {
+	switch p.Field {
 	case "name", "notes", "one_liner", "timezone", "location", "nicknames", "emails", "phone_numbers":
-		_, err := db.ExecContext(ctx, queries.UpdateContactField, id, field, value, MarshalStringSlice(arrayValue))
+		_, err := db.ExecContext(ctx, queries.ContactUpdateField, p.ID, p.Field, p.Value, MarshalStringSlice(p.ArrayValue))
 		if err != nil {
-			return fmt.Errorf("update contact %s field %s: %w", id, field, err)
+			return fmt.Errorf("update contact %s field %s: %w", p.ID, p.Field, err)
 		}
 
 		return nil
 	default:
-		return fmt.Errorf("unknown contact field %q", field)
+		return fmt.Errorf("unknown contact field %q", p.Field)
 	}
 }
 
-func AddWhatsAppID(ctx context.Context, db *sql.DB, contactID, jid, phone string) error {
-	if contactID == "" || jid == "" {
+type ContactAddWhatsAppIDParams struct {
+	ContactID string
+	JID       string
+	Phone     string
+}
+
+func ContactAddWhatsAppID(ctx context.Context, db *sql.DB, p ContactAddWhatsAppIDParams) error {
+	if p.ContactID == "" || p.JID == "" {
 		return nil
 	}
 
-	_, err := db.ExecContext(ctx, queries.ContactAddWhatsAppID, contactID, jid, phone)
+	_, err := db.ExecContext(ctx, queries.ContactAddWhatsAppID, p.ContactID, p.JID, p.Phone)
 	if err != nil {
-		return fmt.Errorf("add whatsapp id %s to contact %s: %w", jid, contactID, err)
+		return fmt.Errorf("add whatsapp id %s to contact %s: %w", p.JID, p.ContactID, err)
 	}
 
 	return nil

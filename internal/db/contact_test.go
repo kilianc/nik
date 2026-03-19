@@ -213,7 +213,11 @@ func TestUpsertContactSelfWhatsAppPreservesRenamedName(t *testing.T) {
 		t.Fatalf("initial self upsert: %v", err)
 	}
 
-	err = UpdateContactField(ctx, conn, selfID, "name", "Nikolai", nil)
+	err = ContactUpdateField(ctx, conn, ContactUpdateFieldParams{
+		ID:    selfID,
+		Field: "name",
+		Value: "Nikolai",
+	})
 	if err != nil {
 		t.Fatalf("rename self contact: %v", err)
 	}
@@ -234,7 +238,7 @@ func TestUpsertContactSelfWhatsAppPreservesRenamedName(t *testing.T) {
 	}
 }
 
-func TestUpdateContactFieldUpdatesAllowedFields(t *testing.T) {
+func TestContactUpdateFieldUpdatesAllowedFields(t *testing.T) {
 	ctx := context.Background()
 
 	conn, err := OpenInMemory()
@@ -254,12 +258,20 @@ func TestUpdateContactFieldUpdatesAllowedFields(t *testing.T) {
 		t.Fatalf("seed contact: %v", err)
 	}
 
-	err = UpdateContactField(ctx, conn, seed.ID, "notes", "new notes", nil)
+	err = ContactUpdateField(ctx, conn, ContactUpdateFieldParams{
+		ID:    seed.ID,
+		Field: "notes",
+		Value: "new notes",
+	})
 	if err != nil {
 		t.Fatalf("update notes: %v", err)
 	}
 
-	err = UpdateContactField(ctx, conn, seed.ID, "nicknames", "", []string{"u1", "u2"})
+	err = ContactUpdateField(ctx, conn, ContactUpdateFieldParams{
+		ID:         seed.ID,
+		Field:      "nicknames",
+		ArrayValue: []string{"u1", "u2"},
+	})
 	if err != nil {
 		t.Fatalf("update nicknames: %v", err)
 	}
@@ -277,7 +289,7 @@ func TestUpdateContactFieldUpdatesAllowedFields(t *testing.T) {
 	}
 }
 
-func TestUpdateContactFieldRejectsUnknownField(t *testing.T) {
+func TestContactUpdateFieldRejectsUnknownField(t *testing.T) {
 	ctx := context.Background()
 
 	conn, err := OpenInMemory()
@@ -286,7 +298,11 @@ func TestUpdateContactFieldRejectsUnknownField(t *testing.T) {
 	}
 	defer conn.Close()
 
-	err = UpdateContactField(ctx, conn, id.V7(), "bad_field", "value", nil)
+	err = ContactUpdateField(ctx, conn, ContactUpdateFieldParams{
+		ID:    id.V7(),
+		Field: "bad_field",
+		Value: "value",
+	})
 	if err == nil {
 		t.Fatalf("expected error for unknown field")
 	}
@@ -295,7 +311,7 @@ func TestUpdateContactFieldRejectsUnknownField(t *testing.T) {
 	}
 }
 
-func TestAddWhatsAppID(t *testing.T) {
+func TestContactAddWhatsAppID(t *testing.T) {
 	ctx := context.Background()
 
 	conn, err := OpenInMemory()
@@ -305,11 +321,11 @@ func TestAddWhatsAppID(t *testing.T) {
 	defer conn.Close()
 
 	t.Run("noop on empty args", func(t *testing.T) {
-		err := AddWhatsAppID(ctx, nil, "", "", "")
+		err := ContactAddWhatsAppID(ctx, nil, ContactAddWhatsAppIDParams{})
 		if err != nil {
 			t.Fatalf("expected noop, got error: %v", err)
 		}
-		err = AddWhatsAppID(ctx, nil, "some-id", "", "")
+		err = ContactAddWhatsAppID(ctx, nil, ContactAddWhatsAppIDParams{ContactID: "some-id"})
 		if err != nil {
 			t.Fatalf("expected noop, got error: %v", err)
 		}
@@ -327,7 +343,10 @@ func TestAddWhatsAppID(t *testing.T) {
 			t.Fatalf("upsert contact: %v", err)
 		}
 
-		err = AddWhatsAppID(ctx, conn, contact.ID, "99999@lid", "")
+		err = ContactAddWhatsAppID(ctx, conn, ContactAddWhatsAppIDParams{
+			ContactID: contact.ID,
+			JID:       "99999@lid",
+		})
 		if err != nil {
 			t.Fatalf("add whatsapp id: %v", err)
 		}
@@ -356,7 +375,11 @@ func TestAddWhatsAppID(t *testing.T) {
 			t.Fatalf("upsert contact: %v", err)
 		}
 
-		err = AddWhatsAppID(ctx, conn, contact.ID, "dup@s.whatsapp.net", "22222")
+		err = ContactAddWhatsAppID(ctx, conn, ContactAddWhatsAppIDParams{
+			ContactID: contact.ID,
+			JID:       "dup@s.whatsapp.net",
+			Phone:     "22222",
+		})
 		if err != nil {
 			t.Fatalf("add whatsapp id: %v", err)
 		}
@@ -382,7 +405,11 @@ func TestAddWhatsAppID(t *testing.T) {
 			t.Fatalf("upsert contact: %v", err)
 		}
 
-		err = AddWhatsAppID(ctx, conn, contact.ID, "33333@s.whatsapp.net", "33333")
+		err = ContactAddWhatsAppID(ctx, conn, ContactAddWhatsAppIDParams{
+			ContactID: contact.ID,
+			JID:       "33333@s.whatsapp.net",
+			Phone:     "33333",
+		})
 		if err != nil {
 			t.Fatalf("add whatsapp id: %v", err)
 		}

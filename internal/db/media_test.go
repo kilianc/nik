@@ -128,7 +128,7 @@ func TestMediaResolveByPath(t *testing.T) {
 	}
 }
 
-func TestUpdateMediaTranscript(t *testing.T) {
+func TestMediaUpdate(t *testing.T) {
 	ctx := context.Background()
 
 	conn, err := OpenInMemory()
@@ -149,7 +149,12 @@ func TestUpdateMediaTranscript(t *testing.T) {
 	}
 
 	now := time.Now()
-	rows, err := UpdateMediaTranscript(ctx, conn, "transcript-media-1", "hello from audio", now)
+	transcript := "hello from audio"
+	rows, err := MediaUpdate(ctx, conn, MediaUpdateParams{
+		ID:             "transcript-media-1",
+		TranscriptText: &transcript,
+		TranscribedAt:  &now,
+	})
 	if err != nil {
 		t.Fatalf("update transcript: %v", err)
 	}

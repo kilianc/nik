@@ -297,7 +297,7 @@ func deriveLabel(ctx context.Context, conn *sql.DB, conv db.Conversation) string
 	}
 
 	if conv.Kind == "dm" {
-		participants, err := db.GetConversationParticipants(ctx, conn, conv.ID)
+		participants, err := db.ConversationParticipantList(ctx, conn, conv.ID)
 		if err == nil {
 			for _, p := range participants {
 				name := p.DisplayName.String

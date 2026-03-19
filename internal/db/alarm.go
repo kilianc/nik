@@ -91,16 +91,25 @@ type AlarmUpdateParams struct {
 	LastFiredAt             any
 	ApplyLastOccurrenceNote bool
 	LastOccurrenceNote      any
+	Cancel                  bool
 }
 
 func AlarmUpdate(ctx context.Context, db DBTX, id string, p AlarmUpdateParams) error {
-	_, err := db.ExecContext(ctx, queries.AlarmUpdate, id, p.Goal, p.Recurrence, p.NextFireAt, p.LastFiredAt, p.ApplyLastOccurrenceNote, p.LastOccurrenceNote)
+	_, err := db.ExecContext(ctx, queries.AlarmUpdate,
+		id,
+		p.Goal,
+		p.Recurrence,
+		p.NextFireAt,
+		p.LastFiredAt,
+		p.ApplyLastOccurrenceNote,
+		p.LastOccurrenceNote,
+		p.Cancel,
+	)
 	return err
 }
 
-func AlarmCancel(ctx context.Context, db *sql.DB, id string) error {
-	_, err := db.ExecContext(ctx, queries.AlarmCancel, id)
-	return err
+func AlarmCancel(ctx context.Context, db DBTX, id string) error {
+	return AlarmUpdate(ctx, db, id, AlarmUpdateParams{Cancel: true})
 }
 
 // AlarmGet looks up a single active alarm by ID or goal prefix.

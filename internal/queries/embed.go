@@ -13,17 +13,17 @@ var ContactUpsertWhatsAppUpdate string
 //go:embed contact_upsert_self_whatsapp.sql
 var ContactUpsertSelfWhatsApp string
 
-//go:embed get_contact.sql
-var GetContact string
+//go:embed contact_get.sql
+var ContactGet string
 
-//go:embed update_contact_field.sql
-var UpdateContactField string
+//go:embed contact_update_field.sql
+var ContactUpdateField string
 
 //go:embed contact_add_whatsapp_id.sql
 var ContactAddWhatsAppID string
 
-//go:embed system_contact_ensure.sql
-var SystemContactEnsure string
+//go:embed contact_system_ensure.sql
+var ContactSystemEnsure string
 
 // conversation queries
 
@@ -64,11 +64,8 @@ var MessageUpdateBody string
 //go:embed media_upsert.sql
 var MediaUpsert string
 
-//go:embed media_update_description.sql
-var MediaUpdateDescription string
-
-//go:embed media_update_transcript.sql
-var MediaUpdateTranscript string
+//go:embed media_update.sql
+var MediaUpdate string
 
 //go:embed media_resolve_by_path.sql
 var MediaResolveByPath string
@@ -86,9 +83,6 @@ var AlarmDue string
 
 //go:embed alarm_update.sql
 var AlarmUpdate string
-
-//go:embed alarm_cancel.sql
-var AlarmCancel string
 
 //go:embed alarm_get.sql
 var AlarmGet string
@@ -147,11 +141,8 @@ var TaskInsert string
 //go:embed task_get.sql
 var TaskGet string
 
-//go:embed task_update_status.sql
-var TaskUpdateStatus string
-
-//go:embed task_start.sql
-var TaskStart string
+//go:embed task_update.sql
+var TaskUpdate string
 
 //go:embed task_stale.sql
 var TaskStale string
@@ -183,9 +174,6 @@ var TaskReportInsert string
 
 //go:embed task_report_last_status.sql
 var TaskReportLastStatus string
-
-//go:embed task_update_last_report_at.sql
-var TaskUpdateLastReportAt string
 
 // shell session queries
 

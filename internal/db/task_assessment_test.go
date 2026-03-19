@@ -155,7 +155,7 @@ func TestTaskAssessmentUniquePerTask(t *testing.T) {
 	}
 }
 
-func TestTaskAllToolCalls(t *testing.T) {
+func TestTaskAssessmentToolCallList(t *testing.T) {
 	ctx := context.Background()
 
 	conn, err := OpenInMemory()
@@ -189,7 +189,7 @@ func TestTaskAllToolCalls(t *testing.T) {
 		t.Fatalf("insert tool_call 2: %v", err)
 	}
 
-	calls, err := TaskAllToolCalls(ctx, conn, actID)
+	calls, err := TaskAssessmentToolCallList(ctx, conn, actID)
 	if err != nil {
 		t.Fatalf("query tool calls: %v", err)
 	}
@@ -213,7 +213,7 @@ func TestTaskAllToolCalls(t *testing.T) {
 	}
 }
 
-func TestTaskReportsByTask(t *testing.T) {
+func TestTaskReportList(t *testing.T) {
 	ctx := context.Background()
 
 	conn, err := OpenInMemory()
@@ -247,7 +247,7 @@ func TestTaskReportsByTask(t *testing.T) {
 		t.Fatalf("insert report 2: %v", err)
 	}
 
-	reports, err := TaskReportsByTask(ctx, conn, taskID)
+	reports, err := TaskReportList(ctx, conn, taskID)
 	if err != nil {
 		t.Fatalf("query reports: %v", err)
 	}

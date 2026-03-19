@@ -105,7 +105,12 @@ func (s *Service) ResolveTaskID(ctx context.Context, shortID string) (string, er
 }
 
 func (s *Service) Start(ctx context.Context, taskID, activationID string) error {
-	return db.TaskStart(ctx, s.conn, taskID, activationID)
+	status := "running"
+	return db.TaskUpdate(ctx, s.conn, db.TaskUpdateParams{
+		ID:           taskID,
+		Status:       &status,
+		ActivationID: &activationID,
+	})
 }
 
 func (s *Service) UpdateStatus(ctx context.Context, taskID, status string) error {
@@ -115,7 +120,10 @@ func (s *Service) UpdateStatus(ctx context.Context, taskID, status string) error
 	}
 	defer tx.Rollback()
 
-	err = db.TaskUpdateStatus(ctx, tx, taskID, status)
+	err = db.TaskUpdate(ctx, tx, db.TaskUpdateParams{
+		ID:     taskID,
+		Status: &status,
+	})
 	if err != nil {
 		return err
 	}
@@ -175,7 +183,10 @@ func (s *Service) InsertReport(ctx context.Context, taskID, status, content stri
 		return err
 	}
 
-	err = db.TaskUpdateLastReportAt(ctx, tx, taskID, now)
+	err = db.TaskUpdate(ctx, tx, db.TaskUpdateParams{
+		ID:           taskID,
+		LastReportAt: &now,
+	})
 	if err != nil {
 		return err
 	}
@@ -242,11 +253,11 @@ func (s *Service) CheckStale(ctx context.Context) {
 }
 
 func (s *Service) AllToolCalls(ctx context.Context, activationID string) ([]db.ToolCallInfo, error) {
-	return db.TaskAllToolCalls(ctx, s.conn, activationID)
+	return db.TaskAssessmentToolCallList(ctx, s.conn, activationID)
 }
 
 func (s *Service) ReportsByTask(ctx context.Context, taskID string) ([]db.TaskReportRow, error) {
-	return db.TaskReportsByTask(ctx, s.conn, taskID)
+	return db.TaskReportList(ctx, s.conn, taskID)
 }
 
 func (s *Service) InsertAssessment(ctx context.Context, p db.TaskAssessmentInsertParams) error {

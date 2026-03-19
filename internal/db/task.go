@@ -68,19 +68,22 @@ func TaskInsert(ctx context.Context, db DBTX, p TaskInsertParams) error {
 	return nil
 }
 
-func TaskStart(ctx context.Context, db *sql.DB, taskID, activationID string) error {
-	_, err := db.ExecContext(ctx, queries.TaskStart, taskID, activationID)
-	if err != nil {
-		return fmt.Errorf("start task %s: %w", taskID, err)
-	}
-
-	return nil
+type TaskUpdateParams struct {
+	ID           string
+	Status       *string
+	ActivationID *string
+	LastReportAt *time.Time
 }
 
-func TaskUpdateStatus(ctx context.Context, db DBTX, taskID, status string) error {
-	_, err := db.ExecContext(ctx, queries.TaskUpdateStatus, taskID, status)
+func TaskUpdate(ctx context.Context, db DBTX, p TaskUpdateParams) error {
+	_, err := db.ExecContext(ctx, queries.TaskUpdate,
+		p.ID,
+		p.Status,
+		p.ActivationID,
+		p.LastReportAt,
+	)
 	if err != nil {
-		return fmt.Errorf("update task status %s: %w", taskID, err)
+		return fmt.Errorf("update task %s: %w", p.ID, err)
 	}
 
 	return nil
@@ -232,15 +235,6 @@ func TaskReportInsert(ctx context.Context, db DBTX, p TaskReportInsertParams) er
 	)
 	if err != nil {
 		return fmt.Errorf("insert task report for %s: %w", p.TaskID, err)
-	}
-
-	return nil
-}
-
-func TaskUpdateLastReportAt(ctx context.Context, db DBTX, taskID string, at time.Time) error {
-	_, err := db.ExecContext(ctx, queries.TaskUpdateLastReportAt, taskID, at)
-	if err != nil {
-		return fmt.Errorf("update task last_report_at %s: %w", taskID, err)
 	}
 
 	return nil

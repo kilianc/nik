@@ -44,19 +44,24 @@ func UpsertMedia(ctx context.Context, db DBTX, p UpsertMediaParams) error {
 	return nil
 }
 
-func UpdateMediaDescription(ctx context.Context, db DBTX, mediaID, description string, describedAt time.Time) (int64, error) {
-	result, err := db.ExecContext(ctx, queries.MediaUpdateDescription, description, describedAt, mediaID)
-	if err != nil {
-		return 0, fmt.Errorf("update media description %s: %w", mediaID, err)
-	}
-
-	return result.RowsAffected()
+type MediaUpdateParams struct {
+	ID             string
+	DescribeText   *string
+	DescribedAt    *time.Time
+	TranscriptText *string
+	TranscribedAt  *time.Time
 }
 
-func UpdateMediaTranscript(ctx context.Context, db DBTX, mediaID, transcript string, transcribedAt time.Time) (int64, error) {
-	result, err := db.ExecContext(ctx, queries.MediaUpdateTranscript, transcript, transcribedAt, mediaID)
+func MediaUpdate(ctx context.Context, db DBTX, p MediaUpdateParams) (int64, error) {
+	result, err := db.ExecContext(ctx, queries.MediaUpdate,
+		p.ID,
+		p.DescribeText,
+		p.DescribedAt,
+		p.TranscriptText,
+		p.TranscribedAt,
+	)
 	if err != nil {
-		return 0, fmt.Errorf("update media transcript %s: %w", mediaID, err)
+		return 0, fmt.Errorf("update media %s: %w", p.ID, err)
 	}
 
 	return result.RowsAffected()
