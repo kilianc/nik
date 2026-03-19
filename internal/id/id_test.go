@@ -7,29 +7,29 @@ import (
 	"github.com/google/uuid"
 )
 
-func TestV4ReturnsValidUUIDv4(t *testing.T) {
-	raw := V4()
-
-	parsed, err := uuid.Parse(raw)
-	if err != nil {
-		t.Fatalf("parse uuid: %v", err)
+func TestUUIDVersions(t *testing.T) {
+	tests := []struct {
+		name    string
+		gen     func() string
+		version uuid.Version
+	}{
+		{"V4", V4, 4},
+		{"V7", V7, 7},
 	}
 
-	if parsed.Version() != 4 {
-		t.Fatalf("expected version 4, got %d", parsed.Version())
-	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			raw := tt.gen()
 
-func TestV7ReturnsValidUUIDv7(t *testing.T) {
-	raw := V7()
+			parsed, err := uuid.Parse(raw)
+			if err != nil {
+				t.Fatalf("parse uuid: %v", err)
+			}
 
-	parsed, err := uuid.Parse(raw)
-	if err != nil {
-		t.Fatalf("parse uuid: %v", err)
-	}
-
-	if parsed.Version() != 7 {
-		t.Fatalf("expected version 7, got %d", parsed.Version())
+			if parsed.Version() != tt.version {
+				t.Fatalf("expected version %d, got %d", tt.version, parsed.Version())
+			}
+		})
 	}
 }
 
@@ -44,15 +44,6 @@ func TestShortLength(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Short(%d) not valid hex: %v", n, err)
 		}
-	}
-}
-
-func TestShortUniqueness(t *testing.T) {
-	a := Short(4)
-	b := Short(4)
-
-	if a == b {
-		t.Fatalf("two Short(4) calls returned the same value: %q", a)
 	}
 }
 

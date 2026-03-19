@@ -6,30 +6,32 @@ import (
 	"testing"
 )
 
-func TestToolErrorFormatsJSON(t *testing.T) {
-	got := ToolError(errors.New("something broke"))
+func TestToolError(t *testing.T) {
+	t.Run("formats error message", func(t *testing.T) {
+		got := ToolError(errors.New("something broke"))
 
-	var parsed map[string]string
-	err := json.Unmarshal([]byte(got), &parsed)
-	if err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if parsed["error"] != "something broke" {
-		t.Errorf("expected 'something broke', got %q", parsed["error"])
-	}
-}
+		var parsed map[string]string
+		err := json.Unmarshal([]byte(got), &parsed)
+		if err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if parsed["error"] != "something broke" {
+			t.Errorf("expected 'something broke', got %q", parsed["error"])
+		}
+	})
 
-func TestToolErrorfFormatsArgs(t *testing.T) {
-	got := ToolErrorf("missing %s: %d", "item", 42)
+	t.Run("formats args", func(t *testing.T) {
+		got := ToolErrorf("missing %s: %d", "item", 42)
 
-	var parsed map[string]string
-	err := json.Unmarshal([]byte(got), &parsed)
-	if err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if parsed["error"] != "missing item: 42" {
-		t.Errorf("expected 'missing item: 42', got %q", parsed["error"])
-	}
+		var parsed map[string]string
+		err := json.Unmarshal([]byte(got), &parsed)
+		if err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if parsed["error"] != "missing item: 42" {
+			t.Errorf("expected 'missing item: 42', got %q", parsed["error"])
+		}
+	})
 }
 
 func TestToolResultMarshalsValue(t *testing.T) {

@@ -8,63 +8,72 @@ import (
 )
 
 func TestParseFrontmatter(t *testing.T) {
-	content := []byte(`---
-name: test_skill
-summary: >
-  Load this skill to test frontmatter parsing.
-tools: [tool_a, tool_b]
----
-
-# Test Skill
-
-Some content here.
-`)
-
-	s, err := parseFrontmatter(content)
-	if err != nil {
-		t.Fatalf("parseFrontmatter: %v", err)
+	tests := []struct {
+		name        string
+		content     string
+		wantName    string
+		wantSummary string
+		wantTools   []string
+		wantPreload bool
+	}{
+		{
+			name:        "inline tools",
+			content:     "---\nname: test_skill\nsummary: >\n  Load this skill to test frontmatter parsing.\ntools: [tool_a, tool_b]\n---\n\n# Test Skill\n\nSome content here.\n",
+			wantName:    "test_skill",
+			wantSummary: "Load this skill to test frontmatter parsing.",
+			wantTools:   []string{"tool_a", "tool_b"},
+		},
+		{
+			name:      "block tools",
+			content:   "---\nname: block\nsummary: block test\ntools:\n  - alpha\n  - beta\n  - gamma\n---\n\n# Block\n",
+			wantName:  "block",
+			wantTools: []string{"alpha", "beta", "gamma"},
+		},
+		{
+			name:        "preload true",
+			content:     "---\nname: preloaded\npreload: true\nsummary: a preloaded skill\ntools: [tool_x]\n---\n\n# Preloaded\n\nBody content.\n",
+			wantName:    "preloaded",
+			wantPreload: true,
+		},
+		{
+			name:     "preload default false",
+			content:  "---\nname: normal\nsummary: no preload field\ntools: [t1]\n---\n\n# Normal\n",
+			wantName: "normal",
+		},
+		{
+			name:     "install field",
+			content:  "---\nname: installable\ninstall: true\nsummary: a skill with install requirements\ntools: [create_alarm]\n---\n\n# Installable\n\nBody content.\n",
+			wantName: "installable",
+		},
 	}
 
-	if s.Name != "test_skill" {
-		t.Errorf("name = %q, want %q", s.Name, "test_skill")
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s, err := parseFrontmatter([]byte(tt.content))
+			if err != nil {
+				t.Fatalf("parseFrontmatter: %v", err)
+			}
 
-	if s.Summary != "Load this skill to test frontmatter parsing." {
-		t.Errorf("summary = %q, want %q", s.Summary, "Load this skill to test frontmatter parsing.")
-	}
-
-	if len(s.Tools) != 2 || s.Tools[0] != "tool_a" || s.Tools[1] != "tool_b" {
-		t.Errorf("tools = %v, want [tool_a tool_b]", s.Tools)
-	}
-}
-
-func TestParseFrontmatterBlockTools(t *testing.T) {
-	content := []byte(`---
-name: block
-summary: block test
-tools:
-  - alpha
-  - beta
-  - gamma
----
-
-# Block
-`)
-
-	s, err := parseFrontmatter(content)
-	if err != nil {
-		t.Fatalf("parseFrontmatter: %v", err)
-	}
-
-	if len(s.Tools) != 3 {
-		t.Fatalf("tools len = %d, want 3", len(s.Tools))
-	}
-
-	want := []string{"alpha", "beta", "gamma"}
-	for i, w := range want {
-		if s.Tools[i] != w {
-			t.Errorf("tools[%d] = %q, want %q", i, s.Tools[i], w)
-		}
+			if s.Name != tt.wantName {
+				t.Errorf("name = %q, want %q", s.Name, tt.wantName)
+			}
+			if tt.wantSummary != "" && s.Summary != tt.wantSummary {
+				t.Errorf("summary = %q, want %q", s.Summary, tt.wantSummary)
+			}
+			if tt.wantTools != nil {
+				if len(s.Tools) != len(tt.wantTools) {
+					t.Fatalf("tools len = %d, want %d", len(s.Tools), len(tt.wantTools))
+				}
+				for i, w := range tt.wantTools {
+					if s.Tools[i] != w {
+						t.Errorf("tools[%d] = %q, want %q", i, s.Tools[i], w)
+					}
+				}
+			}
+			if s.Preload != tt.wantPreload {
+				t.Errorf("preload = %v, want %v", s.Preload, tt.wantPreload)
+			}
+		})
 	}
 }
 
@@ -85,53 +94,6 @@ func TestListSkills(t *testing.T) {
 
 	if len(summaries) != 2 {
 		t.Fatalf("got %d summaries, want 2", len(summaries))
-	}
-}
-
-func TestParseFrontmatterPreload(t *testing.T) {
-	content := []byte(`---
-name: preloaded
-preload: true
-summary: a preloaded skill
-tools: [tool_x]
----
-
-# Preloaded
-
-Body content.
-`)
-
-	s, err := parseFrontmatter(content)
-	if err != nil {
-		t.Fatalf("parseFrontmatter: %v", err)
-	}
-
-	if !s.Preload {
-		t.Error("preload = false, want true")
-	}
-
-	if s.Name != "preloaded" {
-		t.Errorf("name = %q, want %q", s.Name, "preloaded")
-	}
-}
-
-func TestParseFrontmatterPreloadDefaultFalse(t *testing.T) {
-	content := []byte(`---
-name: normal
-summary: no preload field
-tools: [t1]
----
-
-# Normal
-`)
-
-	s, err := parseFrontmatter(content)
-	if err != nil {
-		t.Fatalf("parseFrontmatter: %v", err)
-	}
-
-	if s.Preload {
-		t.Error("preload = true, want false (default)")
 	}
 }
 
@@ -341,29 +303,6 @@ func TestPreloadedSkillsWorkspaceOverride(t *testing.T) {
 	}
 }
 
-func TestParseFrontmatterInstall(t *testing.T) {
-	content := []byte(`---
-name: installable
-install: true
-summary: a skill with install requirements
-tools: [create_alarm]
----
-
-# Installable
-
-Body content.
-`)
-
-	s, err := parseFrontmatter(content)
-	if err != nil {
-		t.Fatalf("parseFrontmatter: %v", err)
-	}
-
-	if s.Name != "installable" {
-		t.Errorf("name = %q, want %q", s.Name, "installable")
-	}
-}
-
 func TestHandleLoadRejectsPathTraversal(t *testing.T) {
 	dir := t.TempDir()
 
@@ -399,104 +338,94 @@ func TestHandleLoadAcceptsValidName(t *testing.T) {
 }
 
 func TestHandleLoadPreflightWarning(t *testing.T) {
-	dir := t.TempDir()
-	skillDir := filepath.Join(dir, "my_skill")
-	os.MkdirAll(skillDir, 0o755)
-	os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(`---
-name: my_skill
-summary: needs shell
-tools: [shell, write_file]
----
+	t.Run("warns about missing tools", func(t *testing.T) {
+		dir := t.TempDir()
+		skillDir := filepath.Join(dir, "my_skill")
+		os.MkdirAll(skillDir, 0o755)
+		os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\nname: my_skill\nsummary: needs shell\ntools: [shell, write_file]\n---\n\n# My Skill\n"), 0o644)
 
-# My Skill
-`), 0o644)
-
-	available := func() []string { return []string{"write_file", "db_query"} }
-	out, err := handleLoad([]string{dir}, "my_skill", available)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.Contains(out, "warning") || !strings.Contains(out, "shell") {
-		t.Fatalf("expected warning about missing shell, got %q", out)
-	}
-
-	warnLine := strings.SplitN(out, "\n", 2)[0]
-	if strings.Contains(warnLine, "write_file") {
-		t.Fatalf("warning should not mention write_file (available), got %q", warnLine)
-	}
-}
-
-func TestHandleLoadNoWarningWhenAllPresent(t *testing.T) {
-	dir := t.TempDir()
-	skillDir := filepath.Join(dir, "ok_skill")
-	os.MkdirAll(skillDir, 0o755)
-	os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(`---
-name: ok_skill
-summary: all tools present
-tools: [shell]
----
-
-# OK
-`), 0o644)
-
-	available := func() []string { return []string{"shell", "db_query"} }
-	out, err := handleLoad([]string{dir}, "ok_skill", available)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if strings.Contains(out, "warning") {
-		t.Fatalf("should not warn when all tools present, got %q", out)
-	}
-}
-
-func TestHandleLoadBlocksSymlinkEscape(t *testing.T) {
-	dir := t.TempDir()
-	outside := t.TempDir()
-
-	skillDir := filepath.Join(outside, "secret")
-	os.MkdirAll(skillDir, 0o755)
-	os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# Secret"), 0o644)
-
-	err := os.Symlink(outside, filepath.Join(dir, "escape"))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	out, loadErr := handleLoad([]string{dir}, "escape/secret", nil)
-	if loadErr != nil {
-		t.Fatalf("unexpected error: %v", loadErr)
-	}
-	if !strings.Contains(out, "not found") {
-		t.Fatalf("expected not found for symlink escape, got %q", out)
-	}
-}
-
-func TestWalkSkillDirsBlocksSymlinkEscape(t *testing.T) {
-	dir := t.TempDir()
-	outside := t.TempDir()
-
-	skillDir := filepath.Join(outside, "secret")
-	os.MkdirAll(skillDir, 0o755)
-	os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\nname: secret\nsummary: escaped\n---\n"), 0o644)
-
-	err := os.Symlink(skillDir, filepath.Join(dir, "escape"))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var found []string
-	walkErr := walkSkillDirs([]string{dir}, func(s SkillSummary, _ []byte) {
-		found = append(found, s.Name)
-	})
-	if walkErr != nil {
-		t.Fatalf("walk error: %v", walkErr)
-	}
-
-	for _, name := range found {
-		if name == "secret" {
-			t.Fatalf("symlink escape should have been blocked, but found skill %q", name)
+		available := func() []string { return []string{"write_file", "db_query"} }
+		out, err := handleLoad([]string{dir}, "my_skill", available)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
 		}
-	}
+		if !strings.Contains(out, "warning") || !strings.Contains(out, "shell") {
+			t.Fatalf("expected warning about missing shell, got %q", out)
+		}
+
+		warnLine := strings.SplitN(out, "\n", 2)[0]
+		if strings.Contains(warnLine, "write_file") {
+			t.Fatalf("warning should not mention write_file (available), got %q", warnLine)
+		}
+	})
+
+	t.Run("no warning when all present", func(t *testing.T) {
+		dir := t.TempDir()
+		skillDir := filepath.Join(dir, "ok_skill")
+		os.MkdirAll(skillDir, 0o755)
+		os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\nname: ok_skill\nsummary: all tools present\ntools: [shell]\n---\n\n# OK\n"), 0o644)
+
+		available := func() []string { return []string{"shell", "db_query"} }
+		out, err := handleLoad([]string{dir}, "ok_skill", available)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if strings.Contains(out, "warning") {
+			t.Fatalf("should not warn when all tools present, got %q", out)
+		}
+	})
+}
+
+func TestSymlinkEscapeBlocked(t *testing.T) {
+	t.Run("handleLoad", func(t *testing.T) {
+		dir := t.TempDir()
+		outside := t.TempDir()
+
+		skillDir := filepath.Join(outside, "secret")
+		os.MkdirAll(skillDir, 0o755)
+		os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# Secret"), 0o644)
+
+		err := os.Symlink(outside, filepath.Join(dir, "escape"))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		out, loadErr := handleLoad([]string{dir}, "escape/secret", nil)
+		if loadErr != nil {
+			t.Fatalf("unexpected error: %v", loadErr)
+		}
+		if !strings.Contains(out, "not found") {
+			t.Fatalf("expected not found for symlink escape, got %q", out)
+		}
+	})
+
+	t.Run("walkSkillDirs", func(t *testing.T) {
+		dir := t.TempDir()
+		outside := t.TempDir()
+
+		skillDir := filepath.Join(outside, "secret")
+		os.MkdirAll(skillDir, 0o755)
+		os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\nname: secret\nsummary: escaped\n---\n"), 0o644)
+
+		err := os.Symlink(skillDir, filepath.Join(dir, "escape"))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var found []string
+		walkErr := walkSkillDirs([]string{dir}, func(s SkillSummary, _ []byte) {
+			found = append(found, s.Name)
+		})
+		if walkErr != nil {
+			t.Fatalf("walk error: %v", walkErr)
+		}
+
+		for _, name := range found {
+			if name == "secret" {
+				t.Fatalf("symlink escape should have been blocked, but found skill %q", name)
+			}
+		}
+	})
 }
 
 func TestStripInstallSection(t *testing.T) {

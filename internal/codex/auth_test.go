@@ -76,26 +76,24 @@ func TestLoadCodexCLIFormat(t *testing.T) {
 	}
 }
 
-func TestLoadMissingFile(t *testing.T) {
-	_, err := load("/nonexistent/auth.json")
-	if err == nil {
-		t.Fatal("expected error for missing file")
-	}
-}
+func TestLoadFailures(t *testing.T) {
+	t.Run("missing file", func(t *testing.T) {
+		_, err := load("/nonexistent/auth.json")
+		if err == nil {
+			t.Fatal("expected error for missing file")
+		}
+	})
 
-func TestLoadEmptyAccessToken(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "auth.json")
+	t.Run("empty access token", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "auth.json")
+		os.WriteFile(path, []byte(`{"tokens":{"access_token":"","refresh_token":"r"}}`), 0o600)
 
-	err := os.WriteFile(path, []byte(`{"tokens":{"access_token":"","refresh_token":"r"}}`), 0o600)
-	if err != nil {
-		t.Fatalf("write: %v", err)
-	}
-
-	_, err = load(path)
-	if err == nil {
-		t.Fatal("expected error for empty access_token")
-	}
+		_, err := load(path)
+		if err == nil {
+			t.Fatal("expected error for empty access_token")
+		}
+	})
 }
 
 func TestTokenReturnsCachedWhenFresh(t *testing.T) {
@@ -125,50 +123,50 @@ func TestTokenFailsWithNoRefreshToken(t *testing.T) {
 	}
 }
 
-func TestSaveCreatesDirectory(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "nested", "deep", "auth.json")
+func TestSave(t *testing.T) {
+	t.Run("creates directory", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "nested", "deep", "auth.json")
 
-	auth := &Auth{
-		AccountID:    "acct",
-		accessToken:  "tok",
-		refreshToken: "ref",
-		expiresAt:    time.Now().Add(time.Hour),
-		filePath:     path,
-	}
+		auth := &Auth{
+			AccountID:    "acct",
+			accessToken:  "tok",
+			refreshToken: "ref",
+			expiresAt:    time.Now().Add(time.Hour),
+			filePath:     path,
+		}
 
-	err := auth.save()
-	if err != nil {
-		t.Fatalf("save: %v", err)
-	}
+		err := auth.save()
+		if err != nil {
+			t.Fatalf("save: %v", err)
+		}
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			t.Fatal("expected file to be created")
+		}
+	})
 
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		t.Fatal("expected file to be created")
-	}
-}
+	t.Run("file permissions", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "auth.json")
 
-func TestSaveFilePermissions(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "auth.json")
+		auth := &Auth{
+			accessToken: "tok",
+			expiresAt:   time.Now().Add(time.Hour),
+			filePath:    path,
+		}
 
-	auth := &Auth{
-		accessToken: "tok",
-		expiresAt:   time.Now().Add(time.Hour),
-		filePath:    path,
-	}
+		err := auth.save()
+		if err != nil {
+			t.Fatalf("save: %v", err)
+		}
 
-	err := auth.save()
-	if err != nil {
-		t.Fatalf("save: %v", err)
-	}
-
-	info, err := os.Stat(path)
-	if err != nil {
-		t.Fatalf("stat: %v", err)
-	}
-
-	perm := info.Mode().Perm()
-	if perm != 0o600 {
-		t.Errorf("file permissions = %o, want 600", perm)
-	}
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("stat: %v", err)
+		}
+		perm := info.Mode().Perm()
+		if perm != 0o600 {
+			t.Errorf("file permissions = %o, want 600", perm)
+		}
+	})
 }

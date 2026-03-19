@@ -30,7 +30,7 @@ func TestBuildToolsReturnsExpectedToolNames(t *testing.T) {
 	}
 }
 
-func TestReplyToolDefHasMessagesArray(t *testing.T) {
+func TestReplyToolDefSchema(t *testing.T) {
 	props, ok := replyToolDef.Parameters["properties"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected properties map")
@@ -40,7 +40,6 @@ func TestReplyToolDefHasMessagesArray(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected 'messages' parameter in reply tool def")
 	}
-
 	if msgsProp["type"] != "array" {
 		t.Fatalf("expected messages to be array type, got %v", msgsProp["type"])
 	}
@@ -49,7 +48,6 @@ func TestReplyToolDefHasMessagesArray(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected required slice")
 	}
-
 	found := false
 	for _, r := range required {
 		if r == "messages" {
@@ -59,6 +57,22 @@ func TestReplyToolDefHasMessagesArray(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("expected 'messages' in required list")
+	}
+
+	items, ok := msgsProp["items"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected 'items' in messages")
+	}
+	itemProps, ok := items["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected 'properties' in items")
+	}
+	voiceProp, ok := itemProps["voice"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected 'voice' in message properties")
+	}
+	if voiceProp["type"] != "boolean" {
+		t.Fatalf("expected voice type boolean, got %v", voiceProp["type"])
 	}
 }
 
@@ -112,37 +126,6 @@ func TestReplyHandlerVoiceWithoutSpeechFnReturnsError(t *testing.T) {
 	}
 }
 
-func TestReplyToolDefHasVoiceField(t *testing.T) {
-	props, ok := replyToolDef.Parameters["properties"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected properties map")
-	}
-
-	msgsProp, ok := props["messages"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected 'messages' parameter")
-	}
-
-	items, ok := msgsProp["items"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected 'items' in messages")
-	}
-
-	itemProps, ok := items["properties"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected 'properties' in items")
-	}
-
-	voiceProp, ok := itemProps["voice"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected 'voice' in message properties")
-	}
-
-	if voiceProp["type"] != "boolean" {
-		t.Fatalf("expected voice type boolean, got %v", voiceProp["type"])
-	}
-}
-
 func TestReplyHandlerBannedWordPrevalidation(t *testing.T) {
 	cfg := &config.Config{
 		AllowConversationIDs: map[string]string{"test": "conv-123"},
@@ -171,94 +154,75 @@ func TestReplyHandlerBannedWordPrevalidation(t *testing.T) {
 	}
 }
 
-func TestReplyHandlerBlocksAbsoluteImagePath(t *testing.T) {
-	home := t.TempDir()
-	cfg := &config.Config{
-		Home:                 home,
-		AllowConversationIDs: map[string]string{"owner": "conv-123"},
+func TestReplyHandlerPathSecurity(t *testing.T) {
+	makeCtx := func() context.Context {
+		return context.WithValue(
+			context.Background(),
+			"meta",
+			map[string]string{"conversation_id": "conv-123"},
+		)
 	}
-	svc := &Service{cfg: cfg}
-	handler := replyHandler(svc)
 
-	ctx := context.WithValue(
-		context.Background(),
-		"meta",
-		map[string]string{"conversation_id": "conv-123"},
-	)
+	t.Run("absolute path blocked", func(t *testing.T) {
+		home := t.TempDir()
+		cfg := &config.Config{
+			Home:                 home,
+			AllowConversationIDs: map[string]string{"owner": "conv-123"},
+		}
+		handler := replyHandler(&Service{cfg: cfg})
 
-	out, err := handler(ctx, llm.ToolCall{
-		Arguments: `{"conversation_id":"conv-123","contact_id":"","messages":[{"text":"look","image_path":"/etc/passwd","voice":false}]}`,
+		out, err := handler(makeCtx(), llm.ToolCall{
+			Arguments: `{"conversation_id":"conv-123","contact_id":"","messages":[{"text":"look","image_path":"/etc/passwd","voice":false}]}`,
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(out, "must be relative") {
+			t.Fatalf("expected relative path error, got %q", out)
+		}
 	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.Contains(out, "must be relative") {
-		t.Fatalf("expected relative path error, got %q", out)
-	}
-}
 
-func TestReplyHandlerBlocksImagePathTraversal(t *testing.T) {
-	home := t.TempDir()
-	cfg := &config.Config{
-		Home:                 home,
-		AllowConversationIDs: map[string]string{"owner": "conv-123"},
-	}
-	svc := &Service{cfg: cfg}
-	handler := replyHandler(svc)
+	t.Run("traversal blocked", func(t *testing.T) {
+		home := t.TempDir()
+		cfg := &config.Config{
+			Home:                 home,
+			AllowConversationIDs: map[string]string{"owner": "conv-123"},
+		}
+		handler := replyHandler(&Service{cfg: cfg})
 
-	ctx := context.WithValue(
-		context.Background(),
-		"meta",
-		map[string]string{"conversation_id": "conv-123"},
-	)
-
-	out, err := handler(ctx, llm.ToolCall{
-		Arguments: `{"conversation_id":"conv-123","contact_id":"","messages":[{"text":"look","image_path":"../../../etc/passwd","voice":false}]}`,
+		out, err := handler(makeCtx(), llm.ToolCall{
+			Arguments: `{"conversation_id":"conv-123","contact_id":"","messages":[{"text":"look","image_path":"../../../etc/passwd","voice":false}]}`,
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(out, "error") {
+			t.Fatalf("expected error for traversal path, got %q", out)
+		}
 	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.Contains(out, "error") {
-		t.Fatalf("expected error for traversal path, got %q", out)
-	}
-}
 
-func TestReplyHandlerBlocksImagePathSymlinkEscape(t *testing.T) {
-	home := t.TempDir()
-	outside := t.TempDir()
+	t.Run("symlink escape blocked", func(t *testing.T) {
+		home := t.TempDir()
+		outside := t.TempDir()
+		os.WriteFile(filepath.Join(outside, "secret.png"), []byte("img"), 0o644)
+		os.Symlink(outside, filepath.Join(home, "escape"))
 
-	err := os.WriteFile(filepath.Join(outside, "secret.png"), []byte("img"), 0o644)
-	if err != nil {
-		t.Fatal(err)
-	}
+		cfg := &config.Config{
+			Home:                 home,
+			AllowConversationIDs: map[string]string{"owner": "conv-123"},
+		}
+		handler := replyHandler(&Service{cfg: cfg})
 
-	err = os.Symlink(outside, filepath.Join(home, "escape"))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	cfg := &config.Config{
-		Home:                 home,
-		AllowConversationIDs: map[string]string{"owner": "conv-123"},
-	}
-	svc := &Service{cfg: cfg}
-	handler := replyHandler(svc)
-
-	ctx := context.WithValue(
-		context.Background(),
-		"meta",
-		map[string]string{"conversation_id": "conv-123"},
-	)
-
-	out, err := handler(ctx, llm.ToolCall{
-		Arguments: `{"conversation_id":"conv-123","contact_id":"","messages":[{"text":"look","image_path":"escape/secret.png","voice":false}]}`,
+		out, err := handler(makeCtx(), llm.ToolCall{
+			Arguments: `{"conversation_id":"conv-123","contact_id":"","messages":[{"text":"look","image_path":"escape/secret.png","voice":false}]}`,
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(out, "error") {
+			t.Fatalf("expected error for symlink escape, got %q", out)
+		}
 	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.Contains(out, "error") {
-		t.Fatalf("expected error for symlink escape, got %q", out)
-	}
 }
 
 func TestReplyHandlerBlocksDisallowedConversation(t *testing.T) {

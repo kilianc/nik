@@ -12,45 +12,47 @@ import (
 )
 
 func TestRenderMediaProcessed(t *testing.T) {
-	conn, convID := setupTestDB(t)
+	t.Run("with reference", func(t *testing.T) {
+		conn, convID := setupTestDB(t)
 
-	now := time.Date(2026, 3, 14, 10, 30, 15, 0, time.UTC)
-	insertMsg(t, conn, convID, "media-msg-id", "ext-media-msg", "image", "(image) sunset", now)
+		now := time.Date(2026, 3, 14, 10, 30, 15, 0, time.UTC)
+		insertMsg(t, conn, convID, "media-msg-id", "ext-media-msg", "image", "(image) sunset", now)
 
-	bump := db.Message{
-		Platform:        "system",
-		Kind:            "media_processed",
-		Body:            `{"file_path":"media/abc.jpg"}`,
-		SentAt:          now.Add(time.Second),
-		ContextStanzaID: sql.NullString{Valid: true, String: "media-msg-id"},
-	}
+		bump := db.Message{
+			Platform:        "system",
+			Kind:            "media_processed",
+			Body:            `{"file_path":"media/abc.jpg"}`,
+			SentAt:          now.Add(time.Second),
+			ContextStanzaID: sql.NullString{Valid: true, String: "media-msg-id"},
+		}
 
-	e := renderMediaProcessed(bump, conn)
+		e := renderMediaProcessed(bump, conn)
 
-	if e.from != "system" {
-		t.Fatalf("expected from=system, got %q", e.from)
-	}
-	if !strings.Contains(e.text, "[media described]") {
-		t.Fatalf("expected [media described] in text, got %q", e.text)
-	}
-	if !strings.Contains(e.text, "(from [10:30:15] Sender: (image) sunset)") {
-		t.Fatalf("expected reference to original message, got %q", e.text)
-	}
-}
+		if e.from != "system" {
+			t.Fatalf("expected from=system, got %q", e.from)
+		}
+		if !strings.Contains(e.text, "[media described]") {
+			t.Fatalf("expected [media described] in text, got %q", e.text)
+		}
+		if !strings.Contains(e.text, "(from [10:30:15] Sender: (image) sunset)") {
+			t.Fatalf("expected reference to original message, got %q", e.text)
+		}
+	})
 
-func TestRenderMediaProcessedNoReference(t *testing.T) {
-	bump := db.Message{
-		Platform: "system",
-		Kind:     "media_processed",
-		Body:     `{"file_path":"media/abc.jpg"}`,
-		SentAt:   time.Now(),
-	}
+	t.Run("no reference", func(t *testing.T) {
+		bump := db.Message{
+			Platform: "system",
+			Kind:     "media_processed",
+			Body:     `{"file_path":"media/abc.jpg"}`,
+			SentAt:   time.Now(),
+		}
 
-	e := renderMediaProcessed(bump, nil)
+		e := renderMediaProcessed(bump, nil)
 
-	if e.text != "[media described]" {
-		t.Fatalf("expected bare [media described], got %q", e.text)
-	}
+		if e.text != "[media described]" {
+			t.Fatalf("expected bare [media described], got %q", e.text)
+		}
+	})
 }
 
 func skillMessage(kind string, skill db.Skill) db.Message {

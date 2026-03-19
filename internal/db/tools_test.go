@@ -48,28 +48,30 @@ func TestIsReadOnlyRecognizesAllowedPrefixes(t *testing.T) {
 	}
 }
 
-func TestNormalizeValueConvertsBytesAndNestedSlices(t *testing.T) {
-	got := normalizeValue([]any{[]byte("x"), []any{[]byte("y")}})
-	want := []any{"x", []any{"y"}}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("expected %v, got %v", want, got)
-	}
-}
+func TestNormalizeValue(t *testing.T) {
+	t.Run("converts bytes and nested slices", func(t *testing.T) {
+		got := normalizeValue([]any{[]byte("x"), []any{[]byte("y")}})
+		want := []any{"x", []any{"y"}}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("expected %v, got %v", want, got)
+		}
+	})
 
-func TestNormalizeValueTruncatesLongStrings(t *testing.T) {
-	got := normalizeValue(stringsOfLen(maxQueryValueBytes + 10))
+	t.Run("truncates long strings", func(t *testing.T) {
+		got := normalizeValue(stringsOfLen(maxQueryValueBytes + 10))
 
-	s, ok := got.(string)
-	if !ok {
-		t.Fatalf("expected string, got %T", got)
-	}
+		s, ok := got.(string)
+		if !ok {
+			t.Fatalf("expected string, got %T", got)
+		}
 
-	if len(s) > maxQueryValueBytes {
-		t.Fatalf("expected truncated string length <= %d, got %d", maxQueryValueBytes, len(s))
-	}
-	if !strings.HasSuffix(s, " [truncated]") {
-		t.Fatalf("expected truncated suffix, got %q", s)
-	}
+		if len(s) > maxQueryValueBytes {
+			t.Fatalf("expected truncated string length <= %d, got %d", maxQueryValueBytes, len(s))
+		}
+		if !strings.HasSuffix(s, " [truncated]") {
+			t.Fatalf("expected truncated suffix, got %q", s)
+		}
+	})
 }
 
 func TestQueryHandlerTruncatesContextBytes(t *testing.T) {

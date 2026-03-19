@@ -32,12 +32,12 @@ func TestJaroWinklerSimilarity(t *testing.T) {
 			}
 		})
 	}
-}
 
-func TestJaroWinklerSymmetric(t *testing.T) {
-	a := jaroWinklerSimilarity("test", "tset")
-	b := jaroWinklerSimilarity("tset", "test")
-	if math.Abs(a-b) > 1e-9 {
-		t.Errorf("not symmetric: %f vs %f", a, b)
-	}
+	t.Run("symmetric", func(t *testing.T) {
+		a := jaroWinklerSimilarity("test", "tset")
+		b := jaroWinklerSimilarity("tset", "test")
+		if math.Abs(a-b) > 1e-9 {
+			t.Errorf("not symmetric: %f vs %f", a, b)
+		}
+	})
 }

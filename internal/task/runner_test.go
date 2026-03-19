@@ -51,6 +51,13 @@ func TestBuildToolDocs(t *testing.T) {
 }
 
 func TestScanTokenTraps(t *testing.T) {
+	t.Run("empty home", func(t *testing.T) {
+		got := scanTokenTraps(t.TempDir())
+		if got != "" {
+			t.Fatalf("expected empty output for empty home, got: %q", got)
+		}
+	})
+
 	home := t.TempDir()
 
 	journal := filepath.Join(home, "journal")
@@ -138,15 +145,6 @@ func TestScanTokenTraps(t *testing.T) {
 	}
 	if strings.Contains(denseSection, "soul/") {
 		t.Fatalf("dated dir should not appear in dense section:\n%s", got)
-	}
-}
-
-func TestScanTokenTrapsEmptyHome(t *testing.T) {
-	home := t.TempDir()
-
-	got := scanTokenTraps(home)
-	if got != "" {
-		t.Fatalf("expected empty output for empty home, got: %q", got)
 	}
 }
 

@@ -146,85 +146,79 @@ func TestMessageEntryReaction(t *testing.T) {
 	}
 }
 
-func TestMessageEntryReactionTargetMissing(t *testing.T) {
+func TestMessageEntryTargetMissing(t *testing.T) {
 	conn, _ := setupTestDB(t)
 
-	reaction := db.Message{
-		ID: "react-3", Kind: "reaction", Body: "👍",
-		IsFromMe: true, Platform: "whatsapp",
-		ContextStanzaID: sql.NullString{Valid: true, String: "ext-not-in-db"},
-		SentAt:          time.Now(),
-	}
+	t.Run("reaction", func(t *testing.T) {
+		reaction := db.Message{
+			ID: "react-3", Kind: "reaction", Body: "👍",
+			IsFromMe: true, Platform: "whatsapp",
+			ContextStanzaID: sql.NullString{Valid: true, String: "ext-not-in-db"},
+			SentAt:          time.Now(),
+		}
+		e := messageEntry(reaction, "", conn)
+		if e.text != "(👍)" {
+			t.Fatalf("expected fallback without target, got %q", e.text)
+		}
+	})
 
-	e := messageEntry(reaction, "", conn)
-
-	if e.text != "(👍)" {
-		t.Fatalf("expected fallback without target, got %q", e.text)
-	}
+	t.Run("reply", func(t *testing.T) {
+		reply := db.Message{
+			ID: "reply-2", Kind: "text", Body: "where?",
+			IsFromMe: false, Platform: "whatsapp",
+			ContextStanzaID: sql.NullString{Valid: true, String: "ext-missing"},
+			SentAt:          time.Now(),
+		}
+		e := messageEntry(reply, "Alice", conn)
+		if e.text != "where?" {
+			t.Fatalf("expected fallback without target, got %q", e.text)
+		}
+	})
 }
 
 func TestMessageEntryReplyContext(t *testing.T) {
 	conn, convID := setupTestDB(t)
-
 	now := time.Date(2026, 3, 14, 9, 12, 30, 0, time.UTC)
-	insertMsg(t, conn, convID, "target-reply", "ext-reply-target", "text", "ok", now)
 
-	reply := db.Message{
-		ID: "reply-1", Kind: "text", Body: "where?",
-		IsFromMe: false, Platform: "whatsapp",
-		ContextStanzaID: sql.NullString{Valid: true, String: "ext-reply-target"},
-		SentAt:          now.Add(time.Second),
-	}
+	t.Run("in window", func(t *testing.T) {
+		insertMsg(t, conn, convID, "target-reply", "ext-reply-target", "text", "ok", now)
 
-	e := messageEntry(reply, "Alice", conn)
+		reply := db.Message{
+			ID: "reply-1", Kind: "text", Body: "where?",
+			IsFromMe: false, Platform: "whatsapp",
+			ContextStanzaID: sql.NullString{Valid: true, String: "ext-reply-target"},
+			SentAt:          now.Add(time.Second),
+		}
+		e := messageEntry(reply, "Alice", conn)
 
-	want := `where? (replying to [09:12:30] Sender: ok)`
-	if e.text != want {
-		t.Fatalf("got %q, want %q", e.text, want)
-	}
-	if e.from != "Alice" {
-		t.Fatalf("expected sender Alice, got %q", e.from)
-	}
-}
+		want := `where? (replying to [09:12:30] Sender: ok)`
+		if e.text != want {
+			t.Fatalf("got %q, want %q", e.text, want)
+		}
+		if e.from != "Alice" {
+			t.Fatalf("expected sender Alice, got %q", e.from)
+		}
+	})
 
-func TestMessageEntryReplyTargetMissing(t *testing.T) {
-	conn, _ := setupTestDB(t)
+	t.Run("out of window", func(t *testing.T) {
+		oldTime := time.Date(2026, 3, 14, 8, 30, 15, 0, time.UTC)
+		replyTime := time.Date(2026, 3, 14, 14, 0, 0, 0, time.UTC)
 
-	reply := db.Message{
-		ID: "reply-2", Kind: "text", Body: "where?",
-		IsFromMe: false, Platform: "whatsapp",
-		ContextStanzaID: sql.NullString{Valid: true, String: "ext-missing"},
-		SentAt:          time.Now(),
-	}
+		insertMsg(t, conn, convID, "old-msg", "ext-old", "text", "how about saturday?", oldTime)
 
-	e := messageEntry(reply, "Alice", conn)
+		reply := db.Message{
+			ID: "reply-3", Kind: "text", Body: "yes!",
+			IsFromMe: false, Platform: "whatsapp",
+			ContextStanzaID: sql.NullString{Valid: true, String: "ext-old"},
+			SentAt:          replyTime,
+		}
+		e := messageEntry(reply, "Alice", conn)
 
-	if e.text != "where?" {
-		t.Fatalf("expected fallback without target, got %q", e.text)
-	}
-}
-
-func TestMessageEntryReplyOutOfWindow(t *testing.T) {
-	conn, convID := setupTestDB(t)
-
-	oldTime := time.Date(2026, 3, 14, 8, 30, 15, 0, time.UTC)
-	now := time.Date(2026, 3, 14, 14, 0, 0, 0, time.UTC)
-
-	insertMsg(t, conn, convID, "old-msg", "ext-old", "text", "how about saturday?", oldTime)
-
-	reply := db.Message{
-		ID: "reply-3", Kind: "text", Body: "yes!",
-		IsFromMe: false, Platform: "whatsapp",
-		ContextStanzaID: sql.NullString{Valid: true, String: "ext-old"},
-		SentAt:          now,
-	}
-
-	e := messageEntry(reply, "Alice", conn)
-
-	want := `yes! (replying to [08:30:15] Sender: how about saturday?)`
-	if e.text != want {
-		t.Fatalf("got %q, want %q", e.text, want)
-	}
+		want := `yes! (replying to [08:30:15] Sender: how about saturday?)`
+		if e.text != want {
+			t.Fatalf("got %q, want %q", e.text, want)
+		}
+	})
 }
 
 func TestMessageEntryPlainText(t *testing.T) {

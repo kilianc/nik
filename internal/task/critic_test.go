@@ -71,31 +71,10 @@ func TestFormatToolCalls(t *testing.T) {
 	}
 }
 
-func TestFormatReportsNoReports(t *testing.T) {
-	svc, _ := testDB(t)
-
-	cfg := &config.Config{}
-	runner := NewRunner(cfg, nil, svc, nil)
-
-	task, err := svc.Create(context.Background(), createParams{
-		Goal: "test", Thinking: "low", ConversationID: testConvID,
-	})
-	if err != nil {
-		t.Fatalf("create task: %v", err)
-	}
-
-	got := runner.formatReports(context.Background(), task.ID)
-	if got != "(no reports)" {
-		t.Fatalf("expected '(no reports)', got %q", got)
-	}
-}
-
-func TestFormatReportsWithEntries(t *testing.T) {
+func TestFormatReports(t *testing.T) {
 	svc, _ := testDB(t)
 	ctx := context.Background()
-
-	cfg := &config.Config{}
-	runner := NewRunner(cfg, nil, svc, nil)
+	runner := NewRunner(&config.Config{}, nil, svc, nil)
 
 	task, err := svc.Create(ctx, createParams{
 		Goal: "test", Thinking: "low", ConversationID: testConvID,
@@ -104,17 +83,21 @@ func TestFormatReportsWithEntries(t *testing.T) {
 		t.Fatalf("create task: %v", err)
 	}
 
+	got := runner.formatReports(ctx, task.ID)
+	if got != "(no reports)" {
+		t.Fatalf("expected '(no reports)', got %q", got)
+	}
+
 	err = svc.InsertReport(ctx, task.ID, "running", "compiling")
 	if err != nil {
 		t.Fatalf("insert report: %v", err)
 	}
-
 	err = svc.InsertReport(ctx, task.ID, "completed", "done")
 	if err != nil {
 		t.Fatalf("insert report: %v", err)
 	}
 
-	got := runner.formatReports(ctx, task.ID)
+	got = runner.formatReports(ctx, task.ID)
 	if !strings.Contains(got, "running: compiling") {
 		t.Fatalf("expected running report, got %q", got)
 	}

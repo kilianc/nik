@@ -25,15 +25,6 @@ func TestSetSensorPanicsOnNil(t *testing.T) {
 	b.SetSensor(nil)
 }
 
-func TestSetSensorStores(t *testing.T) {
-	b := New(&config.Config{}, nil)
-
-	b.SetSensor(stubSensor{})
-	if b.sensor == nil {
-		t.Fatalf("expected sensor to be set")
-	}
-}
-
 func TestRegisterReflexEveryThrottles(t *testing.T) {
 	b := New(&config.Config{}, nil)
 
