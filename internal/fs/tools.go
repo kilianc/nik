@@ -40,7 +40,7 @@ var readFileDef = llm.ToolDef{
 				"description": "Maximum number of lines to return. Defaults to 2000.",
 			},
 		},
-		"required":             []string{"path"},
+		"required":             []string{"path", "offset", "limit"},
 		"additionalProperties": false,
 	},
 }
