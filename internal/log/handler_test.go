@@ -8,35 +8,37 @@ import (
 	"testing"
 )
 
-func TestTruncHandlerTruncatesLongStrings(t *testing.T) {
-	var buf bytes.Buffer
-	inner := slog.NewTextHandler(&buf, &slog.HandlerOptions{})
-	h := &TruncHandler{Inner: inner}
-	logger := slog.New(h)
+func TestTruncHandler(t *testing.T) {
+	t.Run("truncates long strings", func(t *testing.T) {
+		var buf bytes.Buffer
+		inner := slog.NewTextHandler(&buf, &slog.HandlerOptions{})
+		h := &TruncHandler{Inner: inner}
+		logger := slog.New(h)
 
-	long := strings.Repeat("x", 50)
-	logger.Info("test", "key", long)
+		long := strings.Repeat("x", 50)
+		logger.Info("test", "key", long)
 
-	out := buf.String()
-	if strings.Contains(out, long) {
-		t.Errorf("expected truncation, full string found in output")
-	}
-	truncated := strings.Repeat("x", maxAttrLen) + "…"
-	if !strings.Contains(out, truncated) {
-		t.Errorf("expected truncated string %q in output: %s", truncated, out)
-	}
-}
+		out := buf.String()
+		if strings.Contains(out, long) {
+			t.Errorf("expected truncation, full string found in output")
+		}
+		truncated := strings.Repeat("x", maxAttrLen) + "…"
+		if !strings.Contains(out, truncated) {
+			t.Errorf("expected truncated string %q in output: %s", truncated, out)
+		}
+	})
 
-func TestTruncHandlerPreservesShortStrings(t *testing.T) {
-	var buf bytes.Buffer
-	inner := slog.NewTextHandler(&buf, &slog.HandlerOptions{})
-	h := &TruncHandler{Inner: inner}
-	logger := slog.New(h)
+	t.Run("preserves short strings", func(t *testing.T) {
+		var buf bytes.Buffer
+		inner := slog.NewTextHandler(&buf, &slog.HandlerOptions{})
+		h := &TruncHandler{Inner: inner}
+		logger := slog.New(h)
 
-	logger.Info("test", "key", "short")
-	if !strings.Contains(buf.String(), "short") {
-		t.Errorf("short string should be preserved: %s", buf.String())
-	}
+		logger.Info("test", "key", "short")
+		if !strings.Contains(buf.String(), "short") {
+			t.Errorf("short string should be preserved: %s", buf.String())
+		}
+	})
 }
 
 func TestMultiHandlerFansOut(t *testing.T) {

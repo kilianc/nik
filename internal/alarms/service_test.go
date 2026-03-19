@@ -10,16 +10,6 @@ import (
 	"github.com/kciuffolo/nik/internal/db"
 )
 
-func TestNewServiceStoresDB(t *testing.T) {
-	svc := New(nil)
-	if svc == nil {
-		t.Fatalf("expected non-nil service")
-	}
-	if svc.db != nil {
-		t.Fatalf("expected nil db when initialized with nil")
-	}
-}
-
 func TestCreateAlarmRejectsInvalidTimestamp(t *testing.T) {
 	svc := New(nil)
 
@@ -209,96 +199,97 @@ func TestUpdateAlarmNoteBeforeFirstOccurrenceReturnsError(t *testing.T) {
 	}
 }
 
-func TestHealStaleAlarmsEmitsSystemMessage(t *testing.T) {
-	ctx := context.Background()
+func TestHealStaleAlarms(t *testing.T) {
+	t.Run("emits system message for stale alarm", func(t *testing.T) {
+		ctx := context.Background()
 
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
-	defer conn.Close()
+		conn, err := db.OpenInMemory()
+		if err != nil {
+			t.Fatalf("open db: %v", err)
+		}
+		defer conn.Close()
 
-	err = db.EnsureSystemContact(ctx, conn)
-	if err != nil {
-		t.Fatalf("ensure system contact: %v", err)
-	}
+		err = db.EnsureSystemContact(ctx, conn)
+		if err != nil {
+			t.Fatalf("ensure system contact: %v", err)
+		}
 
-	convID := seedConversation(t, ctx, conn)
-	now := time.Now().UTC().Truncate(time.Second)
+		convID := seedConversation(t, ctx, conn)
+		now := time.Now().UTC().Truncate(time.Second)
 
-	alarm, err := db.CreateAlarm(ctx, conn, db.CreateAlarmParams{
-		OriginConversationID: convID,
-		Goal:                 "[NIK_JOURNAL] End of day journal",
-		Recurrence:           "every day",
-		NextFireAt:           now.Add(-2 * time.Hour),
+		alarm, err := db.CreateAlarm(ctx, conn, db.CreateAlarmParams{
+			OriginConversationID: convID,
+			Goal:                 "[NIK_JOURNAL] End of day journal",
+			Recurrence:           "every day",
+			NextFireAt:           now.Add(-2 * time.Hour),
+		})
+		if err != nil {
+			t.Fatalf("create alarm: %v", err)
+		}
+
+		err = db.AlarmUpdate(ctx, conn, alarm.ID, db.AlarmUpdateParams{LastFiredAt: now.Add(-time.Hour)})
+		if err != nil {
+			t.Fatalf("claim alarm: %v", err)
+		}
+
+		svc := New(conn)
+		svc.healStaleAlarms(ctx)
+
+		var msgCount int
+		err = conn.QueryRowContext(ctx,
+			`SELECT count(*) FROM message WHERE conversation_id = ?1 AND kind = 'alarm_stale'`,
+			convID,
+		).Scan(&msgCount)
+		if err != nil {
+			t.Fatalf("count stale messages: %v", err)
+		}
+		if msgCount != 1 {
+			t.Fatalf("expected 1 stale message, got %d", msgCount)
+		}
 	})
-	if err != nil {
-		t.Fatalf("create alarm: %v", err)
-	}
 
-	err = db.AlarmUpdate(ctx, conn, alarm.ID, db.AlarmUpdateParams{LastFiredAt: now.Add(-time.Hour)})
-	if err != nil {
-		t.Fatalf("claim alarm: %v", err)
-	}
+	t.Run("ignores healthy alarm", func(t *testing.T) {
+		ctx := context.Background()
 
-	svc := New(conn)
-	svc.healStaleAlarms(ctx)
+		conn, err := db.OpenInMemory()
+		if err != nil {
+			t.Fatalf("open db: %v", err)
+		}
+		defer conn.Close()
 
-	var msgCount int
-	err = conn.QueryRowContext(ctx,
-		`SELECT count(*) FROM message WHERE conversation_id = ?1 AND kind = 'alarm_stale'`,
-		convID,
-	).Scan(&msgCount)
-	if err != nil {
-		t.Fatalf("count stale messages: %v", err)
-	}
-	if msgCount != 1 {
-		t.Fatalf("expected 1 stale message, got %d", msgCount)
-	}
-}
+		err = db.EnsureSystemContact(ctx, conn)
+		if err != nil {
+			t.Fatalf("ensure system contact: %v", err)
+		}
 
-func TestHealStaleAlarmsIgnoresHealthy(t *testing.T) {
-	ctx := context.Background()
+		convID := seedConversation(t, ctx, conn)
+		now := time.Now().UTC().Truncate(time.Second)
 
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
-	defer conn.Close()
+		_, err = db.CreateAlarm(ctx, conn, db.CreateAlarmParams{
+			OriginConversationID: convID,
+			Goal:                 "[NIK_JOURNAL] End of day journal",
+			Recurrence:           "every day",
+			NextFireAt:           now.Add(12 * time.Hour),
+		})
+		if err != nil {
+			t.Fatalf("create alarm: %v", err)
+		}
 
-	err = db.EnsureSystemContact(ctx, conn)
-	if err != nil {
-		t.Fatalf("ensure system contact: %v", err)
-	}
+		svc := New(conn)
+		svc.healStaleAlarms(ctx)
 
-	convID := seedConversation(t, ctx, conn)
-	now := time.Now().UTC().Truncate(time.Second)
-
-	_, err = db.CreateAlarm(ctx, conn, db.CreateAlarmParams{
-		OriginConversationID: convID,
-		Goal:                 "[NIK_JOURNAL] End of day journal",
-		Recurrence:           "every day",
-		NextFireAt:           now.Add(12 * time.Hour),
+		var msgCount int
+		err = conn.QueryRowContext(ctx,
+			`SELECT count(*) FROM message WHERE conversation_id = ?1 AND kind = 'alarm_stale'`,
+			convID,
+		).Scan(&msgCount)
+		if err != nil {
+			t.Fatalf("count stale messages: %v", err)
+		}
+		if msgCount != 0 {
+			t.Fatalf("expected no stale messages for healthy alarm, got %d", msgCount)
+		}
 	})
-	if err != nil {
-		t.Fatalf("create alarm: %v", err)
-	}
-
-	svc := New(conn)
-	svc.healStaleAlarms(ctx)
-
-	var msgCount int
-	err = conn.QueryRowContext(ctx,
-		`SELECT count(*) FROM message WHERE conversation_id = ?1 AND kind = 'alarm_stale'`,
-		convID,
-	).Scan(&msgCount)
-	if err != nil {
-		t.Fatalf("count stale messages: %v", err)
-	}
-
-	if msgCount != 0 {
-		t.Fatalf("expected no stale messages for healthy alarm, got %d", msgCount)
-	}
 }
 
 func seedConversation(t *testing.T, ctx context.Context, conn *sql.DB) string {

@@ -50,7 +50,7 @@ func TestEnsureContactForMessageValidatesInputs(t *testing.T) {
 	}
 }
 
-func TestEnsureContactLinksBothJIDs(t *testing.T) {
+func TestEnsureContactJIDLinking(t *testing.T) {
 	ctx := context.Background()
 
 	conn, err := db.OpenInMemory()
@@ -62,84 +62,59 @@ func TestEnsureContactLinksBothJIDs(t *testing.T) {
 	svc := NewService(conn)
 	now := time.Now()
 
-	id1, err := svc.EnsureContactForMessage(ctx, "whatsapp", []string{"12345@s.whatsapp.net", "99999@lid"}, false, now)
-	if err != nil {
-		t.Fatalf("first ensure: %v", err)
-	}
+	t.Run("links both JIDs", func(t *testing.T) {
+		id1, err := svc.EnsureContactForMessage(ctx, "whatsapp", []string{"12345@s.whatsapp.net", "99999@lid"}, false, now)
+		if err != nil {
+			t.Fatalf("ensure: %v", err)
+		}
 
-	contact, err := db.GetContact(ctx, conn, id1)
-	if err != nil {
-		t.Fatalf("get contact: %v", err)
-	}
+		contact, err := db.GetContact(ctx, conn, id1)
+		if err != nil {
+			t.Fatalf("get contact: %v", err)
+		}
+		if len(contact.WhatsappIDs) != 2 {
+			t.Fatalf("expected 2 whatsapp ids, got %v", contact.WhatsappIDs)
+		}
+	})
 
-	if len(contact.WhatsappIDs) != 2 {
-		t.Fatalf("expected 2 whatsapp ids after first ensure, got %v", contact.WhatsappIDs)
-	}
-}
+	t.Run("resolves via secondary JID", func(t *testing.T) {
+		id1, err := svc.EnsureContactForMessage(ctx, "whatsapp", []string{"55555@s.whatsapp.net"}, false, now)
+		if err != nil {
+			t.Fatalf("first ensure: %v", err)
+		}
 
-func TestEnsureContactResolvesViaSecondaryJID(t *testing.T) {
-	ctx := context.Background()
+		id2, err := svc.EnsureContactForMessage(ctx, "whatsapp", []string{"77777@lid", "55555@s.whatsapp.net"}, false, now)
+		if err != nil {
+			t.Fatalf("second ensure: %v", err)
+		}
+		if id1 != id2 {
+			t.Fatalf("expected same contact id, got %s and %s", id1, id2)
+		}
 
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
+		contact, err := db.GetContact(ctx, conn, id1)
+		if err != nil {
+			t.Fatalf("get contact: %v", err)
+		}
+		if len(contact.WhatsappIDs) != 2 {
+			t.Fatalf("expected 2 whatsapp ids after linking, got %v", contact.WhatsappIDs)
+		}
+	})
 
-	svc := NewService(conn)
-	now := time.Now()
+	t.Run("self links all JIDs", func(t *testing.T) {
+		id, err := svc.EnsureContactForMessage(ctx, "whatsapp", []string{"nik@s.whatsapp.net", "nikLID@lid"}, true, now)
+		if err != nil {
+			t.Fatalf("ensure self: %v", err)
+		}
+		if id != NikContactID {
+			t.Fatalf("expected nik contact id, got %s", id)
+		}
 
-	id1, err := svc.EnsureContactForMessage(ctx, "whatsapp", []string{"12345@s.whatsapp.net"}, false, now)
-	if err != nil {
-		t.Fatalf("first ensure: %v", err)
-	}
-
-	id2, err := svc.EnsureContactForMessage(ctx, "whatsapp", []string{"99999@lid", "12345@s.whatsapp.net"}, false, now)
-	if err != nil {
-		t.Fatalf("second ensure: %v", err)
-	}
-
-	if id1 != id2 {
-		t.Fatalf("expected same contact id, got %s and %s", id1, id2)
-	}
-
-	contact, err := db.GetContact(ctx, conn, id1)
-	if err != nil {
-		t.Fatalf("get contact: %v", err)
-	}
-
-	if len(contact.WhatsappIDs) != 2 {
-		t.Fatalf("expected 2 whatsapp ids after linking, got %v", contact.WhatsappIDs)
-	}
-}
-
-func TestEnsureContactSelfLinksAllJIDs(t *testing.T) {
-	ctx := context.Background()
-
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
-
-	svc := NewService(conn)
-	now := time.Now()
-
-	id, err := svc.EnsureContactForMessage(ctx, "whatsapp", []string{"nik@s.whatsapp.net", "nikLID@lid"}, true, now)
-	if err != nil {
-		t.Fatalf("ensure self: %v", err)
-	}
-
-	if id != NikContactID {
-		t.Fatalf("expected nik contact id, got %s", id)
-	}
-
-	contact, err := db.GetContact(ctx, conn, NikContactID)
-	if err != nil {
-		t.Fatalf("get nik contact: %v", err)
-	}
-
-	if len(contact.WhatsappIDs) != 2 {
-		t.Fatalf("expected 2 whatsapp ids for nik, got %v", contact.WhatsappIDs)
-	}
+		contact, err := db.GetContact(ctx, conn, NikContactID)
+		if err != nil {
+			t.Fatalf("get nik contact: %v", err)
+		}
+		if len(contact.WhatsappIDs) != 2 {
+			t.Fatalf("expected 2 whatsapp ids for nik, got %v", contact.WhatsappIDs)
+		}
+	})
 }

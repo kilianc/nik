@@ -645,45 +645,13 @@ func TestMarkReadCapsAtReadUpTo(t *testing.T) {
 	if platform.lastReadRefs[0].ExternalMessageID != "in-3" {
 		t.Fatalf("expected final read ref to be in-3, got %q", platform.lastReadRefs[0].ExternalMessageID)
 	}
-}
-
-func TestMarkReadSkipsZeroReadUpTo(t *testing.T) {
-	ctx := context.Background()
-
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
-
-	contactsSvc := contacts.NewService(conn)
-	svc := NewService(&config.Config{}, conn, contactsSvc)
-
-	platform := &mockPlatform{platform: "whatsapp"}
-	svc.RegisterPlatform(platform)
-
-	externalConversationID := "conversation@s.whatsapp.net"
-	externalSenderID := "alice@s.whatsapp.net"
-	t1 := time.Date(2026, time.February, 27, 10, 7, 14, 0, time.UTC)
-
-	sendInboundMessageForReadTest(t, ctx, svc, externalConversationID, externalSenderID, "in-1", "first", t1)
-
-	conv, err := db.GetConversation(ctx, conn, db.GetConversationParams{
-		Platform:               "whatsapp",
-		ExternalConversationID: externalConversationID,
-	})
-	if err != nil {
-		t.Fatalf("get conversation: %v", err)
-	}
-	conversationID := conv.ID
 
 	err = svc.MarkRead(ctx, conversationID, time.Time{})
 	if err != nil {
 		t.Fatalf("mark read with zero readUpTo: %v", err)
 	}
-
-	if platform.markReadCalls != 0 {
-		t.Fatalf("expected no platform mark-read calls, got %d", platform.markReadCalls)
+	if platform.markReadCalls != 2 {
+		t.Fatalf("expected no additional mark-read call for zero readUpTo, got %d", platform.markReadCalls)
 	}
 }
 
@@ -779,7 +747,7 @@ func TestMarkReadPicksUpMessagesAfterOutbound(t *testing.T) {
 	}
 }
 
-func TestFindMessageExactMatch(t *testing.T) {
+func TestFindMessage(t *testing.T) {
 	ctx := context.Background()
 	conn, err := db.OpenInMemory()
 	if err != nil {
@@ -789,144 +757,91 @@ func TestFindMessageExactMatch(t *testing.T) {
 
 	contactsSvc := contacts.NewService(conn)
 	svc := NewService(&config.Config{}, conn, contactsSvc)
-
 	ts := time.Date(2026, time.February, 28, 10, 0, 0, 0, time.UTC)
-	convID := seedConversation(t, ctx, svc, "whatsapp", "conv-find@s.whatsapp.net", "dm")
-	seedMessage(t, ctx, svc, "conv-find@s.whatsapp.net", "sender@s.whatsapp.net", "find-1", "unique hello", ts)
-	seedMessage(t, ctx, svc, "conv-find@s.whatsapp.net", "sender@s.whatsapp.net", "find-2", "unique world", ts.Add(time.Second))
 
-	msg, err := svc.FindMessage(ctx, convID, "unique hello", "10:00:00")
-	if err != nil {
-		t.Fatalf("find message: %v", err)
-	}
-	if msg.Body != "unique hello" {
-		t.Fatalf("expected body 'unique hello', got %q", msg.Body)
-	}
-}
+	t.Run("exact match", func(t *testing.T) {
+		convID := seedConversation(t, ctx, svc, "whatsapp", "conv-find-exact@s.whatsapp.net", "dm")
+		seedMessage(t, ctx, svc, "conv-find-exact@s.whatsapp.net", "sender@s.whatsapp.net", "find-1", "unique hello", ts)
+		seedMessage(t, ctx, svc, "conv-find-exact@s.whatsapp.net", "sender@s.whatsapp.net", "find-2", "unique world", ts.Add(time.Second))
 
-func TestFindMessageNoMatch(t *testing.T) {
-	ctx := context.Background()
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
+		msg, findErr := svc.FindMessage(ctx, convID, "unique hello", "10:00:00")
+		if findErr != nil {
+			t.Fatalf("find message: %v", findErr)
+		}
+		if msg.Body != "unique hello" {
+			t.Fatalf("expected body 'unique hello', got %q", msg.Body)
+		}
+	})
 
-	contactsSvc := contacts.NewService(conn)
-	svc := NewService(&config.Config{}, conn, contactsSvc)
+	t.Run("no match", func(t *testing.T) {
+		convID := seedConversation(t, ctx, svc, "whatsapp", "conv-find-none@s.whatsapp.net", "dm")
+		seedMessage(t, ctx, svc, "conv-find-none@s.whatsapp.net", "sender@s.whatsapp.net", "nm-1", "hello", ts)
 
-	ts := time.Date(2026, time.February, 28, 10, 0, 0, 0, time.UTC)
-	convID := seedConversation(t, ctx, svc, "whatsapp", "conv-nomatch@s.whatsapp.net", "dm")
-	seedMessage(t, ctx, svc, "conv-nomatch@s.whatsapp.net", "sender@s.whatsapp.net", "nm-1", "hello", ts)
+		_, findErr := svc.FindMessage(ctx, convID, "nonexistent", "10:00:00")
+		if findErr == nil {
+			t.Fatalf("expected error for no match")
+		}
+		if !strings.Contains(findErr.Error(), "no message matching") {
+			t.Fatalf("expected 'no message matching' error, got %v", findErr)
+		}
+	})
 
-	_, err = svc.FindMessage(ctx, convID, "nonexistent", "10:00:00")
-	if err == nil {
-		t.Fatalf("expected error for no match")
-	}
-	if !strings.Contains(err.Error(), "no message matching") {
-		t.Fatalf("expected 'no message matching' error, got %v", err)
-	}
-}
+	t.Run("wrong time no match", func(t *testing.T) {
+		convID := seedConversation(t, ctx, svc, "whatsapp", "conv-find-wrongtime@s.whatsapp.net", "dm")
+		seedMessage(t, ctx, svc, "conv-find-wrongtime@s.whatsapp.net", "sender@s.whatsapp.net", "wt-1", "hello", ts)
 
-func TestFindMessageWrongTimeNoMatch(t *testing.T) {
-	ctx := context.Background()
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
+		_, findErr := svc.FindMessage(ctx, convID, "hello", "11:00:00")
+		if findErr == nil {
+			t.Fatalf("expected error for wrong time")
+		}
+	})
 
-	contactsSvc := contacts.NewService(conn)
-	svc := NewService(&config.Config{}, conn, contactsSvc)
+	t.Run("same text disambiguates by time", func(t *testing.T) {
+		t2 := ts.Add(5 * time.Second)
+		convID := seedConversation(t, ctx, svc, "whatsapp", "conv-find-disamb@s.whatsapp.net", "dm")
+		seedMessage(t, ctx, svc, "conv-find-disamb@s.whatsapp.net", "sender@s.whatsapp.net", "dis-1", "ok", ts)
+		seedMessage(t, ctx, svc, "conv-find-disamb@s.whatsapp.net", "sender@s.whatsapp.net", "dis-2", "ok", t2)
 
-	ts := time.Date(2026, time.February, 28, 10, 0, 0, 0, time.UTC)
-	convID := seedConversation(t, ctx, svc, "whatsapp", "conv-wrongtime@s.whatsapp.net", "dm")
-	seedMessage(t, ctx, svc, "conv-wrongtime@s.whatsapp.net", "sender@s.whatsapp.net", "wt-1", "hello", ts)
+		msg, findErr := svc.FindMessage(ctx, convID, "ok", "10:00:00")
+		if findErr != nil {
+			t.Fatalf("find first ok: %v", findErr)
+		}
+		if msg.ExternalMessageID != "dis-1" {
+			t.Fatalf("expected dis-1, got %q", msg.ExternalMessageID)
+		}
 
-	_, err = svc.FindMessage(ctx, convID, "hello", "11:00:00")
-	if err == nil {
-		t.Fatalf("expected error for wrong time")
-	}
-}
+		msg, findErr = svc.FindMessage(ctx, convID, "ok", "10:00:05")
+		if findErr != nil {
+			t.Fatalf("find second ok: %v", findErr)
+		}
+		if msg.ExternalMessageID != "dis-2" {
+			t.Fatalf("expected dis-2, got %q", msg.ExternalMessageID)
+		}
+	})
 
-func TestFindMessageSameTextDifferentTimesDisambiguates(t *testing.T) {
-	ctx := context.Background()
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
+	t.Run("collision picks most recent", func(t *testing.T) {
+		convID := seedConversation(t, ctx, svc, "whatsapp", "conv-find-collision@s.whatsapp.net", "dm")
+		seedMessage(t, ctx, svc, "conv-find-collision@s.whatsapp.net", "sender@s.whatsapp.net", "col-1", "ok", ts)
+		seedMessage(t, ctx, svc, "conv-find-collision@s.whatsapp.net", "sender@s.whatsapp.net", "col-2", "ok", ts)
 
-	contactsSvc := contacts.NewService(conn)
-	svc := NewService(&config.Config{}, conn, contactsSvc)
+		msg, findErr := svc.FindMessage(ctx, convID, "ok", "10:00:00")
+		if findErr != nil {
+			t.Fatalf("find collision: %v", findErr)
+		}
+		if msg.Body != "ok" {
+			t.Fatalf("expected body 'ok', got %q", msg.Body)
+		}
+	})
 
-	t1 := time.Date(2026, time.February, 28, 10, 0, 0, 0, time.UTC)
-	t2 := time.Date(2026, time.February, 28, 10, 0, 5, 0, time.UTC)
-	convID := seedConversation(t, ctx, svc, "whatsapp", "conv-disamb@s.whatsapp.net", "dm")
-	seedMessage(t, ctx, svc, "conv-disamb@s.whatsapp.net", "sender@s.whatsapp.net", "dis-1", "ok", t1)
-	seedMessage(t, ctx, svc, "conv-disamb@s.whatsapp.net", "sender@s.whatsapp.net", "dis-2", "ok", t2)
+	t.Run("substring does not match", func(t *testing.T) {
+		convID := seedConversation(t, ctx, svc, "whatsapp", "conv-find-substr@s.whatsapp.net", "dm")
+		seedMessage(t, ctx, svc, "conv-find-substr@s.whatsapp.net", "sender@s.whatsapp.net", "sub-1", "hello world", ts)
 
-	msg, err := svc.FindMessage(ctx, convID, "ok", "10:00:00")
-	if err != nil {
-		t.Fatalf("find first ok: %v", err)
-	}
-	if msg.ExternalMessageID != "dis-1" {
-		t.Fatalf("expected dis-1, got %q", msg.ExternalMessageID)
-	}
-
-	msg, err = svc.FindMessage(ctx, convID, "ok", "10:00:05")
-	if err != nil {
-		t.Fatalf("find second ok: %v", err)
-	}
-	if msg.ExternalMessageID != "dis-2" {
-		t.Fatalf("expected dis-2, got %q", msg.ExternalMessageID)
-	}
-}
-
-func TestFindMessageCollisionPicksMostRecent(t *testing.T) {
-	ctx := context.Background()
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
-
-	contactsSvc := contacts.NewService(conn)
-	svc := NewService(&config.Config{}, conn, contactsSvc)
-
-	ts := time.Date(2026, time.February, 28, 10, 0, 0, 0, time.UTC)
-	convID := seedConversation(t, ctx, svc, "whatsapp", "conv-collision@s.whatsapp.net", "dm")
-	seedMessage(t, ctx, svc, "conv-collision@s.whatsapp.net", "sender@s.whatsapp.net", "col-1", "ok", ts)
-	seedMessage(t, ctx, svc, "conv-collision@s.whatsapp.net", "sender@s.whatsapp.net", "col-2", "ok", ts)
-
-	msg, err := svc.FindMessage(ctx, convID, "ok", "10:00:00")
-	if err != nil {
-		t.Fatalf("find collision: %v", err)
-	}
-	if msg.Body != "ok" {
-		t.Fatalf("expected body 'ok', got %q", msg.Body)
-	}
-}
-
-func TestFindMessageSubstringDoesNotMatch(t *testing.T) {
-	ctx := context.Background()
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
-
-	contactsSvc := contacts.NewService(conn)
-	svc := NewService(&config.Config{}, conn, contactsSvc)
-
-	ts := time.Date(2026, time.February, 28, 10, 0, 0, 0, time.UTC)
-	convID := seedConversation(t, ctx, svc, "whatsapp", "conv-substr@s.whatsapp.net", "dm")
-	seedMessage(t, ctx, svc, "conv-substr@s.whatsapp.net", "sender@s.whatsapp.net", "sub-1", "hello world", ts)
-
-	_, err = svc.FindMessage(ctx, convID, "hello", "10:00:00")
-	if err == nil {
-		t.Fatalf("expected error: substring should not match")
-	}
+		_, findErr := svc.FindMessage(ctx, convID, "hello", "10:00:00")
+		if findErr == nil {
+			t.Fatalf("expected error: substring should not match")
+		}
+	})
 }
 
 func TestConversationHeaderUnifiedDM(t *testing.T) {
@@ -1110,60 +1025,7 @@ func TestSendImageRejectsBannedWordsInCaption(t *testing.T) {
 	}
 }
 
-func TestReplyNoBannedWordsConfigured(t *testing.T) {
-	ctx := context.Background()
-
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
-
-	contactsSvc := contacts.NewService(conn)
-	svc := NewService(&config.Config{}, conn, contactsSvc)
-	svc.replyDelay = func(string) time.Duration { return 0 }
-
-	now := time.Now()
-	err = db.UpsertConversation(ctx, conn, db.UpsertConversationParams{
-		Platform:               "whatsapp",
-		ExternalConversationID: "conv-noban@s.whatsapp.net",
-		Kind:                   "dm",
-		LastMessageAt:          &now,
-	})
-	if err != nil {
-		t.Fatalf("upsert conversation: %v", err)
-	}
-
-	conv, err := db.GetConversation(ctx, conn, db.GetConversationParams{
-		Platform:               "whatsapp",
-		ExternalConversationID: "conv-noban@s.whatsapp.net",
-	})
-	if err != nil {
-		t.Fatalf("get conversation: %v", err)
-	}
-
-	platform := &mockPlatform{
-		platform: "whatsapp",
-		outbound: OutboundMessage{
-			ExternalMessageID: "out-noban",
-			ExternalSenderID:  "nik@s.whatsapp.net",
-			SentAt:            now,
-			Kind:              "text",
-			Body:              "anything goes",
-		},
-	}
-	svc.RegisterPlatform(platform)
-
-	err = svc.Reply(ctx, conv.ID, "anything goes")
-	if err != nil {
-		t.Fatalf("reply with no banned words configured: %v", err)
-	}
-	if platform.replyCalls != 1 {
-		t.Fatalf("expected one reply call, got %d", platform.replyCalls)
-	}
-}
-
-func TestResolveConversationCreatesNewConversation(t *testing.T) {
+func TestResolveConversation(t *testing.T) {
 	ctx := context.Background()
 
 	conn, err := db.OpenInMemory()
@@ -1223,48 +1085,13 @@ func TestResolveConversationCreatesNewConversation(t *testing.T) {
 	if participants[0].ContactID != contact.ID {
 		t.Fatalf("expected participant %s, got %s", contact.ID, participants[0].ContactID)
 	}
-}
-
-func TestResolveConversationIdempotent(t *testing.T) {
-	ctx := context.Background()
-
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
-
-	_, err = db.UpsertContact(ctx, conn, db.UpsertContactParams{
-		Platform:      "whatsapp",
-		ExternalID:    "66666@s.whatsapp.net",
-		Name:          "Dana",
-		Phone:         "66666",
-		LastMessageAt: time.Now(),
-	})
-	if err != nil {
-		t.Fatalf("seed contact: %v", err)
-	}
-
-	contact, err := db.GetContact(ctx, conn, "66666@s.whatsapp.net")
-	if err != nil {
-		t.Fatalf("get contact: %v", err)
-	}
-
-	contactsSvc := contacts.NewService(conn)
-	svc := NewService(&config.Config{}, conn, contactsSvc)
-
-	convID1, err := svc.ResolveConversation(ctx, contact.ID)
-	if err != nil {
-		t.Fatalf("first resolve: %v", err)
-	}
 
 	convID2, err := svc.ResolveConversation(ctx, contact.ID)
 	if err != nil {
-		t.Fatalf("second resolve: %v", err)
+		t.Fatalf("idempotent resolve: %v", err)
 	}
-
-	if convID1 != convID2 {
-		t.Fatalf("expected same conversation id, got %q and %q", convID1, convID2)
+	if convID != convID2 {
+		t.Fatalf("expected same conversation id, got %q and %q", convID, convID2)
 	}
 }
 

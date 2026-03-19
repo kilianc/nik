@@ -37,39 +37,41 @@ func TestMetaFromCtx(t *testing.T) {
 	}
 }
 
-func TestRecorderOnStartNoMetaNoops(t *testing.T) {
-	r := NewRecorder(nil)
-	r.OnStart(context.Background(), "gpt-4o")
-}
+func TestRecorderOnStart(t *testing.T) {
+	t.Run("no meta noops", func(t *testing.T) {
+		r := NewRecorder(nil)
+		r.OnStart(context.Background(), "gpt-4o")
+	})
 
-func TestRecorderOnStartWritesActivation(t *testing.T) {
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	defer conn.Close()
+	t.Run("writes activation", func(t *testing.T) {
+		conn, err := db.OpenInMemory()
+		if err != nil {
+			t.Fatalf("open: %v", err)
+		}
+		defer conn.Close()
 
-	ctx := context.Background()
-	convID := seedStatsConversation(t, ctx, conn)
-	actID := id.V7()
+		ctx := context.Background()
+		convID := seedStatsConversation(t, ctx, conn)
+		actID := id.V7()
 
-	meta := map[string]string{
-		"activation_id":   actID,
-		"conversation_id": convID,
-	}
-	ctx = context.WithValue(ctx, "meta", meta)
+		meta := map[string]string{
+			"activation_id":   actID,
+			"conversation_id": convID,
+		}
+		ctx = context.WithValue(ctx, "meta", meta)
 
-	r := NewRecorder(conn)
-	r.OnStart(ctx, "gpt-4o")
+		r := NewRecorder(conn)
+		r.OnStart(ctx, "gpt-4o")
 
-	var model string
-	err = conn.QueryRowContext(ctx, `SELECT model FROM activation WHERE id = ?1`, actID).Scan(&model)
-	if err != nil {
-		t.Fatalf("query activation: %v", err)
-	}
-	if model != "gpt-4o" {
-		t.Errorf("expected model 'gpt-4o', got %q", model)
-	}
+		var model string
+		err = conn.QueryRowContext(ctx, `SELECT model FROM activation WHERE id = ?1`, actID).Scan(&model)
+		if err != nil {
+			t.Fatalf("query activation: %v", err)
+		}
+		if model != "gpt-4o" {
+			t.Errorf("expected model 'gpt-4o', got %q", model)
+		}
+	})
 }
 
 func seedStatsConversation(t *testing.T, ctx context.Context, conn db.DBTX) string {

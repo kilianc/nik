@@ -144,18 +144,7 @@ func TestCreateAlarmWithRecurrence(t *testing.T) {
 	if !alarm.Recurrence.Valid || alarm.Recurrence.String != "every Sunday at 7pm" {
 		t.Fatalf("unexpected recurrence: %+v", alarm.Recurrence)
 	}
-}
 
-func TestCreateAlarmRejectsEmptyConversationID(t *testing.T) {
-	ctx := context.Background()
-
-	conn, err := OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
-
-	fireAt := time.Now().Add(2 * time.Minute).UTC().Truncate(time.Second)
 	_, err = CreateAlarm(ctx, conn, CreateAlarmParams{
 		Goal:       "reminder",
 		NextFireAt: fireAt,
@@ -300,7 +289,7 @@ func TestAlarmCancelRemovesFromDueList(t *testing.T) {
 	}
 }
 
-func TestAlarmUpdateSetsLastFiredAtAndKeepsNextFireAt(t *testing.T) {
+func TestAlarmUpdate(t *testing.T) {
 	ctx := context.Background()
 
 	conn, err := OpenInMemory()
@@ -309,114 +298,95 @@ func TestAlarmUpdateSetsLastFiredAtAndKeepsNextFireAt(t *testing.T) {
 	}
 	defer conn.Close()
 
-	convID := seedConversation(t, ctx, conn, "whatsapp", "claim-alarm@g.us", "group")
+	convID := seedConversation(t, ctx, conn, "whatsapp", "update-alarm@g.us", "group")
 	now := time.Now().UTC().Truncate(time.Second)
-	fireAt := now.Add(-time.Minute)
-	alarm, err := CreateAlarm(ctx, conn, CreateAlarmParams{
-		OriginConversationID: convID,
-		Goal:                 "test",
-		NextFireAt:           fireAt,
+
+	t.Run("last_fired_at preserves next_fire_at", func(t *testing.T) {
+		alarm, err := CreateAlarm(ctx, conn, CreateAlarmParams{
+			OriginConversationID: convID,
+			Goal:                 "test",
+			NextFireAt:           now.Add(-time.Minute),
+		})
+		if err != nil {
+			t.Fatalf("create alarm: %v", err)
+		}
+
+		err = AlarmUpdate(ctx, conn, alarm.ID, AlarmUpdateParams{LastFiredAt: now})
+		if err != nil {
+			t.Fatalf("set alarm fired: %v", err)
+		}
+
+		var (
+			nextFireAt  sql.NullString
+			lastFiredAt sql.NullString
+		)
+		err = conn.QueryRowContext(ctx,
+			`SELECT next_fire_at, last_fired_at FROM alarm WHERE id = ?1`,
+			alarm.ID,
+		).Scan(&nextFireAt, &lastFiredAt)
+		if err != nil {
+			t.Fatalf("query alarm: %v", err)
+		}
+		if !nextFireAt.Valid {
+			t.Fatalf("expected next_fire_at to be preserved after claim")
+		}
+		if !lastFiredAt.Valid {
+			t.Fatalf("expected last_fired_at to be set after claim")
+		}
 	})
-	if err != nil {
-		t.Fatalf("create alarm: %v", err)
-	}
 
-	err = AlarmUpdate(ctx, conn, alarm.ID, AlarmUpdateParams{LastFiredAt: now})
-	if err != nil {
-		t.Fatalf("set alarm fired: %v", err)
-	}
+	t.Run("goal", func(t *testing.T) {
+		alarm, err := CreateAlarm(ctx, conn, CreateAlarmParams{
+			OriginConversationID: convID,
+			Goal:                 "old goal",
+			NextFireAt:           now,
+		})
+		if err != nil {
+			t.Fatalf("create alarm: %v", err)
+		}
 
-	var (
-		nextFireAt  sql.NullString
-		lastFiredAt sql.NullString
-	)
-	err = conn.QueryRowContext(ctx,
-		`SELECT next_fire_at, last_fired_at FROM alarm WHERE id = ?1`,
-		alarm.ID,
-	).Scan(&nextFireAt, &lastFiredAt)
-	if err != nil {
-		t.Fatalf("query alarm: %v", err)
-	}
+		newGoal := "new goal"
+		err = AlarmUpdate(ctx, conn, alarm.ID, AlarmUpdateParams{Goal: &newGoal})
+		if err != nil {
+			t.Fatalf("update alarm: %v", err)
+		}
 
-	if !nextFireAt.Valid {
-		t.Fatalf("expected next_fire_at to be preserved after claim")
-	}
-	if !lastFiredAt.Valid {
-		t.Fatalf("expected last_fired_at to be set after claim")
-	}
-}
-
-func TestAlarmUpdateGoal(t *testing.T) {
-	ctx := context.Background()
-
-	conn, err := OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
-
-	convID := seedConversation(t, ctx, conn, "whatsapp", "update-goal@g.us", "group")
-	now := time.Now().UTC().Truncate(time.Second)
-	alarm, err := CreateAlarm(ctx, conn, CreateAlarmParams{
-		OriginConversationID: convID,
-		Goal:                 "old goal",
-		NextFireAt:           now,
+		var goal string
+		err = conn.QueryRowContext(ctx, `SELECT goal FROM alarm WHERE id = ?1`, alarm.ID).Scan(&goal)
+		if err != nil {
+			t.Fatalf("query alarm: %v", err)
+		}
+		if goal != "new goal" {
+			t.Fatalf("expected updated goal, got %q", goal)
+		}
 	})
-	if err != nil {
-		t.Fatalf("create alarm: %v", err)
-	}
 
-	newGoal := "new goal"
-	err = AlarmUpdate(ctx, conn, alarm.ID, AlarmUpdateParams{Goal: &newGoal})
-	if err != nil {
-		t.Fatalf("update alarm: %v", err)
-	}
+	t.Run("recurrence", func(t *testing.T) {
+		alarm, err := CreateAlarm(ctx, conn, CreateAlarmParams{
+			OriginConversationID: convID,
+			Goal:                 "test",
+			Recurrence:           "every day",
+			NextFireAt:           now,
+		})
+		if err != nil {
+			t.Fatalf("create alarm: %v", err)
+		}
 
-	var goal string
-	err = conn.QueryRowContext(ctx, `SELECT goal FROM alarm WHERE id = ?1`, alarm.ID).Scan(&goal)
-	if err != nil {
-		t.Fatalf("query alarm: %v", err)
-	}
-	if goal != "new goal" {
-		t.Fatalf("expected updated goal, got %q", goal)
-	}
-}
+		newRec := "every other day"
+		err = AlarmUpdate(ctx, conn, alarm.ID, AlarmUpdateParams{Recurrence: &newRec})
+		if err != nil {
+			t.Fatalf("update alarm: %v", err)
+		}
 
-func TestAlarmUpdateRecurrence(t *testing.T) {
-	ctx := context.Background()
-
-	conn, err := OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
-
-	convID := seedConversation(t, ctx, conn, "whatsapp", "update-rec@g.us", "group")
-	now := time.Now().UTC().Truncate(time.Second)
-	alarm, err := CreateAlarm(ctx, conn, CreateAlarmParams{
-		OriginConversationID: convID,
-		Goal:                 "test",
-		Recurrence:           "every day",
-		NextFireAt:           now,
+		var recurrence sql.NullString
+		err = conn.QueryRowContext(ctx, `SELECT recurrence FROM alarm WHERE id = ?1`, alarm.ID).Scan(&recurrence)
+		if err != nil {
+			t.Fatalf("query alarm: %v", err)
+		}
+		if !recurrence.Valid || recurrence.String != "every other day" {
+			t.Fatalf("expected updated recurrence, got %+v", recurrence)
+		}
 	})
-	if err != nil {
-		t.Fatalf("create alarm: %v", err)
-	}
-
-	newRec := "every other day"
-	err = AlarmUpdate(ctx, conn, alarm.ID, AlarmUpdateParams{Recurrence: &newRec})
-	if err != nil {
-		t.Fatalf("update alarm: %v", err)
-	}
-
-	var recurrence sql.NullString
-	err = conn.QueryRowContext(ctx, `SELECT recurrence FROM alarm WHERE id = ?1`, alarm.ID).Scan(&recurrence)
-	if err != nil {
-		t.Fatalf("query alarm: %v", err)
-	}
-	if !recurrence.Valid || recurrence.String != "every other day" {
-		t.Fatalf("expected updated recurrence, got %+v", recurrence)
-	}
 }
 
 func TestAlarmGet(t *testing.T) {

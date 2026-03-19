@@ -72,6 +72,9 @@ func TestCreateAndGet(t *testing.T) {
 	if got.Thinking != "low" {
 		t.Fatalf("expected thinking 'low', got %q", got.Thinking)
 	}
+	if got.ConversationID != testConvID {
+		t.Fatalf("expected conversation_id %s, got %q", testConvID, got.ConversationID)
+	}
 }
 
 func TestStartAndComplete(t *testing.T) {
@@ -188,32 +191,6 @@ func TestReportInsertAndList(t *testing.T) {
 	}
 	if status != "running" {
 		t.Fatalf("expected system message status 'running', got %q", status)
-	}
-}
-
-func TestConversationIDRoundTrip(t *testing.T) {
-	svc, _ := testDB(t)
-	ctx := context.Background()
-
-	task, err := svc.Create(ctx, createParams{
-		Goal:           "test meta",
-		Thinking:       "low",
-		ConversationID: testConvID,
-	})
-	if err != nil {
-		t.Fatalf("create: %v", err)
-	}
-
-	if task.ConversationID != testConvID {
-		t.Fatalf("expected conversation_id %s, got %q", testConvID, task.ConversationID)
-	}
-
-	got, err := svc.Get(ctx, task.ID)
-	if err != nil {
-		t.Fatalf("get: %v", err)
-	}
-	if got.ConversationID != testConvID {
-		t.Fatalf("expected conversation_id %s after get, got %q", testConvID, got.ConversationID)
 	}
 }
 

@@ -42,19 +42,24 @@ func TestTTSInstructionsPathPrefersWorkspaceOverride(t *testing.T) {
 	}
 }
 
-func TestMediaPathJoinsHomeAndMedia(t *testing.T) {
+func TestPathGetters(t *testing.T) {
 	c := Config{Home: "/tmp/nik"}
 
-	if got := c.MediaPath(); got != filepath.Join("/tmp/nik", "media") {
-		t.Fatalf("expected media path under home, got %q", got)
+	tests := []struct {
+		name string
+		got  string
+		want string
+	}{
+		{"MediaPath", c.MediaPath(), filepath.Join("/tmp/nik", "media")},
+		{"TmpPath", c.TmpPath(), filepath.Join("/tmp/nik", "tmp")},
 	}
-}
 
-func TestTmpPathUsesWorkspaceTmp(t *testing.T) {
-	c := Config{Home: "/tmp/nik"}
-
-	if got := c.TmpPath(); got != filepath.Join("/tmp/nik", "tmp") {
-		t.Fatalf("expected tmp path, got %q", got)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.got != tt.want {
+				t.Fatalf("expected %q, got %q", tt.want, tt.got)
+			}
+		})
 	}
 }
 
@@ -232,69 +237,39 @@ allow_conversation_ids:
 	}
 }
 
-func TestLoadRejectsMissingMainModel(t *testing.T) {
-	dir := t.TempDir()
-	writeTestConfig(t, dir, `
-openai_key: sk-test
-models:
-  main:
-    model: ""
-`)
-
-	_, err := Load(dir)
-	if err == nil {
-		t.Fatal("expected error for missing models.main.model")
+func TestLoadValidation(t *testing.T) {
+	tests := []struct {
+		name   string
+		config string
+	}{
+		{
+			"missing main model",
+			"openai_key: sk-test\nmodels:\n  main:\n    model: \"\"\n",
+		},
+		{
+			"critic enabled without model",
+			"openai_key: sk-test\nmodels:\n  main:\n    model: gpt-5\n  critic:\n    enabled: true\n    model: \"\"\n",
+		},
+		{
+			"invalid main reasoning_effort",
+			"openai_key: sk-test\nmodels:\n  main:\n    model: gpt-5\n    reasoning_effort: turbo\n",
+		},
+		{
+			"invalid task reasoning_effort",
+			"openai_key: sk-test\nmodels:\n  main:\n    model: gpt-5\n  task:\n    reasoning_effort: turbo\n",
+		},
 	}
-}
 
-func TestLoadRejectsEnabledCriticWithoutModel(t *testing.T) {
-	dir := t.TempDir()
-	writeTestConfig(t, dir, `
-openai_key: sk-test
-models:
-  main:
-    model: gpt-5
-  critic:
-    enabled: true
-    model: ""
-`)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeTestConfig(t, dir, tt.config)
 
-	_, err := Load(dir)
-	if err == nil {
-		t.Fatal("expected error when critic is enabled without model")
-	}
-}
-
-func TestLoadRejectsInvalidPurposeSettings(t *testing.T) {
-	dir := t.TempDir()
-	writeTestConfig(t, dir, `
-openai_key: sk-test
-models:
-  main:
-    model: gpt-5
-    reasoning_effort: turbo
-`)
-
-	_, err := Load(dir)
-	if err == nil {
-		t.Fatal("expected error for invalid models.main.reasoning_effort")
-	}
-}
-
-func TestLoadRejectsInvalidTaskSettings(t *testing.T) {
-	dir := t.TempDir()
-	writeTestConfig(t, dir, `
-openai_key: sk-test
-models:
-  main:
-    model: gpt-5
-  task:
-    reasoning_effort: turbo
-`)
-
-	_, err := Load(dir)
-	if err == nil {
-		t.Fatal("expected error for invalid models.task.reasoning_effort")
+			_, err := Load(dir)
+			if err == nil {
+				t.Fatal("expected validation error")
+			}
+		})
 	}
 }
 
