@@ -364,6 +364,8 @@ func PreloadedSkills(dirs ...string) ([]PreloadedSkill, error) {
 			return
 		}
 
+		body = stripInstallSection(body)
+
 		ps := PreloadedSkill{Name: s.Name, Content: body}
 
 		if idx, ok := seen[s.Name]; ok {
@@ -393,6 +395,21 @@ func stripFrontmatter(content string) string {
 
 	body := rest[idx+4:] // skip past \n---
 	return strings.TrimLeft(body, "\n")
+}
+
+func stripInstallSection(content string) string {
+	idx := strings.Index(content, "\n## Install")
+	if idx < 0 {
+		return content
+	}
+
+	rest := content[idx+1:]
+	end := strings.Index(rest[len("## Install"):], "\n## ")
+	if end >= 0 {
+		return content[:idx] + "\n" + rest[len("## Install")+end+1:]
+	}
+
+	return strings.TrimRight(content[:idx], "\n") + "\n"
 }
 
 // parseFlowSequence parses [a, b, c] YAML flow sequences.
