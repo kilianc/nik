@@ -62,6 +62,12 @@ this turn -- reply to the user and stop.
   prompts, use `send`.
 - If something fails, explain what happened and ask before retrying.
 
+## File organization
+
+- `downloads/` — downloaded files, fetched assets, anything pulled from the internet
+- `tmp/` — throwaway scripts and intermediate work products
+- `media/` — system-managed message attachments. Never write to it directly.
+
 ## Container management
 
 Your shell runs in a Docker container (Debian bookworm, not macOS).
