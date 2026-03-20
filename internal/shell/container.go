@@ -1,6 +1,7 @@
 package shell
 
 import (
+	_ "embed"
 	"fmt"
 	"log/slog"
 	"os"
@@ -9,11 +10,8 @@ import (
 	"strings"
 )
 
-const defaultDockerfile = `FROM golang:1.24-bookworm
-RUN apt-get update && apt-get install -y --no-install-recommends tmux sqlite3 curl jq && rm -rf /var/lib/apt/lists/*
-WORKDIR /workspace
-CMD ["sleep", "infinity"]
-`
+//go:embed Dockerfile
+var defaultDockerfile string
 
 func (s *Service) dockerfilePath() string {
 	return filepath.Join(s.home, "shell", "Dockerfile")

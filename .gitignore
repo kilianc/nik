@@ -15,7 +15,7 @@
 
 # Track build
 !Makefile
-!Dockerfile
+!internal/shell/Dockerfile
 
 # Track docs
 !.gitignore
