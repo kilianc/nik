@@ -3,9 +3,7 @@ package whatsapp
 import (
 	"bufio"
 	"context"
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"fmt"
 	"mime"
 	"os"
@@ -223,9 +221,6 @@ func (c *Client) SendImage(ctx context.Context, conversationJID, imagePath, capt
 		externalSenderID = c.SelfJID()
 	}
 
-	sum := sha256.Sum256(data)
-	hash := hex.EncodeToString(sum[:])
-
 	return messaging.OutboundMessage{
 		ExternalMessageID: string(sendResp.ID),
 		ExternalSenderID:  externalSenderID,
@@ -233,7 +228,6 @@ func (c *Client) SendImage(ctx context.Context, conversationJID, imagePath, capt
 		Kind:              "image",
 		Body:              caption,
 		MimeType:          mimeType,
-		LocalPath:         hash + filepath.Ext(imagePath),
 	}, nil
 }
 
@@ -274,16 +268,12 @@ func (c *Client) SendAudio(ctx context.Context, conversationJID, audioPath strin
 		externalSenderID = c.SelfJID()
 	}
 
-	sum := sha256.Sum256(data)
-	hash := hex.EncodeToString(sum[:])
-
 	return messaging.OutboundMessage{
 		ExternalMessageID: string(sendResp.ID),
 		ExternalSenderID:  externalSenderID,
 		SentAt:            sendResp.Timestamp,
 		Kind:              "audio",
 		MimeType:          "audio/ogg; codecs=opus",
-		LocalPath:         hash + ".ogg",
 	}, nil
 }
 

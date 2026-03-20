@@ -37,7 +37,7 @@ type InboundMessage struct {
 	IsEphemeral            bool
 	IsViewOnce             bool
 	LocalPath              string
-	MediaHash              string
+	MediaID                string
 	MediaSizeBytes         int64
 	MediaTranscriptText    string
 }

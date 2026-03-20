@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func TestUpsertMediaValidatesID(t *testing.T) {
+func TestInsertMediaValidatesID(t *testing.T) {
 	ctx := context.Background()
 
 	conn, err := OpenInMemory()
@@ -17,7 +17,7 @@ func TestUpsertMediaValidatesID(t *testing.T) {
 	}
 	defer conn.Close()
 
-	err = UpsertMedia(ctx, conn, UpsertMediaParams{})
+	err = InsertMedia(ctx, conn, InsertMediaParams{})
 	if err == nil {
 		t.Fatalf("expected error for empty media id")
 	}
@@ -37,18 +37,19 @@ func TestMessageMediaRoundTrip(t *testing.T) {
 
 	messageID := seedMessageForMediaTest(t, ctx, conn)
 
+	mediaID := "019590a0-0000-7000-8000-000000000001"
 	mimeType := "image/jpeg"
-	localPath := "media/hash.jpg"
-	err = UpsertMedia(ctx, conn, UpsertMediaParams{
-		ID:        "hash-123",
+	localPath := "media/2026/03/img.jpg"
+	err = InsertMedia(ctx, conn, InsertMediaParams{
+		ID:        mediaID,
 		MimeType:  &mimeType,
 		LocalPath: &localPath,
 	})
 	if err != nil {
-		t.Fatalf("upsert media: %v", err)
+		t.Fatalf("insert media: %v", err)
 	}
 
-	err = UpsertMessageMedia(ctx, conn, messageID, "hash-123")
+	err = UpsertMessageMedia(ctx, conn, messageID, mediaID)
 	if err != nil {
 		t.Fatalf("upsert message_media: %v", err)
 	}
@@ -69,8 +70,8 @@ func TestMessageMediaRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get message: %v", err)
 	}
-	if !msg.MediaID.Valid || msg.MediaID.String != "hash-123" {
-		t.Fatalf("expected media id hash-123, got %+v", msg.MediaID)
+	if !msg.MediaID.Valid || msg.MediaID.String != mediaID {
+		t.Fatalf("expected media id %s, got %+v", mediaID, msg.MediaID)
 	}
 }
 
@@ -85,29 +86,30 @@ func TestMediaResolveByPath(t *testing.T) {
 
 	messageID := seedMessageForMediaTest(t, ctx, conn)
 
+	mediaID := "019590a0-0000-7000-8000-000000000002"
 	mimeType := "image/jpeg"
-	localPath := "media/resolve-test.jpg"
-	err = UpsertMedia(ctx, conn, UpsertMediaParams{
-		ID:        "resolve-media-1",
+	localPath := "media/2026/03/resolve-test.jpg"
+	err = InsertMedia(ctx, conn, InsertMediaParams{
+		ID:        mediaID,
 		MimeType:  &mimeType,
 		LocalPath: &localPath,
 	})
 	if err != nil {
-		t.Fatalf("upsert media: %v", err)
+		t.Fatalf("insert media: %v", err)
 	}
 
-	err = UpsertMessageMedia(ctx, conn, messageID, "resolve-media-1")
+	err = UpsertMessageMedia(ctx, conn, messageID, mediaID)
 	if err != nil {
 		t.Fatalf("upsert message_media: %v", err)
 	}
 
-	r, err := MediaResolveByPath(ctx, conn, "media/resolve-test.jpg")
+	r, err := MediaResolveByPath(ctx, conn, localPath)
 	if err != nil {
 		t.Fatalf("resolve by path: %v", err)
 	}
 
-	if r.MediaID != "resolve-media-1" {
-		t.Fatalf("expected media id resolve-media-1, got %s", r.MediaID)
+	if r.MediaID != mediaID {
+		t.Fatalf("expected media id %s, got %s", mediaID, r.MediaID)
 	}
 	if r.MessageID != messageID {
 		t.Fatalf("expected message id %s, got %s", messageID, r.MessageID)
@@ -137,21 +139,22 @@ func TestMediaUpdate(t *testing.T) {
 	}
 	defer conn.Close()
 
+	mediaID := "019590a0-0000-7000-8000-000000000003"
 	mimeType := "audio/ogg"
-	localPath := "media/transcript-test.ogg"
-	err = UpsertMedia(ctx, conn, UpsertMediaParams{
-		ID:        "transcript-media-1",
+	localPath := "media/2026/03/transcript-test.ogg"
+	err = InsertMedia(ctx, conn, InsertMediaParams{
+		ID:        mediaID,
 		MimeType:  &mimeType,
 		LocalPath: &localPath,
 	})
 	if err != nil {
-		t.Fatalf("upsert media: %v", err)
+		t.Fatalf("insert media: %v", err)
 	}
 
 	now := time.Now()
 	transcript := "hello from audio"
 	rows, err := MediaUpdate(ctx, conn, MediaUpdateParams{
-		ID:             "transcript-media-1",
+		ID:             mediaID,
 		TranscriptText: &transcript,
 		TranscribedAt:  &now,
 	})
@@ -166,7 +169,7 @@ func TestMediaUpdate(t *testing.T) {
 	var transcribedAt string
 	err = conn.QueryRowContext(ctx,
 		"SELECT transcript_text, transcribed_at FROM media WHERE id = ?1",
-		"transcript-media-1",
+		mediaID,
 	).Scan(&transcriptText, &transcribedAt)
 	if err != nil {
 		t.Fatalf("query transcript: %v", err)

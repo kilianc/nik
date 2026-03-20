@@ -61,8 +61,8 @@ var MessageUpdateBody string
 
 // media queries
 
-//go:embed media_upsert.sql
-var MediaUpsert string
+//go:embed media_insert.sql
+var MediaInsert string
 
 //go:embed media_update.sql
 var MediaUpdate string

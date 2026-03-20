@@ -58,21 +58,22 @@ func TestGetMessageIncludesJoinedMediaFields(t *testing.T) {
 		Body:                   "photo",
 	})
 
-	localPath := "media/whatsapp/bob/img.jpg"
+	mediaID := "019590a0-0000-7000-8000-000000000010"
+	localPath := "media/2026/03/img.jpg"
 	describe := "bob holding a camera"
 	transcript := "hello from audio"
-	err = UpsertMedia(ctx, conn, UpsertMediaParams{
-		ID:             "media-hash-1",
+	err = InsertMedia(ctx, conn, InsertMediaParams{
+		ID:             mediaID,
 		MimeType:       strPtr("image/jpeg"),
 		LocalPath:      &localPath,
 		DescribeText:   &describe,
 		TranscriptText: &transcript,
 	})
 	if err != nil {
-		t.Fatalf("upsert media: %v", err)
+		t.Fatalf("insert media: %v", err)
 	}
 
-	err = UpsertMessageMedia(ctx, conn, messageID, "media-hash-1")
+	err = UpsertMessageMedia(ctx, conn, messageID, mediaID)
 	if err != nil {
 		t.Fatalf("upsert message media: %v", err)
 	}
@@ -82,8 +83,8 @@ func TestGetMessageIncludesJoinedMediaFields(t *testing.T) {
 		t.Fatalf("get message by id: %v", err)
 	}
 
-	if !msg.MediaID.Valid || msg.MediaID.String != "media-hash-1" {
-		t.Fatalf("expected media id media-hash-1, got %+v", msg.MediaID)
+	if !msg.MediaID.Valid || msg.MediaID.String != mediaID {
+		t.Fatalf("expected media id %s, got %+v", mediaID, msg.MediaID)
 	}
 	if !msg.MediaLocalPath.Valid || msg.MediaLocalPath.String != localPath {
 		t.Fatalf("expected local path %q, got %+v", localPath, msg.MediaLocalPath)

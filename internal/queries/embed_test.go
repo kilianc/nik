@@ -12,7 +12,7 @@ func TestEmbeddedQueriesArePresent(t *testing.T) {
 		"contact_upsert_whatsapp_insert": ContactUpsertWhatsAppInsert,
 		"conversation_upsert":            ConversationUpsert,
 		"message_insert":                 MessageInsert,
-		"media_upsert":                   MediaUpsert,
+		"media_insert":                   MediaInsert,
 		"alarm_insert":                   AlarmInsert,
 	}
 

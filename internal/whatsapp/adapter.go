@@ -223,7 +223,7 @@ func (a *Adapter) handleMessage(evt *events.Message) error {
 	if media != nil {
 		msg.MimeType = media.mimeType
 		msg.LocalPath = filepath.Join("media", media.filename)
-		msg.MediaHash = media.hash
+		msg.MediaID = media.id
 		msg.MediaSizeBytes = media.sizeBytes
 	}
 
