@@ -253,15 +253,6 @@ func parseFrontmatter(data []byte) (SkillSummary, error) {
 			continue
 		}
 
-		if strings.HasPrefix(line, "install:") {
-			if inDesc && len(descLines) > 0 {
-				s.Summary = strings.Join(descLines, " ")
-			}
-			inDesc = false
-			inTools = false
-			continue
-		}
-
 		if strings.HasPrefix(line, "tools:") {
 			if inDesc && len(descLines) > 0 {
 				s.Summary = strings.Join(descLines, " ")

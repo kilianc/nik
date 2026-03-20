@@ -52,6 +52,18 @@ API_KEY="$(./vault/cli read some_api_key)" some_command
 - **Never** issue commands that would store secrets in the database,
   write them to log files, or send them to third parties.
 
+## Missing secrets
+
+When a `read` fails, don't immediately ask the user to add it.
+First run `./vault/cli list` and scan the output for plausible
+matches -- the user may have stored the secret under a different
+name (different separators, prefixes, abbreviations, or word order).
+If a likely match exists, use it. If multiple candidates look
+plausible, ask the user which one is correct. Only when nothing
+in the list looks related, ask the user to add it under the expected
+name. The user manages secrets through their own tool -- don't tell
+them to run vault commands.
+
 ## Install
 
 If `./vault/cli` doesn't exist or fails, **stop and talk to
@@ -126,15 +138,3 @@ esac
    you can read it. Debug with the user if it fails.
 8. Ask the user to add the secrets that skills need to their password
    manager. Verify by reading through the adapter.
-
-## Missing secrets
-
-When a `read` fails, don't immediately ask the user to add it.
-First run `./vault/cli list` and scan the output for plausible
-matches -- the user may have stored the secret under a different
-name (different separators, prefixes, abbreviations, or word order).
-If a likely match exists, use it. If multiple candidates look
-plausible, ask the user which one is correct. Only when nothing
-in the list looks related, ask the user to add it under the expected
-name. The user manages secrets through their own tool -- don't tell
-them to run vault commands.
