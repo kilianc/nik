@@ -44,7 +44,7 @@ var replyToolDef = llm.ToolDef{
 						},
 						"quote_text": map[string]any{
 							"type":        "string",
-							"description": "Exact message content to quote, as shown after sender name in timeline (before any parenthetical context). Pass empty string for no quote.",
+							"description": "Exact message content to quote, as shown after sender name in timeline (before any (quote replying to ...) context). Pass empty string for no quote.",
 						},
 						"quote_time": map[string]any{
 							"type":        "string",
@@ -90,7 +90,7 @@ var reactToolDef = llm.ToolDef{
 		"properties": map[string]any{
 			"text": map[string]any{
 				"type":        "string",
-				"description": "Exact message content as shown after sender name in timeline, before any to [...] context.",
+				"description": "Exact message content as shown after sender name in timeline, before any (quote replying to ...) or (reacting to ...) context.",
 			},
 			"time": map[string]any{
 				"type":        "string",

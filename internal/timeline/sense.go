@@ -278,7 +278,7 @@ func messageEntry(msg db.Message, sender string, database *sql.DB) entry {
 			ExternalMessageID: msg.ContextStanzaID.String,
 		})
 		if err == nil {
-			verb := "replying to "
+			verb := "quote replying to "
 			if msg.Kind == "reaction" {
 				verb = "reacting to "
 			}

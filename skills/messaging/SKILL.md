@@ -25,19 +25,23 @@ becomes a separate text bubble -- like texting. One thought per message.
 
 - `conversation_id` -- nik conversation UUID (empty = current)
 - `contact_id` -- contact UUID for starting a new DM (empty = skip)
-- `messages` -- array of `{text, image_path}` objects sent in order
+- `messages` -- array of `{text, image_path, voice, quote_text, quote_time}` objects sent in order
+- `quote_text` / `quote_time` -- almost always empty strings. Only set
+  them when you need to anchor to a specific message (see quote reply
+  rules in the conversation prompt). Never quote-reply to the message
+  directly above you in a 1:1 DM.
 
 ### message_react
 
 React to a specific message with one emoji.
 
 - `text` -- exact message content as shown after sender name in timeline,
-  before any `(replying to ...)`/`(reacting to ...)`/`(edit of ...)` context
+  before any `(quote replying to ...)`/`(reacting to ...)`/`(edit of ...)` context
 - `time` -- timestamp in HH:MM:SS from the timeline brackets
 - `emoji` -- reaction emoji
 
 Examples:
-- Reply `where? (replying to [09:12:45] Bob: ok)` → react to original: text="ok", time="09:12:45"
+- Reply `where? (quote replying to [09:12:45] Bob: ok)` → react to original: text="ok", time="09:12:45"
 - Reaction `(👍) (reacting to [09:12:30] Alice: hello)` → react to original: text="hello", time="09:12:30"
 - Edit `hello (edit of [09:12:30] Alice: helo)` → react to edit: text="hello", time="09:12:35"
 - Edit `hello (edit of [09:12:30] Alice: helo)` → react to original: text="helo", time="09:12:30"
