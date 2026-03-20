@@ -293,6 +293,66 @@ func TestPruneItems(t *testing.T) {
 			t.Fatalf("expected 3 items, got %d", len(got))
 		}
 	})
+
+	makeAssistant := func(text string) responses.ResponseInputItemUnionParam {
+		return responses.ResponseInputItemParamOfMessage(text, responses.EasyInputMessageRoleAssistant)
+	}
+
+	buildMixedItems := func(rounds int, callsPerRound int) responses.ResponseInputParam {
+		items := responses.ResponseInputParam{msg}
+		for r := range rounds {
+			items = append(items, makeAssistant(fmt.Sprintf("round_%d_thinking", r)))
+			for c := range callsPerRound {
+				id := fmt.Sprintf("r%d_c%d", r, c)
+				fc, fco := makePair(id)
+				items = append(items, fc, fco)
+			}
+		}
+		return items
+	}
+
+	t.Run("mixed no-op under limit", func(t *testing.T) {
+		items := buildMixedItems(3, 2)
+		got := pruneItems(items, 20)
+		if len(got) != len(items) {
+			t.Fatalf("expected %d items, got %d", len(items), len(got))
+		}
+	})
+
+	t.Run("mixed prunes old rounds with their assistant messages", func(t *testing.T) {
+		items := buildMixedItems(5, 5)
+		got := pruneItems(items, 20)
+
+		var keptPairs int
+		for _, item := range got[1:] {
+			if item.OfFunctionCallOutput != nil {
+				keptPairs++
+			}
+		}
+		if keptPairs != 20 {
+			t.Fatalf("expected 20 kept pairs, got %d", keptPairs)
+		}
+
+		if got[0].OfMessage == nil {
+			t.Fatalf("expected first item to be user message")
+		}
+	})
+
+	t.Run("mixed keeps assistant messages for surviving rounds", func(t *testing.T) {
+		items := buildMixedItems(5, 5)
+		got := pruneItems(items, 20)
+
+		var assistantCount int
+		for _, item := range got[1:] {
+			if item.OfMessage != nil {
+				assistantCount++
+			}
+		}
+
+		if assistantCount == 0 {
+			t.Fatal("expected at least one assistant message to survive pruning")
+		}
+	})
 }
 
 func TestIsServerError(t *testing.T) {
