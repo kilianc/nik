@@ -64,7 +64,7 @@ func (r *Runner) RunCritic(ctx context.Context, t db.Task) {
 
 	instructions := r.renderCriticPrompt(t, toolCallsStr, reportsStr, skillsStr)
 
-	actID, ch := r.criticLLM.Complete(ctx, instructions, llm.StaticInput(""), nil, nil)
+	actID, ch := r.criticLLM.Complete(ctx, instructions, llm.StaticInput(""), nil, nil, llm.WithRecordFullInput())
 	result := <-ch
 
 	if result.Err != nil {

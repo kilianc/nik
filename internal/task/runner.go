@@ -358,7 +358,7 @@ func (r *Runner) Run(ctx context.Context, t db.Task) {
 
 	instructions := r.renderPrompt(t, defs)
 	nudge := r.buildNudge(t)
-	actID, ch := r.llm.Complete(ctx, instructions, llm.StaticInput(""), defs, exec, llm.WithOnIdle(nudge))
+	actID, ch := r.llm.Complete(ctx, instructions, llm.StaticInput(""), defs, exec, llm.WithOnIdle(nudge), llm.WithRecordFullInput())
 
 	err := r.svc.Start(ctx, t.ID, actID)
 	if err != nil {
