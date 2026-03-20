@@ -15,25 +15,16 @@ const staleThreshold = 30 * time.Minute
 const containerName = "nik-shell"
 
 type Service struct {
-	conn        *sql.DB
-	home        string
-	container   string
-	dockerImage string
+	cfg       *config.Config
+	conn      *sql.DB
+	container string
 }
 
 func NewService(cfg *config.Config, conn *sql.DB) *Service {
-	s := &Service{
-		conn:        conn,
-		home:        cfg.Home,
-		dockerImage: cfg.Shell.DockerImage,
-	}
-
-	if s.dockerImage != "" {
-		s.container = containerName
-	}
-
-	return s
+	return &Service{cfg: cfg, conn: conn}
 }
+
+func (s *Service) dockerImage() string { return s.cfg.Shell.DockerImage }
 
 func (s *Service) CheckSessions(ctx context.Context) {
 	if s.conn == nil {

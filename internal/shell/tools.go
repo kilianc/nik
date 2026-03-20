@@ -80,44 +80,44 @@ type shellArgs struct {
 }
 
 func (s *Service) BuildTools() []llm.Tool {
+	return []llm.Tool{
+		{Def: shellToolDef, Handler: s.shellHandler(), Privileged: true},
+		{Def: shellRebuildDef, Handler: s.rebuildHandler(), Privileged: true},
+		{Def: shellFactoryResetDef, Handler: s.factoryResetHandler(), Privileged: true},
+	}
+}
+
+func (s *Service) ensureReady() error {
+	img := s.dockerImage()
+
+	if img != "" && s.container == "" {
+		s.container = containerName
+	} else if img == "" && s.container != "" {
+		s.StopContainer()
+		s.container = ""
+	}
+
 	if s.container != "" {
 		err := s.ensureContainer()
 		if err != nil {
 			slog.Warn("shell container failed, falling back to local tmux", "pkg", "shell", "error", err)
 			s.container = ""
-			s.dockerImage = ""
 		}
 	}
 
-	err := s.ensureTmux()
-	if err != nil {
-		slog.Warn("shell tool disabled", "pkg", "shell", "error", err)
-		return nil
-	}
-
-	tools := []llm.Tool{
-		{
-			Def:        shellToolDef,
-			Handler:    s.shellHandler(),
-			Privileged: true,
-		},
-	}
-
-	if s.container != "" {
-		tools = append(tools,
-			llm.Tool{Def: shellRebuildDef, Handler: s.rebuildHandler(), Privileged: true},
-			llm.Tool{Def: shellFactoryResetDef, Handler: s.factoryResetHandler(), Privileged: true},
-		)
-	}
-
-	return tools
+	return s.ensureTmux()
 }
 
 func (s *Service) shellHandler() llm.ToolExecutor {
 	return func(ctx context.Context, call llm.ToolCall) (string, error) {
+		err := s.ensureReady()
+		if err != nil {
+			return llm.ToolError(err), nil
+		}
+
 		var args shellArgs
 
-		err := json.Unmarshal([]byte(call.Arguments), &args)
+		err = json.Unmarshal([]byte(call.Arguments), &args)
 		if err != nil {
 			return llm.ToolError(err), nil
 		}
@@ -137,6 +137,10 @@ func (s *Service) shellHandler() llm.ToolExecutor {
 
 func (s *Service) rebuildHandler() llm.ToolExecutor {
 	return func(ctx context.Context, call llm.ToolCall) (string, error) {
+		if s.container == "" {
+			return llm.ToolErrorf("docker shell is not enabled"), nil
+		}
+
 		buildLog, err := s.rebuildContainer()
 		if err != nil {
 			return llm.ToolErrorf("rebuild failed:\n%s\n%v", buildLog, err), nil
@@ -151,6 +155,10 @@ func (s *Service) rebuildHandler() llm.ToolExecutor {
 
 func (s *Service) factoryResetHandler() llm.ToolExecutor {
 	return func(ctx context.Context, call llm.ToolCall) (string, error) {
+		if s.container == "" {
+			return llm.ToolErrorf("docker shell is not enabled"), nil
+		}
+
 		buildLog, err := s.factoryReset()
 		if err != nil {
 			return llm.ToolErrorf("factory reset failed:\n%s\n%v", buildLog, err), nil
@@ -170,7 +178,7 @@ func (s *Service) handleRun(ctx context.Context, args shellArgs) (string, error)
 
 	sid := id.Short(4)
 
-	err := s.newSession(sid, args.Command, s.home)
+	err := s.newSession(sid, args.Command, s.cfg.Home)
 	if err != nil {
 		return llm.ToolError(err), nil
 	}
