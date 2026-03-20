@@ -187,8 +187,7 @@ func main() {
 	taskTools = append(taskTools, fs.BuildTools(cfg.Home)...)
 
 	var workerToolNames []string
-	workerToolSupplier := func() []string { return workerToolNames }
-	taskTools = append(taskTools, skills.BuildTools(cfg, workerToolSupplier)...)
+	taskTools = append(taskTools, skills.BuildTools(cfg)...)
 
 	for _, t := range taskTools {
 		workerToolNames = append(workerToolNames, t.Def.Name)
@@ -250,7 +249,7 @@ func main() {
 	b.RegisterTools(alarms.BuildTools(alarmSvc)...)
 	b.RegisterTools(db.BuildTools(roConn)...)
 	b.RegisterTools(fs.BuildTools(cfg.Home)...)
-	b.RegisterTools(skills.BuildTools(cfg, b.ToolNames)...)
+	b.RegisterTools(skills.BuildTools(cfg)...)
 	b.RegisterTools(task.BuildTools(taskSvc, taskRunner)...)
 
 	brainDone := make(chan struct{})
