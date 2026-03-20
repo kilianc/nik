@@ -78,7 +78,7 @@ func (r *Runner) renderPrompt(t db.Task, tools []llm.ToolDef) string {
 		Tmp:        r.cfg.TmpPath(),
 		TokenTraps: scanTokenTraps(r.cfg.Home),
 		ToolDocs:   buildToolDocs(tools),
-		Skills:     buildSkillDocs(r.cfg),
+		Skills:     buildSkillDocs(r.cfg, tools),
 		Plan:       t.Plan,
 	}
 
@@ -100,8 +100,13 @@ func buildToolDocs(tools []llm.ToolDef) string {
 	return b.String()
 }
 
-func buildSkillDocs(cfg *config.Config) string {
+func buildSkillDocs(cfg *config.Config, toolDefs []llm.ToolDef) string {
 	dirs := []string{cfg.SkillsPath(), cfg.WorkspaceSkillsPath()}
+
+	available := make(map[string]bool, len(toolDefs))
+	for _, td := range toolDefs {
+		available[td.Name] = true
+	}
 
 	preloaded, err := skills.PreloadedSkills(dirs...)
 	if err != nil {
@@ -110,6 +115,9 @@ func buildSkillDocs(cfg *config.Config) string {
 
 	var b strings.Builder
 	for _, s := range preloaded {
+		if len(s.Tools) > 0 && !anyAvailable(s.Tools, available) {
+			continue
+		}
 		fmt.Fprintf(&b, "### %s\n\n%s\n\n", s.Name, s.Content)
 	}
 
@@ -137,6 +145,15 @@ func buildSkillDocs(cfg *config.Config) string {
 	return b.String()
 }
 
+func anyAvailable(tools []string, available map[string]bool) bool {
+	for _, t := range tools {
+		if available[t] {
+			return true
+		}
+	}
+	return false
+}
+
 func scanTokenTraps(home string) string {
 	const (
 		sizeThreshold  = 50 * 1024
@@ -144,13 +161,14 @@ func scanTokenTraps(home string) string {
 	)
 
 	skipDirs := map[string]bool{
-		".git":    true,
-		".cursor": true,
-		".tmp":    true,
-		"vendor":  true,
-		"media":   true,
-		"backups": true,
-		"tmp":     true,
+		".git":     true,
+		".cursor":  true,
+		".gocache": true,
+		".tmp":     true,
+		"vendor":   true,
+		"media":    true,
+		"backups":  true,
+		"tmp":      true,
 	}
 
 	datePattern := regexp.MustCompile(`\d{4}-\d{2}-\d{2}`)

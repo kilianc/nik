@@ -52,7 +52,7 @@ API_KEY="$(./vault/cli read some_api_key)" some_command
 - **Never** issue commands that would store secrets in the database,
   write them to log files, or send them to third parties.
 
-## Setup
+## Install
 
 If `./vault/cli` doesn't exist or fails, **stop and talk to
 the user.** Do not guess, do not pick a provider, do not write an

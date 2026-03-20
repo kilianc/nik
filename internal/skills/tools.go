@@ -346,6 +346,7 @@ func parseFrontmatter(data []byte) (SkillSummary, error) {
 
 type PreloadedSkill struct {
 	Name    string
+	Tools   []string
 	Content string
 }
 
@@ -366,7 +367,7 @@ func PreloadedSkills(dirs ...string) ([]PreloadedSkill, error) {
 
 		body = stripInstallSection(body)
 
-		ps := PreloadedSkill{Name: s.Name, Content: body}
+		ps := PreloadedSkill{Name: s.Name, Tools: s.Tools, Content: body}
 
 		if idx, ok := seen[s.Name]; ok {
 			result[idx] = ps

@@ -142,6 +142,10 @@ Normal body.
 		t.Errorf("name = %q, want %q", result[0].Name, "pre")
 	}
 
+	if len(result[0].Tools) != 1 || result[0].Tools[0] != "t1" {
+		t.Errorf("tools = %v, want [t1]", result[0].Tools)
+	}
+
 	if !strings.Contains(result[0].Content, "Preloaded body.") {
 		t.Errorf("content missing body, got: %q", result[0].Content)
 	}

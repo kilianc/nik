@@ -19,7 +19,7 @@ Home/
 ├── backups/             DB backups
 └── tmp/                 scratch — your sandbox
 
-Never search: `.git/` `.cursor/` `.tmp/` `vendor/`
+Never search: `.git/` `.cursor/` `.gocache/` `.tmp/` `vendor/`
 
 {{ .TokenTraps }}
 
