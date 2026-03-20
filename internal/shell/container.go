@@ -142,13 +142,10 @@ func (s *Service) buildImage() (string, error) {
 }
 
 func (s *Service) startContainer() error {
-	uid := fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid())
-
 	cmd := exec.Command("docker", "run", "-d",
 		"--name", s.container,
 		"-v", s.cfg.Home+":/workspace",
 		"-w", "/workspace",
-		"--user", uid,
 		s.dockerImage()+":latest",
 		"sleep", "infinity",
 	)
