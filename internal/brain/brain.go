@@ -151,6 +151,17 @@ const maxThinkAttempts = 2
 func (b *Brain) think(ctx context.Context, getInput func() string) (string, llm.Usage, error) {
 	userInput := getInput()
 
+	// recall and the first round share the same input data
+	_getInput := getInput
+	getInput = func() string {
+		if userInput == "" {
+			return _getInput()
+		}
+		ret := userInput
+		userInput = ""
+		return ret
+	}
+
 	var recall string
 	if b.recaller != nil {
 		recall = b.recaller(ctx, userInput)
