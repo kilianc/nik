@@ -142,7 +142,7 @@ func buildTools(cfg *config.Config, llmClient, taskLLMClient *llm.Client, conn *
 		}
 
 		taskSvc := task.NewService(conn)
-		shellSvc := shell.NewService(conn, cfg.Home)
+		shellSvc := shell.NewService(cfg, conn)
 		var taskToolList []llm.Tool
 		taskToolList = append(taskToolList, shellSvc.BuildTools()...)
 		taskToolList = append(taskToolList, llm.BuildTools(taskLLMClient, cfg.Home, nil)...)
@@ -156,7 +156,7 @@ func buildTools(cfg *config.Config, llmClient, taskLLMClient *llm.Client, conn *
 		}
 	}
 
-	for _, t := range shell.NewService(conn, cfg.Home).BuildTools() {
+	for _, t := range shell.NewService(cfg, conn).BuildTools() {
 		tools[t.Def.Name] = t.Handler
 	}
 

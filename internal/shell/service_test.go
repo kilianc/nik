@@ -3,9 +3,11 @@ package shell
 import (
 	"context"
 	"testing"
+
+	"github.com/kciuffolo/nik/internal/config"
 )
 
 func TestCheckSessionsNilConnNoops(t *testing.T) {
-	svc := NewService(nil, "/tmp/test")
+	svc := NewService(&config.Config{Home: "/tmp/test"}, nil)
 	svc.CheckSessions(context.Background())
 }

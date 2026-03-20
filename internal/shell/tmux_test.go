@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/kciuffolo/nik/internal/config"
 )
 
 func requireTmux(t *testing.T) {
@@ -17,27 +19,33 @@ func requireTmux(t *testing.T) {
 	sessionPrefix = "__nik_test__"
 }
 
-func cleanup(t *testing.T, id string) {
+func testService(t *testing.T) *Service {
 	t.Helper()
-	killSession(id)
+	return NewService(&config.Config{Home: t.TempDir()}, nil)
+}
+
+func (s *Service) cleanup(t *testing.T, id string) {
+	t.Helper()
+	s.killSession(id)
 }
 
 func TestNewSessionAndKill(t *testing.T) {
 	requireTmux(t)
+	svc := testService(t)
 
 	id := "test-new-kill"
-	defer cleanup(t, id)
+	defer svc.cleanup(t, id)
 
-	err := newSession(id, "sleep 60", "")
+	err := svc.newSession(id, "sleep 60", "")
 	if err != nil {
 		t.Fatalf("newSession: %v", err)
 	}
 
-	if !isAlive(id) {
+	if !svc.isAlive(id) {
 		t.Fatal("expected session to be alive")
 	}
 
-	err = killSession(id)
+	err = svc.killSession(id)
 	if err != nil {
 		t.Fatalf("killSession: %v", err)
 	}
@@ -45,21 +53,22 @@ func TestNewSessionAndKill(t *testing.T) {
 
 func TestEnvVars(t *testing.T) {
 	requireTmux(t)
+	svc := testService(t)
 
 	id := "test-env"
-	defer cleanup(t, id)
+	defer svc.cleanup(t, id)
 
-	err := newSession(id, "sleep 60", "")
+	err := svc.newSession(id, "sleep 60", "")
 	if err != nil {
 		t.Fatalf("newSession: %v", err)
 	}
 
-	err = setEnv(id, "NIK_TEST_KEY", "hello world")
+	err = svc.setEnv(id, "NIK_TEST_KEY", "hello world")
 	if err != nil {
 		t.Fatalf("setEnv: %v", err)
 	}
 
-	val, err := getEnv(id, "NIK_TEST_KEY")
+	val, err := svc.getEnv(id, "NIK_TEST_KEY")
 	if err != nil {
 		t.Fatalf("getEnv: %v", err)
 	}
@@ -70,16 +79,17 @@ func TestEnvVars(t *testing.T) {
 
 func TestFastCommand(t *testing.T) {
 	requireTmux(t)
+	svc := testService(t)
 
 	id := "test-fast"
-	defer cleanup(t, id)
+	defer svc.cleanup(t, id)
 
-	err := newSession(id, "echo hello-nik", "")
+	err := svc.newSession(id, "echo hello-nik", "")
 	if err != nil {
 		t.Fatalf("newSession: %v", err)
 	}
 
-	output, alive, code := stare(context.Background(), id, 5)
+	output, alive, code := svc.stare(context.Background(), id, 5)
 
 	if alive {
 		t.Fatal("expected command to have exited")
@@ -94,17 +104,18 @@ func TestFastCommand(t *testing.T) {
 
 func TestStare(t *testing.T) {
 	requireTmux(t)
+	svc := testService(t)
 
 	id := "test-bg"
-	defer cleanup(t, id)
+	defer svc.cleanup(t, id)
 
-	err := newSession(id, "sleep 30", "")
+	err := svc.newSession(id, "sleep 30", "")
 	if err != nil {
 		t.Fatalf("newSession: %v", err)
 	}
 
 	start := time.Now()
-	_, alive, _ := stare(context.Background(), id, 2)
+	_, alive, _ := svc.stare(context.Background(), id, 2)
 	elapsed := time.Since(start)
 
 	if !alive {
@@ -117,25 +128,26 @@ func TestStare(t *testing.T) {
 
 func TestSendInput(t *testing.T) {
 	requireTmux(t)
+	svc := testService(t)
 
 	id := "test-send"
-	defer cleanup(t, id)
+	defer svc.cleanup(t, id)
 
-	err := newSession(id, "cat", "")
+	err := svc.newSession(id, "cat", "")
 	if err != nil {
 		t.Fatalf("newSession: %v", err)
 	}
 
 	time.Sleep(500 * time.Millisecond)
 
-	err = sendKeys(id, "test-input-line", "Enter")
+	err = svc.sendKeys(id, "test-input-line", "Enter")
 	if err != nil {
 		t.Fatalf("sendKeys input: %v", err)
 	}
 
 	time.Sleep(500 * time.Millisecond)
 
-	output, err := capturePane(id)
+	output, err := svc.capturePane(id)
 	if err != nil {
 		t.Fatalf("captureOutput: %v", err)
 	}
@@ -146,16 +158,17 @@ func TestSendInput(t *testing.T) {
 
 func TestListSessions(t *testing.T) {
 	requireTmux(t)
+	svc := testService(t)
 
 	id := "test-list"
-	defer cleanup(t, id)
+	defer svc.cleanup(t, id)
 
-	err := newSession(id, "sleep 60", "")
+	err := svc.newSession(id, "sleep 60", "")
 	if err != nil {
 		t.Fatalf("newSession: %v", err)
 	}
 
-	sessions, err := listSessions()
+	sessions, err := svc.listSessions()
 	if err != nil {
 		t.Fatalf("listSessions: %v", err)
 	}
@@ -177,18 +190,19 @@ func TestListSessions(t *testing.T) {
 
 func TestOutputTruncation(t *testing.T) {
 	requireTmux(t)
+	svc := testService(t)
 
 	id := "test-trunc"
-	defer cleanup(t, id)
+	defer svc.cleanup(t, id)
 
-	err := newSession(id, "seq 1 500000", "")
+	err := svc.newSession(id, "seq 1 500000", "")
 	if err != nil {
 		t.Fatalf("newSession: %v", err)
 	}
 
-	stare(context.Background(), id, 10)
+	svc.stare(context.Background(), id, 10)
 
-	output, err := capturePane(id)
+	output, err := svc.capturePane(id)
 	if err != nil {
 		t.Fatalf("captureOutput: %v", err)
 	}
@@ -200,16 +214,17 @@ func TestOutputTruncation(t *testing.T) {
 
 func TestExitCode(t *testing.T) {
 	requireTmux(t)
+	svc := testService(t)
 
 	id := "test-exit"
-	defer cleanup(t, id)
+	defer svc.cleanup(t, id)
 
-	err := newSession(id, "exit 42", "")
+	err := svc.newSession(id, "exit 42", "")
 	if err != nil {
 		t.Fatalf("newSession: %v", err)
 	}
 
-	_, alive, code := stare(context.Background(), id, 5)
+	_, alive, code := svc.stare(context.Background(), id, 5)
 
 	if alive {
 		t.Fatal("expected command to have exited")
@@ -221,20 +236,21 @@ func TestExitCode(t *testing.T) {
 
 func TestStareMissingSession(t *testing.T) {
 	requireTmux(t)
+	svc := testService(t)
 
 	id := "test-stare-missing"
 
-	err := newSession(id, "sleep 60", "")
+	err := svc.newSession(id, "sleep 60", "")
 	if err != nil {
 		t.Fatalf("newSession: %v", err)
 	}
 
-	err = killSession(id)
+	err = svc.killSession(id)
 	if err != nil {
 		t.Fatalf("killSession: %v", err)
 	}
 
-	_, alive, _ := stare(context.Background(), id, 2)
+	_, alive, _ := svc.stare(context.Background(), id, 2)
 	if alive {
 		t.Fatal("stare reported alive for a killed session")
 	}
@@ -242,17 +258,18 @@ func TestStareMissingSession(t *testing.T) {
 
 func TestWaitForInstantReturn(t *testing.T) {
 	requireTmux(t)
+	svc := testService(t)
 
 	id := "test-waitfor-instant"
-	defer cleanup(t, id)
+	defer svc.cleanup(t, id)
 
-	err := newSession(id, "echo done", "")
+	err := svc.newSession(id, "echo done", "")
 	if err != nil {
 		t.Fatalf("newSession: %v", err)
 	}
 
 	start := time.Now()
-	output, alive, code := stare(context.Background(), id, 30)
+	output, alive, code := svc.stare(context.Background(), id, 30)
 	elapsed := time.Since(start)
 
 	if alive {
@@ -271,8 +288,9 @@ func TestWaitForInstantReturn(t *testing.T) {
 
 func TestGetEnvNonexistentSession(t *testing.T) {
 	requireTmux(t)
+	svc := testService(t)
 
-	_, err := getEnv("does-not-exist", "SOME_KEY")
+	_, err := svc.getEnv("does-not-exist", "SOME_KEY")
 	if err == nil {
 		t.Fatal("expected error from getEnv on nonexistent session, got nil")
 	}

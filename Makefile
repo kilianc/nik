@@ -63,6 +63,10 @@ trigger:
 call:
 	@cd $(NIK_HOME) && go run ../tools/call $(ARGS)
 
+.PHONY: shell-image
+shell-image:
+	docker build -t nik-shell:latest -f workspace/shell/Dockerfile workspace/shell/
+
 .PHONY: docker
 docker:
 	docker build -t nik:base .

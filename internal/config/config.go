@@ -39,6 +39,10 @@ type TTSConfig struct {
 	Speed float64 `yaml:"speed"`
 }
 
+type ShellConfig struct {
+	DockerImage string `yaml:"docker_image"`
+}
+
 type Config struct {
 	Home        string    `yaml:"-"`
 	lastModTime time.Time `yaml:"-"`
@@ -46,6 +50,7 @@ type Config struct {
 	OpenAIKey       string       `yaml:"openai_key"`
 	UseCodex        bool         `yaml:"use_codex"`
 	Models          ModelsConfig `yaml:"models"`
+	Shell           ShellConfig  `yaml:"shell"`
 	PromptsDirValue string       `yaml:"prompts_dir"`
 	SkillsDirValue  string       `yaml:"skills_dir"`
 

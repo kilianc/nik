@@ -48,6 +48,28 @@ var shellToolDef = llm.ToolDef{
 	},
 }
 
+var shellRebuildDef = llm.ToolDef{
+	Name:        "shell-rebuild",
+	Description: "Build a new container from workspace/shell/Dockerfile. The next shell command runs in it.",
+	Parameters: map[string]any{
+		"type":                 "object",
+		"properties":           map[string]any{},
+		"required":             []string{},
+		"additionalProperties": false,
+	},
+}
+
+var shellFactoryResetDef = llm.ToolDef{
+	Name:        "shell-factory-reset",
+	Description: "Override workspace/shell/Dockerfile with the minimal vendored Dockerfile and rebuild.",
+	Parameters: map[string]any{
+		"type":                 "object",
+		"properties":           map[string]any{},
+		"required":             []string{},
+		"additionalProperties": false,
+	},
+}
+
 type shellArgs struct {
 	Action      string `json:"action"`
 	Command     string `json:"command"`
@@ -58,19 +80,37 @@ type shellArgs struct {
 }
 
 func (s *Service) BuildTools() []llm.Tool {
-	err := ensureTmux()
+	if s.container != "" {
+		err := s.ensureContainer()
+		if err != nil {
+			slog.Warn("shell container failed, falling back to local tmux", "pkg", "shell", "error", err)
+			s.container = ""
+			s.dockerImage = ""
+		}
+	}
+
+	err := s.ensureTmux()
 	if err != nil {
 		slog.Warn("shell tool disabled", "pkg", "shell", "error", err)
 		return nil
 	}
 
-	return []llm.Tool{
+	tools := []llm.Tool{
 		{
 			Def:        shellToolDef,
 			Handler:    s.shellHandler(),
 			Privileged: true,
 		},
 	}
+
+	if s.container != "" {
+		tools = append(tools,
+			llm.Tool{Def: shellRebuildDef, Handler: s.rebuildHandler(), Privileged: true},
+			llm.Tool{Def: shellFactoryResetDef, Handler: s.factoryResetHandler(), Privileged: true},
+		)
+	}
+
+	return tools
 }
 
 func (s *Service) shellHandler() llm.ToolExecutor {
@@ -95,6 +135,34 @@ func (s *Service) shellHandler() llm.ToolExecutor {
 	}
 }
 
+func (s *Service) rebuildHandler() llm.ToolExecutor {
+	return func(ctx context.Context, call llm.ToolCall) (string, error) {
+		buildLog, err := s.rebuildContainer()
+		if err != nil {
+			return llm.ToolErrorf("rebuild failed:\n%s\n%v", buildLog, err), nil
+		}
+
+		return llm.ToolResult(map[string]any{
+			"status":    "ok",
+			"build_log": buildLog,
+		}), nil
+	}
+}
+
+func (s *Service) factoryResetHandler() llm.ToolExecutor {
+	return func(ctx context.Context, call llm.ToolCall) (string, error) {
+		buildLog, err := s.factoryReset()
+		if err != nil {
+			return llm.ToolErrorf("factory reset failed:\n%s\n%v", buildLog, err), nil
+		}
+
+		return llm.ToolResult(map[string]any{
+			"status":    "ok",
+			"build_log": buildLog,
+		}), nil
+	}
+}
+
 func (s *Service) handleRun(ctx context.Context, args shellArgs) (string, error) {
 	if args.Command == "" {
 		return `{"error":"empty command"}`, nil
@@ -102,7 +170,7 @@ func (s *Service) handleRun(ctx context.Context, args shellArgs) (string, error)
 
 	sid := id.Short(4)
 
-	err := newSession(sid, args.Command, s.home)
+	err := s.newSession(sid, args.Command, s.home)
 	if err != nil {
 		return llm.ToolError(err), nil
 	}
@@ -118,9 +186,9 @@ func (s *Service) handleRun(ctx context.Context, args shellArgs) (string, error)
 		StartedAt:      now,
 	}
 
-	err = saveMeta(sid, meta)
+	err = s.saveMeta(sid, meta)
 	if err != nil {
-		killSession(sid)
+		s.killSession(sid)
 		return llm.ToolError(err), nil
 	}
 
@@ -135,12 +203,12 @@ func (s *Service) handleRun(ctx context.Context, args shellArgs) (string, error)
 		maxWait = 10
 	}
 
-	output, alive, code := stare(ctx, sid, maxWait)
+	output, alive, code := s.stare(ctx, sid, maxWait)
 
 	s.persistOutput(ctx, sid, meta.ActivationID, args.Command, args.Description, output, alive, code)
 
 	if !alive {
-		killSession(sid)
+		s.killSession(sid)
 		return shellResult(sid, output, alive, code), nil
 	}
 
@@ -153,16 +221,16 @@ func (s *Service) handleInteract(ctx context.Context, args shellArgs) (string, e
 	}
 
 	if args.Input != "" {
-		err := sendKeys(args.SessionID, args.Input, "Enter")
+		err := s.sendKeys(args.SessionID, args.Input, "Enter")
 		if err != nil {
 			return llm.ToolError(err), nil
 		}
 	}
 
-	if !isAlive(args.SessionID) {
-		out, _ := capturePane(args.SessionID)
-		code, _ := getExitCode(args.SessionID)
-		killSession(args.SessionID)
+	if !s.isAlive(args.SessionID) {
+		out, _ := s.capturePane(args.SessionID)
+		code, _ := s.getExitCode(args.SessionID)
+		s.killSession(args.SessionID)
 		s.updateOutput(ctx, args.SessionID, out, false, code)
 		return shellResult(args.SessionID, out, false, code), nil
 	}
@@ -172,12 +240,12 @@ func (s *Service) handleInteract(ctx context.Context, args shellArgs) (string, e
 		maxWait = 10
 	}
 
-	output, alive, code := stare(ctx, args.SessionID, maxWait)
+	output, alive, code := s.stare(ctx, args.SessionID, maxWait)
 
 	s.updateOutput(ctx, args.SessionID, output, alive, code)
 
 	if !alive {
-		killSession(args.SessionID)
+		s.killSession(args.SessionID)
 	}
 
 	return shellResult(args.SessionID, output, alive, code), nil
@@ -188,10 +256,10 @@ func (s *Service) handleKill(ctx context.Context, args shellArgs) (string, error
 		return `{"error":"empty session_id"}`, nil
 	}
 
-	out, _ := capturePane(args.SessionID)
-	code, _ := getExitCode(args.SessionID)
+	out, _ := s.capturePane(args.SessionID)
+	code, _ := s.getExitCode(args.SessionID)
 
-	err := killSession(args.SessionID)
+	err := s.killSession(args.SessionID)
 	if err != nil {
 		return llm.ToolError(err), nil
 	}
