@@ -13,7 +13,7 @@ import (
 
 var replyToolDef = llm.ToolDef{
 	Name:        "message_reply",
-	Description: "Send one or more messages to a conversation or contact. Each message is a separate text bubble, like texting. Use conversation_id for existing conversations, or contact_id to start a new DM.",
+	Description: "Send one or more messages to a conversation or contact. Each message is a separate text bubble. Use quote_text and quote_time on a message to send it as a quote reply anchored to a specific message in the conversation.",
 	Parameters: map[string]any{
 		"type": "object",
 		"properties": map[string]any{
@@ -42,8 +42,16 @@ var replyToolDef = llm.ToolDef{
 							"type":        "boolean",
 							"description": "When true, the message text is converted to a voice note via TTS instead of sent as text.",
 						},
+						"quote_text": map[string]any{
+							"type":        "string",
+							"description": "Exact message content to quote, as shown after sender name in timeline (before any parenthetical context). Pass empty string for no quote.",
+						},
+						"quote_time": map[string]any{
+							"type":        "string",
+							"description": "HH:MM:SS timestamp of the message to quote, from the timeline brackets. Pass empty string for no quote.",
+						},
 					},
-					"required":             []string{"text", "image_path", "voice"},
+					"required":             []string{"text", "image_path", "voice", "quote_text", "quote_time"},
 					"additionalProperties": false,
 				},
 				"description": "Array of messages to send, in order. Each becomes a separate bubble.",
@@ -131,6 +139,8 @@ type replyMessage struct {
 	Text      string `json:"text"`
 	ImagePath string `json:"image_path"`
 	Voice     bool   `json:"voice"`
+	QuoteText string `json:"quote_text"`
+	QuoteTime string `json:"quote_time"`
 }
 
 func replyHandler(svc *Service) llm.ToolExecutor {
@@ -202,6 +212,22 @@ func replyHandler(svc *Service) llm.ToolExecutor {
 		}
 
 		for _, msg := range args.Messages {
+			var quote *QuoteTarget
+			qt := strings.TrimSpace(msg.QuoteText)
+			qts := strings.TrimSpace(msg.QuoteTime)
+			if qt != "" && qts != "" {
+				target, findErr := svc.FindMessage(ctx, args.ConversationID, qt, qts)
+				if findErr != nil {
+					return llm.ToolError(findErr), nil
+				}
+				quote = &QuoteTarget{
+					ExternalMessageID: target.ExternalMessageID,
+					ExternalSenderID:  target.ExternalSenderID,
+					Body:              target.Body,
+					Kind:              target.Kind,
+				}
+			}
+
 			switch {
 			case msg.Voice:
 				if svc.speechFn == nil {
@@ -216,7 +242,7 @@ func replyHandler(svc *Service) llm.ToolExecutor {
 				absPath := filepath.Join(svc.cfg.Home, strings.TrimSpace(msg.ImagePath))
 				err = svc.SendImage(ctx, args.ConversationID, absPath, msg.Text)
 			default:
-				err = svc.Reply(ctx, args.ConversationID, msg.Text)
+				err = svc.Reply(ctx, args.ConversationID, msg.Text, quote)
 			}
 
 			if err != nil {

@@ -277,7 +277,7 @@ func (s *Service) checkBannedWords(text string) error {
 	return nil
 }
 
-func (s *Service) Reply(ctx context.Context, conversationID string, body string) error {
+func (s *Service) Reply(ctx context.Context, conversationID string, body string, quote *QuoteTarget) error {
 	err := s.checkBannedWords(body)
 	if err != nil {
 		return err
@@ -312,7 +312,7 @@ func (s *Service) Reply(ctx context.Context, conversationID string, body string)
 		}
 	}
 
-	outbound, err := platform.Reply(ctx, conv.ExternalConversationID, body)
+	outbound, err := platform.Reply(ctx, conv.ExternalConversationID, body, quote)
 	_ = platform.StopTyping(ctx, conv.ExternalConversationID)
 	if err != nil {
 		return err
@@ -343,7 +343,7 @@ func (s *Service) Reply(ctx context.Context, conversationID string, body string)
 
 	mimeType := outbound.MimeType
 
-	return s.ReceiveMessage(ctx, InboundMessage{
+	echo := InboundMessage{
 		Platform:               conv.Platform,
 		ExternalConversationID: conv.ExternalConversationID,
 		ExternalMessageID:      outbound.ExternalMessageID,
@@ -354,7 +354,14 @@ func (s *Service) Reply(ctx context.Context, conversationID string, body string)
 		SentAt:                 sentAt,
 		IsFromMe:               true,
 		IsGroup:                conv.Kind == "group",
-	})
+	}
+
+	if quote != nil {
+		echo.ContextStanzaID = quote.ExternalMessageID
+		echo.ContextParticipant = quote.ExternalSenderID
+	}
+
+	return s.ReceiveMessage(ctx, echo)
 }
 
 func (s *Service) SendImage(ctx context.Context, conversationID string, imagePath string, caption string) error {

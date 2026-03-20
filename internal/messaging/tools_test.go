@@ -76,6 +76,42 @@ func TestReplyToolDefSchema(t *testing.T) {
 	}
 }
 
+func TestReplyToolDefHasQuoteFields(t *testing.T) {
+	props, ok := replyToolDef.Parameters["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected properties map")
+	}
+
+	msgsProp := props["messages"].(map[string]any)
+	items := msgsProp["items"].(map[string]any)
+	itemProps := items["properties"].(map[string]any)
+
+	for _, field := range []string{"quote_text", "quote_time"} {
+		prop, ok := itemProps[field].(map[string]any)
+		if !ok {
+			t.Fatalf("expected %q in message properties", field)
+		}
+		if prop["type"] != "string" {
+			t.Fatalf("expected %q type string, got %v", field, prop["type"])
+		}
+	}
+
+	required := items["required"].([]string)
+	hasQuoteText := false
+	hasQuoteTime := false
+	for _, r := range required {
+		if r == "quote_text" {
+			hasQuoteText = true
+		}
+		if r == "quote_time" {
+			hasQuoteTime = true
+		}
+	}
+	if !hasQuoteText || !hasQuoteTime {
+		t.Fatalf("expected quote_text and quote_time in required list")
+	}
+}
+
 func TestReplyHandlerRejectsInvalidJSON(t *testing.T) {
 	handler := replyHandler(&Service{})
 

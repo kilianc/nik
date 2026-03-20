@@ -195,6 +195,7 @@ type mockPlatform struct {
 	sendAudioCalls   int
 	markReadCalls    int
 	lastReadRefs     []InboundMessage
+	lastQuote        *QuoteTarget
 	outbound         OutboundMessage
 	imageOutbound    OutboundMessage
 	audioOutbound    OutboundMessage
@@ -205,8 +206,9 @@ func (m *mockPlatform) Start(_ context.Context, _ MessageReceiver) error {
 	return nil
 }
 func (m *mockPlatform) Stop(_ context.Context) error { return nil }
-func (m *mockPlatform) Reply(_ context.Context, _ string, _ string) (OutboundMessage, error) {
+func (m *mockPlatform) Reply(_ context.Context, _ string, _ string, quote *QuoteTarget) (OutboundMessage, error) {
 	m.replyCalls++
+	m.lastQuote = quote
 	return m.outbound, nil
 }
 func (m *mockPlatform) SendImage(_ context.Context, _ string, _ string, _ string) (OutboundMessage, error) {
@@ -281,7 +283,7 @@ func TestReplyPersistsOutboundImmediately(t *testing.T) {
 
 	svc.RegisterPlatform(platform)
 
-	err = svc.Reply(ctx, conversationID, "hello")
+	err = svc.Reply(ctx, conversationID, "hello", nil)
 	if err != nil {
 		t.Fatalf("reply: %v", err)
 	}
@@ -305,6 +307,85 @@ func TestReplyPersistsOutboundImmediately(t *testing.T) {
 	}
 	if platform.replyCalls != 1 {
 		t.Fatalf("expected one reply call, got %d", platform.replyCalls)
+	}
+}
+
+func TestReplyWithQuoteTargetSetsContextStanza(t *testing.T) {
+	ctx := context.Background()
+
+	conn, err := db.OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	contactsSvc := contacts.NewService(conn)
+	svc := NewService(&config.Config{}, conn, contactsSvc)
+	svc.replyDelay = func(string) time.Duration { return 0 }
+
+	now := time.Now()
+	err = db.UpsertConversation(ctx, conn, db.UpsertConversationParams{
+		Platform:               "whatsapp",
+		ExternalConversationID: "conversation@s.whatsapp.net",
+		Kind:                   "group",
+		LastMessageAt:          &now,
+	})
+	if err != nil {
+		t.Fatalf("upsert conversation: %v", err)
+	}
+
+	conversation, err := db.GetConversation(ctx, conn, db.GetConversationParams{
+		Platform:               "whatsapp",
+		ExternalConversationID: "conversation@s.whatsapp.net",
+	})
+	if err != nil {
+		t.Fatalf("get conversation: %v", err)
+	}
+
+	platform := &mockPlatform{
+		platform: "whatsapp",
+		outbound: OutboundMessage{
+			ExternalMessageID: "out-quote-1",
+			ExternalSenderID:  "nik@s.whatsapp.net",
+			SentAt:            now,
+			Kind:              "text",
+			Body:              "my reply",
+		},
+	}
+	svc.RegisterPlatform(platform)
+
+	quote := &QuoteTarget{
+		ExternalMessageID: "original-msg-id",
+		ExternalSenderID:  "sender@s.whatsapp.net",
+		Body:              "the original message",
+		Kind:              "text",
+	}
+
+	err = svc.Reply(ctx, conversation.ID, "my reply", quote)
+	if err != nil {
+		t.Fatalf("reply with quote: %v", err)
+	}
+
+	if platform.lastQuote == nil {
+		t.Fatal("expected quote to be forwarded to platform")
+	}
+	if platform.lastQuote.ExternalMessageID != "original-msg-id" {
+		t.Fatalf("expected quote external_message_id original-msg-id, got %q", platform.lastQuote.ExternalMessageID)
+	}
+
+	msg, err := db.GetMessage(ctx, conn, db.GetMessageParams{
+		Platform:          "whatsapp",
+		ExternalMessageID: "out-quote-1",
+	})
+	if err != nil {
+		t.Fatalf("get outbound message: %v", err)
+	}
+
+	if !msg.ContextStanzaID.Valid || msg.ContextStanzaID.String != "original-msg-id" {
+		t.Fatalf("expected context_stanza_id=original-msg-id, got %v", msg.ContextStanzaID)
+	}
+	if !msg.ContextParticipant.Valid || msg.ContextParticipant.String != "sender@s.whatsapp.net" {
+		t.Fatalf("expected context_participant=sender@s.whatsapp.net, got %v", msg.ContextParticipant)
 	}
 }
 
@@ -710,7 +791,7 @@ func TestMarkReadPicksUpMessagesAfterOutbound(t *testing.T) {
 	}
 
 	platform.outbound.SentAt = t1.Add(3 * time.Second)
-	err = svc.Reply(ctx, conversationID, "got it")
+	err = svc.Reply(ctx, conversationID, "got it", nil)
 	if err != nil {
 		t.Fatalf("reply: %v", err)
 	}
@@ -933,7 +1014,7 @@ func TestReplyRejectsBannedWords(t *testing.T) {
 	}
 	svc.RegisterPlatform(platform)
 
-	err = svc.Reply(ctx, conv.ID, "this is forbidden content")
+	err = svc.Reply(ctx, conv.ID, "this is forbidden content", nil)
 	if err == nil {
 		t.Fatalf("expected error for banned word")
 	}
@@ -945,13 +1026,13 @@ func TestReplyRejectsBannedWords(t *testing.T) {
 	}
 
 	// case-insensitive: "blocked" in config as "BLOCKED", message has "Blocked"
-	err = svc.Reply(ctx, conv.ID, "this is Blocked too")
+	err = svc.Reply(ctx, conv.ID, "this is Blocked too", nil)
 	if err == nil {
 		t.Fatalf("expected error for case-insensitive banned word")
 	}
 
 	// clean message should go through
-	err = svc.Reply(ctx, conv.ID, "clean message")
+	err = svc.Reply(ctx, conv.ID, "clean message", nil)
 	if err != nil {
 		t.Fatalf("clean reply: %v", err)
 	}

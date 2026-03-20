@@ -38,8 +38,8 @@ func (a *Adapter) Stop(_ context.Context) error {
 	return nil
 }
 
-func (a *Adapter) Reply(ctx context.Context, externalConversationID string, body string) (messaging.OutboundMessage, error) {
-	return a.client.Reply(ctx, externalConversationID, body)
+func (a *Adapter) Reply(ctx context.Context, externalConversationID string, body string, quote *messaging.QuoteTarget) (messaging.OutboundMessage, error) {
+	return a.client.Reply(ctx, externalConversationID, body, quote)
 }
 
 func (a *Adapter) SendImage(ctx context.Context, externalConversationID string, imagePath string, caption string) (messaging.OutboundMessage, error) {
