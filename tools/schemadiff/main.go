@@ -80,6 +80,11 @@ func main() {
 
 	hasDiffs := false
 
+	desiredSet := make(map[string]bool, len(tables))
+	for _, t := range tables {
+		desiredSet[t] = true
+	}
+
 	for _, table := range tables {
 		desiredCols, err := tableInfo(desired, table)
 		if err != nil {
@@ -105,6 +110,21 @@ func main() {
 		for _, d := range diffs {
 			fmt.Printf("  %s\n", d)
 		}
+	}
+
+	liveTables, err := listTables(live)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "list live tables: %v\n", err)
+		os.Exit(1)
+	}
+
+	for _, table := range liveTables {
+		if desiredSet[table] {
+			continue
+		}
+
+		hasDiffs = true
+		fmt.Printf("%s: EXTRA TABLE (not in schema.sql)\n", table)
 	}
 
 	fmt.Println()
