@@ -37,11 +37,16 @@ type CompletionObserver interface {
 type CompleteOption func(*completeOpts)
 
 type completeOpts struct {
-	onIdle func(output string) string
+	onIdle          func(output string) string
+	recordFullInput bool
 }
 
 func WithOnIdle(fn func(output string) string) CompleteOption {
 	return func(o *completeOpts) { o.onIdle = fn }
+}
+
+func WithRecordFullInput() CompleteOption {
+	return func(o *completeOpts) { o.recordFullInput = true }
 }
 
 type Completer interface {
@@ -364,16 +369,20 @@ func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instru
 	var consecutiveRepeats int
 
 	for round := 0; ; round++ {
-		var userInput string
+		var content string
 		if getInput != nil {
-			content := ensureJSONInput(getInput(), c.jsonOutput)
-			userInput = content
+			content = ensureJSONInput(getInput(), c.jsonOutput)
 			msg := responses.ResponseInputItemParamOfMessage(content, responses.EasyInputMessageRoleUser)
 			if round == 0 {
 				items = append(items, msg)
 			} else {
 				items[0] = msg
 			}
+		}
+
+		userInput := content
+		if opts.recordFullInput {
+			userInput = extractInput(items)
 		}
 
 		if round >= maxRounds {
@@ -563,6 +572,22 @@ func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instru
 			slog.Info("pruned tool history", "pkg", "llm", "round", round, "dropped_items", before-len(items))
 		}
 	}
+}
+
+func extractInput(items responses.ResponseInputParam) string {
+	var parts []string
+	for _, item := range items {
+		if item.OfMessage == nil {
+			continue
+		}
+		if !item.OfMessage.Content.OfString.Valid() {
+			continue
+		}
+		if s := item.OfMessage.Content.OfString.Value; s != "" {
+			parts = append(parts, s)
+		}
+	}
+	return strings.Join(parts, "\n\n")
 }
 
 func ensureJSONInput(content string, jsonOutput bool) string {
