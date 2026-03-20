@@ -2,9 +2,7 @@ package messaging
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"log/slog"
@@ -216,7 +214,7 @@ func (s *Service) ReceiveMessage(ctx context.Context, msg InboundMessage) error 
 		}
 	}
 
-	if msg.MediaHash != "" {
+	if msg.MediaID != "" {
 		localPath := nullable(msg.LocalPath)
 		var sizeBytes *int64
 		if msg.MediaSizeBytes > 0 {
@@ -230,8 +228,8 @@ func (s *Service) ReceiveMessage(ctx context.Context, msg InboundMessage) error 
 			transcribedAt = &now
 		}
 
-		err = db.UpsertMedia(ctx, tx, db.UpsertMediaParams{
-			ID:             msg.MediaHash,
+		err = db.InsertMedia(ctx, tx, db.InsertMediaParams{
+			ID:             msg.MediaID,
 			MimeType:       mimeType,
 			LocalPath:      localPath,
 			SizeBytes:      sizeBytes,
@@ -242,7 +240,7 @@ func (s *Service) ReceiveMessage(ctx context.Context, msg InboundMessage) error 
 			return err
 		}
 
-		err = db.UpsertMessageMedia(ctx, tx, msgID, msg.MediaHash)
+		err = db.UpsertMessageMedia(ctx, tx, msgID, msg.MediaID)
 		if err != nil {
 			return err
 		}
@@ -423,6 +421,23 @@ func (s *Service) SendImage(ctx context.Context, conversationID string, imagePat
 		kind = "image"
 	}
 
+	mediaID := id.V7()
+	ext := filepath.Ext(imagePath)
+	datePrefix := time.Now().Format("2006/01")
+	mediaDir := filepath.Join(s.cfg.MediaPath(), datePrefix)
+	localPath := ""
+
+	mkErr := os.MkdirAll(mediaDir, 0o755)
+	if mkErr == nil {
+		mediaFile := filepath.Join(mediaDir, mediaID+ext)
+		cpErr := copyFile(imagePath, mediaFile)
+		if cpErr != nil {
+			slog.Warn("copy outbound image to media dir", "pkg", "messaging", "error", cpErr)
+		} else {
+			localPath = filepath.Join("media", datePrefix, mediaID+ext)
+		}
+	}
+
 	return s.ReceiveMessage(ctx, InboundMessage{
 		Platform:               conv.Platform,
 		ExternalConversationID: conv.ExternalConversationID,
@@ -434,8 +449,8 @@ func (s *Service) SendImage(ctx context.Context, conversationID string, imagePat
 		SentAt:                 sentAt,
 		IsFromMe:               true,
 		IsGroup:                conv.Kind == "group",
-		LocalPath:              outbound.LocalPath,
-		MediaHash:              mediaHashFromPath(imagePath),
+		LocalPath:              localPath,
+		MediaID:                mediaID,
 		MediaSizeBytes:         fileSize(imagePath),
 	})
 }
@@ -451,16 +466,20 @@ func (s *Service) SendAudio(ctx context.Context, conversationID string, audioPat
 		return err
 	}
 
-	mediaHash := mediaHashFromPath(audioPath)
+	mediaID := id.V7()
+	ext := filepath.Ext(audioPath)
+	datePrefix := time.Now().Format("2006/01")
+	mediaDir := filepath.Join(s.cfg.MediaPath(), datePrefix)
 	localPath := ""
-	if mediaHash != "" {
-		ext := filepath.Ext(audioPath)
-		mediaFile := filepath.Join(s.cfg.MediaPath(), mediaHash+ext)
+
+	mkErr := os.MkdirAll(mediaDir, 0o755)
+	if mkErr == nil {
+		mediaFile := filepath.Join(mediaDir, mediaID+ext)
 		cpErr := copyFile(audioPath, mediaFile)
 		if cpErr != nil {
 			slog.Warn("copy outbound audio to media dir", "pkg", "messaging", "error", cpErr)
 		} else {
-			localPath = mediaFile
+			localPath = filepath.Join("media", datePrefix, mediaID+ext)
 		}
 	}
 
@@ -487,10 +506,6 @@ func (s *Service) SendAudio(ctx context.Context, conversationID string, audioPat
 		kind = "audio"
 	}
 
-	if localPath == "" {
-		localPath = outbound.LocalPath
-	}
-
 	return s.ReceiveMessage(ctx, InboundMessage{
 		Platform:               conv.Platform,
 		ExternalConversationID: conv.ExternalConversationID,
@@ -503,7 +518,7 @@ func (s *Service) SendAudio(ctx context.Context, conversationID string, audioPat
 		IsFromMe:               true,
 		IsGroup:                conv.Kind == "group",
 		LocalPath:              localPath,
-		MediaHash:              mediaHash,
+		MediaID:                mediaID,
 		MediaSizeBytes:         fileSize(audioPath),
 		MediaTranscriptText:    body,
 	})
@@ -943,16 +958,6 @@ func (s *Service) PersistMediaResult(ctx context.Context, localPath, text string
 }
 
 func (s *Service) DB() *sql.DB { return s.db }
-
-func mediaHashFromPath(path string) string {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return ""
-	}
-
-	sum := sha256.Sum256(data)
-	return hex.EncodeToString(sum[:])
-}
 
 func fileSize(path string) int64 {
 	info, err := os.Stat(path)

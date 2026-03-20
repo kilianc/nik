@@ -2,14 +2,13 @@ package whatsapp
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"log/slog"
 	"mime"
 	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/kciuffolo/nik/internal/id"
 	"go.mau.fi/whatsmeow"
 	waProto "go.mau.fi/whatsmeow/proto/waE2E"
 )
@@ -22,7 +21,7 @@ const (
 type mediaResult struct {
 	path      string
 	filename  string
-	hash      string
+	id        string
 	mimeType  string
 	sizeBytes int64
 }
@@ -66,22 +65,16 @@ func (c *Client) downloadMedia(ctx context.Context, msg *waProto.Message, messag
 		return nil
 	}
 
-	err = os.MkdirAll(c.mediaPath, 0o755)
-	if err != nil {
-		slog.Warn("create media dir failed", "pkg", "whatsapp", "dir", c.mediaPath, "error", err)
-		return nil
-	}
-
-	sum := sha256.Sum256(data)
-	hash := hex.EncodeToString(sum[:])
-
-	filename := hash + extensionFromMime(mimeType)
+	mediaID := id.V7()
+	ext := extensionFromMime(mimeType)
+	datePrefix := time.Now().Format("2006/01")
+	filename := filepath.Join(datePrefix, mediaID+ext)
 	absPath := filepath.Join(c.mediaPath, filename)
 
-	_, err = os.Stat(absPath)
-	if err == nil {
-		slog.Debug("media reused", "pkg", "whatsapp", "msg_id", messageID, "kind", kind, "path", absPath, "bytes", len(data))
-		return &mediaResult{path: absPath, filename: filename, hash: hash, mimeType: mimeType, sizeBytes: int64(len(data))}
+	err = os.MkdirAll(filepath.Dir(absPath), 0o755)
+	if err != nil {
+		slog.Warn("create media dir failed", "pkg", "whatsapp", "dir", filepath.Dir(absPath), "error", err)
+		return nil
 	}
 
 	err = os.WriteFile(absPath, data, 0o644)
@@ -91,7 +84,7 @@ func (c *Client) downloadMedia(ctx context.Context, msg *waProto.Message, messag
 	}
 
 	slog.Debug("media downloaded", "pkg", "whatsapp", "msg_id", messageID, "kind", kind, "path", absPath, "bytes", len(data))
-	return &mediaResult{path: absPath, filename: filename, hash: hash, mimeType: mimeType, sizeBytes: int64(len(data))}
+	return &mediaResult{path: absPath, filename: filename, id: mediaID, mimeType: mimeType, sizeBytes: int64(len(data))}
 }
 
 func extractDownloadable(msg *waProto.Message, kind string) (whatsmeow.DownloadableMessage, string) {
