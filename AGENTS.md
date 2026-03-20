@@ -421,6 +421,7 @@ Before applying any migration to the live DB:
 Things to revisit periodically. The agent adds entries here when the user flags a mistake or suggests a different approach. Only the user removes entries.
 
 <!-- example: - 2026-03-14: user prefers X over Y for error handling -- revisit error style rules -->
+- 2026-03-20: workspace skill names are PII -- they reveal what services/devices the owner uses. Never reference specific workspace skill names in files that could leak (skill_builder docs, prompts, etc.). Use generic placeholders instead. Built-in skill names (git-tracked under `skills/`) are fine.
 
 ## Fin
 

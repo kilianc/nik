@@ -76,3 +76,10 @@ To add software:
 4. Verify the tool works by running a test command
 5. If the environment is broken beyond repair, call
    `shell-factory-reset` to restore the default Dockerfile and rebuild
+
+## Install
+
+Ask the owner which shell mode to use:
+
+- **Docker** (set `shell.docker_image` in config): sandboxed, reproducible environment. Software managed via Dockerfile. Can't access host network or devices directly. Rebuild with `shell-rebuild`, factory reset with `shell-factory-reset`.
+- **Local** (leave `shell.docker_image` empty): runs tmux directly on the host. Full access to host tools, network, devices. No isolation or Dockerfile management. The Container management section above doesn't apply.

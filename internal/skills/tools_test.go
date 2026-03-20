@@ -41,9 +41,11 @@ func TestParseFrontmatter(t *testing.T) {
 			wantName: "normal",
 		},
 		{
-			name:     "install field",
-			content:  "---\nname: installable\ninstall: true\nsummary: a skill with install requirements\ntools: [create_alarm]\n---\n\n# Installable\n\nBody content.\n",
-			wantName: "installable",
+			name:        "unknown frontmatter field ignored",
+			content:     "---\nname: installable\ninstall: true\nsummary: a skill with install requirements\ntools: [create_alarm]\n---\n\n# Installable\n\nBody content.\n",
+			wantName:    "installable",
+			wantSummary: "a skill with install requirements",
+			wantTools:   []string{"create_alarm"},
 		},
 	}
 
