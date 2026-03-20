@@ -14,7 +14,7 @@ import (
 var defaultDockerfile string
 
 func (s *Service) dockerfilePath() string {
-	return filepath.Join(s.cfg.Home, "shell", "Dockerfile")
+	return filepath.Join(s.cfg.Home, "Dockerfile")
 }
 
 func (s *Service) ensureContainer() error {
