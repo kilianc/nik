@@ -532,6 +532,10 @@ func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instru
 
 		wg.Wait()
 
+		if modelOutput != "" {
+			items = append(items, responses.ResponseInputItemParamOfMessage(modelOutput, responses.EasyInputMessageRoleAssistant))
+		}
+
 		for i, call := range calls {
 			r := results[i]
 
@@ -556,7 +560,7 @@ func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instru
 		before := len(items)
 		items = pruneItems(items, maxHistoryPairs)
 		if len(items) < before {
-			slog.Info("pruned tool history", "pkg", "llm", "round", round, "dropped_pairs", (before-len(items))/2)
+			slog.Info("pruned tool history", "pkg", "llm", "round", round, "dropped_items", before-len(items))
 		}
 	}
 }
@@ -574,15 +578,30 @@ func ensureJSONInput(content string, jsonOutput bool) string {
 }
 
 func pruneItems(items responses.ResponseInputParam, maxPairs int) responses.ResponseInputParam {
-	pairCount := (len(items) - 1) / 2
+	var pairCount int
+	for _, item := range items[1:] {
+		if item.OfFunctionCallOutput != nil {
+			pairCount++
+		}
+	}
+
 	if pairCount <= maxPairs {
 		return items
 	}
 
-	drop := (pairCount - maxPairs) * 2
-	pruned := make(responses.ResponseInputParam, 0, len(items)-drop)
+	dropPairs := pairCount - maxPairs
+	var dropped int
+	cutIdx := 1
+	for cutIdx < len(items) && dropped < dropPairs {
+		if items[cutIdx].OfFunctionCallOutput != nil {
+			dropped++
+		}
+		cutIdx++
+	}
+
+	pruned := make(responses.ResponseInputParam, 0, len(items)-(cutIdx-1))
 	pruned = append(pruned, items[0])
-	pruned = append(pruned, items[1+drop:]...)
+	pruned = append(pruned, items[cutIdx:]...)
 	return pruned
 }
 
