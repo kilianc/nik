@@ -114,6 +114,20 @@ func Open(dbPath string, loc *time.Location) (*sql.DB, error) {
 	return db, nil
 }
 
+func OpenReadOnly(dbPath string, loc *time.Location) (*sql.DB, error) {
+	dsn := "file:" + dbPath + "?mode=ro&_busy_timeout=5000&_journal_mode=WAL"
+	if loc != nil {
+		dsn += "&_loc=" + url.QueryEscape(loc.String())
+	}
+
+	db, err := sql.Open("sqlite3_nik", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("open sqlite read-only: %w", err)
+	}
+
+	return db, nil
+}
+
 func OpenInMemory() (*sql.DB, error) {
 	db, err := Open(":memory:", nil)
 	if err != nil {
