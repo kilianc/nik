@@ -10,19 +10,6 @@ import (
 	"github.com/kciuffolo/nik/internal/db"
 )
 
-func TestCreateAlarmRejectsInvalidTimestamp(t *testing.T) {
-	svc := New(nil)
-
-	_, err := svc.CreateAlarm(context.Background(), "kevin", "", "wake up", "", "not-a-time")
-	if err == nil {
-		t.Fatalf("expected parse error")
-	}
-
-	if !strings.Contains(err.Error(), "parse next_fire_at") {
-		t.Fatalf("expected parse next_fire_at error, got %v", err)
-	}
-}
-
 func TestFireDueAlarmsClearsLastOccurrenceNote(t *testing.T) {
 	ctx := context.Background()
 
@@ -57,7 +44,7 @@ func TestFireDueAlarmsClearsLastOccurrenceNote(t *testing.T) {
 		t.Fatalf("seed last occurrence note: %v", err)
 	}
 
-	svc := New(conn)
+	svc := New(nil, conn)
 	svc.FireDueAlarms(ctx)
 
 	updated, found, err := db.AlarmGet(ctx, conn, alarm.ID)
@@ -115,7 +102,7 @@ func TestUpdateAlarmNoteWritesBothStores(t *testing.T) {
 		t.Fatalf("insert occurrence: %v", err)
 	}
 
-	svc := New(conn)
+	svc := New(nil, conn)
 	err = svc.Update(ctx, alarm.ID, UpdateParams{Note: "done and archived"})
 	if err != nil {
 		t.Fatalf("update note: %v", err)
@@ -188,7 +175,7 @@ func TestUpdateAlarmNoteBeforeFirstOccurrenceReturnsError(t *testing.T) {
 		t.Fatalf("create alarm: %v", err)
 	}
 
-	svc := New(conn)
+	svc := New(nil, conn)
 	err = svc.Update(ctx, alarm.ID, UpdateParams{Note: "premature"})
 	if err == nil {
 		t.Fatalf("expected error before first occurrence")
@@ -232,7 +219,7 @@ func TestHealStaleAlarms(t *testing.T) {
 			t.Fatalf("claim alarm: %v", err)
 		}
 
-		svc := New(conn)
+		svc := New(nil, conn)
 		svc.healStaleAlarms(ctx)
 
 		var msgCount int
@@ -275,7 +262,7 @@ func TestHealStaleAlarms(t *testing.T) {
 			t.Fatalf("create alarm: %v", err)
 		}
 
-		svc := New(conn)
+		svc := New(nil, conn)
 		svc.healStaleAlarms(ctx)
 
 		var msgCount int

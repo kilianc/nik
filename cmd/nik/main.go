@@ -175,7 +175,7 @@ func main() {
 		slog.Info("task client ready", "model", cfg.Models.Task.Model)
 	}
 
-	alarmSvc := alarms.New(conn)
+	alarmSvc := alarms.New(cfg, conn)
 	recallSvc := recall.NewService(cfg, recallClient)
 	taskSvc := task.NewService(conn)
 	shellSvc := shell.NewService(cfg, conn)

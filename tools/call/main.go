@@ -136,7 +136,7 @@ func buildTools(cfg *config.Config, llmClient, taskLLMClient *llm.Client, conn *
 			tools[t.Def.Name] = t.Handler
 		}
 
-		alarmSvc := alarms.New(conn)
+		alarmSvc := alarms.New(cfg, conn)
 		for _, t := range alarms.BuildTools(alarmSvc) {
 			tools[t.Def.Name] = t.Handler
 		}

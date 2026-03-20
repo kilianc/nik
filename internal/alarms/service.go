@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/db"
 )
 
@@ -18,19 +19,15 @@ type AlarmUpdated struct {
 }
 
 type Service struct {
-	db *sql.DB
+	cfg *config.Config
+	db  *sql.DB
 }
 
-func New(conn *sql.DB) *Service {
-	return &Service{db: conn}
+func New(cfg *config.Config, conn *sql.DB) *Service {
+	return &Service{cfg: cfg, db: conn}
 }
 
-func (s *Service) CreateAlarm(ctx context.Context, originContactID, originConversationID, goal, recurrence, nextFireAtStr string) (*Alarm, error) {
-	nextFireAt, err := time.Parse(time.RFC3339, nextFireAtStr)
-	if err != nil {
-		return nil, fmt.Errorf("parse next_fire_at %q: %w", nextFireAtStr, err)
-	}
-
+func (s *Service) CreateAlarm(ctx context.Context, originContactID, originConversationID, goal, recurrence string, nextFireAt time.Time) (*Alarm, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("begin tx: %w", err)
