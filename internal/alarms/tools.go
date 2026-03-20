@@ -3,6 +3,7 @@ package alarms
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/kciuffolo/nik/internal/llm"
@@ -24,14 +25,18 @@ var alarmToolDef = llm.ToolDef{
 			},
 			"fire_at": map[string]any{
 				"type":        "string",
-				"description": "RFC3339 timestamp for when the alarm should first fire, e.g. '2026-03-15T14:30:00Z'.",
+				"description": "Date and time for when the alarm should fire, format YYYY-MM-DD HH:MM.",
+			},
+			"timezone": map[string]any{
+				"type":        "string",
+				"description": "IANA timezone for interpreting fire_at (e.g. Europe/Rome). Defaults to system timezone when omitted.",
 			},
 			"recurrence": map[string]any{
 				"type":        "string",
 				"description": "Natural language recurrence pattern. Examples: 'every day at 9am', 'every Sunday at 7pm', 'every weekday morning', 'first of every month'. Omit or leave empty for one-shot alarms.",
 			},
 		},
-		"required":             []string{"origin_contact_id", "goal", "fire_at", "recurrence"},
+		"required":             []string{"origin_contact_id", "goal", "fire_at", "timezone", "recurrence"},
 		"additionalProperties": false,
 	},
 }
@@ -56,14 +61,18 @@ var updateAlarmToolDef = llm.ToolDef{
 			},
 			"next_fire_at": map[string]any{
 				"type":        "string",
-				"description": "RFC3339 timestamp for the next fire time. Use to reschedule or skip an occurrence.",
+				"description": "Date and time for the next fire, format YYYY-MM-DD HH:MM. Use to reschedule or skip an occurrence.",
+			},
+			"timezone": map[string]any{
+				"type":        "string",
+				"description": "IANA timezone for interpreting next_fire_at (e.g. Europe/Rome). Defaults to system timezone when omitted.",
 			},
 			"occurrence_note": map[string]any{
 				"type":        "string",
 				"description": "Short note about what happened during the current occurrence. Only meaningful when called during an alarm activation.",
 			},
 		},
-		"required":             []string{"alarm_id", "goal", "recurrence", "next_fire_at", "occurrence_note"},
+		"required":             []string{"alarm_id", "goal", "recurrence", "next_fire_at", "timezone", "occurrence_note"},
 		"additionalProperties": false,
 	},
 }
@@ -101,12 +110,30 @@ func BuildTools(svc *Service) []llm.Tool {
 	}
 }
 
+func (s *Service) parseLocalTime(raw, tz string) (time.Time, error) {
+	loc := time.UTC
+	if s.cfg != nil {
+		loc = s.cfg.TZ()
+	}
+
+	if tz != "" {
+		parsed, err := time.LoadLocation(tz)
+		if err != nil {
+			return time.Time{}, fmt.Errorf("invalid timezone %q: %w", tz, err)
+		}
+		loc = parsed
+	}
+
+	return time.ParseInLocation("2006-01-02 15:04", raw, loc)
+}
+
 func alarmHandler(svc *Service) llm.ToolExecutor {
 	return func(ctx context.Context, call llm.ToolCall) (string, error) {
 		var args struct {
 			OriginContactID string `json:"origin_contact_id"`
 			Goal            string `json:"goal"`
 			FireAt          string `json:"fire_at"`
+			Timezone        string `json:"timezone"`
 			Recurrence      string `json:"recurrence"`
 		}
 
@@ -124,12 +151,17 @@ func alarmHandler(svc *Service) llm.ToolExecutor {
 			return `{"error":"empty fire_at"}`, nil
 		}
 
+		fireAt, err := svc.parseLocalTime(args.FireAt, args.Timezone)
+		if err != nil {
+			return llm.ToolErrorf("parse fire_at: %s", err.Error()), nil
+		}
+
 		var originConversationID string
 		if meta, ok := ctx.Value("meta").(map[string]string); ok {
 			originConversationID = meta["conversation_id"]
 		}
 
-		alarm, err := svc.CreateAlarm(ctx, args.OriginContactID, originConversationID, args.Goal, args.Recurrence, args.FireAt)
+		alarm, err := svc.CreateAlarm(ctx, args.OriginContactID, originConversationID, args.Goal, args.Recurrence, fireAt)
 		if err != nil {
 			return llm.ToolError(err), nil
 		}
@@ -138,7 +170,7 @@ func alarmHandler(svc *Service) llm.ToolExecutor {
 			"created":      true,
 			"id":           alarm.ID,
 			"goal":         alarm.Goal,
-			"next_fire_at": alarm.NextFireAt.Time.Format(time.RFC3339),
+			"next_fire_at": alarm.NextFireAt.Time.Format("Jan 2, 2006 3:04 PM"),
 		}
 		if alarm.Recurrence.Valid {
 			result["recurrence"] = alarm.Recurrence.String
@@ -156,6 +188,7 @@ func updateAlarmHandler(svc *Service) llm.ToolExecutor {
 			Goal           string `json:"goal"`
 			Recurrence     string `json:"recurrence"`
 			NextFireAt     string `json:"next_fire_at"`
+			Timezone       string `json:"timezone"`
 			OccurrenceNote string `json:"occurrence_note"`
 		}
 
@@ -180,7 +213,7 @@ func updateAlarmHandler(svc *Service) llm.ToolExecutor {
 			p.Recurrence = &args.Recurrence
 		}
 		if args.NextFireAt != "" {
-			t, parseErr := time.Parse(time.RFC3339, args.NextFireAt)
+			t, parseErr := svc.parseLocalTime(args.NextFireAt, args.Timezone)
 			if parseErr != nil {
 				return llm.ToolErrorf("parse next_fire_at: %s", parseErr.Error()), nil
 			}
