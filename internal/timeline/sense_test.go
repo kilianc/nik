@@ -191,7 +191,7 @@ func TestMessageEntryReplyContext(t *testing.T) {
 		}
 		e := messageEntry(reply, "Alice", conn)
 
-		want := `where? (replying to [09:12:30] Sender: ok)`
+		want := `where? (quote replying to [09:12:30] Sender: ok)`
 		if e.text != want {
 			t.Fatalf("got %q, want %q", e.text, want)
 		}
@@ -214,7 +214,7 @@ func TestMessageEntryReplyContext(t *testing.T) {
 		}
 		e := messageEntry(reply, "Alice", conn)
 
-		want := `yes! (replying to [08:30:15] Sender: how about saturday?)`
+		want := `yes! (quote replying to [08:30:15] Sender: how about saturday?)`
 		if e.text != want {
 			t.Fatalf("got %q, want %q", e.text, want)
 		}
