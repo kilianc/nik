@@ -62,11 +62,11 @@ func TestSeedDockerfile(t *testing.T) {
 
 func TestFactoryResetOverwritesDockerfile(t *testing.T) {
 	home := t.TempDir()
-	svc := &Service{
-		home:        home,
-		container:   "nik-shell-test",
-		dockerImage: "nik-shell-test",
-	}
+	svc := NewService(&config.Config{
+		Home:  home,
+		Shell: config.ShellConfig{DockerImage: "nik-shell-test"},
+	}, nil)
+	svc.container = "nik-shell-test"
 
 	dir := filepath.Join(home, "shell")
 	err := os.MkdirAll(dir, 0o755)

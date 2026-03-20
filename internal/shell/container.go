@@ -14,7 +14,7 @@ import (
 var defaultDockerfile string
 
 func (s *Service) dockerfilePath() string {
-	return filepath.Join(s.home, "shell", "Dockerfile")
+	return filepath.Join(s.cfg.Home, "shell", "Dockerfile")
 }
 
 func (s *Service) ensureContainer() error {
@@ -55,7 +55,7 @@ func (s *Service) ensureContainer() error {
 		return fmt.Errorf("start container: %w", err)
 	}
 
-	slog.Info("shell container started", "pkg", "shell", "container", s.container, "image", s.dockerImage)
+	slog.Info("shell container started", "pkg", "shell", "container", s.container, "image", s.dockerImage())
 	return nil
 }
 
@@ -72,7 +72,7 @@ func (s *Service) rebuildContainer() (string, error) {
 		return buildLog, fmt.Errorf("start container: %w", err)
 	}
 
-	slog.Info("shell container rebuilt", "pkg", "shell", "container", s.container, "image", s.dockerImage)
+	slog.Info("shell container rebuilt", "pkg", "shell", "container", s.container, "image", s.dockerImage())
 	return buildLog, nil
 }
 
@@ -125,7 +125,7 @@ func (s *Service) buildImage() (string, error) {
 	ctx := filepath.Dir(s.dockerfilePath())
 
 	cmd := exec.Command("docker", "build",
-		"-t", s.dockerImage+":latest",
+		"-t", s.dockerImage()+":latest",
 		"-f", s.dockerfilePath(),
 		ctx,
 	)
@@ -137,7 +137,7 @@ func (s *Service) buildImage() (string, error) {
 		return buildLog, fmt.Errorf("docker build: %w", err)
 	}
 
-	slog.Info("shell image built", "pkg", "shell", "image", s.dockerImage)
+	slog.Info("shell image built", "pkg", "shell", "image", s.dockerImage())
 	return buildLog, nil
 }
 
@@ -146,10 +146,10 @@ func (s *Service) startContainer() error {
 
 	cmd := exec.Command("docker", "run", "-d",
 		"--name", s.container,
-		"-v", s.home+":/workspace",
+		"-v", s.cfg.Home+":/workspace",
 		"-w", "/workspace",
 		"--user", uid,
-		s.dockerImage+":latest",
+		s.dockerImage()+":latest",
 		"sleep", "infinity",
 	)
 
@@ -175,7 +175,7 @@ func (s *Service) containerRunning() (bool, error) {
 }
 
 func (s *Service) imageExists() (bool, error) {
-	err := exec.Command("docker", "image", "inspect", s.dockerImage+":latest").Run()
+	err := exec.Command("docker", "image", "inspect", s.dockerImage()+":latest").Run()
 	return err == nil, nil
 }
 
