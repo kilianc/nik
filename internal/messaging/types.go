@@ -42,6 +42,13 @@ type InboundMessage struct {
 	MediaTranscriptText    string
 }
 
+type QuoteTarget struct {
+	ExternalMessageID string
+	ExternalSenderID  string
+	Body              string
+	Kind              string
+}
+
 type OutboundMessage struct {
 	ExternalMessageID string
 	ExternalSenderID  string

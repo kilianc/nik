@@ -140,13 +140,28 @@ func (c *Client) SetPresence(ctx context.Context, available bool) error {
 	return c.wm.SendPresence(ctx, p)
 }
 
-func (c *Client) Reply(ctx context.Context, conversationJID, text string) (messaging.OutboundMessage, error) {
+func (c *Client) Reply(ctx context.Context, conversationJID, text string, quote *messaging.QuoteTarget) (messaging.OutboundMessage, error) {
 	jid, err := types.ParseJID(conversationJID)
 	if err != nil {
 		return messaging.OutboundMessage{}, fmt.Errorf("parse conversation jid: %w", err)
 	}
 
-	msg := &waProto.Message{Conversation: &text}
+	var msg *waProto.Message
+	if quote != nil {
+		msg = &waProto.Message{
+			ExtendedTextMessage: &waProto.ExtendedTextMessage{
+				Text: proto.String(text),
+				ContextInfo: &waProto.ContextInfo{
+					StanzaID:      proto.String(quote.ExternalMessageID),
+					Participant:   proto.String(quote.ExternalSenderID),
+					QuotedMessage: &waProto.Message{Conversation: proto.String(quote.Body)},
+				},
+			},
+		}
+	} else {
+		msg = &waProto.Message{Conversation: &text}
+	}
+
 	resp, err := c.wm.SendMessage(ctx, jid, msg)
 	if err != nil {
 		return messaging.OutboundMessage{}, fmt.Errorf("send message: %w", err)
