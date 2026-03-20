@@ -178,7 +178,7 @@ func (s *Service) handleRun(ctx context.Context, args shellArgs) (string, error)
 
 	sid := id.Short(4)
 
-	err := s.newSession(sid, args.Command, s.cfg.Home)
+	err := s.newSession(sid, args.Command, s.workdir())
 	if err != nil {
 		return llm.ToolError(err), nil
 	}

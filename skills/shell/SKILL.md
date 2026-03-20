@@ -64,13 +64,15 @@ this turn -- reply to the user and stop.
 
 ## Container management
 
-Your shell runs in a Docker container. `workspace/shell/Dockerfile`
-declares what software is installed.
+Your shell runs in a Docker container (Debian bookworm, not macOS).
+`Dockerfile` in the workspace root declares what software is installed.
+
+Pre-installed: go, curl, jq, nodejs, npm, sqlite3, tmux.
 
 To add software:
-1. Read the Dockerfile with `fs_read`
-2. Add the package to the `RUN` line
+1. Read `Dockerfile` with `read_file`
+2. Add the package to the apt-get line (or add an npm/go install)
 3. Call `shell-rebuild`
 4. Verify the tool works by running a test command
 5. If the environment is broken beyond repair, call
-   `shell-factory-reset` to reset the Dockerfile and start over
+   `shell-factory-reset` to restore the default Dockerfile and rebuild

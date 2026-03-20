@@ -18,7 +18,7 @@ func TestSeedDockerfile(t *testing.T) {
 			t.Fatalf("seedDockerfile: %v", err)
 		}
 
-		data, err := os.ReadFile(filepath.Join(home, "shell", "Dockerfile"))
+		data, err := os.ReadFile(filepath.Join(home, "Dockerfile"))
 		if err != nil {
 			t.Fatalf("read dockerfile: %v", err)
 		}
@@ -32,14 +32,8 @@ func TestSeedDockerfile(t *testing.T) {
 		home := t.TempDir()
 		svc := NewService(&config.Config{Home: home, Shell: config.ShellConfig{DockerImage: "nik-shell"}}, nil)
 
-		dir := filepath.Join(home, "shell")
-		err := os.MkdirAll(dir, 0o755)
-		if err != nil {
-			t.Fatalf("mkdir: %v", err)
-		}
-
 		custom := "FROM ubuntu:24.04\n"
-		err = os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte(custom), 0o644)
+		err := os.WriteFile(filepath.Join(home, "Dockerfile"), []byte(custom), 0o644)
 		if err != nil {
 			t.Fatalf("write: %v", err)
 		}
@@ -49,7 +43,7 @@ func TestSeedDockerfile(t *testing.T) {
 			t.Fatalf("seedDockerfile: %v", err)
 		}
 
-		data, err := os.ReadFile(filepath.Join(dir, "Dockerfile"))
+		data, err := os.ReadFile(filepath.Join(home, "Dockerfile"))
 		if err != nil {
 			t.Fatalf("read: %v", err)
 		}
@@ -68,21 +62,15 @@ func TestFactoryResetOverwritesDockerfile(t *testing.T) {
 	}, nil)
 	svc.container = "nik-shell-test"
 
-	dir := filepath.Join(home, "shell")
-	err := os.MkdirAll(dir, 0o755)
-	if err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-
 	custom := "FROM ubuntu:24.04\nRUN apt-get install -y python3\n"
-	err = os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte(custom), 0o644)
+	err := os.WriteFile(filepath.Join(home, "Dockerfile"), []byte(custom), 0o644)
 	if err != nil {
 		t.Fatalf("write: %v", err)
 	}
 
 	svc.factoryReset()
 
-	data, err := os.ReadFile(filepath.Join(dir, "Dockerfile"))
+	data, err := os.ReadFile(filepath.Join(home, "Dockerfile"))
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}

@@ -64,7 +64,7 @@ call:
 
 .PHONY: shell-image
 shell-image:
-	docker build -t nik-shell:latest -f workspace/shell/Dockerfile workspace/shell/
+	docker build -t nik-shell:latest -f workspace/Dockerfile workspace/
 
 PI ?= nik@localhost
 PI_NIK_HOME ?= /home/nik
