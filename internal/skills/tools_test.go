@@ -316,7 +316,7 @@ func TestHandleLoadRejectsPathTraversal(t *testing.T) {
 		"valid\\..\\etc",
 	}
 	for _, name := range cases {
-		out, err := handleLoad([]string{dir}, name, nil)
+		out, err := handleLoad([]string{dir}, name)
 		if err != nil {
 			t.Fatalf("unexpected error for %q: %v", name, err)
 		}
@@ -332,52 +332,13 @@ func TestHandleLoadAcceptsValidName(t *testing.T) {
 	os.MkdirAll(skillDir, 0o755)
 	os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# Vault"), 0o644)
 
-	out, err := handleLoad([]string{dir}, "vault", nil)
+	out, err := handleLoad([]string{dir}, "vault")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !strings.Contains(out, "# Vault") {
 		t.Fatalf("expected skill content, got %q", out)
 	}
-}
-
-func TestHandleLoadPreflightWarning(t *testing.T) {
-	t.Run("warns about missing tools", func(t *testing.T) {
-		dir := t.TempDir()
-		skillDir := filepath.Join(dir, "my_skill")
-		os.MkdirAll(skillDir, 0o755)
-		os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\nname: my_skill\nsummary: needs shell\ntools: [shell, write_file]\n---\n\n# My Skill\n"), 0o644)
-
-		available := func() []string { return []string{"write_file", "db_query"} }
-		out, err := handleLoad([]string{dir}, "my_skill", available)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !strings.Contains(out, "warning") || !strings.Contains(out, "shell") {
-			t.Fatalf("expected warning about missing shell, got %q", out)
-		}
-
-		warnLine := strings.SplitN(out, "\n", 2)[0]
-		if strings.Contains(warnLine, "write_file") {
-			t.Fatalf("warning should not mention write_file (available), got %q", warnLine)
-		}
-	})
-
-	t.Run("no warning when all present", func(t *testing.T) {
-		dir := t.TempDir()
-		skillDir := filepath.Join(dir, "ok_skill")
-		os.MkdirAll(skillDir, 0o755)
-		os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\nname: ok_skill\nsummary: all tools present\ntools: [shell]\n---\n\n# OK\n"), 0o644)
-
-		available := func() []string { return []string{"shell", "db_query"} }
-		out, err := handleLoad([]string{dir}, "ok_skill", available)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if strings.Contains(out, "warning") {
-			t.Fatalf("should not warn when all tools present, got %q", out)
-		}
-	})
 }
 
 func TestSymlinkEscapeBlocked(t *testing.T) {
@@ -394,7 +355,7 @@ func TestSymlinkEscapeBlocked(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		out, loadErr := handleLoad([]string{dir}, "escape/secret", nil)
+		out, loadErr := handleLoad([]string{dir}, "escape/secret")
 		if loadErr != nil {
 			t.Fatalf("unexpected error: %v", loadErr)
 		}

@@ -148,7 +148,7 @@ func buildTools(cfg *config.Config, llmClient, taskLLMClient *llm.Client, conn *
 		taskToolList = append(taskToolList, llm.BuildTools(taskLLMClient, cfg.Home, nil)...)
 		taskToolList = append(taskToolList, db.BuildTools(roConn)...)
 		taskToolList = append(taskToolList, fs.BuildTools(cfg.Home)...)
-		taskToolList = append(taskToolList, skills.BuildTools(cfg, nil)...)
+		taskToolList = append(taskToolList, skills.BuildTools(cfg)...)
 
 		taskRunner := task.NewRunner(cfg, taskLLMClient, taskSvc, taskToolList)
 		for _, t := range task.BuildTools(taskSvc, taskRunner) {
@@ -164,14 +164,7 @@ func buildTools(cfg *config.Config, llmClient, taskLLMClient *llm.Client, conn *
 		tools[t.Def.Name] = t.Handler
 	}
 
-	toolNamesFn := func() []string {
-		names := make([]string, 0, len(tools))
-		for n := range tools {
-			names = append(names, n)
-		}
-		return names
-	}
-	for _, t := range skills.BuildTools(cfg, toolNamesFn) {
+	for _, t := range skills.BuildTools(cfg) {
 		tools[t.Def.Name] = t.Handler
 	}
 
