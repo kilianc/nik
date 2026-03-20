@@ -107,6 +107,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	err = os.MkdirAll(cfg.DownloadsPath(), 0o755)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error creating downloads dir: %v\n", err)
+		os.Exit(1)
+	}
+
 	err = os.MkdirAll(cfg.TmpPath(), 0o755)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error creating tmp dir: %v\n", err)

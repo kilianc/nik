@@ -8,7 +8,8 @@
 Home/
 ├── config.yaml          runtime config
 ├── nik.db               SQLite — use db_query, not sqlite3
-├── media/               received/downloaded media
+├── media/               message attachments — system-managed
+├── downloads/           downloaded files, fetched assets
 ├── journal/             daily journal entries
 ├── briefings/           morning briefings
 ├── dreams/              dream cycle outputs

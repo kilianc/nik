@@ -122,6 +122,10 @@ func (c Config) MediaPath() string {
 	return filepath.Join(c.Home, "media")
 }
 
+func (c Config) DownloadsPath() string {
+	return filepath.Join(c.Home, "downloads")
+}
+
 func (c Config) TZ() *time.Location {
 	if c.Timezone == "" {
 		return time.Local
