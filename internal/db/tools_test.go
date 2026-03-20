@@ -127,6 +127,37 @@ func TestQueryHandlerTruncatesContextBytes(t *testing.T) {
 	}
 }
 
+func TestReadOnlyConnectionRejectsWrites(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := dir + "/test.db"
+
+	rw, err := Open(dbPath, nil)
+	if err != nil {
+		t.Fatalf("open rw db: %v", err)
+	}
+	defer rw.Close()
+
+	ro, err := OpenReadOnly(dbPath, nil)
+	if err != nil {
+		t.Fatalf("open read-only db: %v", err)
+	}
+	defer ro.Close()
+
+	_, err = ro.Exec("INSERT INTO contact (id, name) VALUES ('test', 'test')")
+	if err == nil {
+		t.Fatal("expected read-only connection to reject INSERT")
+	}
+	if !strings.Contains(err.Error(), "readonly") {
+		t.Fatalf("expected readonly error, got: %v", err)
+	}
+
+	var count int
+	err = ro.QueryRow("SELECT count(*) FROM contact").Scan(&count)
+	if err != nil {
+		t.Fatalf("read-only SELECT failed: %v", err)
+	}
+}
+
 func stringsOfLen(n int) string {
 	buf := make([]byte, n)
 	for i := range buf {
