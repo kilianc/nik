@@ -7,11 +7,12 @@ import (
 
 func TestSaveAndLoadMeta(t *testing.T) {
 	requireTmux(t)
+	svc := testService(t)
 
 	id := "test-meta"
-	defer cleanup(t, id)
+	defer svc.cleanup(t, id)
 
-	err := newSession(id, "sleep 60", "")
+	err := svc.newSession(id, "sleep 60", "")
 	if err != nil {
 		t.Fatalf("newSession: %v", err)
 	}
@@ -25,12 +26,12 @@ func TestSaveAndLoadMeta(t *testing.T) {
 		StartedAt:      now,
 	}
 
-	err = saveMeta(id, want)
+	err = svc.saveMeta(id, want)
 	if err != nil {
 		t.Fatalf("saveMeta: %v", err)
 	}
 
-	got, err := loadMeta(id)
+	got, err := svc.loadMeta(id)
 	if err != nil {
 		t.Fatalf("loadMeta: %v", err)
 	}
@@ -54,11 +55,12 @@ func TestSaveAndLoadMeta(t *testing.T) {
 
 func TestSaveMetaValidation(t *testing.T) {
 	requireTmux(t)
+	svc := testService(t)
 
 	id := "test-meta-validation"
-	defer cleanup(t, id)
+	defer svc.cleanup(t, id)
 
-	err := newSession(id, "sleep 60", "")
+	err := svc.newSession(id, "sleep 60", "")
 	if err != nil {
 		t.Fatalf("newSession: %v", err)
 	}
@@ -86,7 +88,7 @@ func TestSaveMetaValidation(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		err := saveMeta(id, tc.meta)
+		err := svc.saveMeta(id, tc.meta)
 		if err == nil {
 			t.Fatalf("%s: expected error, got nil", tc.name)
 		}
@@ -95,8 +97,9 @@ func TestSaveMetaValidation(t *testing.T) {
 
 func TestLoadMetaMissingSession(t *testing.T) {
 	requireTmux(t)
+	svc := testService(t)
 
-	_, err := loadMeta("nonexistent-session-id")
+	_, err := svc.loadMeta("nonexistent-session-id")
 	if err == nil {
 		t.Fatal("expected error for missing session, got nil")
 	}

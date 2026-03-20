@@ -16,8 +16,8 @@ type SessionMeta struct {
 
 const metaEnvKey = "NIK_META"
 
-func loadMeta(id string) (SessionMeta, error) {
-	raw, err := getEnv(id, metaEnvKey)
+func (s *Service) loadMeta(id string) (SessionMeta, error) {
+	raw, err := s.getEnv(id, metaEnvKey)
 	if err != nil {
 		return SessionMeta{}, fmt.Errorf("load meta %s: %w", id, err)
 	}
@@ -36,7 +36,7 @@ func loadMeta(id string) (SessionMeta, error) {
 	return m, nil
 }
 
-func saveMeta(id string, m SessionMeta) error {
+func (s *Service) saveMeta(id string, m SessionMeta) error {
 	if m.Command == "" {
 		return fmt.Errorf("save meta %s: empty command", id)
 	}
@@ -52,7 +52,7 @@ func saveMeta(id string, m SessionMeta) error {
 		return fmt.Errorf("marshal meta %s: %w", id, err)
 	}
 
-	err = setEnv(id, metaEnvKey, string(data))
+	err = s.setEnv(id, metaEnvKey, string(data))
 	if err != nil {
 		return fmt.Errorf("save meta %s: %w", id, err)
 	}

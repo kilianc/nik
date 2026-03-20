@@ -178,7 +178,7 @@ func main() {
 	alarmSvc := alarms.New(conn)
 	recallSvc := recall.NewService(cfg, recallClient)
 	taskSvc := task.NewService(conn)
-	shellSvc := shell.NewService(conn, cfg.Home)
+	shellSvc := shell.NewService(cfg, conn)
 
 	var taskTools []llm.Tool
 	taskTools = append(taskTools, shellSvc.BuildTools()...)
@@ -276,5 +276,6 @@ func main() {
 
 	<-brainDone
 	taskRunner.Wait()
+	shellSvc.StopContainer()
 	slog.Info("shutdown complete")
 }

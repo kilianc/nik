@@ -6,18 +6,33 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/db"
 )
 
 const staleThreshold = 30 * time.Minute
 
+const containerName = "nik-shell"
+
 type Service struct {
-	conn *sql.DB
-	home string
+	conn        *sql.DB
+	home        string
+	container   string
+	dockerImage string
 }
 
-func NewService(conn *sql.DB, home string) *Service {
-	return &Service{conn: conn, home: home}
+func NewService(cfg *config.Config, conn *sql.DB) *Service {
+	s := &Service{
+		conn:        conn,
+		home:        cfg.Home,
+		dockerImage: cfg.Shell.DockerImage,
+	}
+
+	if s.dockerImage != "" {
+		s.container = containerName
+	}
+
+	return s
 }
 
 func (s *Service) CheckSessions(ctx context.Context) {
@@ -34,12 +49,12 @@ func (s *Service) CheckSessions(ctx context.Context) {
 	now := time.Now().UTC()
 
 	for _, sid := range ids {
-		alive := isAlive(sid)
+		alive := s.isAlive(sid)
 
 		if !alive {
-			out, _ := capturePane(sid)
-			code, _ := getExitCode(sid)
-			killSession(sid)
+			out, _ := s.capturePane(sid)
+			code, _ := s.getExitCode(sid)
+			s.killSession(sid)
 
 			err = db.ShellSessionUpdate(ctx, s.conn, db.ShellSessionUpdateParams{
 				ID:       sid,
@@ -55,15 +70,15 @@ func (s *Service) CheckSessions(ctx context.Context) {
 			continue
 		}
 
-		meta, metaErr := loadMeta(sid)
+		meta, metaErr := s.loadMeta(sid)
 		if metaErr != nil {
 			slog.Warn("load meta for stale check", "pkg", "shell", "session_id", sid, "error", metaErr)
 			continue
 		}
 
 		if !meta.StartedAt.IsZero() && now.Sub(meta.StartedAt) > staleThreshold {
-			out, _ := capturePane(sid)
-			killSession(sid)
+			out, _ := s.capturePane(sid)
+			s.killSession(sid)
 
 			err = db.ShellSessionUpdate(ctx, s.conn, db.ShellSessionUpdateParams{
 				ID:     sid,

@@ -1,7 +1,7 @@
 ---
 name: shell
-summary: Run commands on the owner's machine via persistent tmux sessions. Owner-only.
-tools: [shell]
+summary: Run commands in persistent tmux sessions, optionally inside a Docker container. Owner-only.
+tools: [shell, shell-rebuild, shell-factory-reset]
 ---
 
 # Shell
@@ -61,3 +61,16 @@ this turn -- reply to the user and stop.
 - Use non-interactive flags (`-y`) when possible. For interactive
   prompts, use `send`.
 - If something fails, explain what happened and ask before retrying.
+
+## Container management
+
+Your shell runs in a Docker container. `workspace/shell/Dockerfile`
+declares what software is installed.
+
+To add software:
+1. Read the Dockerfile with `fs_read`
+2. Add the package to the `RUN` line
+3. Call `shell-rebuild`
+4. Verify the tool works by running a test command
+5. If the environment is broken beyond repair, call
+   `shell-factory-reset` to reset the Dockerfile and start over

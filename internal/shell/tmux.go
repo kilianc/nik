@@ -30,7 +30,16 @@ func sessionName(id string) string {
 	return sessionPrefix + id
 }
 
-func ensureTmux() error {
+func (s *Service) ensureTmux() error {
+	if s.container != "" {
+		out, err := s.tmux("-V")
+		if err != nil {
+			return fmt.Errorf("tmux in container %s: %w", s.container, err)
+		}
+		_ = out
+		return nil
+	}
+
 	_, err := exec.LookPath("tmux")
 	if err != nil {
 		return fmt.Errorf("find tmux: %w", err)
@@ -39,10 +48,7 @@ func ensureTmux() error {
 	return nil
 }
 
-// newSession creates a tmux session with remain-on-exit on, then replaces the
-// pane process with sh -c command. Options are set before the command runs so
-// fast-exiting commands still have pane_dead captured.
-func newSession(id, command, cwd string) error {
+func (s *Service) newSession(id, command, cwd string) error {
 	name := sessionName(id)
 
 	args := []string{
@@ -55,17 +61,17 @@ func newSession(id, command, cwd string) error {
 		args = append(args, "-c", cwd)
 	}
 
-	_, err := tmux(args...)
+	_, err := s.tmux(args...)
 	if err != nil {
 		return fmt.Errorf("create session %s: %w", id, err)
 	}
 
-	_, err = tmux("set-option", "-t", name, "remain-on-exit", "on")
+	_, err = s.tmux("set-option", "-t", name, "remain-on-exit", "on")
 	if err != nil {
 		return fmt.Errorf("set remain-on-exit %s: %w", id, err)
 	}
 
-	_, err = tmux("set-option", "-t", name, "history-limit", fmt.Sprintf("%d", historyLimit))
+	_, err = s.tmux("set-option", "-t", name, "history-limit", fmt.Sprintf("%d", historyLimit))
 	if err != nil {
 		return fmt.Errorf("set history-limit %s: %w", id, err)
 	}
@@ -73,7 +79,7 @@ func newSession(id, command, cwd string) error {
 	if command != "" {
 		ch := name + "-done"
 		wrapped := fmt.Sprintf("(%s); __ec=$?; tmux wait-for -S %s; exit $__ec", command, ch)
-		_, err = tmux("respawn-pane", "-k", "-t", name, "sh", "-c", wrapped)
+		_, err = s.tmux("respawn-pane", "-k", "-t", name, "sh", "-c", wrapped)
 		if err != nil {
 			return fmt.Errorf("respawn pane %s: %w", id, err)
 		}
@@ -82,8 +88,8 @@ func newSession(id, command, cwd string) error {
 	return nil
 }
 
-func setEnv(id, key, value string) error {
-	_, err := tmux("set-environment", "-t", sessionName(id), key, value)
+func (s *Service) setEnv(id, key, value string) error {
+	_, err := s.tmux("set-environment", "-t", sessionName(id), key, value)
 	if err != nil {
 		return fmt.Errorf("set env %s %s: %w", id, key, err)
 	}
@@ -91,8 +97,8 @@ func setEnv(id, key, value string) error {
 	return nil
 }
 
-func getEnv(id, key string) (string, error) {
-	out, err := tmux("show-environment", "-t", sessionName(id), key)
+func (s *Service) getEnv(id, key string) (string, error) {
+	out, err := s.tmux("show-environment", "-t", sessionName(id), key)
 	if err != nil {
 		return "", fmt.Errorf("get env %s %s: %w", id, key, err)
 	}
@@ -105,11 +111,11 @@ func getEnv(id, key string) (string, error) {
 	return parts[1], nil
 }
 
-func sendKeys(id string, keys ...string) error {
+func (s *Service) sendKeys(id string, keys ...string) error {
 	args := []string{"send-keys", "-t", sessionName(id)}
 	args = append(args, keys...)
 
-	_, err := tmux(args...)
+	_, err := s.tmux(args...)
 	if err != nil {
 		return fmt.Errorf("send keys %s: %w", id, err)
 	}
@@ -117,8 +123,8 @@ func sendKeys(id string, keys ...string) error {
 	return nil
 }
 
-func capturePane(id string) (string, error) {
-	out, err := tmux("capture-pane", "-t", sessionName(id), "-p", "-S", "-")
+func (s *Service) capturePane(id string) (string, error) {
+	out, err := s.tmux("capture-pane", "-t", sessionName(id), "-p", "-S", "-")
 	if err != nil {
 		return "", fmt.Errorf("capture output %s: %w", id, err)
 	}
@@ -133,8 +139,8 @@ func capturePane(id string) (string, error) {
 	return out, nil
 }
 
-func isAlive(id string) bool {
-	out, err := tmux(
+func (s *Service) isAlive(id string) bool {
+	out, err := s.tmux(
 		"display-message", "-t", sessionName(id),
 		"-p", "#{pane_dead}",
 	)
@@ -145,8 +151,8 @@ func isAlive(id string) bool {
 	return strings.TrimSpace(out) == "0"
 }
 
-func getExitCode(id string) (int, error) {
-	out, err := tmux(
+func (s *Service) getExitCode(id string) (int, error) {
+	out, err := s.tmux(
 		"display-message", "-t", sessionName(id),
 		"-p", "#{pane_dead_status}",
 	)
@@ -163,8 +169,8 @@ func getExitCode(id string) (int, error) {
 	return code, nil
 }
 
-func killSession(id string) error {
-	_, err := tmux("kill-session", "-t", sessionName(id))
+func (s *Service) killSession(id string) error {
+	_, err := s.tmux("kill-session", "-t", sessionName(id))
 	if err != nil {
 		return fmt.Errorf("kill session %s: %w", id, err)
 	}
@@ -172,10 +178,9 @@ func killSession(id string) error {
 	return nil
 }
 
-func listSessions() ([]SessionInfo, error) {
-	out, err := tmux("list-sessions", "-F", "#{session_name}")
+func (s *Service) listSessions() ([]SessionInfo, error) {
+	out, err := s.tmux("list-sessions", "-F", "#{session_name}")
 	if err != nil {
-		// no server running = no sessions
 		if strings.Contains(err.Error(), "no server") || strings.Contains(err.Error(), "no current") {
 			return nil, nil
 		}
@@ -193,7 +198,7 @@ func listSessions() ([]SessionInfo, error) {
 
 		sessions = append(sessions, SessionInfo{
 			ID:      id,
-			isAlive: isAlive(id),
+			isAlive: s.isAlive(id),
 		})
 	}
 
@@ -204,14 +209,14 @@ func waitForChannel(id string) string {
 	return sessionName(id) + "-done"
 }
 
-func stare(ctx context.Context, id string, maxWait int) (output string, alive bool, exitCode int) {
+func (s *Service) stare(ctx context.Context, id string, maxWait int) (output string, alive bool, exitCode int) {
 	stareCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	doneCh := make(chan struct{})
 	go func() {
 		defer close(doneCh)
-		exec.CommandContext(stareCtx, "tmux", "wait-for", waitForChannel(id)).Run()
+		s.tmuxWaitFor(stareCtx, waitForChannel(id))
 	}()
 
 	ticker := time.NewTicker(2 * time.Second)
@@ -223,38 +228,55 @@ func stare(ctx context.Context, id string, maxWait int) (output string, alive bo
 	for {
 		select {
 		case <-doneCh:
-			out, _ := capturePane(id)
-			c, _ := getExitCode(id)
+			out, _ := s.capturePane(id)
+			c, _ := s.getExitCode(id)
 			return out, false, c
 
 		case <-deadline.C:
-			out, _ := capturePane(id)
-			if !isAlive(id) {
-				c, _ := getExitCode(id)
+			out, _ := s.capturePane(id)
+			if !s.isAlive(id) {
+				c, _ := s.getExitCode(id)
 				return out, false, c
 			}
 			return out, true, 0
 
 		case <-ctx.Done():
-			out, _ := capturePane(id)
-			if !isAlive(id) {
-				c, _ := getExitCode(id)
+			out, _ := s.capturePane(id)
+			if !s.isAlive(id) {
+				c, _ := s.getExitCode(id)
 				return out, false, c
 			}
 			return out, true, 0
 
 		case <-ticker.C:
-			if !isAlive(id) {
-				out, _ := capturePane(id)
-				c, _ := getExitCode(id)
+			if !s.isAlive(id) {
+				out, _ := s.capturePane(id)
+				c, _ := s.getExitCode(id)
 				return out, false, c
 			}
 		}
 	}
 }
 
-func tmux(args ...string) (string, error) {
-	cmd := exec.Command("tmux", args...)
+func (s *Service) tmuxWaitFor(ctx context.Context, channel string) {
+	if s.container != "" {
+		exec.CommandContext(ctx, "docker", "exec", s.container, "tmux", "wait-for", channel).Run()
+		return
+	}
+
+	exec.CommandContext(ctx, "tmux", "wait-for", channel).Run()
+}
+
+func (s *Service) tmux(args ...string) (string, error) {
+	var cmd *exec.Cmd
+
+	if s.container != "" {
+		cmdArgs := append([]string{"exec", s.container, "tmux"}, args...)
+		cmd = exec.Command("docker", cmdArgs...)
+	} else {
+		cmd = exec.Command("tmux", args...)
+	}
+
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("tmux %s: %s: %w", args[0], strings.TrimSpace(string(out)), err)
