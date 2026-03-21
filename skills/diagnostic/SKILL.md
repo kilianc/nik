@@ -33,6 +33,11 @@ service names — discover what exists at runtime and apply universal
 rules. The goal is to predict what will break tomorrow so you can fix
 it before it matters.
 
+A skill may opt out of nightly diagnostic auth/install checks by setting
+`diagnostic_skip: true` in its frontmatter and documenting why. That
+skip only affects the diagnostic; the skill remains usable when
+explicitly requested.
+
 ## Phase 1 — Discover
 
 Before checking anything, build a picture of what exists right now.
@@ -78,6 +83,10 @@ is read-only — no mutations, no messages, no writes.
 
 ### Rules
 
+0. **Honor explicit diagnostic skips** — if a skill's frontmatter has
+   `diagnostic_skip: true`, do not auth-test it. Record `SKIP` with the
+   reason from the skill docs.
+
 1. **If the CLI has a `status` command** — run it. Check for
    `ready: true` or exit code 0. This is the preferred test.
 
@@ -112,15 +121,6 @@ When uncertain, try running the lightest available command. An auth
 error is a finding worth reporting. A "command not found" or "no such
 file" is not — just skip it.
 
-### Interpreting results
-
-- Auth failure = FAIL (the skill will break on its next activation)
-- Secrets manager failure = CRITICAL (cascading — every skill that
-  depends on it is broken)
-- Include the actual error message to distinguish expired tokens,
-  revoked keys, and network issues
-- Group downstream failures under their root cause
-
 ## Phase 3 — Verify alarm chains
 
 For every recurring alarm from 1c:
@@ -146,13 +146,15 @@ Skill installation and alarm health are handled automatically by reflexes (skill
 
 For every skill with `install: true`:
 1. Check that its expected resources exist (alarm with future `next_fire_at`, credentials configured, binaries present)
-2. If something is still broken despite reflexes having run, that's a real problem — flag it to the user
+2. If the skill has `diagnostic_skip: true`, treat intentionally skipped auth/install prerequisites as `SKIP`, not `FAIL`, and note that the owner disabled nightly diagnostic checks for that skill
+3. If something is still broken despite reflexes having run, that's a real problem — flag it to the user
 
 Do NOT attempt to fix anything here. The reflexes and Nik's normal activation handle repairs. This phase only audits.
 
 Severity:
 
 - Resource healthy = PASS
+- Intentionally skipped by `diagnostic_skip: true` = SKIP
 - Resource missing or broken despite reflexes = FAIL (flag to user with details)
 
 ## Phase 4 — Verify skill outputs
@@ -285,6 +287,8 @@ For every FAIL or CRITICAL finding, include a concrete recommendation.
   network connectivity; N downstream skills are blocked"
 - Unknown auth error → quote the error and suggest loading the skill
   for its setup instructions
+- Intentionally skipped skill → "re-enable nightly checks by removing
+  `diagnostic_skip: true` from the skill frontmatter when ready"
 
 **Dead alarms:**
 

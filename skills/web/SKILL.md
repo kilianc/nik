@@ -88,4 +88,6 @@ Extract the tweet ID from any x.com or twitter.com URL (the long numeric string 
 
 ## Install
 
-Message the user to store the Exa API key in the vault under `exa_api_key`.
+Message the user to store these in the vault:
+- `exa_api_key` -- Exa search API key
+- `x_bearer_token` -- X/Twitter API v2 bearer token (needed for tweet fetching)
