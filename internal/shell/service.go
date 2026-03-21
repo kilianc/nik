@@ -27,10 +27,7 @@ func NewService(cfg *config.Config, conn *sql.DB) *Service {
 func (s *Service) dockerImage() string { return s.cfg.Shell.DockerImage }
 
 func (s *Service) workdir() string {
-	if s.container != "" {
-		return "/workspace"
-	}
-	return s.cfg.Home
+	return s.cfg.ShellHome()
 }
 
 func (s *Service) CheckSessions(ctx context.Context) {

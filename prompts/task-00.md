@@ -1,11 +1,8 @@
 {{ .Now }}
 
-**Home directory:** `{{ .Home }}`
-**Scratch directory:** `{{ .Tmp }}`
-
 ## Workspace layout
 
-Home/
+./
 ├── config.yaml          runtime config
 ├── nik.db               SQLite — use db_query, not sqlite3
 ├── media/               message attachments — system-managed

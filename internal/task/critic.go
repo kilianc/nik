@@ -15,7 +15,6 @@ import (
 
 type criticPromptData struct {
 	Now              string
-	Home             string
 	Goal             string
 	Plan             string
 	Status           string
@@ -260,7 +259,6 @@ func (r *Runner) renderCriticPrompt(t db.Task, toolCalls, reports, skills string
 
 	data := criticPromptData{
 		Now:              now,
-		Home:             r.cfg.Home,
 		Goal:             t.Goal,
 		Plan:             t.Plan,
 		Status:           t.Status,
