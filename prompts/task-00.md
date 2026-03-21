@@ -3,6 +3,9 @@
 ## Workspace layout
 
 ./
+{{- if .ShellEnv }}
+├── Dockerfile               your container image — edit + shell-rebuild to add software
+{{- end }}
 ├── config.yaml          runtime config
 ├── nik.db               SQLite — use db_query, not sqlite3
 ├── media/               message attachments — system-managed
@@ -18,6 +21,9 @@
 └── tmp/                 scratch — your sandbox
 
 Never search: `.git/` `.cursor/` `.gocache/` `.tmp/` `vendor/`
+{{ if .ShellEnv -}}
+**Shell environment:** {{ .ShellEnv }}. `Dockerfile` declares what's installed — edit it and call `shell-rebuild` to add software.
+{{ end -}}
 
 {{ .TokenTraps }}
 
