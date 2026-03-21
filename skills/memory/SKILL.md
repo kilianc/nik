@@ -54,8 +54,26 @@ write_file action: "write", path: "memories/staging.md", content: "| date | type
 
 Use **exactly** this query — no other queries, no LIKE searches, no COUNT, no GROUP BY. The only variable is the cursor value:
 
-```
-db_query: "SELECT c.id AS conv_id, COALESCE(c.title, c.kind) AS conv_title, m.body, m.sent_at, m.is_from_me, COALESCE(ct.name, '') AS sender_name FROM message m JOIN conversation c ON c.id = m.conversation_id LEFT JOIN contact ct ON ct.id = m.contact_id WHERE m.body != '' AND m.sent_at > '<cursor>' ORDER BY m.sent_at ASC LIMIT 500"
+```sql
+SELECT
+  c.id AS conv_id,
+  CASE
+    WHEN c.kind = 'dm' AND c.title IS NOT NULL AND c.title != ''
+      THEN c.title || '''s DMs'
+    WHEN c.kind = 'dm' THEN 'DM'
+    ELSE COALESCE(c.title, c.kind)
+  END AS conv_title,
+  m.body,
+  m.sent_at,
+  m.is_from_me,
+  COALESCE(ct.name, '') AS sender_name
+FROM message m
+JOIN conversation c ON c.id = m.conversation_id
+LEFT JOIN contact ct ON ct.id = m.contact_id
+WHERE m.body != ''
+  AND m.sent_at > '<cursor>'
+ORDER BY m.sent_at ASC
+LIMIT 500
 ```
 
 On first run (no cursor), omit `AND m.sent_at > '<cursor>'`.
@@ -83,10 +101,10 @@ For each fact, write a table row:
 Good memories (specific, durable, actionable):
 
 ```
-| 2025-06-10 | preference | Dana | prefers texts over calls, especially after 8pm | [DM](019a...) |
-| 2025-06-12 | personal_fact | Raj | lactose intolerant, switched to oat milk | [DM](019a...) |
-| 2025-07-01 | relationship_fact | Dana | wedding anniversary is July 4th | [DM](019b...) |
-| 2025-07-03 | standing_decision | Sam | never schedule meetings on Fridays | [DM](019b...) |
+| 2025-06-10 | preference | Dana | prefers texts over calls, especially after 8pm | [Dana's DMs](019a...) |
+| 2025-06-12 | personal_fact | Raj | lactose intolerant, switched to oat milk | [Raj's DMs](019a...) |
+| 2025-07-01 | relationship_fact | Dana | wedding anniversary is July 4th | [Dana's DMs](019b...) |
+| 2025-07-03 | standing_decision | Sam | never schedule meetings on Fridays | [Sam's DMs](019b...) |
 | 2025-06-20 | personal_fact | Mei | runs a pottery studio in Portland | [Group Chat](019c...) |
 | 2025-08-15 | open_loop | Raj | looking for a new apartment downtown | [Group Chat](019c...) |
 ```
@@ -107,7 +125,7 @@ Only extract facts you would tell a colleague taking over this relationship.
 **Retractions**: if a message asks to forget, remove, or stop remembering something, append a `retraction` row instead of a normal fact. The memory column should reference the original fact being retracted, prefixed with `retract:`. Do not remove or modify existing rows — extraction is append-only. Compaction will resolve the retraction later.
 
 ```
-| 2026-03-12 | retraction | Jane Doe | retract: prefers a goofier tone | [DM](019c...) |
+| 2026-03-12 | retraction | Jane Doe | retract: prefers a goofier tone | [Jane Doe's DMs](019c...) |
 ```
 
 ### Step 4. Write facts and save cursor
