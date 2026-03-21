@@ -25,6 +25,7 @@ const runnerTimeout = 20 * time.Minute
 
 type taskPromptData struct {
 	Now        string
+	ShellEnv   string
 	TokenTraps string
 	ToolDocs   string
 	Skills     string
@@ -70,8 +71,14 @@ func (r *Runner) renderPrompt(t db.Task, tools []llm.ToolDef) string {
 	loc := r.cfg.TZ()
 	now := time.Now().In(loc).Format("Monday, January 2, 2006 3:04 PM")
 
+	var shellEnv string
+	if r.cfg.Shell.DockerImage != "" {
+		shellEnv = "Docker container (Debian bookworm)"
+	}
+
 	data := taskPromptData{
 		Now:        now,
+		ShellEnv:   shellEnv,
 		TokenTraps: scanTokenTraps(r.cfg.Home),
 		ToolDocs:   buildToolDocs(tools),
 		Skills:     buildSkillDocs(r.cfg, tools),
