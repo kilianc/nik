@@ -220,6 +220,59 @@ WHERE a.id LIKE '%<short_id>' ORDER BY ao.fired_at DESC LIMIT 10;
 7. **Check logs** -- grep nik.log for the activation_id to see runtime errors, timing, retries
 8. **Alarm chain** -- if alarm-related, check alarm -> alarm_occurrence -> next_fire_at progression
 
+### Debugging duplicate messages (worked example)
+
+When nik sends the same message twice (e.g. "On it." repeated), the cause is almost always **inter-activation** (two separate activations), not intra-activation (same activation sending twice).
+
+**Step 1: Search nik.log for the duplicated text to find activation IDs and rounds.**
+
+```bash
+rg "On it" workspace/nik.log | tail -20
+```
+
+Look for two `message_reply` tool calls with different `activation_id` values close in time. The `round` field shows where in the activation the send happened. A duplicate at round=0 with no other tool calls is a strong signal -- the model immediately acked without examining what was new.
+
+**Step 2: Pull the message table for the conversation around the incident.**
+
+```sql
+SELECT m.sent_at, m.is_from_me, m.platform, m.kind,
+  CASE WHEN length(m.body) > 150 THEN substr(m.body, 1, 150) || '...' ELSE m.body END
+FROM message m
+WHERE m.conversation_id = '<conv_id>'
+  AND m.sent_at >= '<start_utc>' AND m.sent_at <= '<end_utc>'
+ORDER BY m.sent_at;
+```
+
+Build the chronological timeline: user message, task_spawned, first "On it." echo, task_reports, second "On it." echo. Identify which system events landed between the two activations.
+
+**Step 3: Confirm the activations are separate.**
+
+```sql
+SELECT id, tool_call_count, duration_ms, created_at
+FROM activation
+WHERE conversation_id = '<conv_id>'
+  AND created_at >= '<start_utc>' AND created_at <= '<end_utc>'
+ORDER BY created_at;
+```
+
+Two rows close together confirms inter-activation. One row with multiple `message_reply` tool calls would indicate intra-activation.
+
+**Step 4: Read the second activation's timeline input to see what triggered re-ack.**
+
+```sql
+SELECT ar.id, ar.round, ar.user_input, ar.reasoning_summaries
+FROM activation_round ar
+WHERE ar.activation_id = '<second_act_id>' AND ar.round = 0;
+```
+
+Search the `user_input` for `### New` -- this is what the model saw as fresh content. If `### New` contains only system events (task_reports, task_spawned) and/or `YOU` messages, the model should have called `message_noop` but the `### New` label compelled it to respond.
+
+**Step 5: Read the model's reasoning to confirm the misinterpretation.**
+
+The `reasoning_summaries` column shows the model's chain of thought. Look for signs it re-processed the original user request despite it being in `### Already handled`.
+
+**Root cause pattern:** `markRead` advances `last_read_at` at the end of `timeline.Get()`. Tool side effects (task_spawned, nik's echo, worker task_reports) are stored with timestamps after that mark. On the next tick, `check()` sees them as new, fires a second activation, and the model sees system-only content under `### New` -- which is enough to make it re-ack instead of noop.
+
 ## Git
 
 `.gitignore` uses ignore-all approach: `*` ignores everything, then specific patterns are un-ignored (`!*.go`, `!go.mod`, `!go.sum`, `!*.sql`, `!*.yaml`, `!*.md`, `!Makefile`, `!.gitignore`, `!.config.example.yaml`). `workspace/` is blanket-ignored (contains runtime artifacts and secrets). Use `git add -f` if a new file type needs tracking.
