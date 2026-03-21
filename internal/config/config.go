@@ -68,6 +68,13 @@ type Config struct {
 	BannedWords []string `yaml:"banned_words"`
 }
 
+func (c Config) ShellHome() string {
+	if c.Shell.DockerImage != "" {
+		return "/workspace"
+	}
+	return c.Home
+}
+
 func (c Config) LogPath() string {
 	return filepath.Join(c.Home, "nik.log")
 }

@@ -268,7 +268,7 @@ func writeFileHandler(home string) llm.ToolExecutor {
 
 		return llm.ToolResult(map[string]any{
 			"ok":    true,
-			"path":  filepath.Join(home, args.Path),
+			"path":  args.Path,
 			"bytes": size,
 		}), nil
 	}
