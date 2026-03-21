@@ -1,3 +1,4 @@
+-- people nik knows (name, nicknames, emails, whatsapp_ids, phone_numbers, timezone, location, notes)
 CREATE TABLE IF NOT EXISTS contact (
   id              TEXT PRIMARY KEY,
   name            TEXT NOT NULL DEFAULT '',
@@ -21,6 +22,7 @@ CREATE TABLE IF NOT EXISTS contact (
   CHECK (IS_ISO8601_MS(updated_at))
 );
 
+-- chat threads (platform, kind, title, topic, participants)
 CREATE TABLE IF NOT EXISTS conversation (
   id                       TEXT PRIMARY KEY,
   platform                 TEXT NOT NULL CHECK(platform IN ('whatsapp')),
@@ -43,6 +45,7 @@ CREATE TABLE IF NOT EXISTS conversation (
   UNIQUE(platform, external_conversation_id)
 );
 
+-- links contacts to conversations (display_name)
 CREATE TABLE IF NOT EXISTS conversation_participant (
   id              TEXT PRIMARY KEY,
   conversation_id TEXT NOT NULL REFERENCES conversation(id),
@@ -55,6 +58,7 @@ CREATE TABLE IF NOT EXISTS conversation_participant (
   UNIQUE(conversation_id, contact_id)
 );
 
+-- all messages (conversation_id, contact_id, platform, kind, body, sent_at)
 CREATE TABLE IF NOT EXISTS message (
   id                       TEXT PRIMARY KEY,
   conversation_id          TEXT NOT NULL REFERENCES conversation(id),
@@ -91,6 +95,7 @@ CREATE TABLE IF NOT EXISTS message (
   UNIQUE(platform, external_message_id)
 );
 
+-- attachments (mime_type, local_path, describe_text, transcript_text)
 CREATE TABLE IF NOT EXISTS media (
   id              TEXT PRIMARY KEY,
   mime_type       TEXT NOT NULL,
@@ -108,6 +113,7 @@ CREATE TABLE IF NOT EXISTS media (
   CHECK (IS_ISO8601_MS(updated_at))
 );
 
+-- links messages to media
 CREATE TABLE IF NOT EXISTS message_media (
   id          TEXT PRIMARY KEY,
   message_id  TEXT NOT NULL UNIQUE REFERENCES message(id),
@@ -116,6 +122,7 @@ CREATE TABLE IF NOT EXISTS message_media (
   CHECK (IS_ISO8601_MS(created_at))
 );
 
+-- scheduled reminders (goal, recurrence, next_fire_at)
 CREATE TABLE IF NOT EXISTS alarm (
   id                     TEXT PRIMARY KEY,
   origin_contact_id      TEXT REFERENCES contact(id),
@@ -133,6 +140,7 @@ CREATE TABLE IF NOT EXISTS alarm (
   CHECK (IS_ISO8601_MS(created_at))
 );
 
+-- fired alarm instances (alarm_id, note, fired_at)
 CREATE TABLE IF NOT EXISTS alarm_occurrence (
   id       TEXT PRIMARY KEY,
   alarm_id TEXT NOT NULL REFERENCES alarm(id),
@@ -141,6 +149,7 @@ CREATE TABLE IF NOT EXISTS alarm_occurrence (
   CHECK (IS_ISO8601_MS(fired_at))
 );
 
+-- brain/worker runs (conversation_id, task_id, model, tokens, cost, duration)
 CREATE TABLE IF NOT EXISTS activation (
   id                         TEXT PRIMARY KEY,
   conversation_id            TEXT NOT NULL REFERENCES conversation(id),
@@ -167,6 +176,7 @@ CREATE TABLE IF NOT EXISTS activation (
   CHECK (IS_ISO8601_MS(created_at))
 );
 
+-- per-round LLM IO within an activation
 CREATE TABLE IF NOT EXISTS activation_round (
   id                  TEXT PRIMARY KEY,
   activation_id       TEXT NOT NULL REFERENCES activation(id),
@@ -178,6 +188,7 @@ CREATE TABLE IF NOT EXISTS activation_round (
   CHECK (IS_ISO8601_MS(created_at))
 );
 
+-- individual tool invocations within activations
 CREATE TABLE IF NOT EXISTS tool_call (
   id                  TEXT PRIMARY KEY,
   activation_id       TEXT NOT NULL REFERENCES activation(id),
@@ -191,6 +202,7 @@ CREATE TABLE IF NOT EXISTS tool_call (
   CHECK (IS_ISO8601_MS(created_at))
 );
 
+-- spawned work units (goal, plan, status, thinking level)
 CREATE TABLE IF NOT EXISTS task (
   id                TEXT PRIMARY KEY,
   conversation_id   TEXT NOT NULL REFERENCES conversation(id),
@@ -212,6 +224,7 @@ CREATE TABLE IF NOT EXISTS task (
   CHECK (last_report_at IS NULL OR IS_ISO8601_MS(last_report_at))
 );
 
+-- progress/completion reports from workers
 CREATE TABLE IF NOT EXISTS task_report (
   id          TEXT PRIMARY KEY,
   task_id     TEXT NOT NULL REFERENCES task(id),
@@ -221,6 +234,7 @@ CREATE TABLE IF NOT EXISTS task_report (
   CHECK (IS_ISO8601_MS(created_at))
 );
 
+-- persistent shell sessions (command, output, exit_code, alive)
 CREATE TABLE IF NOT EXISTS shell_session (
   id            TEXT PRIMARY KEY,
   activation_id TEXT NOT NULL REFERENCES activation(id),
@@ -235,6 +249,7 @@ CREATE TABLE IF NOT EXISTS shell_session (
   CHECK (IS_ISO8601_MS(updated_at))
 );
 
+-- registered skills (name, status, content_hash)
 CREATE TABLE IF NOT EXISTS skill (
   id            TEXT PRIMARY KEY,
   name          TEXT NOT NULL UNIQUE,
@@ -247,6 +262,7 @@ CREATE TABLE IF NOT EXISTS skill (
   CHECK (IS_ISO8601_MS(updated_at))
 );
 
+-- skill change log (added, removed, changed)
 CREATE TABLE IF NOT EXISTS skill_event (
   id           TEXT PRIMARY KEY,
   name         TEXT NOT NULL,
@@ -257,6 +273,7 @@ CREATE TABLE IF NOT EXISTS skill_event (
   CHECK (IS_ISO8601_MS(created_at))
 );
 
+-- critic evaluations of completed tasks
 CREATE TABLE IF NOT EXISTS task_assessment (
   id                        TEXT PRIMARY KEY,
   task_id                   TEXT NOT NULL UNIQUE REFERENCES task(id),

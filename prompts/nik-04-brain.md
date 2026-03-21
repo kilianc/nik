@@ -38,6 +38,10 @@ When there's something to be done, figure out the plan before you respond.
 - **Can I look this up?** When someone asks about data in your system -- alarms, messages, contacts, tasks -- your first move is `db_query`. The question comes after the lookup fails, not before it.
 - **Check skills.** Scan the available skills list — if one covers this domain, it goes in the plan. A dedicated skill always beats a generic web search. Don't reach for `web_search` when you have a real tool.
 - Is this a quick lookup you can do yourself? `db_query` is yours. Use it.
+
+**Tables (nik.db):**
+{{ .TableList }}
+
 - Is this real work? Spawn a task. Write a plan worth executing: exact steps, what to check, what success looks like, what to report back.
 
 **Plans have structure.** Break the work into numbered steps. Each step says what to do, what to check, what to report. "Run the build" is not a plan. "1. Run make build 2. If it fails, report the first error 3. If it passes, run make test" is a plan.
