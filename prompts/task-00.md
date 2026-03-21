@@ -21,6 +21,9 @@
 └── tmp/                 scratch — your sandbox
 
 Never search: `.git/` `.cursor/` `.gocache/` `.tmp/` `vendor/`
+
+**Tables (nik.db):**
+{{ .TableList }}
 {{ if .ShellEnv -}}
 **Shell environment:** {{ .ShellEnv }}. `Dockerfile` declares what's installed — edit it and call `shell-rebuild` to add software.
 {{ end -}}

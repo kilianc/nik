@@ -10,6 +10,7 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/skills"
 )
 
@@ -22,6 +23,7 @@ type promptData struct {
 	Recall          string
 	WorkerTools     string
 	NikTools        string
+	TableList       string
 	BannedWords     []string
 	PreloadedSkills []skills.PreloadedSkill
 	AvailableSkills []skillSummaryData
@@ -179,6 +181,7 @@ func (b *Brain) buildPromptData(now time.Time, recall string) promptData {
 	}
 
 	data.BannedWords = b.cfg.BannedWords
+	data.TableList = db.TableList()
 
 	homeRoot, err := os.OpenRoot(b.cfg.Home)
 	if err != nil {
