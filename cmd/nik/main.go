@@ -221,13 +221,11 @@ func main() {
 	taskRunner := task.NewRunner(cfg, taskLLMClient, taskSvc, taskTools)
 	taskRunner.SetRecorder(recorder)
 
-	if cfg.Models.Critic.Enabled && cfg.OpenAIKey != "" {
-		criticOpts := []llm.ClientOption{
-			llm.WithAPIKey(cfg.OpenAIKey),
-			llm.WithReasoningEffort(&cfg.Models.Critic.ReasoningEffort),
-			llm.WithVerbosity(&cfg.Models.Critic.Verbosity),
-			llm.WithJSONOutput(),
-		}
+	if cfg.Models.Critic.Enabled {
+		criticOpts := append([]llm.ClientOption{}, authOpts...)
+		criticOpts = append(criticOpts, llm.WithReasoningEffort(&cfg.Models.Critic.ReasoningEffort))
+		criticOpts = append(criticOpts, llm.WithVerbosity(&cfg.Models.Critic.Verbosity))
+		criticOpts = append(criticOpts, llm.WithJSONOutput())
 		criticClient := llm.NewClient(&cfg.Models.Critic.Model, criticOpts...)
 		taskRunner.SetCriticLLM(criticClient)
 		slog.Info("critic client ready", "model", cfg.Models.Critic.Model, "enabled", cfg.Models.Critic.Enabled)
