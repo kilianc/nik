@@ -38,6 +38,10 @@ run-loop:
 run-replay: clean
 	cd $(NIK_HOME) && go run ../cmd/nik/main.go -wapp-replay-history wapp_history.pb64
 
+.PHONY: migrate
+migrate:
+	@go run ./tools/migrate -db $(NIK_HOME)/nik.db $(ARGS)
+
 .PHONY: schema-diff
 schema-diff:
 	@go run ./tools/schemadiff -db $(NIK_HOME)/nik.db
