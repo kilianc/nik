@@ -249,10 +249,16 @@ type CompletionResult struct {
 }
 
 const (
-	maxRounds       = 75
-	loopThreshold   = 4
-	maxRetries      = 5
-	maxHistoryPairs = 20
+	maxRounds     = 75
+	loopThreshold = 4
+	maxRetries    = 5
+
+	// pruning budget: reserve ~50% of context window for tool history,
+	// assume ~8k tokens per call/output pair (p99 from real activations).
+	historyBudgetFraction = 0.50
+	estTokensPerPair      = 8000
+	minHistoryPairs       = 10
+	maxHistoryPairs       = 40
 )
 
 const jsonObjectInputHint = "Return a single json object only."
@@ -585,10 +591,11 @@ func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instru
 			}
 		}
 
+		pairLimit := maxPairsForModel(*c.model)
 		before := len(items)
-		items = pruneItems(items, maxHistoryPairs)
+		items = pruneItems(items, pairLimit)
 		if len(items) < before {
-			slog.Info("pruned tool history", "pkg", "llm", "round", round, "dropped_items", before-len(items))
+			slog.Info("pruned tool history", "pkg", "llm", "round", round, "dropped_items", before-len(items), "pair_limit", pairLimit)
 		}
 	}
 }
@@ -619,6 +626,23 @@ func ensureJSONInput(content string, jsonOutput bool) string {
 	}
 
 	return jsonObjectInputHint
+}
+
+func maxPairsForModel(model string) int {
+	ctx, ok := ModelContextWindow(model)
+	if !ok {
+		return maxHistoryPairs
+	}
+
+	pairs := int(float64(ctx) * historyBudgetFraction / estTokensPerPair)
+
+	if pairs < minHistoryPairs {
+		return minHistoryPairs
+	}
+	if pairs > maxHistoryPairs {
+		return maxHistoryPairs
+	}
+	return pairs
 }
 
 func pruneItems(items responses.ResponseInputParam, maxPairs int) responses.ResponseInputParam {

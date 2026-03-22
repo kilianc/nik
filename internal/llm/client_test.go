@@ -355,6 +355,32 @@ func TestPruneItems(t *testing.T) {
 	})
 }
 
+func TestMaxPairsForModel(t *testing.T) {
+	tests := []struct {
+		model string
+		want  int
+	}{
+		{"gpt-5.4", maxHistoryPairs},
+		{"gpt-4.1", maxHistoryPairs},
+		{"gpt-5.4-mini", 25},
+		{"gpt-5.3-codex", 25},
+		{"gpt-4o", minHistoryPairs},
+		{"o1-mini", minHistoryPairs},
+		{"o3", 12},
+		{"unknown-model", maxHistoryPairs},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			got := maxPairsForModel(tt.model)
+			if got != tt.want {
+				ctx, _ := ModelContextWindow(tt.model)
+				t.Fatalf("maxPairsForModel(%q) = %d, want %d (context_window=%d)", tt.model, got, tt.want, ctx)
+			}
+		})
+	}
+}
+
 func TestIsServerError(t *testing.T) {
 	tests := []struct {
 		name string
