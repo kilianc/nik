@@ -74,7 +74,7 @@ func shiftHeadings(n int, content string) string {
 	return b.String()
 }
 
-func (b *Brain) loadInstructions(now time.Time, recall string, retry bool) (string, error) {
+func (b *Brain) loadInstructions(now time.Time, recall string) (string, error) {
 	promptRoot, err := os.OpenRoot(b.cfg.PromptsPath())
 	if err != nil {
 		return "", fmt.Errorf("open prompts root: %w", err)
@@ -116,18 +116,23 @@ func (b *Brain) loadInstructions(now time.Time, recall string, retry bool) (stri
 		return "", fmt.Errorf("execute prompt template: %w", err)
 	}
 
-	result := htmlCommentRe.ReplaceAllString(buf.String(), "")
+	return htmlCommentRe.ReplaceAllString(buf.String(), ""), nil
+}
 
-	if retry {
-		nudge, nudgeErr := readFromRoot(promptRoot, "nik-05-retry.md")
-		if nudgeErr != nil {
-			slog.Warn("load retry nudge", "pkg", "brain", "error", nudgeErr)
-		} else {
-			result += "\n\n" + string(nudge)
-		}
+func (b *Brain) loadNudge() string {
+	promptRoot, err := os.OpenRoot(b.cfg.PromptsPath())
+	if err != nil {
+		slog.Warn("load retry nudge", "pkg", "brain", "error", err)
+		return ""
 	}
+	defer promptRoot.Close()
 
-	return result, nil
+	data, err := readFromRoot(promptRoot, "nik-05-retry.md")
+	if err != nil {
+		slog.Warn("load retry nudge", "pkg", "brain", "error", err)
+		return ""
+	}
+	return string(data)
 }
 
 func readFromRoot(root *os.Root, name string) ([]byte, error) {

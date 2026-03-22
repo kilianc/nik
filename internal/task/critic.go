@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/kciuffolo/nik/internal/db"
+	"github.com/kciuffolo/nik/internal/id"
 	"github.com/kciuffolo/nik/internal/llm"
 )
 
@@ -46,9 +47,12 @@ func (r *Runner) RunCritic(ctx context.Context, t db.Task) {
 	ctx, cancel := context.WithTimeout(ctx, criticTimeout)
 	defer cancel()
 
+	actID := id.V7()
+
 	ctx = context.WithValue(ctx, "meta", map[string]string{
 		"conversation_id": t.ConversationID,
 		"task_id":         t.ID,
+		"activation_id":   actID,
 		"sources":         `["critic"]`,
 	})
 
@@ -63,29 +67,31 @@ func (r *Runner) RunCritic(ctx context.Context, t db.Task) {
 
 	instructions := r.renderCriticPrompt(t, toolCallsStr, reportsStr, skillsStr)
 
-	actID, ch := r.criticLLM.Complete(ctx, instructions, llm.StaticInput(""), nil, nil, llm.WithRecordFullInput())
-	result := <-ch
+	act := llm.NewActivation(r.criticLLM, llm.NoopRecorder{}, instructions, nil)
+	act.SetInput("")
 
-	if result.Err != nil {
-		slog.Warn("critic failed", "pkg", "task", "task_id", t.ID, "error", result.Err)
+	result, err := act.Round(ctx)
+	if err != nil {
+		slog.Warn("critic failed", "pkg", "task", "task_id", t.ID, "error", err)
 		return
 	}
 
-	assessment, err := parseCriticOutput(result.Output)
-	if err != nil {
-		slog.Warn("critic parse failed, retrying", "pkg", "task", "task_id", t.ID, "error", err)
+	assessment, parseErr := parseCriticOutput(result.Text)
+	if parseErr != nil {
+		slog.Warn("critic parse failed, retrying", "pkg", "task", "task_id", t.ID, "error", parseErr)
 
-		actID, ch = r.criticLLM.Complete(ctx, instructions, llm.StaticInput(criticRetryInput), nil, nil)
-		result = <-ch
+		act.AppendAssistantText(result.Text)
+		act.AppendUserMessage(criticRetryInput)
 
-		if result.Err != nil {
-			slog.Warn("critic retry failed", "pkg", "task", "task_id", t.ID, "error", result.Err)
+		result, err = act.Round(ctx)
+		if err != nil {
+			slog.Warn("critic retry failed", "pkg", "task", "task_id", t.ID, "error", err)
 			return
 		}
 
-		assessment, err = parseCriticOutput(result.Output)
-		if err != nil {
-			slog.Warn("critic parse failed after retry", "pkg", "task", "task_id", t.ID, "error", err)
+		assessment, parseErr = parseCriticOutput(result.Text)
+		if parseErr != nil {
+			slog.Warn("critic parse failed after retry", "pkg", "task", "task_id", t.ID, "error", parseErr)
 			return
 		}
 	}

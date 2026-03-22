@@ -18,7 +18,7 @@ func NewRecorder(conn *sql.DB) *Recorder {
 	return &Recorder{conn: conn}
 }
 
-func (r *Recorder) OnStart(ctx context.Context, model string) {
+func (r *Recorder) Start(ctx context.Context, model string) {
 	meta := metaFromCtx(ctx)
 	actID := meta["activation_id"]
 	if actID == "" {
@@ -38,7 +38,7 @@ func (r *Recorder) OnStart(ctx context.Context, model string) {
 	}
 }
 
-func (r *Recorder) OnRound(ctx context.Context, round int, userInput string, modelOutput string, reasoningSummaries []string) string {
+func (r *Recorder) Round(ctx context.Context, round, attempt int, userInput string, modelOutput string, reasoningSummaries []string) string {
 	meta := metaFromCtx(ctx)
 	actID := meta["activation_id"]
 	if actID == "" {
@@ -60,7 +60,7 @@ func (r *Recorder) OnRound(ctx context.Context, round int, userInput string, mod
 	return roundID
 }
 
-func (r *Recorder) OnToolCall(ctx context.Context, activationRoundID string, name string, args string, result string, duration time.Duration, isError bool) {
+func (r *Recorder) ToolCall(ctx context.Context, roundID string, call llm.ToolCall, result llm.ExecResult) {
 	meta := metaFromCtx(ctx)
 	actID := meta["activation_id"]
 	if actID == "" {
@@ -69,63 +69,46 @@ func (r *Recorder) OnToolCall(ctx context.Context, activationRoundID string, nam
 
 	err := db.ToolCallInsertOne(ctx, r.conn, db.ToolCallInsertParams{
 		ActivationID:      actID,
-		ActivationRoundID: activationRoundID,
-		Name:              name,
-		Input:             args,
-		Output:            result,
-		Duration:          duration,
-		IsError:           isError,
+		ActivationRoundID: roundID,
+		Name:              call.Name,
+		Input:             call.Arguments,
+		Output:            result.Output,
+		Duration:          result.Elapsed,
+		IsError:           result.IsErr,
 	})
 	if err != nil {
 		slog.Warn("record tool call", "pkg", "stats", "activation_id", actID, "error", err)
 	}
 }
 
-func (r *Recorder) OnFinish(ctx context.Context, model, reasoningEffort string, usage llm.Usage, rounds llm.RoundStats, toolCalls int, durationMS int64, output string, processErr error) {
+func (r *Recorder) Finish(ctx context.Context, stats llm.ActivationStats) {
 	meta := metaFromCtx(ctx)
 	actID := meta["activation_id"]
 	if actID == "" {
 		return
-	}
-
-	var errText string
-	if processErr != nil {
-		errText = processErr.Error()
 	}
 
 	ctx = context.WithoutCancel(ctx)
 
 	err := db.ActivationUpdateStats(ctx, r.conn, actID, db.ActivationStatsUpdate{
-		ReasoningEffort: reasoningEffort,
-		InputTokens:     usage.InputTokens,
-		OutputTokens:    usage.OutputTokens,
-		TotalTokens:     usage.TotalTokens,
-		CachedTokens:    usage.CachedTokens,
-		ReasoningTokens: usage.ReasoningTokens,
-		CostUSD:         llm.ComputeCost(model, usage.InputTokens, usage.OutputTokens, usage.CachedTokens),
-		RoundCount:      rounds.RoundCount,
-		MaxInputTokens:  rounds.MaxInputTokensPerRound,
-		MaxTotalTokens:  rounds.MaxTotalTokensPerRound,
-		ToolCallCount:   toolCalls,
-		DurationMS:      durationMS,
-		Error:           errText,
-		Output:          output,
+		ReasoningEffort: stats.ReasoningEffort,
+		InputTokens:     stats.Usage.InputTokens,
+		OutputTokens:    stats.Usage.OutputTokens,
+		TotalTokens:     stats.Usage.TotalTokens,
+		CachedTokens:    stats.Usage.CachedTokens,
+		ReasoningTokens: stats.Usage.ReasoningTokens,
+		CostUSD:         llm.ComputeCost(stats.Model, stats.Usage.InputTokens, stats.Usage.OutputTokens, stats.Usage.CachedTokens),
+		RoundCount:      stats.Rounds.RoundCount,
+		MaxInputTokens:  stats.Rounds.MaxInputTokensPerRound,
+		MaxTotalTokens:  stats.Rounds.MaxTotalTokensPerRound,
+		ToolCallCount:   stats.ToolCallCount,
+		DurationMS:      stats.DurationMS,
 	})
 	if err != nil {
 		slog.Warn("update activation stats", "pkg", "stats", "activation_id", actID, "error", err)
 	}
-}
 
-func (r *Recorder) OnDetail(ctx context.Context, instructions string, tools []string) {
-	meta := metaFromCtx(ctx)
-	actID := meta["activation_id"]
-	if actID == "" {
-		return
-	}
-
-	ctx = context.WithoutCancel(ctx)
-
-	err := db.ActivationUpdateDetail(ctx, r.conn, actID, instructions, tools)
+	err = db.ActivationUpdateDetail(ctx, r.conn, actID, stats.Instructions, stats.Tools)
 	if err != nil {
 		slog.Warn("update activation detail", "pkg", "stats", "activation_id", actID, "error", err)
 	}
@@ -139,4 +122,4 @@ func metaFromCtx(ctx context.Context) map[string]string {
 	return meta
 }
 
-var _ llm.CompletionObserver = (*Recorder)(nil)
+var _ llm.ActivationRecorder = (*Recorder)(nil)

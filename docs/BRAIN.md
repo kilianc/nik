@@ -40,7 +40,7 @@ wakes up again.
   │          ├── build prompt                        │
   │          └── LLM loop (continuous steering)      │
   │               ├── tool calls → execute → next    │
-  │               └── terminal tool → done           │
+  │               └── terminal tool + empty round → done │
   │                                                  │
   └──────────────────────────────────────────────────┘
 ```
@@ -141,26 +141,32 @@ sees a potentially different timeline each round (new messages may have arrived,
 its own replies now appear as `YOU` messages), but its tool call history
 accumulates and eventually gets pruned.
 
-**Files:** `internal/llm/client.go` (`completeLoop`, `pruneItems`, `maxPairsForModel`)
+**Files:** `internal/brain/brain.go` (`think`), `internal/llm/activation.go` (`Prune`, `maxPairsForModel`)
 
 ## Terminal tools and the end of an activation
 
-An activation runs until the model calls a terminal tool: `message_send`,
-`message_noop`, or `message_react`. These signal "I'm done with this
-conversation for now." The brain checks the LLM result for any terminal call
-and, if found, ends the activation.
+Terminal tools (`message_send`, `message_noop`, `message_react`) are tools
+that can validly conclude an activation. Calling one does not immediately end
+the loop — it marks the round as a valid stopping point. The brain tracks a
+`concluded` flag across rounds:
 
-If the model produces zero tool calls (pure text, no action), the brain retries
-once with a nudge prompt (`nik-05-retry.md`) appended to the instructions. This
-nudge warns about common failure modes and insists on at least one tool call. If
-the retry also produces no terminal call, the activation fails with an error.
+1. Model calls a terminal tool → execute → re-read input → next round.
+2. Next round produces tool calls → continue (supports multi-message activations).
+3. Next round produces zero tool calls → clean exit (the model confirmed it's done).
 
-**Worker nudge (onIdle):** task workers have an analogous mechanism. If a
-worker's LLM completion produces text with no tool calls (meaning it finished
-without calling `task_report`), a nudge prompt (`task-01-nudge.md`) is injected
-once as a follow-up user message to remind it to report.
+If the model produces zero tool calls without a prior terminal tool, the brain
+injects `nik-05-retry.md` as a follow-up user message (one shot). This nudge
+warns about common failure modes and insists on at least one tool call. If the
+nudge also produces no tool calls, the activation fails.
 
-**Files:** `internal/brain/brain.go` (`think`, `hasTerminalCall`),
+**Worker nudge:** task workers have an analogous mechanism. If a worker produces
+text with no tool calls (meaning it finished without calling `task_report`), it
+checks whether a final report already exists. If not, `task-01-nudge.md` is
+injected once. If the worker still produces no tool calls, the task is resolved
+based on the last report status (or fails if no report exists).
+
+**Files:** `internal/brain/brain.go` (`think`, `terminalTools`),
+`internal/task/runner.go` (`runLoop`),
 `prompts/nik-05-retry.md`, `prompts/task-01-nudge.md`
 
 ## Self-reactivation: continuity across activations
@@ -276,9 +282,6 @@ The system prompt is assembled from template files:
 - **Hooks** allow model-specific prompt patches. Markdown files in
   `workspace/prompts/` with YAML frontmatter specify target models, section, and
   mode (append or replace). Applied per-section before template parsing.
-- **Retry nudge:** on retry, `nik-05-retry.md` is appended. It warns about
-  zero-tool-call failures but does NOT fire when the model produced a tool call
-  (including noop — this is a known gap).
 
 **Files:** `internal/brain/prompt.go`, `internal/brain/hooks.go`, `prompts/*.md`
 
@@ -322,24 +325,47 @@ tick
         activate
           consume timeline ── cache snapshot ── markRead(now)
           recall(snapshot) ── relevant memories
-          build prompt(now, recall, retry=false)
+          build prompt(now, recall)
+          create llm.Activation
 
-          completeLoop (continuous steering):
+          brain loop (continuous steering):
             round 0: user msg = cached snapshot
             round 1+: user msg = fresh timeline read ── markRead(now)
             each round:
-              API call ── model output
-              tool calls? ── execute in parallel ── append to history
-                             prune if >20 pairs ── next round
-              no tool calls? ── return text
-                                (activation ends or onIdle nudge fires once)
-
-          terminal tool call (reply/noop/react)? ── done
-          no terminal call? ── retry with nudge prompt ── fresh completeLoop
-          still no terminal call? ── error
+              session.Round ── model output
+              API error? ── retry up to 3× with backoff, else fail
+              tool calls? ── execute in parallel ── add results to session
+                             track concluded flag
+                             prune if >limit ── refresh input ── next round
+              no tool calls? ── concluded? ── done
+                             else nudge once (nik-05-retry.md), else fail
+              identical tool calls 4× in a row? ── fail (loop detection)
 
         release conversation lock
 ```
+
+## Ownership boundaries: llm vs callers
+
+The `llm` package is a dumb API client. It manages protocol state (the items
+array, model params, streaming, pruning) but makes zero decisions about when to
+stop, when to retry, or what to do with results. One call in, one result out.
+
+The `brain` and `task runner` own the round loop and all policy:
+
+- **5xx / transient error retry** with exponential backoff (up to 3 attempts)
+- **Loop detection**: consecutive identical tool call signatures, fail after 4
+- **Idle nudge**: brain loads `nik-05-retry.md`, runner loads `task-01-nudge.md`,
+  injected as user messages — one shot
+- **Terminal tool detection**: brain tracks `concluded` flag; activation
+  ends when the round after a terminal tool produces zero tool calls
+- **Activation ID**: generated by the caller, passed via context metadata
+
+The `llm.Activation` type wraps the items array and provides: `SetInput` (replace
+items[0]), `Round` (single API call, no retries), `AddToolResult`, `Prune`,
+`Usage`, `AppendAssistantText`, `AppendUserMessage`.
+
+**Files:** `internal/llm/activation.go`, `internal/brain/brain.go` (`think`),
+`internal/task/runner.go` (`runLoop`)
 
 ## Known issues
 
@@ -357,14 +383,6 @@ is that messages appear as "New" exactly once. Deferring markRead violates that.
 The fix for the noop-buries-messages problem must preserve at-most-once; it
 cannot move markRead later in the pipeline.
 
-**Retry nudge doesn't fire on noop** — noop counts as a tool call, so the
-retry prompt never triggers. If the model noops when it should act, there's no
-second chance within the activation.
-
-**Noop scrubbing** (mitigation for both issues above) — `WithScrubTools` strips
-noop tool calls from the `items` array after execution. When continuous steering
-re-reads the timeline and finds new messages, the model sees a clean context
-with no prior noop anchoring. The noop is still recorded in `history` (so
-`hasTerminalCall` finds it and the activation terminates normally), but the
-model's view is reset to just the user message. This prevents the anchoring
-failure where a round-0 noop biased the model toward inaction in round 1.
+**Noop exits cleanly** — `message_noop` is a terminal tool. When nik calls it,
+the `concluded` flag is set. On the next round, if the model produces zero
+tool calls, the activation ends with a clean exit (no nudge, no error).
