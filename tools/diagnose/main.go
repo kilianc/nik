@@ -252,7 +252,7 @@ func loadRounds(ctx context.Context, conn *sql.DB, activationID, messageBody str
 		if messageBody != "" {
 			r.MessagePresent = strings.Contains(r.UserInput, messageBody)
 			if r.MessagePresent {
-				newIdx := strings.Index(r.UserInput, "### New")
+				newIdx := strings.Index(r.UserInput, "### New messages")
 				if newIdx >= 0 {
 					r.MessageInNew = strings.Contains(r.UserInput[newIdx:], messageBody)
 				}
@@ -398,7 +398,7 @@ func classify(msg messageRow, activations []activationRow) diagnosisResult {
 	if surfaced {
 		return diagnosisResult{
 			Category: "SURFACED_HANDLED",
-			Summary:  "Message present in timeline but under Already handled.",
+			Summary:  "Message present in timeline but under Old messages.",
 		}
 	}
 
@@ -794,9 +794,9 @@ func printReport(msg messageRow, conv conversationRow, contactName string, activ
 		for _, r := range a.Rounds {
 			presence := "message NOT present"
 			if r.MessageInNew {
-				presence = "message in ### New"
+				presence = "message in New messages"
 			} else if r.MessagePresent {
-				presence = "message in Already handled"
+				presence = "message in Old messages"
 			}
 
 			tools := "(no tool calls)"
