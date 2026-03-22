@@ -10,72 +10,99 @@ Nik (Noetic Intelligence Kernel) is an autonomous personal AI that lives on What
 
 ## The Brain Loop
 
-The brain is the core of the system. It's a polling loop that checks for things to do and handles them.
+The brain is a polling loop. Every 2 seconds it checks for new events and handles them.
 
 ```
 Awake(ctx, 2s)
 │
 ├─ perceive
-│   ├─ for each DataSource → Check(ctx)
-│   │   └─ returns []DataSourceOutput (lines of context + metadata)
+│   ├─ cfg.ReloadIfChanged()
+│   ├─ run reflexes (fire alarms, check stale tasks, reap shells, ...)
+│   ├─ sensor.Check(ctx) → []Stimulus
 │   │
-│   └─ for each output
-│       ├─ skip if conversation already active (dedup)
-│       └─ go activate(ctx, output)
-│           ├─ Processing callback (e.g. mark read)
-│           ├─ think
-│           │   ├─ loadInstructions (prompt + skills + soul + time)
-│           │   ├─ join input lines
-│           │   └─ llm.Complete (loop: completion → tool calls → execute → repeat)
-│           └─ Processed callback (e.g. mark alarm fired)
+│   └─ for each stimulus
+│       ├─ skip if conversation already claimed (dedup)
+│       └─ go activate(ctx, stimulus)
+│           └─ think(ctx, getInput)
+│               ├─ getInput() → sensor.Read(convID) → rendered timeline
+│               ├─ recall(ctx, input) → relevant memories
+│               ├─ loadInstructions(now, recall)
+│               ├─ llm.NewActivation(instructions, tools)
+│               │
+│               └─ round loop
+│                   ├─ act.Round(ctx) → RoundResult
+│                   ├─ transient error? → retry (up to 3)
+│                   ├─ no tool calls? → nudge once, then fail
+│                   ├─ loop detected (4 identical rounds)? → fail
+│                   ├─ execute tools (parallel)
+│                   ├─ terminal tool? (message_send/noop/react) → mark concluded
+│                   ├─ act.Prune() → trim old tool pairs if context too large
+│                   └─ act.SetInput(getInput()) → re-read timeline (continuous steering)
 │
 └─ (repeat every 2s until ctx cancelled)
 ```
 
-Every 2 seconds the brain calls `Check()` on each registered data source. Each source returns zero or more outputs -- chunks of context with metadata like `conversation_id`. For each output, the brain spawns a goroutine (an activation): it loads the system prompt (personality + preloaded skills + soul), concatenates the input, and thinks -- which under the hood means calling `llm.Complete`. The LLM can make tool calls (reply, set alarms, run shell commands), and each result feeds back into the completion loop until the model is done.
+Every tick, the brain reloads config, runs all reflexes, then asks the sensor for new stimuli. The sensor (`Timeline`) checks each allowed conversation for events newer than the read marker. For each stimulus, the brain claims the conversation (preventing concurrent activations) and spawns a goroutine.
 
-One activation = one shot. There are no follow-up turns. When the model returns, it's over. This constraint forces the model to do all its work -- searching, thinking, replying -- in a single burst.
+Inside the goroutine, `think` reads the timeline, runs recall (LLM-filtered memories), loads instructions (base prompt + identity + conversation rules + skills + brain waves + soul), and enters the round loop. Each round calls the LLM, executes any tool calls in parallel, then re-reads the timeline so the model sees its own side effects. The loop ends when the model calls a terminal tool (`message_send`, `message_noop`, or `message_react`).
+
+One activation = one conversation. The model does all its work -- perceiving, planning, acting -- in a single burst of rounds. When the terminal tool fires, it's over.
 
 ```mermaid
 flowchart TD
     Awake["Awake (polling loop)"] --> Tick
 
     subgraph perceiveStep [Perceive]
-        CheckSources["Check each DataSource"] --> Outputs["Collect DataSourceOutputs"]
-        Outputs --> Dedup{"Already\nactive?"}
+        Reload["cfg.ReloadIfChanged()"] --> Reflexes["Run reflexes"]
+        Reflexes --> Check["sensor.Check(ctx)"]
+        Check --> Dedup{"Conversation\nclaimed?"}
         Dedup -- yes --> Skip[Skip]
-        Dedup -- no --> Activate["Activate"]
+        Dedup -- no --> Activate["go activate"]
     end
 
-    Activate --> Processing["Processing callback"]
-    Processing --> LoadPrompt["Load instructions\n(prompt + skills + soul)"]
-    LoadPrompt --> ThinkStep["think"]
+    Activate --> ReadTimeline["sensor.Read(convID)"]
+    ReadTimeline --> Recall["recall(ctx, input)"]
+    Recall --> LoadPrompt["loadInstructions\n(prompt + skills + soul)"]
+    LoadPrompt --> RoundLoop
 
-    subgraph completeLoop [LLM Complete Loop]
-        ThinkStep --> LLM["LLM completion"]
-        LLM --> ToolCalls{"Tool calls?"}
-        ToolCalls -- yes --> Exec["Execute tools"]
-        Exec --> ThinkStep
-        ToolCalls -- no --> Done["Return output"]
+    subgraph RoundLoop [Round Loop]
+        Round["act.Round(ctx)"] --> ToolCheck{"Tool calls?"}
+        ToolCheck -- yes --> Exec["Execute tools ∥"]
+        Exec --> Terminal{"Terminal\ntool?"}
+        Terminal -- no --> Steer["act.SetInput(getInput())\n— continuous steering"]
+        Steer --> Round
+        ToolCheck -- no --> Nudge{"Already\nnudged?"}
+        Nudge -- no --> SendNudge["Append retry prompt"]
+        SendNudge --> Round
+        Nudge -- yes --> Fail["Fail: no terminal tool"]
+        Terminal -- yes --> Done["Activation complete"]
     end
-
-    Done --> Processed["Processed callback"]
 ```
 
-## Data Sources
+## Sense and Reflexes
 
-A data source is anything that can produce work for the brain. Each one implements a single method: `Check(ctx) ([]DataSourceOutput, error)`. The brain doesn't know or care what generates the inputs -- it just polls.
+The brain has one sensor and many reflexes. The sensor is the single perception interface -- it checks for new events and renders the timeline. Reflexes are mechanical side-effect functions that run every tick (some are throttled) to materialize facts the sensor will later observe.
 
-| Source | Trigger | What it produces |
-|--------|---------|------------------|
-| **messaging** | unread conversations in the allow list | conversation history + session context + new messages |
-| **alarms** | a reminder's `fire_at` has passed | the alarm goal + conversation context |
-| **shell** | a tmux session exited or hit its check-in time | session output for review |
-| **journal** | end of day (configurable time) | the day's conversations and memories for reflection |
-| **dream** | nightly passes (1-4 hourly after journal) | prior dreams + memories for subconscious processing |
-| **briefing** | morning after wake | daily briefing context |
+```go
+type Sensor interface {
+    Check(ctx context.Context) ([]Stimulus, error)
+    Read(ctx context.Context, convID string) string
+}
 
-Each output carries metadata (`conversation_id`, `message_id`, etc.) and optional lifecycle callbacks (`Processing` runs before the LLM, `Processed` runs after).
+type Reflex func(ctx context.Context)
+```
+
+The sensor is `Timeline` (`internal/timeline/`). It iterates allowed conversation IDs, queries messages, and compares timestamps against the read marker. `Read` renders the full conversation as a markdown timeline with "Old messages" and "New messages" sections split at the read line, then advances the marker.
+
+Reflexes create the conditions the sensor detects:
+
+| Reflex | Package | Throttle | What it does |
+|--------|---------|----------|--------------|
+| `FireDueAlarms` | alarms | every tick | creates alarm occurrences (system messages) when `next_fire_at` has passed |
+| `CheckStale` | task | every tick | inserts stale reports for tasks with no recent activity |
+| `StaleAlarmReflex` | alarms | 30 min | detects recurring alarms with null/past `next_fire_at` |
+| `SkillChangeReflex` | skills | 5 min | detects skill file additions, removals, content changes |
+| `CheckSessions` | shell | 10 sec | reaps dead/stale tmux sessions |
 
 ## Messaging: Adapters and the Canonical Model
 
@@ -83,27 +110,32 @@ Messaging is split into two layers:
 
 **Canonical layer** -- platform-agnostic tables (`conversation`, `message`, `media`, `contact`) are the source of truth. Every message nik sends or receives lives here with a UUIDv7 primary key, regardless of where it came from.
 
-**Adapter layer** -- each platform implements `MessagingPlatform`: normalize inbound events into canonical models, execute outbound actions (reply, react, typing indicators, read receipts). Currently there's one adapter: WhatsApp via whatsmeow.
+**Adapter layer** -- each platform implements `MessagingPlatform`: normalize inbound events into canonical models, execute outbound actions (reply, react, send media, typing indicators, read receipts). Currently there's one adapter: WhatsApp via whatsmeow.
 
 The two interfaces that connect them:
 
 ```go
 // inbound -- adapters push events through this
 type MessageReceiver interface {
-    ReceiveConversation(ctx, conv)
-    ReceiveMessage(ctx, msg)
-    OnHistorySyncComplete(ctx, platform)
+    ReceiveConversation(ctx, conv) error
+    ReceiveMessage(ctx, msg) error
+    OnHistorySyncComplete(ctx, platform) error
 }
 
 // outbound -- brain tools call these via the service
 type MessagingPlatform interface {
-    Reply(ctx, externalConversationID, body)
-    React(ctx, externalConversationID, externalMessageID, emoji)
-    StartTyping / StopTyping / SetPresence / MarkRead
+    Platform() string
+    Start(ctx, receiver) error
+    Stop(ctx) error
+    Reply(ctx, externalConversationID, body, quote) (OutboundMessage, error)
+    SendImage(ctx, externalConversationID, imagePath, caption) (OutboundMessage, error)
+    SendAudio(ctx, externalConversationID, audioPath, voiceNote) (OutboundMessage, error)
+    React(ctx, externalConversationID, externalMessageID, externalSenderID, emoji) (OutboundMessage, error)
+    SetPresence(ctx, available) error
+    StartTyping / StopTyping(ctx, externalConversationID) error
+    MarkRead(ctx, refs) error
 }
 ```
-
-The full flow of a message through the system:
 
 ```mermaid
 flowchart LR
@@ -126,34 +158,32 @@ flowchart LR
         Tables[("conversation\nmessage\nmedia\ncontact")]
     end
 
-    subgraph datasource [Data Source]
-        Poll["PollUnreadConversationIDs\n→ build context"]
+    subgraph sensor [Sensor — Timeline]
+        Check["Check: new events\nsince read marker?"]
+        Read["Read: render timeline\n+ advance marker"]
     end
 
     subgraph brainBox [Brain]
-        BrainLoop["activate → think"]
-    end
-
-    subgraph llmBox [LLM]
-        LLM_Complete["Complete + tool calls"]
+        BrainLoop["activate → think\n→ round loop"]
     end
 
     WA_In --> Normalize --> Receive --> Tables
-    Tables --> Poll --> BrainLoop --> LLM_Complete
-    LLM_Complete -- "message_send" --> Reply --> Execute --> WA_Out
+    Tables --> Check --> BrainLoop
+    BrainLoop -- "continuous steering" --> Read --> Tables
+    BrainLoop -- "message_send" --> Reply --> Execute --> WA_Out
     Execute --> Receive
 ```
 
-When a message arrives: the WhatsApp adapter normalizes it and calls `ReceiveMessage`, which upserts the conversation, resolves/creates the contact, and inserts the message. On the next perceive cycle, the messaging data source polls for unread conversations, builds the context (history + session info + participant profiles), and hands it to the brain. The brain activates, thinks, and calls tools -- most commonly `message_send`, which goes back through the service to the adapter and out to WhatsApp. The outbound message is also fed back through `ReceiveMessage` so it appears in the canonical history.
+When a message arrives: the WhatsApp adapter normalizes it and calls `ReceiveMessage`, which upserts the conversation, resolves/creates the contact, and inserts the message. On the next tick, the sensor's `Check` finds events newer than the read marker and returns a stimulus. The brain activates and calls `Read` to render the timeline. Each round of the think loop re-reads the timeline (continuous steering), so the model sees its own side effects in real time. When the model calls `message_send`, the service types, delays, sends via the adapter, and feeds the outbound message back through `ReceiveMessage` so it appears in the canonical history.
 
 ## Autonomous Systems
 
-These run on schedule via alarms — the brain activates them like any other stimulus. Core alarms use `[NIK_XXX]` goal prefixes (e.g. `[NIK_JOURNAL]`, `[NIK_DREAM_1]`) and are enforced by the `CoreAlarmEnforcer` reflex in `internal/alarms/core.go`. The reflex creates missing alarms and heals dead ones (null/past `next_fire_at`) using schedule times from config. Skills still document the alarm format as a fallback.
+These run on schedule via alarms. The `FireDueAlarms` reflex creates alarm occurrence messages when `next_fire_at` has passed. The timeline sensor sees these as new events, triggers an activation, and the model loads the relevant skill. Core alarms use `[NIK_XXX]` goal prefixes (e.g. `[NIK_JOURNAL]`, `[NIK_DREAM_1]`). Skills document the alarm format and install them on first load.
 
-- **Journal**: managed entirely by the `journal` skill. Nik uses a recurring alarm, gathers day context via `db_query`/`shell`, and writes to `journal/` files. No domain package.
-- **Dream**: managed entirely by the `dream` skill. Nik uses 5 recurring alarms (one per dream pass), processes the journal and memories, and writes to `dreams/` files. The final pass (Wake) evolves nik's **soul** — a living identity document stored in `soul/latest.md` and loaded into the system prompt on every activation. Dated snapshots in `soul/YYYY-MM-DD.md` preserve history. No domain package.
-- **Briefing**: managed entirely by the `briefing` skill. Nik uses a recurring alarm, `web_search` for news, and writes to `briefings/` files. No domain package.
-- **Diagnostic**: managed entirely by the `diagnostic` skill. Nik uses a recurring alarm, discovers skills/services, tests auth, verifies alarm chains and skill outputs, checks data integrity and spending. Writes to `diagnostics/` files. No domain package.
+- **Journal**: managed by the `journal` skill. Recurring alarm, gathers day context via `db_query`/`shell`, writes to `journal/` files. No domain package.
+- **Dream**: managed by the `dream` skill. Multiple recurring alarms (one per dream pass), processes journal and memories, writes to `dreams/` files. The final pass (Wake) evolves nik's **soul** — a living identity document stored in `soul/latest.md` and loaded into the system prompt on every activation. Dated snapshots in `soul/YYYY-MM-DD.md` preserve history. No domain package.
+- **Briefing**: managed by the `briefing` skill. Recurring alarm, searches the web for news (via the `web` skill), writes to `briefings/` files. No domain package.
+- **Diagnostic**: managed by the `diagnostic` skill. Recurring alarm, discovers skills/services, tests auth, verifies alarm chains and skill outputs, checks data integrity and spending. Writes to `diagnostics/` files. No domain package.
 
 ## Tasks and the Timeline
 
@@ -180,28 +210,19 @@ These run on schedule via alarms — the brain activates them like any other sti
 
 ## Tools
 
-Domain packages define tools via `BuildTools()` and register them at startup. The brain makes them available to the LLM during activations. Some tools are privileged (owner-only).
+Domain packages define tools via `BuildTools()` and register them in `main.go`. The brain makes them available to the LLM during activations. Some tools are privileged (owner-only). Workers get a subset.
 
-**messaging** -- `message_send`, `message_react`, `message_set_presence`
+| Package | Tools |
+|---------|-------|
+| **messaging** | `message_send`, `message_noop`, `message_react`, `message_set_presence` |
+| **shell** | `shell`, `shell-rebuild`, `shell-factory-reset` |
+| **alarms** | `alarm`, `update_alarm`, `cancel_alarm` |
+| **contacts** | `update_contact` |
+| **db** | `db_query` |
+| **llm** | `describe_media` |
+| **fs** | `read_file`, `write_file` |
+| **skills** | `load_skill` |
+| **config** | `config` |
+| **task** | `task_spawn`, `task_status`, `task_list`, `task_cancel`, `task_report`, `task_retry` |
 
-**shell** -- `shell` (tmux: run, read, send, kill, list)
-
-**alarms** -- `alarm`
-
-**contacts** -- `update_contact`
-
-**search** -- `db_query`
-
-**llm** -- `describe_media`
-
-**websearch** -- `web_search`
-
-**skills** -- `load_skill`
-
-**config** -- `config`
-
-**journal** -- `journal_write`
-
-**dream** -- `dream_write`, `soul_evolve`
-
-**briefing** -- `briefing_write`
+Skills extend nik's capabilities at runtime. Loading a skill (via `load_skill`) injects domain knowledge and instructions into the activation -- the LLM then uses built-in tools to execute. For example, the `web` skill teaches nik to search with Exa and fetch URLs via `shell`, the `journal` skill teaches it to gather day context and `write_file` entries.
