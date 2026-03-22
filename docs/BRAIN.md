@@ -145,7 +145,7 @@ accumulates and eventually gets pruned.
 
 ## Terminal tools and the end of an activation
 
-An activation runs until the model calls a terminal tool: `message_reply`,
+An activation runs until the model calls a terminal tool: `message_send`,
 `message_noop`, or `message_react`. These signal "I'm done with this
 conversation for now." The brain checks the LLM result for any terminal call
 and, if found, ends the activation.
@@ -165,7 +165,7 @@ once as a follow-up user message to remind it to report.
 
 ## Self-reactivation: continuity across activations
 
-When nik sends a message via `message_reply`, the outbound message is stored in
+When nik sends a message via `message_send`, the outbound message is stored in
 the database with a `sent_at` timestamp after the current `last_read_at`. On
 the next tick, `check()` sees it as new and triggers another activation. The
 model sees its own previous reply as a `YOU` message in "Already handled".

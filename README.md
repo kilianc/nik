@@ -140,11 +140,11 @@ flowchart LR
 
     WA_In --> Normalize --> Receive --> Tables
     Tables --> Poll --> BrainLoop --> LLM_Complete
-    LLM_Complete -- "message_reply" --> Reply --> Execute --> WA_Out
+    LLM_Complete -- "message_send" --> Reply --> Execute --> WA_Out
     Execute --> Receive
 ```
 
-When a message arrives: the WhatsApp adapter normalizes it and calls `ReceiveMessage`, which upserts the conversation, resolves/creates the contact, and inserts the message. On the next perceive cycle, the messaging data source polls for unread conversations, builds the context (history + session info + participant profiles), and hands it to the brain. The brain activates, thinks, and calls tools -- most commonly `message_reply`, which goes back through the service to the adapter and out to WhatsApp. The outbound message is also fed back through `ReceiveMessage` so it appears in the canonical history.
+When a message arrives: the WhatsApp adapter normalizes it and calls `ReceiveMessage`, which upserts the conversation, resolves/creates the contact, and inserts the message. On the next perceive cycle, the messaging data source polls for unread conversations, builds the context (history + session info + participant profiles), and hands it to the brain. The brain activates, thinks, and calls tools -- most commonly `message_send`, which goes back through the service to the adapter and out to WhatsApp. The outbound message is also fed back through `ReceiveMessage` so it appears in the canonical history.
 
 ## Autonomous Systems
 
@@ -182,7 +182,7 @@ These run on schedule via alarms — the brain activates them like any other sti
 
 Domain packages define tools via `BuildTools()` and register them at startup. The brain makes them available to the LLM during activations. Some tools are privileged (owner-only).
 
-**messaging** -- `message_reply`, `message_react`, `message_set_presence`
+**messaging** -- `message_send`, `message_react`, `message_set_presence`
 
 **shell** -- `shell` (tmux: run, read, send, kill, list)
 

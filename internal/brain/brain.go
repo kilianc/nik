@@ -211,7 +211,7 @@ func (b *Brain) think(ctx context.Context, getInput func() string) (string, llm.
 }
 
 var terminalTools = map[string]bool{
-	"message_reply": true,
+	"message_send":  true,
 	"message_noop":  true,
 	"message_react": true,
 }

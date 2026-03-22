@@ -18,7 +18,7 @@ func TestBuildToolsReturnsExpectedToolNames(t *testing.T) {
 	}
 
 	want := []string{
-		"message_reply",
+		"message_send",
 		"message_noop",
 		"message_react",
 		"message_set_presence",
@@ -30,21 +30,21 @@ func TestBuildToolsReturnsExpectedToolNames(t *testing.T) {
 	}
 }
 
-func TestReplyToolDefSchema(t *testing.T) {
-	props, ok := replyToolDef.Parameters["properties"].(map[string]any)
+func TestSendToolDefSchema(t *testing.T) {
+	props, ok := sendToolDef.Parameters["properties"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected properties map")
 	}
 
 	msgsProp, ok := props["messages"].(map[string]any)
 	if !ok {
-		t.Fatalf("expected 'messages' parameter in reply tool def")
+		t.Fatalf("expected 'messages' parameter in send tool def")
 	}
 	if msgsProp["type"] != "array" {
 		t.Fatalf("expected messages to be array type, got %v", msgsProp["type"])
 	}
 
-	required, ok := replyToolDef.Parameters["required"].([]string)
+	required, ok := sendToolDef.Parameters["required"].([]string)
 	if !ok {
 		t.Fatalf("expected required slice")
 	}
@@ -76,8 +76,8 @@ func TestReplyToolDefSchema(t *testing.T) {
 	}
 }
 
-func TestReplyToolDefHasQuoteFields(t *testing.T) {
-	props, ok := replyToolDef.Parameters["properties"].(map[string]any)
+func TestSendToolDefHasQuoteFields(t *testing.T) {
+	props, ok := sendToolDef.Parameters["properties"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected properties map")
 	}
@@ -112,8 +112,8 @@ func TestReplyToolDefHasQuoteFields(t *testing.T) {
 	}
 }
 
-func TestReplyHandlerRejectsInvalidJSON(t *testing.T) {
-	handler := replyHandler(&Service{})
+func TestSendHandlerRejectsInvalidJSON(t *testing.T) {
+	handler := sendHandler(&Service{})
 
 	out, err := handler(context.Background(), llm.ToolCall{Arguments: "{"})
 	if err != nil {
@@ -124,8 +124,8 @@ func TestReplyHandlerRejectsInvalidJSON(t *testing.T) {
 	}
 }
 
-func TestReplyHandlerRejectsEmptyMessages(t *testing.T) {
-	handler := replyHandler(&Service{})
+func TestSendHandlerRejectsEmptyMessages(t *testing.T) {
+	handler := sendHandler(&Service{})
 
 	ctx := context.WithValue(
 		context.Background(),
@@ -143,8 +143,8 @@ func TestReplyHandlerRejectsEmptyMessages(t *testing.T) {
 	}
 }
 
-func TestReplyHandlerVoiceWithoutSpeechFnReturnsError(t *testing.T) {
-	handler := replyHandler(&Service{})
+func TestSendHandlerVoiceWithoutSpeechFnReturnsError(t *testing.T) {
+	handler := sendHandler(&Service{})
 
 	ctx := context.WithValue(
 		context.Background(),
@@ -162,13 +162,13 @@ func TestReplyHandlerVoiceWithoutSpeechFnReturnsError(t *testing.T) {
 	}
 }
 
-func TestReplyHandlerBannedWordPrevalidation(t *testing.T) {
+func TestSendHandlerBannedWordPrevalidation(t *testing.T) {
 	cfg := &config.Config{
 		AllowConversationIDs: map[string]string{"test": "conv-123"},
 		BannedWords:          []string{"goblin"},
 	}
 	svc := &Service{cfg: cfg}
-	handler := replyHandler(svc)
+	handler := sendHandler(svc)
 
 	ctx := context.WithValue(
 		context.Background(),
@@ -190,7 +190,7 @@ func TestReplyHandlerBannedWordPrevalidation(t *testing.T) {
 	}
 }
 
-func TestReplyHandlerPathSecurity(t *testing.T) {
+func TestSendHandlerPathSecurity(t *testing.T) {
 	makeCtx := func() context.Context {
 		return context.WithValue(
 			context.Background(),
@@ -205,7 +205,7 @@ func TestReplyHandlerPathSecurity(t *testing.T) {
 			Home:                 home,
 			AllowConversationIDs: map[string]string{"owner": "conv-123"},
 		}
-		handler := replyHandler(&Service{cfg: cfg})
+		handler := sendHandler(&Service{cfg: cfg})
 
 		out, err := handler(makeCtx(), llm.ToolCall{
 			Arguments: `{"conversation_id":"conv-123","contact_id":"","messages":[{"text":"look","image_path":"/etc/passwd","voice":false}]}`,
@@ -224,7 +224,7 @@ func TestReplyHandlerPathSecurity(t *testing.T) {
 			Home:                 home,
 			AllowConversationIDs: map[string]string{"owner": "conv-123"},
 		}
-		handler := replyHandler(&Service{cfg: cfg})
+		handler := sendHandler(&Service{cfg: cfg})
 
 		out, err := handler(makeCtx(), llm.ToolCall{
 			Arguments: `{"conversation_id":"conv-123","contact_id":"","messages":[{"text":"look","image_path":"../../../etc/passwd","voice":false}]}`,
@@ -247,7 +247,7 @@ func TestReplyHandlerPathSecurity(t *testing.T) {
 			Home:                 home,
 			AllowConversationIDs: map[string]string{"owner": "conv-123"},
 		}
-		handler := replyHandler(&Service{cfg: cfg})
+		handler := sendHandler(&Service{cfg: cfg})
 
 		out, err := handler(makeCtx(), llm.ToolCall{
 			Arguments: `{"conversation_id":"conv-123","contact_id":"","messages":[{"text":"look","image_path":"escape/secret.png","voice":false}]}`,
@@ -261,12 +261,12 @@ func TestReplyHandlerPathSecurity(t *testing.T) {
 	})
 }
 
-func TestReplyHandlerBlocksDisallowedConversation(t *testing.T) {
+func TestSendHandlerBlocksDisallowedConversation(t *testing.T) {
 	cfg := &config.Config{
 		AllowConversationIDs: map[string]string{"owner": "allowed-conv"},
 	}
 	svc := &Service{cfg: cfg}
-	handler := replyHandler(svc)
+	handler := sendHandler(svc)
 
 	ctx := context.WithValue(
 		context.Background(),
@@ -285,12 +285,12 @@ func TestReplyHandlerBlocksDisallowedConversation(t *testing.T) {
 	}
 }
 
-func TestReplyHandlerAllowsContextConversation(t *testing.T) {
+func TestSendHandlerAllowsContextConversation(t *testing.T) {
 	cfg := &config.Config{
 		AllowConversationIDs: map[string]string{"owner": "allowed-conv"},
 	}
 	svc := &Service{cfg: cfg}
-	handler := replyHandler(svc)
+	handler := sendHandler(svc)
 
 	ctx := context.WithValue(
 		context.Background(),

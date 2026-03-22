@@ -295,7 +295,7 @@ func loadToolCalls(ctx context.Context, conn *sql.DB, roundID string) ([]toolCal
 }
 
 var terminalTools = map[string]bool{
-	"message_reply": true,
+	"message_send":  true,
 	"message_noop":  true,
 	"message_react": true,
 }
@@ -354,7 +354,7 @@ func classify(msg messageRow, activations []activationRow) diagnosisResult {
 					hasTask := false
 					for _, rr := range a.Rounds {
 						for _, tc := range rr.ToolCalls {
-							if tc.Name == "message_reply" {
+							if tc.Name == "message_send" {
 								hasReply = true
 							}
 							if tc.Name == "task_spawn" {

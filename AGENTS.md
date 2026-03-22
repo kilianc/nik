@@ -231,7 +231,7 @@ When nik sends the same message twice (e.g. "On it." repeated), the cause is alm
 rg "On it" workspace/nik.log | tail -20
 ```
 
-Look for two `message_reply` tool calls with different `activation_id` values close in time. The `round` field shows where in the activation the send happened. A duplicate at round=0 with no other tool calls is a strong signal -- the model immediately acked without examining what was new.
+Look for two `message_send` tool calls with different `activation_id` values close in time. The `round` field shows where in the activation the send happened. A duplicate at round=0 with no other tool calls is a strong signal -- the model immediately acked without examining what was new.
 
 **Step 2: Pull the message table for the conversation around the incident.**
 
@@ -256,7 +256,7 @@ WHERE conversation_id = '<conv_id>'
 ORDER BY created_at;
 ```
 
-Two rows close together confirms inter-activation. One row with multiple `message_reply` tool calls would indicate intra-activation.
+Two rows close together confirms inter-activation. One row with multiple `message_send` tool calls would indicate intra-activation.
 
 **Step 4: Read the second activation's timeline input to see what triggered re-ack.**
 

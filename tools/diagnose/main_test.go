@@ -114,7 +114,7 @@ func TestClassifySurfacedHandled(t *testing.T) {
 			Round:        0,
 			MessageInNew: true,
 			ToolCalls: []toolCallInfo{{
-				Name: "message_reply",
+				Name: "message_send",
 			}},
 		}},
 	}}
