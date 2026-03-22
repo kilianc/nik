@@ -199,10 +199,7 @@ func main() {
 		workerToolNames = append(workerToolNames, t.Def.Name)
 	}
 
-	llmClient.SetObserver(stats.NewRecorder(conn))
-	if taskLLMClient != llmClient {
-		taskLLMClient.SetObserver(stats.NewRecorder(conn))
-	}
+	recorder := stats.NewRecorder(conn)
 
 	messagingSvc.SetSpeechFn(func(ctx context.Context, text string) (string, error) {
 		var instructions string
@@ -222,6 +219,7 @@ func main() {
 	})
 
 	taskRunner := task.NewRunner(cfg, taskLLMClient, taskSvc, taskTools)
+	taskRunner.SetRecorder(recorder)
 
 	if cfg.Models.Critic.Enabled && cfg.OpenAIKey != "" {
 		criticOpts := []llm.ClientOption{
@@ -231,12 +229,12 @@ func main() {
 			llm.WithJSONOutput(),
 		}
 		criticClient := llm.NewClient(&cfg.Models.Critic.Model, criticOpts...)
-		criticClient.SetObserver(stats.NewRecorder(conn))
 		taskRunner.SetCriticLLM(criticClient)
 		slog.Info("critic client ready", "model", cfg.Models.Critic.Model, "enabled", cfg.Models.Critic.Enabled)
 	}
 
 	b := brain.New(cfg, llmClient)
+	b.SetRecorder(recorder)
 
 	b.SetWorkerToolNames(workerToolNames)
 	b.SetRecaller(recallSvc.Recall)

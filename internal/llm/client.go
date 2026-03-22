@@ -3,17 +3,14 @@ package llm
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/kciuffolo/nik/internal/codex"
@@ -26,44 +23,7 @@ import (
 	"github.com/openai/openai-go/v3/shared"
 )
 
-type CompletionObserver interface {
-	OnStart(ctx context.Context, model string)
-	OnRound(ctx context.Context, round int, userInput string, modelOutput string, reasoningSummaries []string) string
-	OnToolCall(ctx context.Context, activationRoundID string, name string, args string, result string, duration time.Duration, isError bool)
-	OnFinish(ctx context.Context, model string, reasoningEffort string, usage Usage, rounds RoundStats, toolCalls int, durationMS int64, output string, processErr error)
-	OnDetail(ctx context.Context, instructions string, tools []string)
-}
-
-type CompleteOption func(*completeOpts)
-
-type completeOpts struct {
-	onIdle          func(output string) string
-	recordFullInput bool
-	scrubTools      map[string]bool
-}
-
-func WithOnIdle(fn func(output string) string) CompleteOption {
-	return func(o *completeOpts) { o.onIdle = fn }
-}
-
-func WithRecordFullInput() CompleteOption {
-	return func(o *completeOpts) { o.recordFullInput = true }
-}
-
-func WithScrubTools(names ...string) CompleteOption {
-	return func(o *completeOpts) {
-		o.scrubTools = make(map[string]bool, len(names))
-		for _, n := range names {
-			o.scrubTools[n] = true
-		}
-	}
-}
-
-type Completer interface {
-	Complete(ctx context.Context, instructions string, getInput func() string, tools []ToolDef, executor ToolExecutor, opts ...CompleteOption) (string, <-chan CompletionResult)
-}
-
-const maxConcurrentSessions = 6
+const maxConcurrentActivations = 6
 
 type Client struct {
 	codexClient     *openai.Client
@@ -72,12 +32,7 @@ type Client struct {
 	reasoningEffort *string
 	verbosity       *string
 	jsonOutput      bool
-	observer        CompletionObserver
 	sem             chan struct{}
-}
-
-func (c *Client) SetObserver(obs CompletionObserver) {
-	c.observer = obs
 }
 
 type clientConfig struct {
@@ -133,7 +88,7 @@ func NewClient(model *string, opts ...ClientOption) *Client {
 		reasoningEffort: cfg.reasoningEffort,
 		verbosity:       cfg.verbosity,
 		jsonOutput:      cfg.jsonOutput,
-		sem:             make(chan struct{}, maxConcurrentSessions),
+		sem:             make(chan struct{}, maxConcurrentActivations),
 	}
 
 	if cfg.apiKey != "" {
@@ -240,21 +195,9 @@ type ToolCallRecord struct {
 	DurationMS int64
 }
 
-type CompletionResult struct {
-	Output  string
-	Usage   Usage
-	History []ToolCallRecord
-	Extra   CompletionExtra
-	Err     error
-}
-
 const (
-	maxRounds     = 75
-	loopThreshold = 4
-	maxRetries    = 5
+	maxRounds = 75
 
-	// pruning budget: reserve ~50% of context window for tool history,
-	// assume ~8k tokens per call/output pair (p99 from real activations).
 	historyBudgetFraction = 0.50
 	estTokensPerPair      = 8000
 	minHistoryPairs       = 10
@@ -262,343 +205,6 @@ const (
 )
 
 const jsonObjectInputHint = "Return a single json object only."
-
-func StaticInput(s string) func() string {
-	return func() string { return s }
-}
-
-// Complete starts an LLM completion. getInput is called at the top of every
-// round; its return replaces the user message (items[0]). Returns the
-// activation ID and a channel that receives exactly one result.
-func (c *Client) Complete(ctx context.Context, instructions string, getInput func() string, tools []ToolDef, executor ToolExecutor, opts ...CompleteOption) (string, <-chan CompletionResult) {
-	ch := make(chan CompletionResult, 1)
-
-	client := c.apiClient
-	if c.codexClient != nil {
-		client = c.codexClient
-	}
-
-	if client == nil {
-		ch <- CompletionResult{Err: fmt.Errorf("no client configured (need api key or codex auth)")}
-		close(ch)
-		return "", ch
-	}
-
-	var o completeOpts
-	for _, opt := range opts {
-		opt(&o)
-	}
-
-	actID := id.V7()
-	ctx = augmentCtxMeta(ctx, "activation_id", actID)
-
-	if c.observer != nil {
-		c.observer.OnStart(ctx, *c.model)
-	}
-
-	go func() {
-		defer close(ch)
-
-		c.sem <- struct{}{}
-		defer func() { <-c.sem }()
-
-		result := c.completeLoop(ctx, client, instructions, getInput, tools, executor, &o)
-		ch <- result
-	}()
-
-	return actID, ch
-}
-
-func augmentCtxMeta(ctx context.Context, key, value string) context.Context {
-	existing, _ := ctx.Value("meta").(map[string]string)
-	m := make(map[string]string, len(existing)+1)
-	for k, v := range existing {
-		m[k] = v
-	}
-	m[key] = value
-	return context.WithValue(ctx, "meta", m)
-}
-
-func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instructions string, getInput func() string, tools []ToolDef, executor ToolExecutor, opts *completeOpts) CompletionResult {
-	total := Usage{}
-	rounds := RoundStats{}
-	extra := CompletionExtra{}
-
-	completeStart := time.Now()
-	var retErr error
-	var retOutput string
-	var history []ToolCallRecord
-
-	if c.observer != nil {
-		defer func() {
-			c.observer.OnFinish(ctx, *c.model, extra.ReasoningEffort, total, rounds, len(history), time.Since(completeStart).Milliseconds(), retOutput, retErr)
-
-			toolNames := make([]string, len(tools))
-			for i, t := range tools {
-				toolNames[i] = t.Name
-			}
-			c.observer.OnDetail(ctx, instructions, toolNames)
-		}()
-	}
-
-	var items responses.ResponseInputParam
-
-	params := responses.ResponseNewParams{
-		Model:        shared.ResponsesModel(*c.model),
-		Instructions: openai.String(instructions),
-		Tools:        buildToolParams(tools),
-		Reasoning: shared.ReasoningParam{
-			Summary: shared.ReasoningSummaryDetailed,
-		},
-	}
-
-	if c.reasoningEffort != nil && *c.reasoningEffort != "" {
-		params.Reasoning.Effort = shared.ReasoningEffort(*c.reasoningEffort)
-	}
-
-	if c.verbosity != nil && *c.verbosity != "" {
-		params.Text = responses.ResponseTextConfigParam{
-			Verbosity: responses.ResponseTextConfigVerbosity(*c.verbosity),
-		}
-	}
-
-	if c.jsonOutput {
-		params.Text.Format = responses.ResponseFormatTextConfigUnionParam{
-			OfJSONObject: &shared.ResponseFormatJSONObjectParam{},
-		}
-	}
-
-	m := *c.model
-	noReasoning := (strings.Contains(m, "spark") || strings.Contains(m, "nano") || strings.Contains(m, "4.1-mini")) && !strings.Contains(m, "5.4")
-	if noReasoning {
-		params.Reasoning = shared.ReasoningParam{}
-		params.Text = responses.ResponseTextConfigParam{}
-	}
-
-	if c.codexClient != nil {
-		params.Store = openai.Bool(false)
-	}
-
-	useStreaming := c.codexClient != nil
-
-	var prevSig string
-	var consecutiveRepeats int
-
-	for round := 0; ; round++ {
-		var content string
-		if getInput != nil {
-			content = ensureJSONInput(getInput(), c.jsonOutput)
-			msg := responses.ResponseInputItemParamOfMessage(content, responses.EasyInputMessageRoleUser)
-			if round == 0 {
-				items = append(items, msg)
-			} else {
-				items[0] = msg
-			}
-		}
-
-		userInput := content
-		if opts.recordFullInput {
-			userInput = extractInput(items)
-		}
-
-		if round >= maxRounds {
-			slog.Warn("max rounds reached", "pkg", "llm", "rounds", round)
-			retErr = fmt.Errorf("max rounds (%d) reached without final response", maxRounds)
-			return CompletionResult{Usage: total, History: history, Extra: extra, Err: retErr}
-		}
-		params.Input = responses.ResponseNewParamsInputUnion{OfInputItemList: items}
-
-		var resp *responses.Response
-		var apiErr error
-
-		for attempt := range maxRetries {
-			if attempt > 0 {
-				delay := retryDelay(attempt)
-				slog.Warn("server error, retrying", "pkg", "llm", "round", round, "attempt", attempt, "delay", delay)
-				time.Sleep(delay)
-			}
-
-			if useStreaming {
-				resp, apiErr = completeStreaming(ctx, client, params)
-			} else {
-				var r *responses.Response
-				r, apiErr = client.Responses.New(ctx, params)
-				resp = r
-			}
-
-			if apiErr == nil || !isServerError(apiErr) {
-				break
-			}
-		}
-
-		if apiErr != nil {
-			retErr = fmt.Errorf("complete round %d: %w", round, apiErr)
-			return CompletionResult{Usage: total, History: history, Extra: extra, Err: retErr}
-		}
-
-		extra.RawResponses = append(extra.RawResponses, resp.RawJSON())
-
-		if effort := string(resp.Reasoning.Effort); effort != "" {
-			extra.ReasoningEffort = effort
-		}
-
-		total.InputTokens += resp.Usage.InputTokens
-		total.OutputTokens += resp.Usage.OutputTokens
-		total.TotalTokens += resp.Usage.TotalTokens
-		total.CachedTokens += resp.Usage.InputTokensDetails.CachedTokens
-		total.ReasoningTokens += resp.Usage.OutputTokensDetails.ReasoningTokens
-
-		rounds.RoundCount++
-		if resp.Usage.InputTokens > rounds.MaxInputTokensPerRound {
-			rounds.MaxInputTokensPerRound = resp.Usage.InputTokens
-		}
-		if resp.Usage.TotalTokens > rounds.MaxTotalTokensPerRound {
-			rounds.MaxTotalTokensPerRound = resp.Usage.TotalTokens
-		}
-
-		// TODO: check if len(roundSummaries) is always 1 -- if so, simplify to single TEXT column
-		var roundSummaries []string
-		for _, item := range resp.Output {
-			if item.Type != "reasoning" {
-				continue
-			}
-			for _, s := range item.AsReasoning().Summary {
-				if s.Text != "" {
-					roundSummaries = append(roundSummaries, s.Text)
-				}
-			}
-		}
-
-		modelOutput := resp.OutputText()
-
-		var roundID string
-		if c.observer != nil {
-			roundID = c.observer.OnRound(ctx, round, userInput, modelOutput, roundSummaries)
-		}
-
-		if resp.Status == responses.ResponseStatusIncomplete {
-			reason := resp.IncompleteDetails.Reason
-			slog.Warn("response incomplete", "pkg", "llm", "reason", reason, "round", round)
-			retErr = fmt.Errorf("response incomplete: %s", reason)
-			return CompletionResult{Usage: total, History: history, Extra: extra, Err: retErr}
-		}
-
-		var calls []ToolCall
-		for _, item := range resp.Output {
-			if item.Type != "function_call" {
-				continue
-			}
-
-			fc := item.AsFunctionCall()
-			calls = append(calls, ToolCall{
-				CallID:    fc.CallID,
-				Name:      fc.Name,
-				Arguments: fc.Arguments,
-			})
-		}
-
-		if len(calls) == 0 {
-			retOutput = modelOutput
-
-			if opts.onIdle != nil {
-				followUp := opts.onIdle(retOutput)
-				if followUp != "" {
-					opts.onIdle = nil
-					items = append(items, responses.ResponseInputItemParamOfMessage(retOutput, responses.EasyInputMessageRoleAssistant))
-					items = append(items, responses.ResponseInputItemParamOfMessage(followUp, responses.EasyInputMessageRoleUser))
-					continue
-				}
-			}
-
-			return CompletionResult{Output: retOutput, Usage: total, History: history, Extra: extra}
-		}
-
-		sig := roundSignature(calls)
-		if sig == prevSig {
-			consecutiveRepeats++
-			if consecutiveRepeats >= loopThreshold {
-				slog.Warn("loop detected", "pkg", "llm", "round", round, "repeats", consecutiveRepeats, "tool", calls[0].Name)
-				retErr = fmt.Errorf("loop detected: %d identical rounds calling %s", consecutiveRepeats, calls[0].Name)
-				return CompletionResult{Usage: total, History: history, Extra: extra, Err: retErr}
-			}
-		} else {
-			consecutiveRepeats = 1
-		}
-		prevSig = sig
-
-		type toolResult struct {
-			result  string
-			elapsed time.Duration
-			isErr   bool
-		}
-
-		results := make([]toolResult, len(calls))
-
-		var wg sync.WaitGroup
-		wg.Add(len(calls))
-
-		for i, call := range calls {
-			slog.Info("tool call", toolCallAttrs(ctx, call.Name, round, call.Arguments)...)
-
-			go func(i int, call ToolCall) {
-				defer wg.Done()
-				start := time.Now()
-				result, err := executor(ctx, call)
-				elapsed := time.Since(start)
-
-				if err != nil {
-					result = ToolError(err)
-					results[i] = toolResult{result: result, elapsed: elapsed, isErr: true}
-					return
-				}
-				results[i] = toolResult{result: result, elapsed: elapsed}
-			}(i, call)
-		}
-
-		wg.Wait()
-
-		if modelOutput != "" {
-			items = append(items, responses.ResponseInputItemParamOfMessage(modelOutput, responses.EasyInputMessageRoleAssistant))
-		}
-
-		for i, call := range calls {
-			r := results[i]
-
-			items = append(items, responses.ResponseInputItemParamOfFunctionCall(call.Arguments, call.CallID, call.Name))
-
-			rec := ToolCallRecord{
-				Name:       call.Name,
-				Args:       call.Arguments,
-				Result:     r.result,
-				Error:      r.isErr,
-				DurationMS: r.elapsed.Milliseconds(),
-			}
-			history = append(history, rec)
-
-			if c.observer != nil {
-				c.observer.OnToolCall(ctx, roundID, rec.Name, rec.Args, rec.Result, r.elapsed, rec.Error)
-			}
-
-			items = append(items, responses.ResponseInputItemParamOfFunctionCallOutput(call.CallID, r.result))
-		}
-
-		if len(opts.scrubTools) > 0 {
-			for _, call := range calls {
-				if opts.scrubTools[call.Name] {
-					items = items[:1]
-					break
-				}
-			}
-		}
-
-		pairLimit := maxPairsForModel(*c.model)
-		before := len(items)
-		items = pruneItems(items, pairLimit)
-		if len(items) < before {
-			slog.Info("pruned tool history", "pkg", "llm", "round", round, "dropped_items", before-len(items), "pair_limit", pairLimit)
-		}
-	}
-}
 
 func extractInput(items responses.ResponseInputParam) string {
 	var parts []string
@@ -699,7 +305,7 @@ func completeStreaming(ctx context.Context, client *openai.Client, params respon
 	return final, nil
 }
 
-func isServerError(err error) bool {
+func IsTransient(err error) bool {
 	var apiErr *openai.Error
 	if errors.As(err, &apiErr) && apiErr.StatusCode >= 500 {
 		return true
@@ -716,7 +322,7 @@ func isServerError(err error) bool {
 	return false
 }
 
-func retryDelay(attempt int) time.Duration {
+func RetryDelay(attempt int) time.Duration {
 	switch attempt {
 	case 1:
 		return 5 * time.Second
@@ -848,31 +454,6 @@ func buildToolParams(tools []ToolDef) []responses.ToolUnionParam {
 	}
 
 	return params
-}
-
-func toolCallAttrs(ctx context.Context, name string, round int, raw string) []any {
-	attrs := []any{"pkg", "llm", "tool", name, "round", round}
-
-	if meta, ok := ctx.Value("meta").(map[string]string); ok {
-		if v := meta["activation_id"]; v != "" {
-			attrs = append(attrs, "activation_id", v)
-		}
-		if v := meta["task_id"]; v != "" {
-			attrs = append(attrs, "task_id", v)
-		}
-	}
-
-	var parsed map[string]any
-	err := json.Unmarshal([]byte(raw), &parsed)
-	if err != nil {
-		return append(attrs, "args", raw)
-	}
-
-	for k, v := range parsed {
-		attrs = append(attrs, k, fmt.Sprintf("%v", v))
-	}
-
-	return attrs
 }
 
 func roundSignature(calls []ToolCall) string {

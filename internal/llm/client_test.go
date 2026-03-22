@@ -22,7 +22,7 @@ func TestIsImageMime(t *testing.T) {
 	}
 }
 
-func TestRoundSignature(t *testing.T) {
+func Test_roundSignature(t *testing.T) {
 	a := ToolCall{Name: "load_skill", Arguments: `{"action":"load","name":"search"}`}
 	b := ToolCall{Name: "db_query", Arguments: `{"query":"SELECT 1"}`}
 
@@ -58,116 +58,87 @@ func TestSpeechRequiresAPIKey(t *testing.T) {
 }
 
 func TestParallelToolExecution(t *testing.T) {
-	const delay = 50 * time.Millisecond
-
-	executor := func(_ context.Context, call ToolCall) (string, error) {
-		time.Sleep(delay)
-		return fmt.Sprintf("result-%s", call.CallID), nil
-	}
-
-	calls := []ToolCall{
-		{CallID: "a", Name: "tool1", Arguments: `{}`},
-		{CallID: "b", Name: "tool2", Arguments: `{}`},
-		{CallID: "c", Name: "tool3", Arguments: `{}`},
-	}
-
 	type toolResult struct {
 		result  string
 		elapsed time.Duration
 		isErr   bool
 	}
 
-	results := make([]toolResult, len(calls))
+	runParallel := func(executor ToolExecutor, calls []ToolCall) []toolResult {
+		results := make([]toolResult, len(calls))
+		var wg sync.WaitGroup
+		wg.Add(len(calls))
+		for i, call := range calls {
+			go func(i int, call ToolCall) {
+				defer wg.Done()
+				s := time.Now()
+				result, err := executor(context.Background(), call)
+				elapsed := time.Since(s)
+				if err != nil {
+					results[i] = toolResult{result: ToolError(err), elapsed: elapsed, isErr: true}
+					return
+				}
+				results[i] = toolResult{result: result, elapsed: elapsed}
+			}(i, call)
+		}
+		wg.Wait()
+		return results
+	}
 
-	start := time.Now()
+	t.Run("runs concurrently", func(t *testing.T) {
+		const delay = 50 * time.Millisecond
+		executor := func(_ context.Context, call ToolCall) (string, error) {
+			time.Sleep(delay)
+			return fmt.Sprintf("result-%s", call.CallID), nil
+		}
+		calls := []ToolCall{
+			{CallID: "a", Name: "tool1", Arguments: `{}`},
+			{CallID: "b", Name: "tool2", Arguments: `{}`},
+			{CallID: "c", Name: "tool3", Arguments: `{}`},
+		}
 
-	var wg sync.WaitGroup
-	wg.Add(len(calls))
+		start := time.Now()
+		results := runParallel(executor, calls)
+		total := time.Since(start)
 
-	for i, call := range calls {
-		go func(i int, call ToolCall) {
-			defer wg.Done()
-			s := time.Now()
-			result, err := executor(context.Background(), call)
-			elapsed := time.Since(s)
-
-			if err != nil {
-				results[i] = toolResult{result: ToolError(err), elapsed: elapsed, isErr: true}
-				return
+		if total >= delay*time.Duration(len(calls)) {
+			t.Fatalf("expected parallel execution (<%v), took %v", delay*time.Duration(len(calls)), total)
+		}
+		for i, call := range calls {
+			expected := fmt.Sprintf("result-%s", call.CallID)
+			if results[i].result != expected {
+				t.Fatalf("call %d: expected %q, got %q", i, expected, results[i].result)
 			}
-			results[i] = toolResult{result: result, elapsed: elapsed}
-		}(i, call)
-	}
-
-	wg.Wait()
-	total := time.Since(start)
-
-	if total >= delay*time.Duration(len(calls)) {
-		t.Fatalf("expected parallel execution (<%v), took %v", delay*time.Duration(len(calls)), total)
-	}
-
-	for i, call := range calls {
-		expected := fmt.Sprintf("result-%s", call.CallID)
-		if results[i].result != expected {
-			t.Fatalf("call %d: expected %q, got %q", i, expected, results[i].result)
-		}
-		if results[i].isErr {
-			t.Fatalf("call %d: unexpected error", i)
-		}
-	}
-}
-
-func TestParallelToolExecutionWithErrors(t *testing.T) {
-	executor := func(_ context.Context, call ToolCall) (string, error) {
-		if call.Name == "fail" {
-			return "", fmt.Errorf("boom")
-		}
-		return "ok", nil
-	}
-
-	calls := []ToolCall{
-		{CallID: "a", Name: "succeed", Arguments: `{}`},
-		{CallID: "b", Name: "fail", Arguments: `{}`},
-	}
-
-	type toolResult struct {
-		result  string
-		elapsed time.Duration
-		isErr   bool
-	}
-
-	results := make([]toolResult, len(calls))
-
-	var wg sync.WaitGroup
-	wg.Add(len(calls))
-
-	for i, call := range calls {
-		go func(i int, call ToolCall) {
-			defer wg.Done()
-			s := time.Now()
-			result, err := executor(context.Background(), call)
-			elapsed := time.Since(s)
-
-			if err != nil {
-				results[i] = toolResult{result: ToolError(err), elapsed: elapsed, isErr: true}
-				return
+			if results[i].isErr {
+				t.Fatalf("call %d: unexpected error", i)
 			}
-			results[i] = toolResult{result: result, elapsed: elapsed}
-		}(i, call)
-	}
+		}
+	})
 
-	wg.Wait()
+	t.Run("captures errors", func(t *testing.T) {
+		executor := func(_ context.Context, call ToolCall) (string, error) {
+			if call.Name == "fail" {
+				return "", fmt.Errorf("boom")
+			}
+			return "ok", nil
+		}
+		calls := []ToolCall{
+			{CallID: "a", Name: "succeed", Arguments: `{}`},
+			{CallID: "b", Name: "fail", Arguments: `{}`},
+		}
 
-	if results[0].result != "ok" || results[0].isErr {
-		t.Fatalf("call 0: expected success, got %q (err=%v)", results[0].result, results[0].isErr)
-	}
+		results := runParallel(executor, calls)
 
-	if !results[1].isErr {
-		t.Fatalf("call 1: expected error flag")
-	}
-	if results[1].result != `{"error":"boom"}` {
-		t.Fatalf("call 1: expected error json, got %q", results[1].result)
-	}
+		if results[0].result != "ok" || results[0].isErr {
+			t.Fatalf("call 0: expected success, got %q (err=%v)", results[0].result, results[0].isErr)
+		}
+		if !results[1].isErr {
+			t.Fatalf("call 1: expected error flag")
+		}
+		if results[1].result != `{"error":"boom"}` {
+			t.Fatalf("call 1: expected error json, got %q", results[1].result)
+		}
+	})
 }
 
 func TestBuildToolParamsIncludesDefinitions(t *testing.T) {
@@ -381,134 +352,28 @@ func TestMaxPairsForModel(t *testing.T) {
 	}
 }
 
-func TestIsServerError(t *testing.T) {
+func TestIsTransient(t *testing.T) {
 	tests := []struct {
 		name string
 		err  error
 		want bool
 	}{
-		{
-			name: "nil error",
-			err:  nil,
-			want: false,
-		},
-		{
-			name: "plain error",
-			err:  fmt.Errorf("something broke"),
-			want: false,
-		},
-		{
-			name: "openai 500",
-			err:  &openai.Error{StatusCode: 500},
-			want: true,
-		},
-		{
-			name: "openai 502",
-			err:  &openai.Error{StatusCode: 502},
-			want: true,
-		},
-		{
-			name: "openai 429 is not server error",
-			err:  &openai.Error{StatusCode: 429},
-			want: false,
-		},
-		{
-			name: "stream server_error",
-			err:  &ssestream.StreamError{Message: "server_error"},
-			want: true,
-		},
-		{
-			name: "stream INTERNAL_ERROR",
-			err:  &ssestream.StreamError{Message: "stream ID 1; INTERNAL_ERROR; received from peer"},
-			want: true,
-		},
-		{
-			name: "stream unrelated message",
-			err:  &ssestream.StreamError{Message: "connection reset"},
-			want: false,
-		},
-		{
-			name: "wrapped openai 503",
-			err:  fmt.Errorf("complete: %w", &openai.Error{StatusCode: 503}),
-			want: true,
-		},
-		{
-			name: "wrapped stream INTERNAL_ERROR",
-			err:  fmt.Errorf("stream: %w", &ssestream.StreamError{Message: "stream ID 1; INTERNAL_ERROR; received from peer"}),
-			want: true,
-		},
+		{"nil error", nil, false},
+		{"plain error", fmt.Errorf("something broke"), false},
+		{"openai 500", &openai.Error{StatusCode: 500}, true},
+		{"openai 502", &openai.Error{StatusCode: 502}, true},
+		{"openai 429 is not transient", &openai.Error{StatusCode: 429}, false},
+		{"stream server_error", &ssestream.StreamError{Message: "server_error"}, true},
+		{"stream INTERNAL_ERROR", &ssestream.StreamError{Message: "stream ID 1; INTERNAL_ERROR; received from peer"}, true},
+		{"stream unrelated message", &ssestream.StreamError{Message: "connection reset"}, false},
+		{"wrapped openai 503", fmt.Errorf("complete: %w", &openai.Error{StatusCode: 503}), true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := isServerError(tt.err)
+			got := IsTransient(tt.err)
 			if got != tt.want {
-				t.Errorf("isServerError() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestScrubTools(t *testing.T) {
-	msg := responses.ResponseInputItemParamOfMessage("timeline", responses.EasyInputMessageRoleUser)
-	assistant := responses.ResponseInputItemParamOfMessage("thinking", responses.EasyInputMessageRoleAssistant)
-	noopCall := responses.ResponseInputItemParamOfFunctionCall(`{"reason":"drift"}`, "noop_1", "message_noop")
-	noopResult := responses.ResponseInputItemParamOfFunctionCallOutput("noop_1", `{"ok":true}`)
-	otherCall := responses.ResponseInputItemParamOfFunctionCall(`{}`, "db_1", "db_query")
-	otherResult := responses.ResponseInputItemParamOfFunctionCallOutput("db_1", `{"rows":[]}`)
-
-	tests := []struct {
-		name  string
-		items responses.ResponseInputParam
-		calls []ToolCall
-		scrub map[string]bool
-		want  int
-	}{
-		{
-			name:  "scrubs noop and keeps user message",
-			items: responses.ResponseInputParam{msg, assistant, noopCall, noopResult},
-			calls: []ToolCall{{Name: "message_noop"}},
-			scrub: map[string]bool{"message_noop": true},
-			want:  1,
-		},
-		{
-			name:  "no scrub when tool not in set",
-			items: responses.ResponseInputParam{msg, assistant, otherCall, otherResult},
-			calls: []ToolCall{{Name: "db_query"}},
-			scrub: map[string]bool{"message_noop": true},
-			want:  4,
-		},
-		{
-			name:  "scrubs when noop mixed with other calls",
-			items: responses.ResponseInputParam{msg, assistant, otherCall, otherResult, noopCall, noopResult},
-			calls: []ToolCall{{Name: "db_query"}, {Name: "message_noop"}},
-			scrub: map[string]bool{"message_noop": true},
-			want:  1,
-		},
-		{
-			name:  "no scrub when set is empty",
-			items: responses.ResponseInputParam{msg, assistant, noopCall, noopResult},
-			calls: []ToolCall{{Name: "message_noop"}},
-			scrub: map[string]bool{},
-			want:  4,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			items := tt.items
-
-			if len(tt.scrub) > 0 {
-				for _, call := range tt.calls {
-					if tt.scrub[call.Name] {
-						items = items[:1]
-						break
-					}
-				}
-			}
-
-			if len(items) != tt.want {
-				t.Fatalf("expected %d items, got %d", tt.want, len(items))
+				t.Errorf("IsTransient() = %v, want %v", got, tt.want)
 			}
 		})
 	}

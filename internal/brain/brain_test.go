@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/kciuffolo/nik/internal/config"
-	"github.com/kciuffolo/nik/internal/llm"
 )
 
 func TestNewInitializesInternalState(t *testing.T) {
@@ -32,51 +31,19 @@ func TestNewInitializesInternalState(t *testing.T) {
 	}
 }
 
-func TestHasTerminalCall(t *testing.T) {
-	tests := []struct {
-		name    string
-		history []llm.ToolCallRecord
-		want    bool
-	}{
-		{
-			name:    "empty history",
-			history: nil,
-			want:    false,
-		},
-		{
-			name:    "only non-terminal calls",
-			history: []llm.ToolCallRecord{{Name: "task_list"}, {Name: "db_query"}},
-			want:    false,
-		},
-		{
-			name:    "message_send present",
-			history: []llm.ToolCallRecord{{Name: "task_list"}, {Name: "message_send"}},
-			want:    true,
-		},
-		{
-			name:    "message_noop present",
-			history: []llm.ToolCallRecord{{Name: "message_noop"}},
-			want:    true,
-		},
-		{
-			name:    "message_react present",
-			history: []llm.ToolCallRecord{{Name: "load_skill"}, {Name: "message_react"}},
-			want:    true,
-		},
-		{
-			name:    "non-terminal messaging tools are not terminal",
-			history: []llm.ToolCallRecord{{Name: "message_set_presence"}, {Name: "describe_media"}},
-			want:    false,
-		},
+func TestTerminalTools(t *testing.T) {
+	terminal := []string{"message_send", "message_noop", "message_react"}
+	for _, name := range terminal {
+		if !terminalTools[name] {
+			t.Errorf("expected %q to be terminal", name)
+		}
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := hasTerminalCall(tt.history)
-			if got != tt.want {
-				t.Errorf("hasTerminalCall() = %v, want %v", got, tt.want)
-			}
-		})
+	nonTerminal := []string{"task_list", "db_query", "message_set_presence", "describe_media"}
+	for _, name := range nonTerminal {
+		if terminalTools[name] {
+			t.Errorf("expected %q to NOT be terminal", name)
+		}
 	}
 }
 

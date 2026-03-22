@@ -72,23 +72,26 @@ func TestNumberRows(t *testing.T) {
 
 func TestIsSeparator(t *testing.T) {
 	tests := []struct {
+		name string
 		line string
 		want bool
 	}{
-		{"|------|------|--------|--------|--------------|", true},
-		{"| --- | --- |", true},
-		{"| - | - | - |", true},
-		{"| date | type | entity |", false},
-		{"| 2026-02-13 | personal_fact | CT |", false},
-		{"not a table row", false},
-		{"||", false},
+		{"full dashes", "|------|------|--------|--------|--------------|", true},
+		{"spaced dashes", "| --- | --- |", true},
+		{"minimal dashes", "| - | - | - |", true},
+		{"header row", "| date | type | entity |", false},
+		{"data row", "| 2026-02-13 | personal_fact | CT |", false},
+		{"not a table", "not a table row", false},
+		{"empty pipes", "||", false},
 	}
 
 	for _, tt := range tests {
-		got := isSeparator(tt.line)
-		if got != tt.want {
-			t.Errorf("isSeparator(%q) = %v, want %v", tt.line, got, tt.want)
-		}
+		t.Run(tt.name, func(t *testing.T) {
+			got := isSeparator(tt.line)
+			if got != tt.want {
+				t.Errorf("isSeparator(%q) = %v, want %v", tt.line, got, tt.want)
+			}
+		})
 	}
 }
 

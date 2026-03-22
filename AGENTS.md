@@ -76,7 +76,7 @@ Entry point: `cmd/nik/main.go`
 | `internal/brain/` | main loop, sense + reflex + tool registration, prompt loading |
 | `internal/codex/` | Codex auth for LLM client (login, token management) |
 | `internal/id/` | UUID generation — `V4()`, `V7()`, `Short(n)` |
-| `internal/llm/` | LLM client — `Complete`, `Transcribe`, `Describe`; supports OpenAI and Codex auth |
+| `internal/llm/` | LLM API client — `Activation` (multi-round protocol state), `Transcribe`, `Describe`; supports OpenAI and Codex auth. No retries, no loop control — callers own the loop. |
 | `internal/messaging/` | canonical messaging service and tool handlers |
 | `internal/whatsapp/` | WhatsApp platform adapter implementing messaging platform interface |
 | `internal/contacts/` | contact resolution/upsert orchestration + contact update tools |
@@ -306,6 +306,9 @@ EOF
 - service method names: `Get` for single entity by ID, `List<Plural>` for returning slices (e.g. `ListTasks`, `ListReports`, `ListOccurrences`). Avoid bare `List()` — include the entity name.
 - DB function names follow the same pattern with entity prefix: `TaskGet`, `TaskList`, `TaskReportList`.
 - errors are present tense, always wrapped like "read file xxx: err" not "error while reading"
+- always name error variables `err` — never use decorated names like `roundErr`, `parseErr`, `getErr`
+- flatten conditional blocks: handle exit conditions first with early returns, let the common path fall through unnested
+- trust codebase invariants — don't guard against states the code guarantees
 - avoid inline error assignment in if statements; assign first, then check
 - never chain multiple operations in a single if condition
 - use blank lines to separate logical blocks within a function (guard clauses, parse steps, main logic, return)
@@ -359,7 +362,7 @@ Each prompt file has one job. Don't duplicate rules across files.
 
 ### Brain concepts
 
-The brain uses cognitive metaphors; the LLM client uses transport/mechanical ones.
+The brain owns the round loop and all policy. The LLM package (`llm.Activation`) is a dumb API client — protocol state only, no retries, no loop detection, no stopping decisions. The brain (and task runner) drive `Activation.Round()` in a loop, handling 5xx retry, loop detection, idle nudges, and terminal tool detection inline.
 
 - **Reflex** (`func(ctx context.Context)`): runs every tick before perception. A reflex is an optimization -- without it, the brain would poll every 2 seconds. Reflexes detect that something changed and trigger the brain to re-evaluate the timeline. Some reflexes materialize mechanical facts (e.g. `FireDueAlarms` creates occurrences), but reflexes never decide or fix on behalf of the LLM (see *Single decision-maker*). Examples: `task.CheckStale` (inserts stale reports), `alarms.FireDueAlarms` (creates occurrences and claims alarms), `alarms.StaleAlarmReflex` (detects stale recurring alarms), `skills.SkillChangeReflex` (detects skill add/remove/change), `shell.CheckSessions` (reaps dead shell sessions).
 - **Sense** (`interface { Scan(ctx) ([]Stimulus, error) }`): the brain's single, unified perception. Strictly read-only -- no side effects. Returns `[]Stimulus`, one per conversation with new events.

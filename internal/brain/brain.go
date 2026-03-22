@@ -2,18 +2,21 @@ package brain
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/kciuffolo/nik/internal/config"
+	"github.com/kciuffolo/nik/internal/id"
 	"github.com/kciuffolo/nik/internal/llm"
+	"github.com/kciuffolo/nik/internal/log"
 )
 
 type Brain struct {
 	cfg             *config.Config
-	llm             llm.Completer
+	llm             *llm.Client
+	recorder        llm.ActivationRecorder
 	toolDefs        []llm.ToolDef
 	toolExec        map[string]llm.ToolExecutor
 	privileged      map[string]bool
@@ -27,15 +30,26 @@ type Brain struct {
 	wg      sync.WaitGroup
 }
 
-func New(cfg *config.Config, llmClient llm.Completer) *Brain {
+var terminalTools = map[string]bool{
+	"message_send":  true,
+	"message_noop":  true,
+	"message_react": true,
+}
+
+func New(cfg *config.Config, llmClient *llm.Client) *Brain {
 	return &Brain{
 		cfg:        cfg,
 		llm:        llmClient,
+		recorder:   llm.NoopRecorder{},
 		toolExec:   make(map[string]llm.ToolExecutor),
 		privileged: make(map[string]bool),
 		now:        time.Now,
 		claimed:    NewSyncSet(),
 	}
+}
+
+func (b *Brain) SetRecorder(rec llm.ActivationRecorder) {
+	b.recorder = rec
 }
 
 func (b *Brain) SetWorkerToolNames(names []string) {
@@ -146,25 +160,17 @@ func (b *Brain) activate(ctx context.Context, output Stimulus) {
 	)
 }
 
-const maxThinkAttempts = 2
+const (
+	maxAttempts   = 3
+	loopThreshold = 4
+)
 
 func (b *Brain) think(ctx context.Context, getInput func() string) (string, llm.Usage, error) {
-	userInput := getInput()
-
-	// recall and the first round share the same input data
-	_getInput := getInput
-	getInput = func() string {
-		if userInput == "" {
-			return _getInput()
-		}
-		ret := userInput
-		userInput = ""
-		return ret
-	}
+	input := getInput()
 
 	var recall string
 	if b.recaller != nil {
-		recall = b.recaller(ctx, userInput)
+		recall = b.recaller(ctx, input)
 	}
 
 	thinkCtx, cancel := context.WithTimeout(ctx, activationTimeout)
@@ -174,53 +180,71 @@ func (b *Brain) think(ctx context.Context, getInput func() string) (string, llm.
 	tools := b.toolsForContext(ctx)
 	executor := b.toolExecutor()
 
-	var totalUsage llm.Usage
+	instructions, err := b.loadInstructions(b.now(), recall)
+	if err != nil {
+		return "", llm.Usage{}, err
+	}
 
-	for attempt := range maxThinkAttempts {
-		retry := attempt > 0
-		if retry {
-			slog.Warn("no terminal tool call, retrying", "pkg", "brain", "attempt", attempt)
+	actID := id.V7()
+	meta["activation_id"] = actID
+
+	act := llm.NewActivation(b.llm, b.recorder, instructions, tools)
+	act.Start(thinkCtx)
+	defer act.Close(thinkCtx)
+	act.SetInput(input)
+
+	var (
+		nudged    bool
+		concluded bool
+	)
+
+	for {
+		result, err := act.Round(thinkCtx)
+		if err != nil && llm.IsTransient(err) && act.Attempt() <= maxAttempts {
+			slog.Warn("transient API error, retrying", "pkg", "brain", "attempt", act.Attempt(), "error", err)
+			time.Sleep(llm.RetryDelay(act.Attempt()))
+			continue
 		}
-
-		instructions, err := b.loadInstructions(b.now(), recall, retry)
 		if err != nil {
-			return "", totalUsage, err
+			return "", act.Usage(), err
 		}
 
-		actID, ch := b.llm.Complete(thinkCtx, instructions, getInput, tools, executor, llm.WithScrubTools("message_noop"))
-		result := <-ch
-
-		meta["activation_id"] = actID
-
-		totalUsage.InputTokens += result.Usage.InputTokens
-		totalUsage.OutputTokens += result.Usage.OutputTokens
-		totalUsage.TotalTokens += result.Usage.TotalTokens
-		totalUsage.CachedTokens += result.Usage.CachedTokens
-		totalUsage.ReasoningTokens += result.Usage.ReasoningTokens
-
-		if result.Err != nil {
-			return "", totalUsage, result.Err
+		if result.Incomplete {
+			return "", act.Usage(), fmt.Errorf("response incomplete in round %d", act.RoundNumber()-1)
 		}
 
-		if hasTerminalCall(result.History) {
-			return result.Output, totalUsage, nil
+		if len(result.ToolCalls) == 0 {
+			if concluded {
+				return "", act.Usage(), nil
+			}
+			if nudged {
+				return "", act.Usage(), fmt.Errorf("no terminal tool call")
+			}
+			nudged = true
+			act.AppendAssistantText(result.Text)
+			act.AppendUserMessage(b.loadNudge())
+			continue
 		}
+
+		if act.Repeats() >= loopThreshold {
+			return "", act.Usage(), fmt.Errorf("loop: %d identical rounds calling %s", act.Repeats(), result.ToolCalls[0].Name)
+		}
+
+		for _, call := range result.ToolCalls {
+			slog.Info("tool call", log.ToolCallAttrs(thinkCtx, "brain", call.Name, act.RoundNumber()-1, call.Arguments)...)
+		}
+		results := act.ExecuteTools(thinkCtx, result, executor)
+
+		concluded = false
+		for i, call := range result.ToolCalls {
+			_ = results[i]
+			if terminalTools[call.Name] {
+				concluded = true
+			}
+		}
+
+		act.Prune()
+		act.SetInput(getInput())
 	}
-
-	return "", totalUsage, errors.New("no terminal tool call after retries")
 }
 
-var terminalTools = map[string]bool{
-	"message_send":  true,
-	"message_noop":  true,
-	"message_react": true,
-}
-
-func hasTerminalCall(history []llm.ToolCallRecord) bool {
-	for _, h := range history {
-		if terminalTools[h.Name] {
-			return true
-		}
-	}
-	return false
-}

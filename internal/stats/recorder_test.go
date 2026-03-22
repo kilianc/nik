@@ -7,6 +7,7 @@ import (
 
 	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/id"
+	"github.com/kciuffolo/nik/internal/llm"
 )
 
 func TestMetaFromCtx(t *testing.T) {
@@ -37,10 +38,10 @@ func TestMetaFromCtx(t *testing.T) {
 	}
 }
 
-func TestRecorderOnStart(t *testing.T) {
+func TestRecorderStart(t *testing.T) {
 	t.Run("no meta noops", func(t *testing.T) {
 		r := NewRecorder(nil)
-		r.OnStart(context.Background(), "gpt-4o")
+		r.Start(context.Background(), "gpt-4o")
 	})
 
 	t.Run("writes activation", func(t *testing.T) {
@@ -61,7 +62,7 @@ func TestRecorderOnStart(t *testing.T) {
 		ctx = context.WithValue(ctx, "meta", meta)
 
 		r := NewRecorder(conn)
-		r.OnStart(ctx, "gpt-4o")
+		r.Start(ctx, "gpt-4o")
 
 		var model string
 		err = conn.QueryRowContext(ctx, `SELECT model FROM activation WHERE id = ?1`, actID).Scan(&model)
@@ -74,10 +75,10 @@ func TestRecorderOnStart(t *testing.T) {
 	})
 }
 
-func TestRecorderOnRound(t *testing.T) {
+func TestRecorderRound(t *testing.T) {
 	t.Run("no meta noops", func(t *testing.T) {
 		r := NewRecorder(nil)
-		got := r.OnRound(context.Background(), 0, "input", "output", nil)
+		got := r.Round(context.Background(), 0, 0, "input", "output", nil)
 		if got != "" {
 			t.Fatalf("expected empty string, got %q", got)
 		}
@@ -101,9 +102,9 @@ func TestRecorderOnRound(t *testing.T) {
 		ctx = context.WithValue(ctx, "meta", meta)
 
 		r := NewRecorder(conn)
-		r.OnStart(ctx, "gpt-4o")
+		r.Start(ctx, "gpt-4o")
 
-		roundID := r.OnRound(ctx, 0, "hello", "thinking", []string{"considered"})
+		roundID := r.Round(ctx, 0, 0, "hello", "thinking", []string{"considered"})
 		if roundID == "" {
 			t.Fatal("expected non-empty round ID")
 		}
@@ -117,6 +118,82 @@ func TestRecorderOnRound(t *testing.T) {
 			t.Errorf("expected user_input 'hello', got %q", userInput)
 		}
 	})
+}
+
+func TestRecorderToolCall(t *testing.T) {
+	conn, err := db.OpenInMemory()
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer conn.Close()
+
+	ctx := context.Background()
+	convID := seedStatsConversation(t, ctx, conn)
+	actID := id.V7()
+
+	meta := map[string]string{
+		"activation_id":   actID,
+		"conversation_id": convID,
+	}
+	ctx = context.WithValue(ctx, "meta", meta)
+
+	r := NewRecorder(conn)
+	r.Start(ctx, "gpt-4o")
+	roundID := r.Round(ctx, 0, 0, "input", "output", nil)
+
+	call := llm.ToolCall{CallID: "c1", Name: "db_query", Arguments: `{"query":"SELECT 1"}`}
+	result := llm.ExecResult{Output: `{"rows":[]}`, Elapsed: 42 * time.Millisecond}
+	r.ToolCall(ctx, roundID, call, result)
+
+	var name string
+	err = conn.QueryRowContext(ctx, `SELECT name FROM tool_call WHERE activation_id = ?1`, actID).Scan(&name)
+	if err != nil {
+		t.Fatalf("query tool_call: %v", err)
+	}
+	if name != "db_query" {
+		t.Errorf("expected tool name 'db_query', got %q", name)
+	}
+}
+
+func TestRecorderFinish(t *testing.T) {
+	conn, err := db.OpenInMemory()
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer conn.Close()
+
+	ctx := context.Background()
+	convID := seedStatsConversation(t, ctx, conn)
+	actID := id.V7()
+
+	meta := map[string]string{
+		"activation_id":   actID,
+		"conversation_id": convID,
+	}
+	ctx = context.WithValue(ctx, "meta", meta)
+
+	r := NewRecorder(conn)
+	r.Start(ctx, "gpt-5.4")
+
+	r.Finish(ctx, llm.ActivationStats{
+		Model:           "gpt-5.4",
+		ReasoningEffort: "high",
+		Usage:           llm.Usage{InputTokens: 100, OutputTokens: 50, TotalTokens: 150},
+		Rounds:          llm.RoundStats{RoundCount: 2, MaxInputTokensPerRound: 80, MaxTotalTokensPerRound: 120},
+		ToolCallCount:   3,
+		DurationMS:      1500,
+		Instructions:    "test instructions",
+		Tools:           []string{"db_query", "shell_exec"},
+	})
+
+	var roundCount int
+	err = conn.QueryRowContext(ctx, `SELECT round_count FROM activation WHERE id = ?1`, actID).Scan(&roundCount)
+	if err != nil {
+		t.Fatalf("query activation: %v", err)
+	}
+	if roundCount != 2 {
+		t.Errorf("expected round_count 2, got %d", roundCount)
+	}
 }
 
 func seedStatsConversation(t *testing.T, ctx context.Context, conn db.DBTX) string {

@@ -18,7 +18,6 @@ import (
 	"github.com/kciuffolo/nik/internal/messaging"
 	"github.com/kciuffolo/nik/internal/shell"
 	"github.com/kciuffolo/nik/internal/skills"
-	"github.com/kciuffolo/nik/internal/stats"
 	"github.com/kciuffolo/nik/internal/task"
 )
 
@@ -108,11 +107,6 @@ func buildTools(cfg *config.Config, llmClient, taskLLMClient *llm.Client, conn *
 			roConn = conn
 		} else {
 			defer roConn.Close()
-		}
-
-		llmClient.SetObserver(stats.NewRecorder(conn))
-		if taskLLMClient != llmClient {
-			taskLLMClient.SetObserver(stats.NewRecorder(conn))
 		}
 
 		contactsSvc := contacts.NewService(conn)

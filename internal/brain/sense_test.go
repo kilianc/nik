@@ -25,45 +25,47 @@ func TestSetSensorPanicsOnNil(t *testing.T) {
 	b.SetSensor(nil)
 }
 
-func TestRegisterReflexEveryThrottles(t *testing.T) {
-	b := New(&config.Config{}, nil)
+func TestRegisterReflex(t *testing.T) {
+	t.Run("throttles by interval", func(t *testing.T) {
+		b := New(&config.Config{}, nil)
 
-	calls := 0
-	b.RegisterReflex(50*time.Millisecond, func(ctx context.Context) {
-		calls++
+		calls := 0
+		b.RegisterReflex(50*time.Millisecond, func(ctx context.Context) {
+			calls++
+		})
+
+		ctx := context.Background()
+		for range 5 {
+			b.reflexes[0](ctx)
+		}
+
+		if calls != 1 {
+			t.Fatalf("expected 1 call during throttle window, got %d", calls)
+		}
+
+		time.Sleep(60 * time.Millisecond)
+		b.reflexes[0](ctx)
+
+		if calls != 2 {
+			t.Fatalf("expected 2 calls after interval elapsed, got %d", calls)
+		}
 	})
 
-	ctx := context.Background()
-	for range 5 {
-		b.reflexes[0](ctx)
-	}
+	t.Run("zero interval runs every tick", func(t *testing.T) {
+		b := New(&config.Config{}, nil)
 
-	if calls != 1 {
-		t.Fatalf("expected 1 call during throttle window, got %d", calls)
-	}
+		calls := 0
+		b.RegisterReflex(0, func(ctx context.Context) {
+			calls++
+		})
 
-	time.Sleep(60 * time.Millisecond)
-	b.reflexes[0](ctx)
+		ctx := context.Background()
+		for range 5 {
+			b.reflexes[0](ctx)
+		}
 
-	if calls != 2 {
-		t.Fatalf("expected 2 calls after interval elapsed, got %d", calls)
-	}
-}
-
-func TestRegisterReflexZeroRunsEveryTick(t *testing.T) {
-	b := New(&config.Config{}, nil)
-
-	calls := 0
-	b.RegisterReflex(0, func(ctx context.Context) {
-		calls++
+		if calls != 5 {
+			t.Fatalf("expected 5 calls with zero interval, got %d", calls)
+		}
 	})
-
-	ctx := context.Background()
-	for range 5 {
-		b.reflexes[0](ctx)
-	}
-
-	if calls != 5 {
-		t.Fatalf("expected 5 calls with zero interval, got %d", calls)
-	}
 }

@@ -30,81 +30,64 @@ func TestHTMLCommentStripping(t *testing.T) {
 	}
 }
 
-func TestBuildPromptDataBannedWords(t *testing.T) {
-	tests := []struct {
-		name  string
-		words []string
-		want  int
-	}{
-		{"with words", []string{"forbidden", "blocked"}, 2},
-		{"empty", nil, 0},
-	}
+func TestBuildPromptData(t *testing.T) {
+	t.Run("banned words", func(t *testing.T) {
+		tests := []struct {
+			name  string
+			words []string
+			want  int
+		}{
+			{"with words", []string{"forbidden", "blocked"}, 2},
+			{"empty", nil, 0},
+		}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			b := &Brain{
-				cfg: &config.Config{
-					Timezone:    "UTC",
-					BannedWords: tt.words,
-				},
-			}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				b := &Brain{cfg: &config.Config{Timezone: "UTC", BannedWords: tt.words}}
+				data := b.buildPromptData(time.Now(), "")
+				if len(data.BannedWords) != tt.want {
+					t.Fatalf("expected %d banned words, got %d", tt.want, len(data.BannedWords))
+				}
+			})
+		}
+	})
 
-			data := b.buildPromptData(time.Now(), "")
-			if len(data.BannedWords) != tt.want {
-				t.Fatalf("expected %d banned words, got %d", tt.want, len(data.BannedWords))
-			}
-		})
-	}
-}
+	t.Run("breath", func(t *testing.T) {
+		home := t.TempDir()
+		b := &Brain{cfg: &config.Config{Home: home, Timezone: "UTC"}}
 
-func TestBuildPromptDataBreath(t *testing.T) {
-	home := t.TempDir()
+		data := b.buildPromptData(time.Now(), "")
+		if data.Breath != "" {
+			t.Fatalf("expected empty breath when file missing, got %q", data.Breath)
+		}
 
-	b := &Brain{
-		cfg: &config.Config{
-			Home:     home,
-			Timezone: "UTC",
-		},
-	}
+		breathDir := home + "/breathing"
+		if err := os.MkdirAll(breathDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		err := os.WriteFile(breathDir+"/latest.md", []byte("  feeling warm today  \n"), 0o644)
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	data := b.buildPromptData(time.Now(), "")
-	if data.Breath != "" {
-		t.Fatalf("expected empty breath when file missing, got %q", data.Breath)
-	}
+		data = b.buildPromptData(time.Now(), "")
+		if data.Breath != "feeling warm today" {
+			t.Fatalf("unexpected breath: %q", data.Breath)
+		}
+	})
 
-	breathDir := home + "/breathing"
-	if err := os.MkdirAll(breathDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	t.Run("now fields", func(t *testing.T) {
+		b := &Brain{cfg: &config.Config{Timezone: "UTC", Location: "San Francisco"}}
+		data := b.buildPromptData(time.Date(2026, time.January, 2, 15, 4, 0, 0, time.UTC), "")
 
-	err := os.WriteFile(breathDir+"/latest.md", []byte("  feeling warm today  \n"), 0o644)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	data = b.buildPromptData(time.Now(), "")
-	if data.Breath != "feeling warm today" {
-		t.Fatalf("unexpected breath: %q", data.Breath)
-	}
-}
-
-func TestBuildPromptDataNow(t *testing.T) {
-	b := &Brain{
-		cfg: &config.Config{
-			Timezone: "UTC",
-			Location: "San Francisco",
-		},
-	}
-
-	data := b.buildPromptData(time.Date(2026, time.January, 2, 15, 4, 0, 0, time.UTC), "")
-
-	if data.Now.Date != "Friday, January 2, 2026 3:04 PM" {
-		t.Fatalf("unexpected date: %q", data.Now.Date)
-	}
-	if data.Now.Timezone != "UTC (UTC, UTC+0)" {
-		t.Fatalf("unexpected timezone: %q", data.Now.Timezone)
-	}
-	if data.Now.Location != "San Francisco" {
-		t.Fatalf("unexpected location: %q", data.Now.Location)
-	}
+		if data.Now.Date != "Friday, January 2, 2026 3:04 PM" {
+			t.Fatalf("unexpected date: %q", data.Now.Date)
+		}
+		if data.Now.Timezone != "UTC (UTC, UTC+0)" {
+			t.Fatalf("unexpected timezone: %q", data.Now.Timezone)
+		}
+		if data.Now.Location != "San Francisco" {
+			t.Fatalf("unexpected location: %q", data.Now.Location)
+		}
+	})
 }

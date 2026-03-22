@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestComputeCostBasic(t *testing.T) {
+func TestComputeCost(t *testing.T) {
 	t.Run("unknown model returns zero", func(t *testing.T) {
 		cost := ComputeCost("unknown-model", 100, 100, 0)
 		if cost != 0 {
@@ -19,30 +19,27 @@ func TestComputeCostBasic(t *testing.T) {
 			t.Fatalf("expected positive cost for known model, got %f", cost)
 		}
 	})
-}
 
-func TestComputeCostCachedTokensReduceCost(t *testing.T) {
-	full := ComputeCost("gpt-5.2-codex", 100000, 1000, 0)
-	cached := ComputeCost("gpt-5.2-codex", 100000, 1000, 80000)
-	if cached >= full {
-		t.Fatalf("cached cost ($%.6f) should be less than full cost ($%.6f)", cached, full)
-	}
+	t.Run("cached tokens reduce cost", func(t *testing.T) {
+		full := ComputeCost("gpt-5.2-codex", 100000, 1000, 0)
+		cached := ComputeCost("gpt-5.2-codex", 100000, 1000, 80000)
+		if cached >= full {
+			t.Fatalf("cached cost ($%.6f) should be less than full cost ($%.6f)", cached, full)
+		}
 
-	// gpt-5.2-codex: input $1.75/M, cached $0.175/M (90% off)
-	// 20k uncached * 1.75e-6 + 80k cached * 0.175e-6 + 1k output * 14e-6
-	want := 20000*1.75e-6 + 80000*0.175e-6 + 1000*14.0e-6
-	if math.Abs(cached-want) > 1e-9 {
-		t.Fatalf("expected $%.6f, got $%.6f", want, cached)
-	}
-}
+		want := 20000*1.75e-6 + 80000*0.175e-6 + 1000*14.0e-6
+		if math.Abs(cached-want) > 1e-9 {
+			t.Fatalf("expected $%.6f, got $%.6f", want, cached)
+		}
+	})
 
-func TestComputeCostNoCacheRateFallsBackToInput(t *testing.T) {
-	// gpt-5.2-pro has no cached rate, so cached tokens charge at full input
-	full := ComputeCost("gpt-5.2-pro", 10000, 500, 0)
-	withCached := ComputeCost("gpt-5.2-pro", 10000, 500, 5000)
-	if math.Abs(full-withCached) > 1e-9 {
-		t.Fatalf("expected same cost for model without cache rate, got $%.6f vs $%.6f", full, withCached)
-	}
+	t.Run("no cache rate falls back to input", func(t *testing.T) {
+		full := ComputeCost("gpt-5.2-pro", 10000, 500, 0)
+		withCached := ComputeCost("gpt-5.2-pro", 10000, 500, 5000)
+		if math.Abs(full-withCached) > 1e-9 {
+			t.Fatalf("expected same cost, got $%.6f vs $%.6f", full, withCached)
+		}
+	})
 }
 
 func TestModelRates(t *testing.T) {
@@ -74,7 +71,6 @@ func TestModelRates(t *testing.T) {
 func TestComputeCostGPT54Codex(t *testing.T) {
 	cost := ComputeCost("gpt-5.4-codex", 100000, 1000, 80000)
 
-	// 20k uncached * 2.50e-6 + 80k cached * 0.25e-6 + 1k output * 15.0e-6
 	want := 20000*2.50e-6 + 80000*0.25e-6 + 1000*15.0e-6
 	if math.Abs(cost-want) > 1e-9 {
 		t.Fatalf("expected $%.6f, got $%.6f", want, cost)

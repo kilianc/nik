@@ -21,10 +21,10 @@ const (
 
 type Service struct {
 	cfg    *config.Config
-	client llm.Completer
+	client *llm.Client
 }
 
-func NewService(cfg *config.Config, client llm.Completer) *Service {
+func NewService(cfg *config.Config, client *llm.Client) *Service {
 	return &Service{cfg: cfg, client: client}
 }
 
@@ -55,22 +55,24 @@ func (s *Service) Recall(ctx context.Context, stimulus string) string {
 
 	instructions := buildRecallPrompt(stimulus)
 
-	_, ch := s.client.Complete(ctx, instructions, llm.StaticInput(numbered), nil, nil)
-	result := <-ch
+	act := llm.NewActivation(s.client, llm.NoopRecorder{}, instructions, nil)
+	act.SetInput(numbered)
 
-	if result.Err != nil {
-		slog.Warn("recall failed", "pkg", "recall", "err", result.Err)
+	result, err := act.Round(ctx)
+	if err != nil {
+		slog.Warn("recall failed", "pkg", "recall", "err", err)
 		return ""
 	}
 
-	ids := parseSelectedIDs(result.Output, len(rows))
+	ids := parseSelectedIDs(result.Text, len(rows))
 
+	usage := act.Usage()
 	slog.Info("recall completed",
 		"pkg", "recall",
 		"rows", len(rows),
 		"selected", len(ids),
-		"input_tokens", result.Usage.InputTokens,
-		"output_tokens", result.Usage.OutputTokens,
+		"input_tokens", usage.InputTokens,
+		"output_tokens", usage.OutputTokens,
 	)
 
 	if len(ids) == 0 {
