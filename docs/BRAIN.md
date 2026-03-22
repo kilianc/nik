@@ -119,23 +119,29 @@ the model has done so far. The model sees:
   round 2:  [ timeline_v2,  assistant_0, tool_call_0, tool_result_0,
                              assistant_1, tool_call_1, tool_result_1 ]
   ...
-  round N:  [ timeline_vN,  ... (oldest pairs pruned if >20) ... ]
+  round N:  [ timeline_vN,  ... (oldest pairs pruned if >limit) ... ]
 
   items[0] is REPLACED each round.
   everything after items[0] ACCUMULATES.
 ```
 
 **Pruning** keeps the accumulated tool history from overflowing the context
-window. After each tool round, if there are more than 20 tool call/output
-pairs, the oldest pairs are dropped. The user message (items[0] — the timeline)
-is always preserved. This is purely token budget management.
+window. After each tool round, if there are more tool call/output pairs than
+the limit, the oldest pairs are dropped. The user message (items[0] — the
+timeline) is always preserved. This is purely token budget management.
+
+The pair limit is model-aware: `maxPairsForModel` reserves ~50% of the model's
+context window for tool history, assuming ~8k tokens per pair (p99 from real
+activation data). The result is clamped to 10–40 pairs. Models with unknown
+context windows fall back to the ceiling (40). In practice: 128k-context models
+get 10 pairs, 400k models get 25, and 1M+ models get 40.
 
 The model can run up to 75 rounds per activation, steering continuously. It
 sees a potentially different timeline each round (new messages may have arrived,
 its own replies now appear as `YOU` messages), but its tool call history
 accumulates and eventually gets pruned.
 
-**Files:** `internal/llm/client.go` (`completeLoop`, `pruneItems`)
+**Files:** `internal/llm/client.go` (`completeLoop`, `pruneItems`, `maxPairsForModel`)
 
 ## Terminal tools and the end of an activation
 
