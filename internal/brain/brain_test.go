@@ -134,6 +134,6 @@ func (f *fakeSensor) Check(_ context.Context) ([]Stimulus, error) {
 	return f.stimuli, nil
 }
 
-func (f *fakeSensor) Get(_ context.Context, _ string) string {
+func (f *fakeSensor) Read(_ context.Context, _ string) string {
 	return ""
 }
