@@ -127,7 +127,7 @@ func (b *Brain) activate(ctx context.Context, output Stimulus) {
 	ctx = context.WithValue(ctx, "meta", output.Meta)
 
 	_, usage, err := b.think(ctx, func() string {
-		return b.sensor.Get(ctx, convID)
+		return b.sensor.Read(ctx, convID)
 	})
 	elapsed := time.Since(start)
 

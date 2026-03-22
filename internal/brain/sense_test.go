@@ -11,7 +11,7 @@ import (
 type stubSensor struct{}
 
 func (stubSensor) Check(context.Context) ([]Stimulus, error) { return nil, nil }
-func (stubSensor) Get(context.Context, string) string        { return "" }
+func (stubSensor) Read(context.Context, string) string       { return "" }
 
 func TestSetSensorPanicsOnNil(t *testing.T) {
 	b := New(&config.Config{}, nil)

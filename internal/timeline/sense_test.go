@@ -275,7 +275,7 @@ func TestRenderUsesSystemMessagesOnly(t *testing.T) {
 		t.Fatalf("expected header to include conversation id line, got %q", headerOut)
 	}
 
-	full := tl.Get(ctx, convID)
+	full := tl.Read(ctx, convID)
 	if !strings.Contains(full, "## Conversation") {
 		t.Fatalf("expected timeline output to use conversation header, got %q", full)
 	}

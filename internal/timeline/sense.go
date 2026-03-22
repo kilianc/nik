@@ -48,7 +48,7 @@ func (t *Timeline) Check(ctx context.Context) ([]brain.Stimulus, error) {
 	return stimuli, nil
 }
 
-func (t *Timeline) Get(ctx context.Context, convID string) string {
+func (t *Timeline) Read(ctx context.Context, convID string) string {
 	maxHistory := t.cfg.MaxHistory
 	if maxHistory == 0 {
 		maxHistory = 20
@@ -56,7 +56,7 @@ func (t *Timeline) Get(ctx context.Context, convID string) string {
 
 	conv, msgs, err := t.msgSvc.ConversationWithMessages(ctx, convID, maxHistory)
 	if err != nil {
-		slog.Warn("timeline get", "pkg", "timeline", "conversation_id", convID, "error", err)
+		slog.Warn("timeline read", "pkg", "timeline", "conversation_id", convID, "error", err)
 		return ""
 	}
 
