@@ -43,7 +43,7 @@ func (s *Service) Recall(ctx context.Context, stimulus string) string {
 		return ""
 	}
 
-	numbered, rows := numberRows(memories)
+	numbered, header, rows := numberRows(memories)
 	if len(rows) == 0 {
 		return ""
 	}
@@ -77,7 +77,7 @@ func (s *Service) Recall(ctx context.Context, stimulus string) string {
 		return ""
 	}
 
-	var selected []string
+	selected := append([]string{}, header...)
 	for _, id := range ids {
 		selected = append(selected, rows[id-1])
 	}
@@ -93,10 +93,10 @@ Stimulus:
 ` + stimulus
 }
 
-// numberRows parses a markdown table, skips everything up to and including
-// the separator line (|---|---|...), and returns a numbered version for
-// the LLM plus the original data rows for reassembly. Row IDs are 1-based.
-func numberRows(memories string) (numbered string, rows []string) {
+// numberRows parses a markdown table, collecting the header (everything up to
+// and including the separator line), and returns a numbered version for the LLM
+// plus the original header and data rows for reassembly. Row IDs are 1-based.
+func numberRows(memories string) (numbered string, header []string, rows []string) {
 	lines := strings.Split(strings.TrimSpace(memories), "\n")
 
 	pastSeparator := false
@@ -109,6 +109,7 @@ func numberRows(memories string) (numbered string, rows []string) {
 		}
 
 		if !pastSeparator {
+			header = append(header, line)
 			if isSeparator(trimmed) {
 				pastSeparator = true
 			}
@@ -119,7 +120,7 @@ func numberRows(memories string) (numbered string, rows []string) {
 		fmt.Fprintf(&b, "%d: %s\n", len(rows), trimmed)
 	}
 
-	return b.String(), rows
+	return b.String(), header, rows
 }
 
 func isSeparator(line string) bool {

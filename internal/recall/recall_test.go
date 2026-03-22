@@ -27,6 +27,7 @@ func TestNumberRows(t *testing.T) {
 	tests := []struct {
 		name         string
 		input        string
+		wantHeader   int
 		wantRows     int
 		wantNumbered bool
 	}{
@@ -34,12 +35,14 @@ func TestNumberRows(t *testing.T) {
 			"with data rows",
 			"| date | type | entity | memory | conversation |\n|------|------|--------|--------|--------------|\n| 2026-02-13 | personal_fact | CT | phone number is +16129610041 | Terminus |\n| 2026-02-14 | preference | Kilian | prefers low-emoji responses | dm |",
 			2,
+			2,
 			true,
 		},
-		{"empty", "", 0, false},
+		{"empty", "", 0, 0, false},
 		{
 			"header only",
 			"| date | type | entity | memory | conversation |\n|------|------|--------|--------|--------------|",
+			2,
 			0,
 			false,
 		},
@@ -47,7 +50,11 @@ func TestNumberRows(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			numbered, rows := numberRows(tt.input)
+			numbered, header, rows := numberRows(tt.input)
+
+			if len(header) != tt.wantHeader {
+				t.Fatalf("expected %d header lines, got %d", tt.wantHeader, len(header))
+			}
 
 			if len(rows) != tt.wantRows {
 				t.Fatalf("expected %d rows, got %d", tt.wantRows, len(rows))
