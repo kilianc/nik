@@ -330,6 +330,7 @@ EOF
 - tests run against in-memory SQLite (`:memory:`) where applicable
 - `make test` or regular `go test`
 - **strict 1:1 test file naming**: every `.go` file has a `_test.go` with the same base name (`foo.go` → `foo_test.go`). Tests for code in `foo.go` go in `foo_test.go`, nowhere else. Never name a test file after a concept (e.g. `stale_test.go`) when the code lives in another file (e.g. `service.go`). When creating a new `.go` file, create its `_test.go` in the same step. If a file gets too big it's a signal the base `.go` file might have to be split
+- **prefer table-driven tests**: when 3+ cases share the same setup/assertion structure and differ only in inputs and expected outputs, use a `[]struct` table with `t.Run` subtests. Use `t.Run` subtests (not a data table) when cases share setup but have distinct assertion logic
 
 ### Scripts and tools
 
