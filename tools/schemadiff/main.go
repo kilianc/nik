@@ -1,5 +1,6 @@
-// schemadiff compares the live nik.db schema against the desired schema.sql
-// and prints column-level diffs. read-only -- never modifies the database.
+// schemadiff compares the live nik.db schema against the desired schema.sql.
+// checks column metadata (via PRAGMA table_info) and full DDL (via
+// sqlite_master) to catch constraint drift. read-only.
 package main
 
 import (
@@ -99,15 +100,20 @@ func main() {
 			continue
 		}
 
-		diffs := diffColumns(desiredCols, liveCols)
-		if len(diffs) == 0 {
+		colDiffs := diffColumns(desiredCols, liveCols)
+		ddlDiffs := diffConstraints(desired, live, table)
+
+		if len(colDiffs) == 0 && len(ddlDiffs) == 0 {
 			fmt.Printf("%s: ok\n", table)
 			continue
 		}
 
 		hasDiffs = true
 		fmt.Printf("%s:\n", table)
-		for _, d := range diffs {
+		for _, d := range colDiffs {
+			fmt.Printf("  %s\n", d)
+		}
+		for _, d := range ddlDiffs {
 			fmt.Printf("  %s\n", d)
 		}
 	}
@@ -197,6 +203,200 @@ func stripVirtualTables(schema string) string {
 		out = append(out, stmt)
 	}
 	return strings.Join(out, ";")
+}
+
+// diffConstraints extracts CHECK, UNIQUE, and FK table-level constraints
+// from both DDLs and compares them. Column ordering differences (from
+// ALTER TABLE additions) are ignored — column comparison handles those.
+func diffConstraints(desired, live *sql.DB, table string) []string {
+	desiredDDL, err := tableDDL(desired, table)
+	if err != nil {
+		return nil
+	}
+
+	liveDDL, err := tableDDL(live, table)
+	if err != nil {
+		return nil
+	}
+
+	dc := extractConstraints(desiredDDL)
+	lc := extractConstraints(liveDDL)
+
+	sort.Strings(dc)
+	sort.Strings(lc)
+
+	dn := strings.Join(dc, "|")
+	ln := strings.Join(lc, "|")
+
+	if dn == ln {
+		return nil
+	}
+
+	var diffs []string
+	diffs = append(diffs, "~ constraint mismatch")
+
+	desiredSet := make(map[string]bool, len(dc))
+	for _, c := range dc {
+		desiredSet[c] = true
+	}
+
+	liveSet := make(map[string]bool, len(lc))
+	for _, c := range lc {
+		liveSet[c] = true
+	}
+
+	for _, c := range dc {
+		if !liveSet[c] {
+			diffs = append(diffs, "  + "+c)
+		}
+	}
+	for _, c := range lc {
+		if !desiredSet[c] {
+			diffs = append(diffs, "  - "+c)
+		}
+	}
+
+	return diffs
+}
+
+func tableDDL(db *sql.DB, table string) (string, error) {
+	var ddl string
+	err := db.QueryRow("SELECT sql FROM sqlite_master WHERE type='table' AND name=?", table).Scan(&ddl)
+	if err != nil {
+		return "", err
+	}
+	return ddl, nil
+}
+
+// extractConstraints pulls inline CHECK(...) expressions from column defs
+// and standalone table-level constraints (CHECK, UNIQUE, FOREIGN KEY) from
+// a CREATE TABLE DDL. Each is returned as a normalized string.
+func extractConstraints(ddl string) []string {
+	body := extractBody(ddl)
+	parts := splitTopLevel(body)
+
+	var constraints []string
+	for _, part := range parts {
+		norm := collapseWhitespace(part)
+		upper := strings.ToUpper(norm)
+
+		// table-level constraints: CHECK, UNIQUE, FOREIGN KEY
+		if strings.HasPrefix(upper, "CHECK ") || strings.HasPrefix(upper, "CHECK(") ||
+			strings.HasPrefix(upper, "UNIQUE(") || strings.HasPrefix(upper, "UNIQUE ") ||
+			strings.HasPrefix(upper, "FOREIGN KEY") {
+			constraints = append(constraints, norm)
+			continue
+		}
+
+		// inline CHECK on a column definition — extract only the CHECK(...) expr
+		for _, c := range extractInlineChecks(norm) {
+			constraints = append(constraints, c)
+		}
+	}
+
+	return constraints
+}
+
+// extractInlineChecks finds all CHECK(...) expressions within a column
+// definition, returning just the balanced CHECK(...) text.
+func extractInlineChecks(colDef string) []string {
+	upper := strings.ToUpper(colDef)
+	var checks []string
+	offset := 0
+
+	for offset < len(upper) {
+		idx := strings.Index(upper[offset:], "CHECK(")
+		if idx < 0 {
+			idx = strings.Index(upper[offset:], "CHECK (")
+		}
+		if idx < 0 {
+			break
+		}
+
+		start := offset + idx
+		parenStart := strings.IndexByte(colDef[start:], '(')
+		if parenStart < 0 {
+			break
+		}
+		parenStart += start
+
+		depth := 0
+		end := parenStart
+		for end < len(colDef) {
+			switch colDef[end] {
+			case '(':
+				depth++
+			case ')':
+				depth--
+				if depth == 0 {
+					checks = append(checks, collapseWhitespace(colDef[start:end+1]))
+					offset = end + 1
+					goto next
+				}
+			}
+			end++
+		}
+		break
+	next:
+	}
+
+	return checks
+}
+
+// extractBody returns the content between the outer parens of CREATE TABLE.
+func extractBody(ddl string) string {
+	start := strings.IndexByte(ddl, '(')
+	if start < 0 {
+		return ""
+	}
+	end := strings.LastIndexByte(ddl, ')')
+	if end <= start {
+		return ""
+	}
+	return ddl[start+1 : end]
+}
+
+// splitTopLevel splits on commas that are not inside parentheses.
+func splitTopLevel(s string) []string {
+	var parts []string
+	depth := 0
+	start := 0
+	for i, ch := range s {
+		switch ch {
+		case '(':
+			depth++
+		case ')':
+			depth--
+		case ',':
+			if depth == 0 {
+				parts = append(parts, strings.TrimSpace(s[start:i]))
+				start = i + 1
+			}
+		}
+	}
+	tail := strings.TrimSpace(s[start:])
+	if tail != "" {
+		parts = append(parts, tail)
+	}
+	return parts
+}
+
+func collapseWhitespace(s string) string {
+	s = strings.ReplaceAll(s, `"`, "")
+	var prev rune
+	var b strings.Builder
+	for _, r := range s {
+		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
+			if prev != ' ' {
+				b.WriteRune(' ')
+				prev = ' '
+			}
+			continue
+		}
+		b.WriteRune(r)
+		prev = r
+	}
+	return strings.TrimSpace(b.String())
 }
 
 func diffColumns(desired, live map[string]column) []string {
