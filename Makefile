@@ -62,6 +62,14 @@ trigger:
 call:
 	@cd $(NIK_HOME) && go run ../tools/call $(ARGS)
 
+.PHONY: diagnose
+diagnose:
+	@go run ./tools/diagnose -home $(NIK_HOME) $(ARGS)
+
+.PHONY: replay
+replay:
+	@go run ./tools/replay $(ARGS)
+
 .PHONY: shell-image
 shell-image:
 	docker build -t nik-shell:latest -f workspace/Dockerfile workspace/
