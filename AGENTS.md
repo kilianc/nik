@@ -97,6 +97,7 @@ Entry point: `cmd/nik/main.go`
 
 ## Debugging
 
+- **read `docs/BRAIN.md` before any debugging or root cause analysis** — it explains the timeline, read marker, continuous steering, self-reactivation, and known issues. Assumptions about how the loop works without reading it first are the #1 source of wrong diagnoses.
 - never run `make run` on your own, ask me to do it if you need me to
 - never send signals to nik's process (kill, SIGQUIT, SIGTERM, etc.) -- if nik needs a restart, ask me
 - do not override GOPROXY, I need a VPN when it fails, tell me to connect to it and wait
