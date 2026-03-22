@@ -82,7 +82,7 @@ type TaskReportRow struct {
 }
 
 func TaskReportList(ctx context.Context, db *sql.DB, taskID string) ([]TaskReportRow, error) {
-	rows, err := db.QueryContext(ctx, queries.TaskReportByTask, taskID)
+	rows, err := db.QueryContext(ctx, queries.TaskReportList, taskID)
 	if err != nil {
 		return nil, fmt.Errorf("query reports for task %s: %w", taskID, err)
 	}

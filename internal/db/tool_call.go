@@ -20,7 +20,7 @@ type ToolCallInsertParams struct {
 	IsError           bool
 }
 
-func ToolCallInsertOne(ctx context.Context, db *sql.DB, p ToolCallInsertParams) error {
+func ToolCallInsert(ctx context.Context, db *sql.DB, p ToolCallInsertParams) error {
 	errFlag := 0
 	if p.IsError {
 		errFlag = 1
@@ -31,7 +31,7 @@ func ToolCallInsertOne(ctx context.Context, db *sql.DB, p ToolCallInsertParams) 
 		roundID = p.ActivationRoundID
 	}
 
-	_, err := db.ExecContext(ctx, queries.ToolCallInsertOne,
+	_, err := db.ExecContext(ctx, queries.ToolCallInsert,
 		id.V7(),
 		p.ActivationID,
 		roundID,

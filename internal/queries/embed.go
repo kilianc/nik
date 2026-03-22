@@ -16,8 +16,8 @@ var ContactUpsertSelfWhatsApp string
 //go:embed contact_get.sql
 var ContactGet string
 
-//go:embed contact_update_field.sql
-var ContactUpdateField string
+//go:embed contact_update.sql
+var ContactUpdate string
 
 //go:embed contact_add_whatsapp_id.sql
 var ContactAddWhatsAppID string
@@ -56,8 +56,8 @@ var MessageGet string
 //go:embed message_list.sql
 var MessageList string
 
-//go:embed message_update_body.sql
-var MessageUpdateBody string
+//go:embed message_update.sql
+var MessageUpdate string
 
 // media queries
 
@@ -135,8 +135,8 @@ var ActivationRoundInsert string
 
 // tool call queries
 
-//go:embed tool_call_insert_one.sql
-var ToolCallInsertOne string
+//go:embed tool_call_insert.sql
+var ToolCallInsert string
 
 // task queries
 
@@ -169,8 +169,8 @@ var TaskAssessmentInsert string
 //go:embed task_assessment_tool_calls.sql
 var TaskAssessmentToolCalls string
 
-//go:embed task_report_by_task.sql
-var TaskReportByTask string
+//go:embed task_report_list.sql
+var TaskReportList string
 
 // task report queries
 
