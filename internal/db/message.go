@@ -160,7 +160,7 @@ func InsertMessage(ctx context.Context, db DBTX, p InsertMessageParams) error {
 }
 
 func UpdateMessageBody(ctx context.Context, db *sql.DB, messageID, body string) error {
-	_, err := db.ExecContext(ctx, queries.MessageUpdateBody, messageID, body)
+	_, err := db.ExecContext(ctx, queries.MessageUpdate, messageID, body)
 	if err != nil {
 		return fmt.Errorf("update message body %s: %w", messageID, err)
 	}

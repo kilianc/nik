@@ -247,4 +247,3 @@ func (b *Brain) think(ctx context.Context, getInput func() string) (string, llm.
 		act.SetInput(getInput())
 	}
 }
-

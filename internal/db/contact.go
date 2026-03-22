@@ -122,21 +122,21 @@ func upsertSelfContactWhatsApp(ctx context.Context, db *sql.DB, p UpsertContactP
 	return GetContact(ctx, db, p.SelfID)
 }
 
-type ContactUpdateFieldParams struct {
+type ContactUpdateParams struct {
 	ID         string
 	Field      string
 	Value      string
 	ArrayValue []string
 }
 
-func ContactUpdateField(ctx context.Context, db *sql.DB, p ContactUpdateFieldParams) error {
+func ContactUpdate(ctx context.Context, db *sql.DB, p ContactUpdateParams) error {
 	if p.ID == "" {
 		return fmt.Errorf("empty contact_id")
 	}
 
 	switch p.Field {
 	case "name", "notes", "one_liner", "timezone", "location", "nicknames", "emails", "phone_numbers":
-		_, err := db.ExecContext(ctx, queries.ContactUpdateField, p.ID, p.Field, p.Value, MarshalStringSlice(p.ArrayValue))
+		_, err := db.ExecContext(ctx, queries.ContactUpdate, p.ID, p.Field, p.Value, MarshalStringSlice(p.ArrayValue))
 		if err != nil {
 			return fmt.Errorf("update contact %s field %s: %w", p.ID, p.Field, err)
 		}

@@ -1,2 +1,5 @@
-INSERT OR IGNORE INTO contact (id, name)
+INSERT OR IGNORE INTO contact (
+  id,
+  name
+)
 VALUES (?1, 'system')

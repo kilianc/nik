@@ -67,7 +67,7 @@ func (r *Recorder) ToolCall(ctx context.Context, roundID string, call llm.ToolCa
 		return
 	}
 
-	err := db.ToolCallInsertOne(ctx, r.conn, db.ToolCallInsertParams{
+	err := db.ToolCallInsert(ctx, r.conn, db.ToolCallInsertParams{
 		ActivationID:      actID,
 		ActivationRoundID: roundID,
 		Name:              call.Name,

@@ -17,7 +17,7 @@ import (
 const runnerTimeout = 20 * time.Minute
 
 const (
-	runnerMaxAttempts = 3
+	runnerMaxAttempts   = 3
 	runnerLoopThreshold = 4
 )
 
@@ -171,7 +171,6 @@ func (r *Runner) runLoop(ctx context.Context, t db.Task, act *llm.Activation, ex
 		act.Prune()
 	}
 }
-
 
 func (r *Runner) Cancel(taskID string) bool {
 	v, ok := r.cancels.LoadAndDelete(taskID)

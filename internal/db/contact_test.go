@@ -213,7 +213,7 @@ func TestUpsertContactSelfWhatsAppPreservesRenamedName(t *testing.T) {
 		t.Fatalf("initial self upsert: %v", err)
 	}
 
-	err = ContactUpdateField(ctx, conn, ContactUpdateFieldParams{
+	err = ContactUpdate(ctx, conn, ContactUpdateParams{
 		ID:    selfID,
 		Field: "name",
 		Value: "Nikolai",
@@ -238,7 +238,7 @@ func TestUpsertContactSelfWhatsAppPreservesRenamedName(t *testing.T) {
 	}
 }
 
-func TestContactUpdateFieldUpdatesAllowedFields(t *testing.T) {
+func TestContactUpdateAllowedFields(t *testing.T) {
 	ctx := context.Background()
 
 	conn, err := OpenInMemory()
@@ -258,7 +258,7 @@ func TestContactUpdateFieldUpdatesAllowedFields(t *testing.T) {
 		t.Fatalf("seed contact: %v", err)
 	}
 
-	err = ContactUpdateField(ctx, conn, ContactUpdateFieldParams{
+	err = ContactUpdate(ctx, conn, ContactUpdateParams{
 		ID:    seed.ID,
 		Field: "notes",
 		Value: "new notes",
@@ -267,7 +267,7 @@ func TestContactUpdateFieldUpdatesAllowedFields(t *testing.T) {
 		t.Fatalf("update notes: %v", err)
 	}
 
-	err = ContactUpdateField(ctx, conn, ContactUpdateFieldParams{
+	err = ContactUpdate(ctx, conn, ContactUpdateParams{
 		ID:         seed.ID,
 		Field:      "nicknames",
 		ArrayValue: []string{"u1", "u2"},
@@ -289,7 +289,7 @@ func TestContactUpdateFieldUpdatesAllowedFields(t *testing.T) {
 	}
 }
 
-func TestContactUpdateFieldRejectsUnknownField(t *testing.T) {
+func TestContactUpdateRejectsUnknownField(t *testing.T) {
 	ctx := context.Background()
 
 	conn, err := OpenInMemory()
@@ -298,7 +298,7 @@ func TestContactUpdateFieldRejectsUnknownField(t *testing.T) {
 	}
 	defer conn.Close()
 
-	err = ContactUpdateField(ctx, conn, ContactUpdateFieldParams{
+	err = ContactUpdate(ctx, conn, ContactUpdateParams{
 		ID:    id.V7(),
 		Field: "bad_field",
 		Value: "value",

@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func TestToolCallInsertOne(t *testing.T) {
+func TestToolCallInsert(t *testing.T) {
 	tests := []struct {
 		name        string
 		toolName    string
@@ -66,7 +66,7 @@ func TestToolCallInsertOne(t *testing.T) {
 				t.Fatalf("insert activation round: %v", err)
 			}
 
-			err = ToolCallInsertOne(ctx, conn, ToolCallInsertParams{
+			err = ToolCallInsert(ctx, conn, ToolCallInsertParams{
 				ActivationID:      actID,
 				ActivationRoundID: roundID,
 				Name:              tt.toolName,
@@ -120,7 +120,7 @@ func TestToolCallInsertOne(t *testing.T) {
 			t.Fatalf("insert activation: %v", err)
 		}
 
-		err = ToolCallInsertOne(ctx, conn, ToolCallInsertParams{
+		err = ToolCallInsert(ctx, conn, ToolCallInsertParams{
 			ActivationID: actID,
 			Name:         "shell",
 			Input:        "{}",
