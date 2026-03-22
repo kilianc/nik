@@ -226,13 +226,13 @@ func renderTimeline(entries []entry, readLine time.Time) []string {
 	var lines []string
 
 	if len(handled) > 0 {
-		lines = append(lines, "### Already handled", "")
+		lines = append(lines, "### Old messages (you have already seen these)", "")
 		lines = append(lines, renderEntries(handled)...)
 		lines = append(lines, "")
 	}
 
 	if len(fresh) > 0 {
-		lines = append(lines, "### New", "")
+		lines = append(lines, "### New messages (since your last activation)", "")
 		lines = append(lines, renderEntries(fresh)...)
 	}
 
