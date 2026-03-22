@@ -187,7 +187,7 @@ func (b *Brain) think(ctx context.Context, getInput func() string) (string, llm.
 			return "", totalUsage, err
 		}
 
-		actID, ch := b.llm.Complete(thinkCtx, instructions, getInput, tools, executor)
+		actID, ch := b.llm.Complete(thinkCtx, instructions, getInput, tools, executor, llm.WithScrubTools("message_noop"))
 		result := <-ch
 
 		meta["activation_id"] = actID

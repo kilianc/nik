@@ -342,6 +342,23 @@ marker before the model chooses what to do. A bad noop buries unhandled
 messages with no recovery until an unrelated event arrives. Root cause of the
 3-hour "Send it to him" delay.
 
+**Rejected fix: defer markRead until after activation.** This breaks
+at-most-once delivery. If markRead is deferred, a crash or timeout mid-activation
+leaves the read marker behind. The next tick re-reads the same messages,
+triggers a new activation, and the model acts on them again — duplicate replies,
+duplicate tasks, duplicate side effects. The consumable timeline's core guarantee
+is that messages appear as "New" exactly once. Deferring markRead violates that.
+The fix for the noop-buries-messages problem must preserve at-most-once; it
+cannot move markRead later in the pipeline.
+
 **Retry nudge doesn't fire on noop** — noop counts as a tool call, so the
 retry prompt never triggers. If the model noops when it should act, there's no
 second chance within the activation.
+
+**Noop scrubbing** (mitigation for both issues above) — `WithScrubTools` strips
+noop tool calls from the `items` array after execution. When continuous steering
+re-reads the timeline and finds new messages, the model sees a clean context
+with no prior noop anchoring. The noop is still recorded in `history` (so
+`hasTerminalCall` finds it and the activation terminates normally), but the
+model's view is reset to just the user message. This prevents the anchoring
+failure where a round-0 noop biased the model toward inaction in round 1.
