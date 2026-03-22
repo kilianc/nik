@@ -49,8 +49,8 @@ func TestHasTerminalCall(t *testing.T) {
 			want:    false,
 		},
 		{
-			name:    "message_reply present",
-			history: []llm.ToolCallRecord{{Name: "task_list"}, {Name: "message_reply"}},
+			name:    "message_send present",
+			history: []llm.ToolCallRecord{{Name: "task_list"}, {Name: "message_send"}},
 			want:    true,
 		},
 		{

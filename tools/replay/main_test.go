@@ -28,7 +28,7 @@ func TestLoadCase(t *testing.T) {
 		Activations: []caseActivation{{
 			ID:    "act-1",
 			Model: "gpt-4o-mini",
-			Tools: []string{"message_reply", "message_noop"},
+			Tools: []string{"message_send", "message_noop"},
 			Rounds: []caseRound{{
 				Round:     0,
 				InputFile: "round_0_input.txt",
@@ -64,7 +64,7 @@ func TestLoadToolSchemas(t *testing.T) {
 	dir := t.TempDir()
 
 	tools := []toolSchema{
-		{Name: "message_reply", Description: "Reply to a message", Parameters: map[string]any{"type": "object"}},
+		{Name: "message_send", Description: "Send a message", Parameters: map[string]any{"type": "object"}},
 		{Name: "message_noop", Description: "No-op", Parameters: map[string]any{"type": "object"}},
 	}
 
@@ -79,7 +79,7 @@ func TestLoadToolSchemas(t *testing.T) {
 	if len(loaded) != 2 {
 		t.Fatalf("tools = %d, want 2", len(loaded))
 	}
-	if loaded[0].Name != "message_reply" {
-		t.Errorf("tool[0].name = %q, want message_reply", loaded[0].Name)
+	if loaded[0].Name != "message_send" {
+		t.Errorf("tool[0].name = %q, want message_send", loaded[0].Name)
 	}
 }

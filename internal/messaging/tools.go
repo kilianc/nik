@@ -11,9 +11,9 @@ import (
 	"github.com/kciuffolo/nik/internal/llm"
 )
 
-var replyToolDef = llm.ToolDef{
-	Name:        "message_reply",
-	Description: "Send one or more messages to a conversation or contact. Each message is a separate text bubble. Use quote_text and quote_time on a message to send it as a quote reply anchored to a specific message in the conversation.",
+var sendToolDef = llm.ToolDef{
+	Name:        "message_send",
+	Description: "Send one or more messages to a conversation. Each message is a separate text bubble. Use quote_text and quote_time on a message to send it as a quote reply anchored to a specific message in the conversation.",
 	Parameters: map[string]any{
 		"type": "object",
 		"properties": map[string]any{
@@ -128,14 +128,14 @@ var setPresenceToolDef = llm.ToolDef{
 
 func BuildTools(svc *Service) []llm.Tool {
 	return []llm.Tool{
-		{Def: replyToolDef, Handler: replyHandler(svc)},
+		{Def: sendToolDef, Handler: sendHandler(svc)},
 		{Def: noopToolDef, Handler: noopHandler()},
 		{Def: reactToolDef, Handler: reactHandler(svc)},
 		{Def: setPresenceToolDef, Handler: setPresenceHandler(svc)},
 	}
 }
 
-type replyMessage struct {
+type sendMessage struct {
 	Text      string `json:"text"`
 	ImagePath string `json:"image_path"`
 	Voice     bool   `json:"voice"`
@@ -143,12 +143,12 @@ type replyMessage struct {
 	QuoteTime string `json:"quote_time"`
 }
 
-func replyHandler(svc *Service) llm.ToolExecutor {
+func sendHandler(svc *Service) llm.ToolExecutor {
 	return func(ctx context.Context, call llm.ToolCall) (string, error) {
 		var args struct {
-			ConversationID string         `json:"conversation_id"`
-			ContactID      string         `json:"contact_id"`
-			Messages       []replyMessage `json:"messages"`
+			ConversationID string        `json:"conversation_id"`
+			ContactID      string        `json:"contact_id"`
+			Messages       []sendMessage `json:"messages"`
 		}
 
 		err := json.Unmarshal([]byte(call.Arguments), &args)

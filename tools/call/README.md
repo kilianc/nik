@@ -17,7 +17,7 @@ go run ./tools/call shell '{"action":"list","command":"","description":"","sessi
 
 ## Available tools
 
-LLM tools (`describe_media`), canonical DB-backed messaging tools (`message_noop`), contact tools, db query tools (`db_query`), shell tools (`shell`), skill tools (`load_skill`), and task tools (`task_spawn`, `task_retry`, `task_list`, `task_status`, `task_cancel`). Live platform actions (`message_reply`, `message_react`, typing/presence) are excluded.
+LLM tools (`describe_media`), canonical DB-backed messaging tools (`message_noop`), contact tools, db query tools (`db_query`), shell tools (`shell`), skill tools (`load_skill`), and task tools (`task_spawn`, `task_retry`, `task_list`, `task_status`, `task_cancel`). Live platform actions (`message_send`, `message_react`, typing/presence) are excluded.
 
 Run with an unknown tool name to see the full list:
 

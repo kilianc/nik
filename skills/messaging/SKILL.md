@@ -3,7 +3,7 @@ name: messaging
 preload: true
 summary: Send messages, reactions, typing indicators, and presence across platforms.
 tools:
-  - message_reply
+  - message_send
   - message_noop
   - message_react
   - message_set_presence
@@ -18,7 +18,7 @@ content + timestamp from the timeline.
 
 ## Tools
 
-### message_reply
+### message_send
 
 Send one or more messages to a conversation. Each item in the array
 becomes a separate text bubble -- like texting. One thought per message.
@@ -64,13 +64,13 @@ Set account-level presence for a platform.
 ## Behavior
 
 - Every activation must end with exactly one terminal action:
-  `message_reply`, `message_react`, or `message_noop`. These are the only
+  `message_send`, `message_react`, or `message_noop`. These are the only
   terminal actions -- everything else (tool lookups, skill loads, task
   spawns) is intermediate work. If you don't close with one of these three,
   your response is swallowed and the user sees nothing.
 - Pick one terminal action per activation. If a reaction says it all, use
-  `message_react` alone. If text is needed, use `message_reply` alone. Do
-  not call both `message_react` and `message_reply` in the same activation
+  `message_react` alone. If text is needed, use `message_send` alone. Do
+  not call both `message_react` and `message_send` in the same activation
   unless the person explicitly asks for both.
 - Typing indicators are sent automatically as part of reply -- no need
   to manage them manually.
