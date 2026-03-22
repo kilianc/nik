@@ -422,3 +422,68 @@ func TestIsServerError(t *testing.T) {
 		})
 	}
 }
+
+func TestScrubTools(t *testing.T) {
+	msg := responses.ResponseInputItemParamOfMessage("timeline", responses.EasyInputMessageRoleUser)
+	assistant := responses.ResponseInputItemParamOfMessage("thinking", responses.EasyInputMessageRoleAssistant)
+	noopCall := responses.ResponseInputItemParamOfFunctionCall(`{"reason":"drift"}`, "noop_1", "message_noop")
+	noopResult := responses.ResponseInputItemParamOfFunctionCallOutput("noop_1", `{"ok":true}`)
+	otherCall := responses.ResponseInputItemParamOfFunctionCall(`{}`, "db_1", "db_query")
+	otherResult := responses.ResponseInputItemParamOfFunctionCallOutput("db_1", `{"rows":[]}`)
+
+	tests := []struct {
+		name  string
+		items responses.ResponseInputParam
+		calls []ToolCall
+		scrub map[string]bool
+		want  int
+	}{
+		{
+			name:  "scrubs noop and keeps user message",
+			items: responses.ResponseInputParam{msg, assistant, noopCall, noopResult},
+			calls: []ToolCall{{Name: "message_noop"}},
+			scrub: map[string]bool{"message_noop": true},
+			want:  1,
+		},
+		{
+			name:  "no scrub when tool not in set",
+			items: responses.ResponseInputParam{msg, assistant, otherCall, otherResult},
+			calls: []ToolCall{{Name: "db_query"}},
+			scrub: map[string]bool{"message_noop": true},
+			want:  4,
+		},
+		{
+			name:  "scrubs when noop mixed with other calls",
+			items: responses.ResponseInputParam{msg, assistant, otherCall, otherResult, noopCall, noopResult},
+			calls: []ToolCall{{Name: "db_query"}, {Name: "message_noop"}},
+			scrub: map[string]bool{"message_noop": true},
+			want:  1,
+		},
+		{
+			name:  "no scrub when set is empty",
+			items: responses.ResponseInputParam{msg, assistant, noopCall, noopResult},
+			calls: []ToolCall{{Name: "message_noop"}},
+			scrub: map[string]bool{},
+			want:  4,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			items := tt.items
+
+			if len(tt.scrub) > 0 {
+				for _, call := range tt.calls {
+					if tt.scrub[call.Name] {
+						items = items[:1]
+						break
+					}
+				}
+			}
+
+			if len(items) != tt.want {
+				t.Fatalf("expected %d items, got %d", tt.want, len(items))
+			}
+		})
+	}
+}

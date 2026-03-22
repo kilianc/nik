@@ -39,6 +39,7 @@ type CompleteOption func(*completeOpts)
 type completeOpts struct {
 	onIdle          func(output string) string
 	recordFullInput bool
+	scrubTools      map[string]bool
 }
 
 func WithOnIdle(fn func(output string) string) CompleteOption {
@@ -47,6 +48,15 @@ func WithOnIdle(fn func(output string) string) CompleteOption {
 
 func WithRecordFullInput() CompleteOption {
 	return func(o *completeOpts) { o.recordFullInput = true }
+}
+
+func WithScrubTools(names ...string) CompleteOption {
+	return func(o *completeOpts) {
+		o.scrubTools = make(map[string]bool, len(names))
+		for _, n := range names {
+			o.scrubTools[n] = true
+		}
+	}
 }
 
 type Completer interface {
@@ -564,6 +574,15 @@ func (c *Client) completeLoop(ctx context.Context, client *openai.Client, instru
 			}
 
 			items = append(items, responses.ResponseInputItemParamOfFunctionCallOutput(call.CallID, r.result))
+		}
+
+		if len(opts.scrubTools) > 0 {
+			for _, call := range calls {
+				if opts.scrubTools[call.Name] {
+					items = items[:1]
+					break
+				}
+			}
 		}
 
 		before := len(items)
