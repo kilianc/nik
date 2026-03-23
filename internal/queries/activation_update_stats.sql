@@ -13,6 +13,5 @@ SET
   max_total_tokens_per_round = MAX(max_total_tokens_per_round, ?12),
   tool_call_count = tool_call_count + ?13,
   duration_ms = duration_ms + ?14,
-  error = ?15,
-  output = ?16
+  error = ?15
 WHERE id = ?1

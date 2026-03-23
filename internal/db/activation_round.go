@@ -14,6 +14,10 @@ type ActivationRoundInsertParams struct {
 	UserInput          string
 	ModelOutput        string
 	ReasoningSummaries []string
+	InputTokens        int64
+	OutputTokens       int64
+	CachedTokens       int64
+	ReasoningTokens    int64
 }
 
 func ActivationRoundInsert(ctx context.Context, db DBTX, p ActivationRoundInsertParams) (string, error) {
@@ -26,6 +30,10 @@ func ActivationRoundInsert(ctx context.Context, db DBTX, p ActivationRoundInsert
 		p.UserInput,
 		p.ModelOutput,
 		MarshalStringSlice(p.ReasoningSummaries),
+		p.InputTokens,
+		p.OutputTokens,
+		p.CachedTokens,
+		p.ReasoningTokens,
 	)
 	if err != nil {
 		return "", fmt.Errorf("insert activation_round %s round %d: %w", p.ActivationID, p.Round, err)

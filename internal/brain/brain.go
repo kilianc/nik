@@ -165,7 +165,7 @@ const (
 	loopThreshold = 4
 )
 
-func (b *Brain) think(ctx context.Context, getInput func() string) (string, llm.Usage, error) {
+func (b *Brain) think(ctx context.Context, getInput func() string) (_ string, _ llm.Usage, retErr error) {
 	input := getInput()
 
 	var recall string
@@ -190,7 +190,10 @@ func (b *Brain) think(ctx context.Context, getInput func() string) (string, llm.
 
 	act := llm.NewActivation(b.llm, b.recorder, instructions, tools)
 	act.Start(thinkCtx)
-	defer act.Close(thinkCtx)
+	defer func() {
+		act.SetError(retErr)
+		act.Close(thinkCtx)
+	}()
 	act.SetInput(input)
 
 	var (

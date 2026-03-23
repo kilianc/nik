@@ -3,6 +3,7 @@ package stats
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"log/slog"
 	"time"
 
@@ -38,7 +39,7 @@ func (r *Recorder) Start(ctx context.Context, model string) {
 	}
 }
 
-func (r *Recorder) Round(ctx context.Context, round, attempt int, userInput string, modelOutput string, reasoningSummaries []string) string {
+func (r *Recorder) Round(ctx context.Context, round, attempt int, userInput string, modelOutput string, reasoningSummaries []string, usage llm.Usage) string {
 	meta := metaFromCtx(ctx)
 	actID := meta["activation_id"]
 	if actID == "" {
@@ -51,6 +52,10 @@ func (r *Recorder) Round(ctx context.Context, round, attempt int, userInput stri
 		UserInput:          userInput,
 		ModelOutput:        modelOutput,
 		ReasoningSummaries: reasoningSummaries,
+		InputTokens:        usage.InputTokens,
+		OutputTokens:       usage.OutputTokens,
+		CachedTokens:       usage.CachedTokens,
+		ReasoningTokens:    usage.ReasoningTokens,
 	})
 	if err != nil {
 		slog.Warn("record activation round", "pkg", "stats", "activation_id", actID, "round", round, "error", err)
@@ -104,12 +109,23 @@ func (r *Recorder) Finish(ctx context.Context, stats llm.ActivationStats) {
 		MaxTotalTokens:  stats.Rounds.MaxTotalTokensPerRound,
 		ToolCallCount:   stats.ToolCallCount,
 		DurationMS:      stats.DurationMS,
+		Error:           stats.Error,
 	})
 	if err != nil {
 		slog.Warn("update activation stats", "pkg", "stats", "activation_id", actID, "error", err)
 	}
 
-	err = db.ActivationUpdateDetail(ctx, r.conn, actID, stats.Instructions, stats.Tools)
+	schemas := "[]"
+	if len(stats.ToolSchemas) > 0 {
+		data, jsonErr := json.Marshal(stats.ToolSchemas)
+		if jsonErr != nil {
+			slog.Warn("marshal tool schemas", "pkg", "stats", "activation_id", actID, "error", jsonErr)
+		} else {
+			schemas = string(data)
+		}
+	}
+
+	err = db.ActivationUpdateDetail(ctx, r.conn, actID, stats.Instructions, stats.Tools, schemas)
 	if err != nil {
 		slog.Warn("update activation detail", "pkg", "stats", "activation_id", actID, "error", err)
 	}

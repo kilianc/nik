@@ -10,7 +10,7 @@ import (
 
 type ActivationRecorder interface {
 	Start(ctx context.Context, model string)
-	Round(ctx context.Context, round, attempt int, input, output string, summaries []string) string
+	Round(ctx context.Context, round, attempt int, input, output string, summaries []string, usage Usage) string
 	ToolCall(ctx context.Context, roundID string, call ToolCall, result ExecResult)
 	Finish(ctx context.Context, stats ActivationStats)
 }
@@ -23,16 +23,20 @@ type ActivationStats struct {
 	Rounds          RoundStats
 	ToolCallCount   int
 	DurationMS      int64
+	Error           string
 	Instructions    string
 	Tools           []string
+	ToolSchemas     []ToolDef
 }
 
 type NoopRecorder struct{}
 
-func (NoopRecorder) Start(context.Context, string)                                    {}
-func (NoopRecorder) Round(context.Context, int, int, string, string, []string) string { return "" }
-func (NoopRecorder) ToolCall(context.Context, string, ToolCall, ExecResult)           {}
-func (NoopRecorder) Finish(context.Context, ActivationStats)                          {}
+func (NoopRecorder) Start(context.Context, string) {}
+func (NoopRecorder) Round(context.Context, int, int, string, string, []string, Usage) string {
+	return ""
+}
+func (NoopRecorder) ToolCall(context.Context, string, ToolCall, ExecResult) {}
+func (NoopRecorder) Finish(context.Context, ActivationStats)                {}
 
 type RoundResult struct {
 	Text               string
@@ -43,22 +47,24 @@ type RoundResult struct {
 }
 
 type Activation struct {
-	client       *Client
-	recorder     ActivationRecorder
-	prov         provider
-	total        Usage
-	rounds       RoundStats
-	extra        CompletionExtra
-	history      []ToolCallRecord
-	round        int
-	attempt      int
-	startTime    time.Time
-	prevSig      string
-	repeats      int
-	lastRoundID  string
-	instructions string
-	toolNames    []string
-	verbosity    string
+	client        *Client
+	recorder      ActivationRecorder
+	prov          provider
+	total         Usage
+	rounds        RoundStats
+	extra         CompletionExtra
+	history       []ToolCallRecord
+	round         int
+	attempt       int
+	startTime     time.Time
+	prevSig       string
+	repeats       int
+	lastRoundID   string
+	instructions  string
+	toolNames     []string
+	toolDefs      []ToolDef
+	verbosity     string
+	activationErr string
 }
 
 func NewActivation(client *Client, rec ActivationRecorder, instructions string, tools []ToolDef) *Activation {
@@ -86,12 +92,19 @@ func NewActivation(client *Client, rec ActivationRecorder, instructions string, 
 		startTime:    time.Now(),
 		instructions: instructions,
 		toolNames:    names,
+		toolDefs:     tools,
 		verbosity:    verbosity,
 	}
 }
 
 func (s *Activation) Start(ctx context.Context) {
 	s.recorder.Start(ctx, *s.client.model)
+}
+
+func (s *Activation) SetError(err error) {
+	if err != nil {
+		s.activationErr = err.Error()
+	}
 }
 
 func (s *Activation) Close(ctx context.Context) {
@@ -103,8 +116,10 @@ func (s *Activation) Close(ctx context.Context) {
 		Rounds:          s.rounds,
 		ToolCallCount:   len(s.history),
 		DurationMS:      time.Since(s.startTime).Milliseconds(),
+		Error:           s.activationErr,
 		Instructions:    s.instructions,
 		Tools:           s.toolNames,
+		ToolSchemas:     s.toolDefs,
 	})
 }
 
@@ -170,7 +185,7 @@ func (s *Activation) Round(ctx context.Context) (*RoundResult, error) {
 		s.prevSig = sig
 	}
 
-	s.lastRoundID = s.recorder.Round(ctx, s.round, s.attempt, s.UserInput(), result.Text, pr.reasoningSummaries)
+	s.lastRoundID = s.recorder.Round(ctx, s.round, s.attempt, s.UserInput(), result.Text, pr.reasoningSummaries, pr.usage)
 	s.attempt = 0
 	s.round++
 	return result, nil
