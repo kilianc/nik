@@ -240,24 +240,69 @@ allow_conversation_ids:
 
 func TestLoadValidation(t *testing.T) {
 	tests := []struct {
-		name   string
-		config string
+		name    string
+		config  string
+		wantErr bool
 	}{
 		{
 			"missing main model",
 			"openai_key: sk-test\nmodels:\n  main:\n    model: \"\"\n",
+			true,
 		},
 		{
 			"critic enabled without model",
 			"openai_key: sk-test\nmodels:\n  main:\n    model: gpt-5\n  critic:\n    enabled: true\n    model: \"\"\n",
+			true,
 		},
 		{
 			"invalid main reasoning_effort",
 			"openai_key: sk-test\nmodels:\n  main:\n    model: gpt-5\n    reasoning_effort: turbo\n",
+			true,
 		},
 		{
 			"invalid task reasoning_effort",
 			"openai_key: sk-test\nmodels:\n  main:\n    model: gpt-5\n  task:\n    reasoning_effort: turbo\n",
+			true,
+		},
+		{
+			"empty backend is valid",
+			"openai_key: sk-test\nmodels:\n  main:\n    model: gpt-5\n    backend: \"\"\n",
+			false,
+		},
+		{
+			"api backend is valid",
+			"openai_key: sk-test\nmodels:\n  main:\n    model: gpt-5\n    backend: api\n",
+			false,
+		},
+		{
+			"subscription backend is valid",
+			"models:\n  main:\n    model: gpt-5\n    backend: subscription\n",
+			false,
+		},
+		{
+			"invalid backend rejected",
+			"openai_key: sk-test\nmodels:\n  main:\n    model: gpt-5\n    backend: cloud\n",
+			true,
+		},
+		{
+			"invalid task backend rejected",
+			"openai_key: sk-test\nmodels:\n  main:\n    model: gpt-5\n  task:\n    backend: cloud\n",
+			true,
+		},
+		{
+			"invalid critic backend rejected",
+			"openai_key: sk-test\nmodels:\n  main:\n    model: gpt-5\n  critic:\n    backend: cloud\n",
+			true,
+		},
+		{
+			"subscription satisfies auth requirement",
+			"models:\n  main:\n    model: gpt-5\n    backend: subscription\n",
+			false,
+		},
+		{
+			"no key and no subscription fails",
+			"models:\n  main:\n    model: gpt-5\n",
+			true,
 		},
 	}
 
@@ -267,8 +312,11 @@ func TestLoadValidation(t *testing.T) {
 			writeTestConfig(t, dir, tt.config)
 
 			_, err := Load(dir)
-			if err == nil {
-				t.Fatal("expected validation error")
+			if tt.wantErr && err == nil {
+				t.Fatal("expected error")
+			}
+			if !tt.wantErr && err != nil {
+				t.Fatalf("unexpected error: %v", err)
 			}
 		})
 	}
@@ -316,6 +364,51 @@ func TestIsAllowed(t *testing.T) {
 	}
 	if cfg.IsAllowed("") {
 		t.Fatal("expected empty string to not be allowed")
+	}
+}
+
+func TestIsSubscription(t *testing.T) {
+	m := ModelConfig{Backend: "subscription"}
+	if !m.IsSubscription() {
+		t.Fatal("expected IsSubscription true")
+	}
+
+	m.Backend = "api"
+	if m.IsSubscription() {
+		t.Fatal("expected IsSubscription false for api")
+	}
+
+	m.Backend = ""
+	if m.IsSubscription() {
+		t.Fatal("expected IsSubscription false for empty")
+	}
+
+	c := CriticConfig{Backend: "subscription"}
+	if !c.IsSubscription() {
+		t.Fatal("expected CriticConfig.IsSubscription true")
+	}
+
+	c.Backend = ""
+	if c.IsSubscription() {
+		t.Fatal("expected CriticConfig.IsSubscription false for empty")
+	}
+}
+
+func TestAnySubscription(t *testing.T) {
+	m := ModelsConfig{}
+	if m.AnySubscription() {
+		t.Fatal("expected false when no backend set")
+	}
+
+	m.Task.Backend = "subscription"
+	if !m.AnySubscription() {
+		t.Fatal("expected true when task is subscription")
+	}
+
+	m = ModelsConfig{}
+	m.Critic.Backend = "subscription"
+	if !m.AnySubscription() {
+		t.Fatal("expected true when critic is subscription")
 	}
 }
 

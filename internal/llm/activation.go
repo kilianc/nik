@@ -4,13 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strings"
 	"sync"
 	"time"
-
-	"github.com/openai/openai-go/v3"
-	"github.com/openai/openai-go/v3/responses"
-	"github.com/openai/openai-go/v3/shared"
 )
 
 type ActivationRecorder interface {
@@ -50,9 +45,7 @@ type RoundResult struct {
 type Activation struct {
 	client       *Client
 	recorder     ActivationRecorder
-	params       responses.ResponseNewParams
-	items        responses.ResponseInputParam
-	useStreaming bool
+	prov         provider
 	total        Usage
 	rounds       RoundStats
 	extra        CompletionExtra
@@ -69,40 +62,11 @@ type Activation struct {
 }
 
 func NewActivation(client *Client, rec ActivationRecorder, instructions string, tools []ToolDef) *Activation {
-	params := responses.ResponseNewParams{
-		Model:        shared.ResponsesModel(*client.model),
-		Instructions: openai.String(instructions),
-		Tools:        buildToolParams(tools),
-		Reasoning: shared.ReasoningParam{
-			Summary: shared.ReasoningSummaryDetailed,
-		},
-	}
-
-	if client.reasoningEffort != nil && *client.reasoningEffort != "" {
-		params.Reasoning.Effort = shared.ReasoningEffort(*client.reasoningEffort)
-	}
-
-	if client.verbosity != nil && *client.verbosity != "" {
-		params.Text = responses.ResponseTextConfigParam{
-			Verbosity: responses.ResponseTextConfigVerbosity(*client.verbosity),
-		}
-	}
-
-	if client.jsonOutput {
-		params.Text.Format = responses.ResponseFormatTextConfigUnionParam{
-			OfJSONObject: &shared.ResponseFormatJSONObjectParam{},
-		}
-	}
-
-	m := *client.model
-	noReasoning := (strings.Contains(m, "spark") || strings.Contains(m, "nano") || strings.Contains(m, "4.1-mini")) && !strings.Contains(m, "5.4")
-	if noReasoning {
-		params.Reasoning = shared.ReasoningParam{}
-		params.Text = responses.ResponseTextConfigParam{}
-	}
-
-	if client.codexClient != nil {
-		params.Store = openai.Bool(false)
+	var prov provider
+	if client.isAnthropic() {
+		prov = newAnthropicProvider(client, instructions, tools)
+	} else {
+		prov = newOpenAIProvider(client, instructions, tools)
 	}
 
 	names := make([]string, len(tools))
@@ -118,8 +82,7 @@ func NewActivation(client *Client, rec ActivationRecorder, instructions string, 
 	return &Activation{
 		client:       client,
 		recorder:     rec,
-		params:       params,
-		useStreaming: client.codexClient != nil,
+		prov:         prov,
 		startTime:    time.Now(),
 		instructions: instructions,
 		toolNames:    names,
@@ -146,14 +109,7 @@ func (s *Activation) Close(ctx context.Context) {
 }
 
 func (s *Activation) SetInput(content string) {
-	content = ensureJSONInput(content, s.client.jsonOutput)
-	msg := responses.ResponseInputItemParamOfMessage(content, responses.EasyInputMessageRoleUser)
-
-	if len(s.items) == 0 {
-		s.items = append(s.items, msg)
-	} else {
-		s.items[0] = msg
-	}
+	s.prov.setInput(content)
 }
 
 func (s *Activation) Attempt() int { return s.attempt }
@@ -163,89 +119,46 @@ func (s *Activation) Round(ctx context.Context) (*RoundResult, error) {
 		return nil, fmt.Errorf("max rounds (%d) reached without completion", maxRounds)
 	}
 
-	s.params.Input = responses.ResponseNewParamsInputUnion{OfInputItemList: s.items}
-
-	apiClient := s.client.apiClient
-	if s.client.codexClient != nil {
-		apiClient = s.client.codexClient
-	}
-
-	var resp *responses.Response
-	var err error
-
-	if s.useStreaming {
-		resp, err = completeStreaming(ctx, apiClient, s.params)
-	} else {
-		resp, err = apiClient.Responses.New(ctx, s.params)
-	}
-
+	pr, err := s.prov.complete(ctx)
 	if err != nil {
 		s.attempt++
 		return nil, fmt.Errorf("round %d: %w", s.round, err)
 	}
 
-	s.extra.RawResponses = append(s.extra.RawResponses, resp.RawJSON())
+	s.extra.RawResponses = append(s.extra.RawResponses, pr.rawJSON)
 
-	if effort := string(resp.Reasoning.Effort); effort != "" {
-		s.extra.ReasoningEffort = effort
+	if pr.reasoningEffort != "" {
+		s.extra.ReasoningEffort = pr.reasoningEffort
 	}
 
-	s.total.InputTokens += resp.Usage.InputTokens
-	s.total.OutputTokens += resp.Usage.OutputTokens
-	s.total.TotalTokens += resp.Usage.TotalTokens
-	s.total.CachedTokens += resp.Usage.InputTokensDetails.CachedTokens
-	s.total.ReasoningTokens += resp.Usage.OutputTokensDetails.ReasoningTokens
+	s.total.InputTokens += pr.usage.InputTokens
+	s.total.OutputTokens += pr.usage.OutputTokens
+	s.total.TotalTokens += pr.usage.TotalTokens
+	s.total.CachedTokens += pr.usage.CachedTokens
+	s.total.ReasoningTokens += pr.usage.ReasoningTokens
 
 	s.rounds.RoundCount++
-	if resp.Usage.InputTokens > s.rounds.MaxInputTokensPerRound {
-		s.rounds.MaxInputTokensPerRound = resp.Usage.InputTokens
+	if pr.usage.InputTokens > s.rounds.MaxInputTokensPerRound {
+		s.rounds.MaxInputTokensPerRound = pr.usage.InputTokens
 	}
-	if resp.Usage.TotalTokens > s.rounds.MaxTotalTokensPerRound {
-		s.rounds.MaxTotalTokensPerRound = resp.Usage.TotalTokens
-	}
-
-	var summaries []string
-	for _, item := range resp.Output {
-		if item.Type != "reasoning" {
-			continue
-		}
-		for _, su := range item.AsReasoning().Summary {
-			if su.Text != "" {
-				summaries = append(summaries, su.Text)
-			}
-		}
+	if pr.usage.TotalTokens > s.rounds.MaxTotalTokensPerRound {
+		s.rounds.MaxTotalTokensPerRound = pr.usage.TotalTokens
 	}
 
 	result := &RoundResult{
-		Text:               resp.OutputText(),
-		ReasoningSummaries: summaries,
-		RoundUsage: Usage{
-			InputTokens:     resp.Usage.InputTokens,
-			OutputTokens:    resp.Usage.OutputTokens,
-			TotalTokens:     resp.Usage.TotalTokens,
-			CachedTokens:    resp.Usage.InputTokensDetails.CachedTokens,
-			ReasoningTokens: resp.Usage.OutputTokensDetails.ReasoningTokens,
-		},
+		Text:               pr.text,
+		ReasoningSummaries: pr.reasoningSummaries,
+		RoundUsage:         pr.usage,
 	}
 
-	if resp.Status == responses.ResponseStatusIncomplete {
+	if pr.incomplete {
 		result.Incomplete = true
 		s.attempt = 0
 		s.round++
 		return result, nil
 	}
 
-	for _, item := range resp.Output {
-		if item.Type != "function_call" {
-			continue
-		}
-		fc := item.AsFunctionCall()
-		result.ToolCalls = append(result.ToolCalls, ToolCall{
-			CallID:    fc.CallID,
-			Name:      fc.Name,
-			Arguments: fc.Arguments,
-		})
-	}
+	result.ToolCalls = pr.toolCalls
 
 	if len(result.ToolCalls) > 0 {
 		sig := roundSignature(result.ToolCalls)
@@ -257,7 +170,7 @@ func (s *Activation) Round(ctx context.Context) (*RoundResult, error) {
 		s.prevSig = sig
 	}
 
-	s.lastRoundID = s.recorder.Round(ctx, s.round, s.attempt, s.UserInput(), result.Text, summaries)
+	s.lastRoundID = s.recorder.Round(ctx, s.round, s.attempt, s.UserInput(), result.Text, pr.reasoningSummaries)
 	s.attempt = 0
 	s.round++
 	return result, nil
@@ -314,27 +227,25 @@ func (s *Activation) AddToolResult(call ToolCall, output string, isError bool) {
 	}
 	s.history = append(s.history, rec)
 
-	s.items = append(s.items, responses.ResponseInputItemParamOfFunctionCall(call.Arguments, call.CallID, call.Name))
-	s.items = append(s.items, responses.ResponseInputItemParamOfFunctionCallOutput(call.CallID, output))
+	s.prov.addToolResult(call, output, isError)
 }
 
 func (s *Activation) AppendAssistantText(text string) {
 	if text == "" {
 		return
 	}
-	s.items = append(s.items, responses.ResponseInputItemParamOfMessage(text, responses.EasyInputMessageRoleAssistant))
+	s.prov.appendAssistant(text)
 }
 
 func (s *Activation) AppendUserMessage(text string) {
-	s.items = append(s.items, responses.ResponseInputItemParamOfMessage(text, responses.EasyInputMessageRoleUser))
+	s.prov.appendUser(text)
 }
 
 func (s *Activation) Prune() {
 	pairLimit := maxPairsForModel(*s.client.model)
-	before := len(s.items)
-	s.items = pruneItems(s.items, pairLimit)
-	if len(s.items) < before {
-		slog.Info("pruned tool history", "pkg", "llm", "round", s.round, "dropped_items", before-len(s.items), "pair_limit", pairLimit)
+	dropped := s.prov.prune(pairLimit)
+	if dropped > 0 {
+		slog.Info("pruned tool history", "pkg", "llm", "round", s.round, "dropped_items", dropped, "pair_limit", pairLimit)
 	}
 }
 
@@ -346,22 +257,9 @@ func (s *Activation) RoundNumber() int          { return s.round }
 func (s *Activation) StartTime() time.Time      { return s.startTime }
 
 func (s *Activation) UserInput() string {
-	if len(s.items) == 0 {
-		return ""
-	}
-	return extractInputFromItem(s.items[0])
+	return s.prov.userInput()
 }
 
 func (s *Activation) FullInput() string {
-	return extractInput(s.items)
-}
-
-func extractInputFromItem(item responses.ResponseInputItemUnionParam) string {
-	if item.OfMessage == nil {
-		return ""
-	}
-	if !item.OfMessage.Content.OfString.Valid() {
-		return ""
-	}
-	return item.OfMessage.Content.OfString.Value
+	return s.prov.fullInput()
 }

@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	anthropic "github.com/anthropics/anthropic-sdk-go"
+	anthropicopt "github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/kciuffolo/nik/internal/codex"
 	"github.com/kciuffolo/nik/internal/id"
 	"github.com/openai/openai-go/v3"
@@ -28,6 +30,7 @@ const maxConcurrentActivations = 6
 type Client struct {
 	codexClient     *openai.Client
 	apiClient       *openai.Client
+	anthropicClient *anthropic.Client
 	model           *string
 	reasoningEffort *string
 	verbosity       *string
@@ -37,6 +40,7 @@ type Client struct {
 
 type clientConfig struct {
 	apiKey          string
+	anthropicKey    string
 	codexAuth       *codex.Auth
 	reasoningEffort *string
 	verbosity       *string
@@ -48,6 +52,12 @@ type ClientOption func(*clientConfig)
 func WithAPIKey(key string) ClientOption {
 	return func(c *clientConfig) {
 		c.apiKey = key
+	}
+}
+
+func WithAnthropicKey(key string) ClientOption {
+	return func(c *clientConfig) {
+		c.anthropicKey = key
 	}
 }
 
@@ -121,11 +131,27 @@ func NewClient(model *string, opts ...ClientOption) *Client {
 		c.codexClient = &codexClient
 	}
 
+	if cfg.anthropicKey != "" {
+		ac := anthropic.NewClient(
+			anthropicopt.WithAPIKey(cfg.anthropicKey),
+			anthropicopt.WithMaxRetries(0),
+		)
+		c.anthropicClient = &ac
+	}
+
 	return c
 }
 
 func (c *Client) Model() string {
 	return *c.model
+}
+
+func (c *Client) isAnthropic() bool {
+	return isAnthropicModel(*c.model)
+}
+
+func isAnthropicModel(model string) bool {
+	return strings.HasPrefix(model, "claude")
 }
 
 type ToolDef struct {
@@ -206,34 +232,6 @@ const (
 
 const jsonObjectInputHint = "Return a single json object only."
 
-func extractInput(items responses.ResponseInputParam) string {
-	var parts []string
-	for _, item := range items {
-		if item.OfMessage == nil {
-			continue
-		}
-		if !item.OfMessage.Content.OfString.Valid() {
-			continue
-		}
-		if s := item.OfMessage.Content.OfString.Value; s != "" {
-			parts = append(parts, s)
-		}
-	}
-	return strings.Join(parts, "\n\n")
-}
-
-func ensureJSONInput(content string, jsonOutput bool) string {
-	if !jsonOutput {
-		return content
-	}
-
-	if strings.TrimSpace(content) != "" {
-		return content
-	}
-
-	return jsonObjectInputHint
-}
-
 func maxPairsForModel(model string) int {
 	ctx, ok := ModelContextWindow(model)
 	if !ok {
@@ -251,60 +249,6 @@ func maxPairsForModel(model string) int {
 	return pairs
 }
 
-func pruneItems(items responses.ResponseInputParam, maxPairs int) responses.ResponseInputParam {
-	var pairCount int
-	for _, item := range items[1:] {
-		if item.OfFunctionCallOutput != nil {
-			pairCount++
-		}
-	}
-
-	if pairCount <= maxPairs {
-		return items
-	}
-
-	dropPairs := pairCount - maxPairs
-	var dropped int
-	cutIdx := 1
-	for cutIdx < len(items) && dropped < dropPairs {
-		if items[cutIdx].OfFunctionCallOutput != nil {
-			dropped++
-		}
-		cutIdx++
-	}
-
-	pruned := make(responses.ResponseInputParam, 0, len(items)-(cutIdx-1))
-	pruned = append(pruned, items[0])
-	pruned = append(pruned, items[cutIdx:]...)
-	return pruned
-}
-
-// completeStreaming uses the streaming API and collects the final completed
-// response. the codex backend requires stream=true on all requests.
-func completeStreaming(ctx context.Context, client *openai.Client, params responses.ResponseNewParams) (*responses.Response, error) {
-	stream := client.Responses.NewStreaming(ctx, params)
-	defer stream.Close()
-
-	var final *responses.Response
-	for stream.Next() {
-		evt := stream.Current()
-		completed := evt.AsResponseCompleted()
-		if completed.Type == "response.completed" {
-			final = &completed.Response
-		}
-	}
-
-	if stream.Err() != nil {
-		return nil, stream.Err()
-	}
-
-	if final == nil {
-		return nil, fmt.Errorf("stream ended without response.completed event")
-	}
-
-	return final, nil
-}
-
 func IsTransient(err error) bool {
 	var apiErr *openai.Error
 	if errors.As(err, &apiErr) && apiErr.StatusCode >= 500 {
@@ -317,6 +261,11 @@ func IsTransient(err error) bool {
 		if strings.Contains(msg, "server_error") || strings.Contains(msg, "INTERNAL_ERROR") {
 			return true
 		}
+	}
+
+	var anthropicErr *anthropic.Error
+	if errors.As(err, &anthropicErr) && (anthropicErr.StatusCode >= 500 || anthropicErr.StatusCode == 429) {
+		return true
 	}
 
 	return false
@@ -437,23 +386,6 @@ func (c *Client) Describe(ctx context.Context, data []byte, filename, mimeType, 
 
 func isImageMime(mimeType string) bool {
 	return strings.HasPrefix(mimeType, "image/")
-}
-
-func buildToolParams(tools []ToolDef) []responses.ToolUnionParam {
-	params := make([]responses.ToolUnionParam, len(tools))
-
-	for i, t := range tools {
-		params[i] = responses.ToolUnionParam{
-			OfFunction: &responses.FunctionToolParam{
-				Name:        t.Name,
-				Description: openai.String(t.Description),
-				Parameters:  t.Parameters,
-				Strict:      openai.Bool(true),
-			},
-		}
-	}
-
-	return params
 }
 
 func roundSignature(calls []ToolCall) string {

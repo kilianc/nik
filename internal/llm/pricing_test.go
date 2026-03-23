@@ -40,6 +40,22 @@ func TestComputeCost(t *testing.T) {
 			t.Fatalf("expected same cost, got $%.6f vs $%.6f", full, withCached)
 		}
 	})
+
+	t.Run("gpt-5.4-codex exact cost", func(t *testing.T) {
+		cost := ComputeCost("gpt-5.4-codex", 100000, 1000, 80000)
+		want := 20000*2.50e-6 + 80000*0.25e-6 + 1000*15.0e-6
+		if math.Abs(cost-want) > 1e-9 {
+			t.Fatalf("expected $%.6f, got $%.6f", want, cost)
+		}
+	})
+
+	t.Run("claude-opus-4-6 exact cost", func(t *testing.T) {
+		cost := ComputeCost("claude-opus-4-6", 100000, 1000, 80000)
+		want := 20000*15.0e-6 + 80000*1.50e-6 + 1000*75.0e-6
+		if math.Abs(cost-want) > 1e-9 {
+			t.Fatalf("expected $%.6f, got $%.6f", want, cost)
+		}
+	})
 }
 
 func TestModelRates(t *testing.T) {
@@ -66,13 +82,31 @@ func TestModelRates(t *testing.T) {
 			t.Fatal("expected unknown model to return false")
 		}
 	})
+
+	t.Run("anthropic model", func(t *testing.T) {
+		rates, ok := ModelRates("claude-opus-4-6")
+		if !ok {
+			t.Fatal("expected claude-opus-4-6 to be found")
+		}
+
+		if rates.Input != 15.0 {
+			t.Fatalf("expected input rate 15.0, got %f", rates.Input)
+		}
+		if rates.Output != 75.0 {
+			t.Fatalf("expected output rate 75.0, got %f", rates.Output)
+		}
+		if rates.Cached != 1.5 {
+			t.Fatalf("expected cached rate 1.5, got %f", rates.Cached)
+		}
+	})
 }
 
-func TestComputeCostGPT54Codex(t *testing.T) {
-	cost := ComputeCost("gpt-5.4-codex", 100000, 1000, 80000)
-
-	want := 20000*2.50e-6 + 80000*0.25e-6 + 1000*15.0e-6
-	if math.Abs(cost-want) > 1e-9 {
-		t.Fatalf("expected $%.6f, got $%.6f", want, cost)
+func TestModelContextWindowAnthropic(t *testing.T) {
+	ctx, ok := ModelContextWindow("claude-opus-4-6")
+	if !ok {
+		t.Fatal("expected claude-opus-4-6 to have a context window")
+	}
+	if ctx != 200_000 {
+		t.Fatalf("expected 200000 context window, got %d", ctx)
 	}
 }
