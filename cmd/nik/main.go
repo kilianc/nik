@@ -151,31 +151,44 @@ func main() {
 		return
 	}
 
-	var authOpts []llm.ClientOption
+	var keyOpts []llm.ClientOption
 	if cfg.OpenAIKey != "" {
-		authOpts = append(authOpts, llm.WithAPIKey(cfg.OpenAIKey))
+		keyOpts = append(keyOpts, llm.WithAPIKey(cfg.OpenAIKey))
 	}
-	if cfg.UseCodex {
-		auth, err := codex.LoadOrLogin("")
+	if cfg.AnthropicKey != "" {
+		keyOpts = append(keyOpts, llm.WithAnthropicKey(cfg.AnthropicKey))
+	}
+
+	var codexAuth *codex.Auth
+	if cfg.Models.AnySubscription() {
+		var err error
+		codexAuth, err = codex.LoadOrLogin("")
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "codex auth error: %v\n", err)
 			os.Exit(1)
 		}
-		authOpts = append(authOpts, llm.WithCodex(auth))
-		slog.Info("codex auth ready", "account_id", auth.AccountID)
+		slog.Info("codex auth ready", "account_id", codexAuth.AccountID)
 	}
 
-	mainOpts := append([]llm.ClientOption{}, authOpts...)
+	mainOpts := append([]llm.ClientOption{}, keyOpts...)
+	if cfg.Models.Main.IsSubscription() {
+		mainOpts = append(mainOpts, llm.WithCodex(codexAuth))
+	}
 	mainOpts = append(mainOpts, llm.WithReasoningEffort(&cfg.Models.Main.ReasoningEffort))
 	mainOpts = append(mainOpts, llm.WithVerbosity(&cfg.Models.Main.Verbosity))
 	llmClient := llm.NewClient(&cfg.Models.Main.Model, mainOpts...)
 
 	var recallClient *llm.Client
-	if cfg.Models.Recall.Model != "" && cfg.OpenAIKey != "" {
+	if cfg.Models.Recall.Model != "" && (cfg.OpenAIKey != "" || cfg.AnthropicKey != "") {
 		recallOpts := []llm.ClientOption{
-			llm.WithAPIKey(cfg.OpenAIKey),
 			llm.WithReasoningEffort(&cfg.Models.Recall.ReasoningEffort),
 			llm.WithVerbosity(&cfg.Models.Recall.Verbosity),
+		}
+		if cfg.OpenAIKey != "" {
+			recallOpts = append(recallOpts, llm.WithAPIKey(cfg.OpenAIKey))
+		}
+		if cfg.AnthropicKey != "" {
+			recallOpts = append(recallOpts, llm.WithAnthropicKey(cfg.AnthropicKey))
 		}
 		recallClient = llm.NewClient(&cfg.Models.Recall.Model, recallOpts...)
 		slog.Info("recall client ready", "model", cfg.Models.Recall.Model)
@@ -183,7 +196,10 @@ func main() {
 
 	taskLLMClient := llmClient
 	if cfg.Models.Task.Model != "" {
-		taskOpts := append([]llm.ClientOption{}, authOpts...)
+		taskOpts := append([]llm.ClientOption{}, keyOpts...)
+		if cfg.Models.Task.IsSubscription() {
+			taskOpts = append(taskOpts, llm.WithCodex(codexAuth))
+		}
 		taskOpts = append(taskOpts, llm.WithReasoningEffort(&cfg.Models.Task.ReasoningEffort))
 		taskOpts = append(taskOpts, llm.WithVerbosity(&cfg.Models.Task.Verbosity))
 		taskLLMClient = llm.NewClient(&cfg.Models.Task.Model, taskOpts...)
@@ -231,7 +247,10 @@ func main() {
 	taskRunner.SetRecorder(recorder)
 
 	if cfg.Models.Critic.Enabled {
-		criticOpts := append([]llm.ClientOption{}, authOpts...)
+		criticOpts := append([]llm.ClientOption{}, keyOpts...)
+		if cfg.Models.Critic.IsSubscription() {
+			criticOpts = append(criticOpts, llm.WithCodex(codexAuth))
+		}
 		criticOpts = append(criticOpts, llm.WithReasoningEffort(&cfg.Models.Critic.ReasoningEffort))
 		criticOpts = append(criticOpts, llm.WithVerbosity(&cfg.Models.Critic.Verbosity))
 		criticOpts = append(criticOpts, llm.WithJSONOutput())

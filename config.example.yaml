@@ -1,54 +1,58 @@
-# LLM
-openai_key: sk-proj-...  # optional when use_codex is true
-use_codex: false         # use ChatGPT subscription (OAuth) instead of API key
+# api keys
+openai_key: sk-proj-...       # OpenAI API key for GPT models
+anthropic_key: sk-ant-...     # Anthropic API key for Claude models
+
+# models
 models:
   main:
     model: gpt-5.4
-    reasoning_effort: ""  # none, minimal, low, medium, high, xhigh (empty = model default)
-    verbosity: ""         # low, medium, high (empty = model default)
+    reasoning_effort: ""      # none, minimal, low, medium, high, xhigh (empty = model default)
+    verbosity: ""             # low, medium, high (empty = model default)
+    backend: subscription     # api | subscription (subscription = ChatGPT Plus/Pro OAuth)
   task:
-    model: ""             # model for task workers (empty = use main model)
+    model: ""                 # model for task workers (empty = use main model)
     reasoning_effort: ""
     verbosity: ""
+    backend: api              # api | subscription
   recall:
-    model: ""             # model for recall pre-filtering (empty = skip recall)
-    reasoning_effort: ""  # none, minimal, low, medium, high, xhigh (empty = model default)
-    verbosity: ""         # low, medium, high (empty = model default)
+    model: ""                 # model for recall pre-filtering (empty = skip recall)
+    reasoning_effort: ""      # none, minimal, low, medium, high, xhigh (empty = model default)
+    verbosity: ""             # low, medium, high (empty = model default)
   critic:
-    enabled: false        # enable post-task critic assessment
-    model: ""             # required when critic is enabled
-    reasoning_effort: ""  # none, minimal, low, medium, high, xhigh (empty = model default)
-    verbosity: ""         # low, medium, high (empty = model default)
+    enabled: false            # enable post-task critic assessment
+    model: ""                 # required when critic is enabled
+    reasoning_effort: ""      # none, minimal, low, medium, high, xhigh (empty = model default)
+    verbosity: ""             # low, medium, high (empty = model default)
+    backend: api              # api | subscription
   tts:
-    model: gpt-4o-mini-tts
-    voice: ash
-    speed: 1.0
+    model: gpt-4o-mini-tts    # TTS model
+    voice: ash                # alloy, ash, ballad, coral, echo, fable, onyx, nova, sage, shimmer
+    speed: 1.0                # 0.25 – 4.0
 
 # paths (relative to home dir)
 prompts_dir: ../prompts
 skills_dir: ../skills
 
 # conversations (label: uuid)
-privileged_conversation_ids: # conversations with owner-level access — always allowed
+privileged_conversation_ids:  # conversations with owner-level access — always allowed
   dms: ...
-allow_conversation_ids:      # other conversations nik can respond to
+allow_conversation_ids:       # other conversations nik can respond to
   family: ...
 
 # context
-max_history: 100             # max messages loaded per conversation
+max_history: 100              # max messages loaded per conversation
 timezone: America/New_York
 location: New York, NY
 
 # scheduled routines (HH:MM in configured timezone, empty = disabled)
-journal_time: "00:00"        # nightly journal
-dream_time: "02:00"          # nightly dream cycle
-briefing_time: "08:00"       # morning briefing
-diagnostic_time: "08:00"     # daily system diagnostic
+journal_time: "00:00"         # nightly journal
+dream_time: "02:00"           # nightly dream cycle
+briefing_time: "08:00"        # morning briefing
+diagnostic_time: "08:00"      # daily system diagnostic
 
 # shell sandbox
 shell:
-  docker_image: nik-shell    # empty = run commands on host via tmux
+  docker_image: nik-shell     # empty = run commands on host via tmux
 
 # content filters
-banned_words: []             # words nik must never use
-
+banned_words: []              # words nik must never use

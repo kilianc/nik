@@ -42,6 +42,15 @@ var modelPricing = map[string]tokenPricing{
 	"o3-pro":  {input: 20.0e-6, output: 80.0e-6, contextWindow: 200_000},
 	"o4-mini": {input: 1.10e-6, output: 4.40e-6, cached: 0.275e-6, contextWindow: 200_000},
 	"o1-mini": {input: 1.10e-6, output: 4.40e-6, contextWindow: 128_000},
+	// Claude family (cached: 90% off input)
+	"claude-opus-4-6":   {input: 15.0e-6, output: 75.0e-6, cached: 1.50e-6, contextWindow: 200_000},
+	"claude-sonnet-4-6": {input: 3.00e-6, output: 15.0e-6, cached: 0.30e-6, contextWindow: 200_000},
+	"claude-haiku-4-5":  {input: 0.80e-6, output: 4.00e-6, cached: 0.08e-6, contextWindow: 200_000},
+	"claude-opus-4-5":   {input: 15.0e-6, output: 75.0e-6, cached: 1.50e-6, contextWindow: 200_000},
+	"claude-sonnet-4-5": {input: 3.00e-6, output: 15.0e-6, cached: 0.30e-6, contextWindow: 200_000},
+	"claude-opus-4-1":   {input: 15.0e-6, output: 75.0e-6, cached: 1.50e-6, contextWindow: 200_000},
+	"claude-opus-4-0":   {input: 15.0e-6, output: 75.0e-6, cached: 1.50e-6, contextWindow: 200_000},
+	"claude-sonnet-4-0": {input: 3.00e-6, output: 15.0e-6, cached: 0.30e-6, contextWindow: 200_000},
 }
 
 type Rates struct {

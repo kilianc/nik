@@ -16,6 +16,11 @@ type ModelConfig struct {
 	Model           string `yaml:"model"`
 	ReasoningEffort string `yaml:"reasoning_effort"`
 	Verbosity       string `yaml:"verbosity"`
+	Backend         string `yaml:"backend"`
+}
+
+func (m ModelConfig) IsSubscription() bool {
+	return m.Backend == "subscription"
 }
 
 type CriticConfig struct {
@@ -23,6 +28,11 @@ type CriticConfig struct {
 	Model           string `yaml:"model"`
 	ReasoningEffort string `yaml:"reasoning_effort"`
 	Verbosity       string `yaml:"verbosity"`
+	Backend         string `yaml:"backend"`
+}
+
+func (c CriticConfig) IsSubscription() bool {
+	return c.Backend == "subscription"
 }
 
 type ModelsConfig struct {
@@ -31,6 +41,10 @@ type ModelsConfig struct {
 	Recall ModelConfig  `yaml:"recall"`
 	Critic CriticConfig `yaml:"critic"`
 	TTS    TTSConfig    `yaml:"tts"`
+}
+
+func (m ModelsConfig) AnySubscription() bool {
+	return m.Main.IsSubscription() || m.Task.IsSubscription() || m.Recall.IsSubscription() || m.Critic.IsSubscription()
 }
 
 type TTSConfig struct {
@@ -48,7 +62,7 @@ type Config struct {
 	lastModTime time.Time `yaml:"-"`
 
 	OpenAIKey       string       `yaml:"openai_key"`
-	UseCodex        bool         `yaml:"use_codex"`
+	AnthropicKey    string       `yaml:"anthropic_key"`
 	Models          ModelsConfig `yaml:"models"`
 	Shell           ShellConfig  `yaml:"shell"`
 	PromptsDirValue string       `yaml:"prompts_dir"`
@@ -352,8 +366,8 @@ func normalizeConfig(cfg *Config) {
 }
 
 func validateConfig(cfg Config) error {
-	if strings.TrimSpace(cfg.OpenAIKey) == "" && !cfg.UseCodex {
-		return fmt.Errorf("missing required config key openai_key (or set use_codex: true)")
+	if strings.TrimSpace(cfg.OpenAIKey) == "" && !cfg.Models.AnySubscription() && strings.TrimSpace(cfg.AnthropicKey) == "" {
+		return fmt.Errorf("missing required config key openai_key, anthropic_key, or set backend: subscription on a model")
 	}
 
 	if strings.TrimSpace(cfg.Models.Main.Model) == "" {
@@ -379,6 +393,7 @@ func validateConfig(cfg Config) error {
 		Model:           cfg.Models.Critic.Model,
 		ReasoningEffort: cfg.Models.Critic.ReasoningEffort,
 		Verbosity:       cfg.Models.Critic.Verbosity,
+		Backend:         cfg.Models.Critic.Backend,
 	}
 	err = validatePurposeModel("critic", criticModel)
 	if err != nil {
@@ -401,7 +416,20 @@ func validatePurposeModel(purpose string, modelCfg ModelConfig) error {
 		return fmt.Errorf("invalid models.%s.verbosity %q (low, medium, high, or empty)", purpose, modelCfg.Verbosity)
 	}
 
+	if !isValidBackend(modelCfg.Backend) {
+		return fmt.Errorf("invalid models.%s.backend %q (api, subscription, or empty)", purpose, modelCfg.Backend)
+	}
+
 	return nil
+}
+
+func isValidBackend(value string) bool {
+	switch value {
+	case "", "api", "subscription":
+		return true
+	default:
+		return false
+	}
 }
 
 func isValidReasoningEffort(value string) bool {
