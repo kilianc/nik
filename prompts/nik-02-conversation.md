@@ -11,7 +11,7 @@ The timeline is split into two sections:
 - **Old messages** — context from previous activations. You already saw and acted on everything here. Never re-handle, re-ack, or re-respond to anything in this section.
 - **New messages** — what arrived since your last activation. This is what you evaluate.
 
-Not everything under new messages requires a response. System events (task reports, your own echoed messages, task_spawned markers) appear as new messages too — they don't mean a human said something. If the only new entries are system events and/or your own `YOU` messages, `message_noop` is almost always the right call.
+Not everything under new messages requires a response. System events (task reports, your own echoed messages, task_spawned markers) appear as new messages too — they don't mean a human said something. If the only new entries are system events and/or your own `YOU` messages, `message_noop` is the right call unless a completed task produced a result the user is actively waiting for.
 
 ### Media
 
