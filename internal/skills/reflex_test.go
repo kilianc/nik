@@ -332,6 +332,71 @@ func TestSkillChangeReflexNullInstallHashWhenNoInstallSection(t *testing.T) {
 	}
 }
 
+func TestSkillChangeReflexOnlyFirstPrivilegedConv(t *testing.T) {
+	conn, err := db.OpenInMemory()
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { conn.Close() })
+
+	ctx := context.Background()
+
+	err = db.EnsureSystemContact(ctx, conn)
+	if err != nil {
+		t.Fatalf("ensure system contact: %v", err)
+	}
+
+	convA := "aaa-first"
+	convB := "zzz-second"
+	for _, id := range []string{convA, convB} {
+		_, err = conn.ExecContext(ctx,
+			"INSERT INTO conversation (id, platform, external_conversation_id) VALUES (?, 'whatsapp', ?)",
+			id, id+"@s.whatsapp.net",
+		)
+		if err != nil {
+			t.Fatalf("seed conversation %s: %v", id, err)
+		}
+	}
+
+	dir := t.TempDir()
+	skillsDir := filepath.Join(dir, "skills")
+	err = os.MkdirAll(skillsDir, 0o755)
+	if err != nil {
+		t.Fatalf("mkdir skills dir: %v", err)
+	}
+
+	cfg := &config.Config{
+		Home: dir,
+		PrivilegedConversationIDs: map[string]string{
+			"owner":  convA,
+			"backup": convB,
+		},
+	}
+
+	reflex := SkillChangeReflex(cfg, conn)
+	writeSkillFile(t, skillsDir, "journal", "---\nname: journal\nsummary: daily journal\n---\n# Journal\n")
+
+	reflex(ctx)
+
+	var total int
+	err = conn.QueryRowContext(ctx, `SELECT count(*) FROM message WHERE kind = 'skill_added'`).Scan(&total)
+	if err != nil {
+		t.Fatalf("count total skill_added: %v", err)
+	}
+	if total != 1 {
+		t.Fatalf("expected 1 skill_added message total, got %d", total)
+	}
+
+	var targetConv string
+	err = conn.QueryRowContext(ctx, `SELECT conversation_id FROM message WHERE kind = 'skill_added'`).Scan(&targetConv)
+	if err != nil {
+		t.Fatalf("get target conversation: %v", err)
+	}
+	if targetConv != convA {
+		t.Fatalf("expected skill_added in %s, got %s", convA, targetConv)
+	}
+}
+
 func TestExtractInstallSection(t *testing.T) {
 	tests := []struct {
 		name    string
