@@ -133,17 +133,15 @@ func applySkillChange(ctx context.Context, conn *sql.DB, privIDs []string, kind 
 		return
 	}
 
-	for _, convID := range privIDs {
-		err = db.InsertSystemMessage(ctx, tx, db.SystemMessageParams{
-			ConversationID: convID,
-			Kind:           "skill_" + kind,
-			Body:           skill,
-			SentAt:         skill.UpdatedAt,
-		})
-		if err != nil {
-			slog.Warn("skill reflex: insert system message", "name", p.Name, "kind", kind, "error", err)
-			return
-		}
+	err = db.InsertSystemMessage(ctx, tx, db.SystemMessageParams{
+		ConversationID: privIDs[0],
+		Kind:           "skill_" + kind,
+		Body:           skill,
+		SentAt:         skill.UpdatedAt,
+	})
+	if err != nil {
+		slog.Warn("skill reflex: insert system message", "name", p.Name, "kind", kind, "error", err)
+		return
 	}
 
 	err = tx.Commit()
