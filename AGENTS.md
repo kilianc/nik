@@ -134,7 +134,9 @@ task.conversation_id + task.contact_id = who requested it
 
 ### Log file
 
-Location: `workspace/nik.log` (slog text format). Key events to grep for:
+Location: `workspace/nik.log` (slog text format). Log timestamps are **local time with offset** (e.g. `2026-03-22T17:41:29.861-07:00`). DB timestamps are **UTC** (e.g. `2026-03-23T00:41:29.861Z`). Always convert before comparing — `17:41 -07:00` = `00:41Z` next day. Run `date -u` to get the current UTC time when correlating.
+
+Key events to grep for:
 
 - `activation starting` / `activation completed` / `activation failed` -- brain lifecycle
 - `tool call` -- includes tool name, round, args (llm package)
@@ -480,6 +482,7 @@ Things to revisit periodically. The agent adds entries here when the user flags 
 
 <!-- example: - 2026-03-14: user prefers X over Y for error handling -- revisit error style rules -->
 - 2026-03-20: workspace skill names are PII -- they reveal what services/devices the owner uses. Never reference specific workspace skill names in files that could leak (skill_builder docs, prompts, etc.). Use generic placeholders instead. Built-in skill names (git-tracked under `skills/`) are fine.
+- 2026-03-22: agent repeatedly misread log timestamps (local -07:00) as UTC, claiming nik was running old code when it had already been restarted. Added explicit timezone documentation to the Log file section. Always `date -u` and convert before comparing log vs DB times.
 
 ## Fin
 
