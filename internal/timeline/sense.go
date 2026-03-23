@@ -250,6 +250,7 @@ func renderEntries(entries []entry) []string {
 			lastDate = date
 		}
 		lines = append(lines, fmt.Sprintf("[%s] %s: %s", e.at.Format("15:04:05"), e.from, e.text))
+		lines = append(lines, "")
 	}
 
 	return lines
