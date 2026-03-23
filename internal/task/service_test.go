@@ -246,28 +246,28 @@ func TestCheckStaleInsertReports(t *testing.T) {
 
 	svc.CheckStale(ctx)
 
-	for _, tc := range []struct {
-		name   string
-		taskID string
-		want   int
-	}{
-		{"pending task gets report", pending.ID, 1},
-		{"running task gets report", running.ID, 1},
-		{"fresh task no report", fresh.ID, 0},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			var count int
-			err = conn.QueryRowContext(ctx,
-				"SELECT count(*) FROM task_report WHERE task_id = ?1", tc.taskID,
-			).Scan(&count)
-			if err != nil {
-				t.Fatalf("count reports: %v", err)
-			}
-			if count != tc.want {
-				t.Fatalf("expected %d reports, got %d", tc.want, count)
-			}
-		})
+	assertReportCount := func(t *testing.T, taskID string, want int) {
+		t.Helper()
+		var count int
+		err = conn.QueryRowContext(ctx,
+			"SELECT count(*) FROM task_report WHERE task_id = ?1", taskID,
+		).Scan(&count)
+		if err != nil {
+			t.Fatalf("count reports: %v", err)
+		}
+		if count != want {
+			t.Fatalf("expected %d reports, got %d", want, count)
+		}
 	}
+
+	t.Run("pending task gets report", func(t *testing.T) { assertReportCount(t, pending.ID, 1) })
+	t.Run("running task gets report", func(t *testing.T) { assertReportCount(t, running.ID, 1) })
+	t.Run("fresh task no report", func(t *testing.T) { assertReportCount(t, fresh.ID, 0) })
+
+	svc.CheckStale(ctx)
+
+	t.Run("pending not duplicated", func(t *testing.T) { assertReportCount(t, pending.ID, 1) })
+	t.Run("running not duplicated", func(t *testing.T) { assertReportCount(t, running.ID, 1) })
 }
 
 func TestListTasksByConversation(t *testing.T) {

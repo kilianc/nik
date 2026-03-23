@@ -8,4 +8,5 @@ WHERE (
   OR (
     t.status = 'pending'
     AND t.created_at < ISO8601_MS(?1)
+    AND (t.last_report_at IS NULL OR t.last_report_at < ISO8601_MS(?1))
   )
