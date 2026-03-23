@@ -79,6 +79,10 @@ func (r *Runner) Run(ctx context.Context, t db.Task) {
 
 	instructions := r.renderPrompt(t, defs)
 
+	act := llm.NewActivation(r.llm, r.recorder, instructions, defs)
+	act.Start(ctx)
+	defer act.Close(ctx)
+
 	err := r.svc.Start(ctx, t.ID, actID)
 	if err != nil {
 		slog.Error("start task", "pkg", "task", "task_id", t.ID, "error", err)
@@ -86,10 +90,6 @@ func (r *Runner) Run(ctx context.Context, t db.Task) {
 	}
 
 	slog.Info("task started", "pkg", "task", "task_id", t.ID, "goal", t.Goal, "thinking", t.Thinking)
-
-	act := llm.NewActivation(r.llm, r.recorder, instructions, defs)
-	act.Start(ctx)
-	defer act.Close(ctx)
 	act.SetInput("")
 
 	runErr := r.runLoop(ctx, t, act, exec)
