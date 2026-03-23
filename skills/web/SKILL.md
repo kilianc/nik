@@ -9,7 +9,7 @@ tools: [shell]
 Three tools for getting content from the web:
 
 - **search** -- Exa API. Default for general web search.
-- **fetch** -- curl. Default choice for reading a URL.
+- **fetch** -- Exa contents API (curl fallback). Default choice for reading a URL.
 - **tweets** -- X API v2 via curl. Use for fetching tweet data.
 
 For JS-heavy pages that need rendering or interaction, load the `browse` skill.
@@ -24,8 +24,8 @@ Get the Exa API key from the vault and pass it as the `x-api-key` header:
 curl -s https://api.exa.ai/search \
   -H 'Content-Type: application/json' \
   -H "x-api-key: $EXA_KEY" \
-  -d '{"query":"<QUERY>","type":"auto","numResults":<N>,"contents":{"text":{"maxCharacters":4000}}}' \
-  | jq '[.results[] | {title,url,text}]'
+  -d '{"query":"<QUERY>","type":"auto","numResults":<N>,"contents":{"highlights":{"numSentences":3},"text":{"maxCharacters":4000}}}' \
+  | jq '[.results[] | {title,url,highlights,text}]'
 ```
 
 Parameters:
@@ -42,35 +42,33 @@ When to use:
 Tips:
 - Be specific. "latest iPhone release date 2026" beats "iPhone news".
 - Use `category` to narrow results when relevant.
-- Results include text excerpts -- often enough without fetching the URL.
+- `highlights` return the most relevant passages for your query -- check these first before reading full `text`.
 - For multiple queries, run them as separate shell commands.
 
 ## fetch
 
 Read a URL's content. Default for any URL that isn't a tweet or JS-heavy.
 
-Quick read:
+Use the Exa `/contents` endpoint for clean, LLM-ready text extraction:
+
+```
+curl -s https://api.exa.ai/contents \
+  -H 'Content-Type: application/json' \
+  -H "x-api-key: $EXA_KEY" \
+  -d '{"urls":["<URL>"],"text":{"maxCharacters":20000}}' \
+  | jq -r '.results[0].text'
+```
+
+Fallback for non-HTML content (raw text, APIs, files) or when the Exa key isn't available:
 
 ```
 curl -L -s -A 'Mozilla/5.0' "<URL>" | head -c 50000
 ```
 
-For cleaner output on HTML pages, strip tags:
-
-```
-curl -L -s -A 'Mozilla/5.0' "<URL>" | python3 -c "
-import sys,re
-h=sys.stdin.read()
-for t in ('script','style','noscript'):
-    h=re.sub(f'<{t}[^>]*>.*?</{t}>','',h,flags=re.S|re.I)
-print(' '.join(re.sub('<[^>]+>',' ',h).split())[:20000])
-"
-```
-
 Tips:
-- Exa search results include text excerpts (up to 4000 chars) -- often enough without fetching.
-- Use plain curl first. Add the python strip only if the HTML is too noisy.
-- For JS-heavy pages (SPAs, dashboards), load the `browse` skill.
+- Exa handles JS-rendered pages and complex layouts natively -- no manual tag stripping needed.
+- Search results already include highlights and text excerpts -- often enough without fetching.
+- For JS-heavy pages that need interaction (not just reading), load the `browse` skill.
 
 ## tweets
 
