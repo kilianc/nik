@@ -25,7 +25,6 @@ type ActivationRow struct {
 	ToolCallCount   int
 	DurationMS      int64
 	Error           string
-	Output          string
 	CreatedAt       time.Time
 }
 
@@ -91,14 +90,14 @@ type ActivationStatsUpdate struct {
 	ToolCallCount   int
 	DurationMS      int64
 	Error           string
-	Output          string
 }
 
-func ActivationUpdateDetail(ctx context.Context, db DBTX, id string, instructions string, tools []string) error {
+func ActivationUpdateDetail(ctx context.Context, db DBTX, id string, instructions string, tools []string, toolSchemas string) error {
 	_, err := db.ExecContext(ctx, queries.ActivationUpdateDetail,
 		id,
 		instructions,
 		MarshalStringSlice(tools),
+		toolSchemas,
 	)
 	if err != nil {
 		return fmt.Errorf("update activation detail %s: %w", id, err)
@@ -124,7 +123,6 @@ func ActivationUpdateStats(ctx context.Context, db DBTX, id string, s Activation
 		s.ToolCallCount,
 		s.DurationMS,
 		s.Error,
-		s.Output,
 	)
 	if err != nil {
 		return fmt.Errorf("update activation stats %s: %w", id, err)

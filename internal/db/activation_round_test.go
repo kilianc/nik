@@ -36,6 +36,10 @@ func TestActivationRoundInsert(t *testing.T) {
 		UserInput:          "hello world",
 		ModelOutput:        "thinking...",
 		ReasoningSummaries: []string{"considered greeting"},
+		InputTokens:        500,
+		OutputTokens:       120,
+		CachedTokens:       80,
+		ReasoningTokens:    40,
 	})
 	if err != nil {
 		t.Fatalf("insert round 0: %v", err)
@@ -50,12 +54,27 @@ func TestActivationRoundInsert(t *testing.T) {
 		userInput          string
 		modelOutput        string
 		reasoningSummaries string
+		inputTokens        int64
+		outputTokens       int64
+		cachedTokens       int64
+		reasoningTokens    int64
 	}
 
 	err = conn.QueryRowContext(ctx,
-		"SELECT round, user_input, model_output, reasoning_summaries FROM activation_round WHERE id = ?1",
+		`SELECT round, user_input, model_output, reasoning_summaries,
+		  input_tokens, output_tokens, cached_tokens, reasoning_tokens
+		FROM activation_round WHERE id = ?1`,
 		roundID,
-	).Scan(&got.round, &got.userInput, &got.modelOutput, &got.reasoningSummaries)
+	).Scan(
+		&got.round,
+		&got.userInput,
+		&got.modelOutput,
+		&got.reasoningSummaries,
+		&got.inputTokens,
+		&got.outputTokens,
+		&got.cachedTokens,
+		&got.reasoningTokens,
+	)
 	if err != nil {
 		t.Fatalf("query activation round: %v", err)
 	}
@@ -71,6 +90,18 @@ func TestActivationRoundInsert(t *testing.T) {
 	}
 	if got.reasoningSummaries != `["considered greeting"]` {
 		t.Fatalf("expected reasoning_summaries %q, got %q", `["considered greeting"]`, got.reasoningSummaries)
+	}
+	if got.inputTokens != 500 {
+		t.Fatalf("expected input_tokens 500, got %d", got.inputTokens)
+	}
+	if got.outputTokens != 120 {
+		t.Fatalf("expected output_tokens 120, got %d", got.outputTokens)
+	}
+	if got.cachedTokens != 80 {
+		t.Fatalf("expected cached_tokens 80, got %d", got.cachedTokens)
+	}
+	if got.reasoningTokens != 40 {
+		t.Fatalf("expected reasoning_tokens 40, got %d", got.reasoningTokens)
 	}
 
 	_, err = ActivationRoundInsert(ctx, conn, ActivationRoundInsertParams{

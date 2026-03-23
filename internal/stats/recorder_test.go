@@ -78,7 +78,7 @@ func TestRecorderStart(t *testing.T) {
 func TestRecorderRound(t *testing.T) {
 	t.Run("no meta noops", func(t *testing.T) {
 		r := NewRecorder(nil)
-		got := r.Round(context.Background(), 0, 0, "input", "output", nil)
+		got := r.Round(context.Background(), 0, 0, "input", "output", nil, llm.Usage{})
 		if got != "" {
 			t.Fatalf("expected empty string, got %q", got)
 		}
@@ -104,18 +104,26 @@ func TestRecorderRound(t *testing.T) {
 		r := NewRecorder(conn)
 		r.Start(ctx, "gpt-4o")
 
-		roundID := r.Round(ctx, 0, 0, "hello", "thinking", []string{"considered"})
+		roundID := r.Round(ctx, 0, 0, "hello", "thinking", []string{"considered"}, llm.Usage{
+			InputTokens:  300,
+			OutputTokens: 75,
+			CachedTokens: 50,
+		})
 		if roundID == "" {
 			t.Fatal("expected non-empty round ID")
 		}
 
 		var userInput string
-		err = conn.QueryRowContext(ctx, `SELECT user_input FROM activation_round WHERE id = ?1`, roundID).Scan(&userInput)
+		var inputTokens int64
+		err = conn.QueryRowContext(ctx, `SELECT user_input, input_tokens FROM activation_round WHERE id = ?1`, roundID).Scan(&userInput, &inputTokens)
 		if err != nil {
 			t.Fatalf("query round: %v", err)
 		}
 		if userInput != "hello" {
 			t.Errorf("expected user_input 'hello', got %q", userInput)
+		}
+		if inputTokens != 300 {
+			t.Errorf("expected input_tokens 300, got %d", inputTokens)
 		}
 	})
 }
@@ -139,7 +147,7 @@ func TestRecorderToolCall(t *testing.T) {
 
 	r := NewRecorder(conn)
 	r.Start(ctx, "gpt-4o")
-	roundID := r.Round(ctx, 0, 0, "input", "output", nil)
+	roundID := r.Round(ctx, 0, 0, "input", "output", nil, llm.Usage{})
 
 	call := llm.ToolCall{CallID: "c1", Name: "db_query", Arguments: `{"query":"SELECT 1"}`}
 	result := llm.ExecResult{Output: `{"rows":[]}`, Elapsed: 42 * time.Millisecond}
@@ -182,17 +190,30 @@ func TestRecorderFinish(t *testing.T) {
 		Rounds:          llm.RoundStats{RoundCount: 2, MaxInputTokensPerRound: 80, MaxTotalTokensPerRound: 120},
 		ToolCallCount:   3,
 		DurationMS:      1500,
+		Error:           "test error",
 		Instructions:    "test instructions",
 		Tools:           []string{"db_query", "shell_exec"},
+		ToolSchemas: []llm.ToolDef{
+			{Name: "db_query", Description: "run a query", Parameters: map[string]any{"type": "object"}},
+		},
 	})
 
 	var roundCount int
-	err = conn.QueryRowContext(ctx, `SELECT round_count FROM activation WHERE id = ?1`, actID).Scan(&roundCount)
+	var gotErr, gotSchemas string
+	err = conn.QueryRowContext(ctx,
+		`SELECT round_count, error, tool_schemas FROM activation WHERE id = ?1`, actID,
+	).Scan(&roundCount, &gotErr, &gotSchemas)
 	if err != nil {
 		t.Fatalf("query activation: %v", err)
 	}
 	if roundCount != 2 {
 		t.Errorf("expected round_count 2, got %d", roundCount)
+	}
+	if gotErr != "test error" {
+		t.Errorf("expected error 'test error', got %q", gotErr)
+	}
+	if gotSchemas == "[]" {
+		t.Error("expected non-empty tool_schemas")
 	}
 }
 

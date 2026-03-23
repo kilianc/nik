@@ -170,9 +170,9 @@ CREATE TABLE IF NOT EXISTS activation (
   tool_call_count            INTEGER NOT NULL DEFAULT 0,
   duration_ms                INTEGER NOT NULL DEFAULT 0,
   error                      TEXT NOT NULL DEFAULT '',
-  output                     TEXT NOT NULL DEFAULT '',
   instructions               TEXT NOT NULL DEFAULT '',
   tools                      TEXT NOT NULL DEFAULT '[]',
+  tool_schemas               TEXT NOT NULL DEFAULT '[]',
   created_at                 TIMESTAMP NOT NULL DEFAULT (NOW_ISO8601_MS()),
   CHECK (IS_ISO8601_MS(created_at))
 );
@@ -185,6 +185,10 @@ CREATE TABLE IF NOT EXISTS activation_round (
   user_input          TEXT NOT NULL DEFAULT '',
   model_output        TEXT NOT NULL DEFAULT '',
   reasoning_summaries TEXT NOT NULL DEFAULT '[]',
+  input_tokens        INTEGER NOT NULL DEFAULT 0,
+  output_tokens       INTEGER NOT NULL DEFAULT 0,
+  cached_tokens       INTEGER NOT NULL DEFAULT 0,
+  reasoning_tokens    INTEGER NOT NULL DEFAULT 0,
   created_at          TIMESTAMP NOT NULL DEFAULT (NOW_ISO8601_MS()),
   CHECK (IS_ISO8601_MS(created_at))
 );

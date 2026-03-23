@@ -93,8 +93,10 @@ func (r *Runner) Run(ctx context.Context, t db.Task) {
 	act.SetInput("")
 
 	runErr := r.runLoop(ctx, t, act, exec)
+	act.SetError(runErr)
 
 	if ctx.Err() != nil {
+		act.SetError(ctx.Err())
 		r.svc.UpdateStatus(context.Background(), t.ID, "cancelled")
 		slog.Info("task cancelled", "pkg", "task", "task_id", t.ID, "reason", ctx.Err())
 		return
