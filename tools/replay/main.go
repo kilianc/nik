@@ -19,12 +19,17 @@ import (
 
 func main() {
 	caseDir := flag.String("case", "", "path to case directory")
+	activationFlag := flag.String("activation", "", "activation short ID to replay (default: diagnosed activation)")
 	round := flag.Int("round", -1, "round to replay (-1 = use diagnosed round from case.json)")
+	desired := flag.String("desired", "", "desired tool pattern (e.g. message_noop, message_send+task_spawn)")
+	effortOverride := flag.String("effort", "", "override reasoning effort (low, medium, high)")
 	n := flag.Int("n", 1, "number of replay attempts")
+	verbose := flag.Bool("v", false, "show full tool call arguments and per-attempt reasoning")
+	jsonOut := flag.Bool("json", false, "output structured JSON (for programmatic use)")
 	flag.Parse()
 
 	if *caseDir == "" {
-		fmt.Fprintln(os.Stderr, "usage: replay -case <path> [-round N] [-n 1]")
+		fmt.Fprintln(os.Stderr, "usage: replay -case <path> [-activation ID] [-round N] [-desired pattern] [-n 1] [-v]")
 		os.Exit(1)
 	}
 
@@ -40,12 +45,28 @@ func main() {
 	}
 
 	targetRound := *round
-	if targetRound < 0 {
+	if targetRound < 0 && *activationFlag == "" {
 		targetRound = cj.Diagnosis.Round
+	}
+	if targetRound < 0 {
+		targetRound = 0
 	}
 
 	act := cj.Activations[0]
-	if cj.Diagnosis.ActivationID != "" {
+	if *activationFlag != "" {
+		found := false
+		for _, a := range cj.Activations {
+			if strings.HasSuffix(a.ID, *activationFlag) {
+				act = a
+				found = true
+				break
+			}
+		}
+		if !found {
+			fmt.Fprintf(os.Stderr, "activation %q not found in case\n", *activationFlag)
+			os.Exit(1)
+		}
+	} else if cj.Diagnosis.ActivationID != "" {
 		for _, a := range cj.Activations {
 			if a.ID == cj.Diagnosis.ActivationID {
 				act = a
@@ -76,9 +97,9 @@ func main() {
 		}
 	}
 
-	userInput, err := os.ReadFile(filepath.Join(*caseDir, roundData.InputFile))
+	items, err := buildItems(*caseDir, act, targetRound)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "read %s: %v\n", roundData.InputFile, err)
+		fmt.Fprintf(os.Stderr, "build items: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -94,22 +115,59 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("REPLAY  activation %s  round %d  (%s)\n", shortID(act.ID), targetRound, act.Model)
-	fmt.Printf("  instructions: %d chars\n", len(instructions))
-	fmt.Printf("  tools:        %d tools\n", len(tools))
-	fmt.Printf("  input:        %d chars (%s)\n", len(userInput), roundData.InputFile)
-	fmt.Println()
+	cfg := replayConfig{
+		model:           act.Model,
+		reasoningEffort: act.ReasoningEffort,
+		verbosity:       act.Verbosity,
+	}
+	if *effortOverride != "" {
+		cfg.reasoningEffort = *effortOverride
+	}
+
+	priorRounds := 0
+	priorToolCalls := 0
+	for _, r := range act.Rounds {
+		if r.Round >= targetRound {
+			break
+		}
+		priorRounds++
+		priorToolCalls += len(r.ToolCalls)
+	}
+
+	if !*jsonOut {
+		configLabel := ""
+		if cfg.reasoningEffort != "" {
+			configLabel += ", effort=" + cfg.reasoningEffort
+		}
+		if cfg.verbosity != "" {
+			configLabel += ", verbosity=" + cfg.verbosity
+		}
+		fmt.Printf("REPLAY  activation %s  round %d  (%s%s)\n", shortID(act.ID), targetRound, act.Model, configLabel)
+		fmt.Printf("  instructions: %d chars\n", len(instructions))
+		fmt.Printf("  tools:        %d tools\n", len(tools))
+		fmt.Printf("  items:        %d (1 user msg + %d prior rounds, %d tool call pairs)\n",
+			len(items), priorRounds, priorToolCalls)
+		if act.InputTokens > 0 {
+			fmt.Printf("  original:     in=%d out=%d cached=%d reasoning=%d\n",
+				act.InputTokens, act.OutputTokens, act.CachedTokens, act.ReasoningTokens)
+		}
+		fmt.Println()
+	}
 
 	var attempts []replayResult
 
 	for i := range *n {
-		result, err := replayOnce(context.Background(), client, string(instructions), string(userInput), tools, act.Model)
+		result, err := replayOnce(context.Background(), client, string(instructions), items, tools, cfg, *verbose || *jsonOut)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "attempt %d failed: %v\n", i+1, err)
 			continue
 		}
 
 		attempts = append(attempts, result)
+
+		if *jsonOut {
+			continue
+		}
 
 		if *n == 1 {
 			fmt.Println("ATTEMPT 1/1")
@@ -134,45 +192,185 @@ func main() {
 			}
 		}
 
-		if *n == 1 && result.reasoning != "" {
+		showReasoning := *n == 1 || *verbose
+		if showReasoning && result.reasoning != "" {
+			limit := 200
+			if *verbose {
+				limit = 2000
+			}
 			fmt.Println("  reasoning:")
-			fmt.Printf("    %s\n", truncate(result.reasoning, 200))
+			fmt.Printf("    %s\n", truncate(strings.TrimSpace(result.reasoning), limit))
+		}
+
+		if *verbose {
+			fmt.Printf("  tokens: in=%d out=%d cached=%d reasoning=%d\n",
+				result.inputTokens, result.outputTokens, result.cachedTokens, result.reasoningTokens)
 		}
 	}
 
+	origKey := originalKey(roundData)
+
+	if *jsonOut {
+		printJSON(act, targetRound, roundData, attempts, origKey, *desired)
+		return
+	}
+
 	fmt.Println()
-	fmt.Println("ORIGINAL (from case.json)")
-	if len(roundData.ToolCalls) == 0 {
-		fmt.Printf("  round %d: no tool calls\n", targetRound)
-	} else {
-		var names []string
-		for _, tc := range roundData.ToolCalls {
-			names = append(names, tc.Name)
-		}
-		fmt.Printf("  round %d: %s\n", targetRound, strings.Join(names, ", "))
+	fmt.Printf("ORIGINAL: %s\n", origKey)
+	if *desired != "" {
+		fmt.Printf("DESIRED:  %s\n", *desired)
 	}
 
 	if *n > 1 && len(attempts) > 0 {
 		fmt.Println()
-		counts := map[string]int{}
-		for _, a := range attempts {
-			key := "no_tools"
-			if len(a.tools) > 0 {
-				var names []string
-				for _, tc := range a.tools {
-					name, _, _ := strings.Cut(tc, "  ")
-					names = append(names, name)
-				}
-				key = strings.Join(names, "+")
-			}
-			counts[key]++
-		}
-
-		fmt.Println("DISTRIBUTION:")
-		for k, v := range counts {
-			fmt.Printf("  %s: %d/%d (%.0f%%)\n", k, v, len(attempts), float64(v)/float64(len(attempts))*100)
-		}
+		printDistribution(attempts, origKey, *desired)
 	}
+}
+
+func originalKey(roundData *caseRound) string {
+	if len(roundData.ToolCalls) == 0 {
+		return "no_tools"
+	}
+	var names []string
+	for _, tc := range roundData.ToolCalls {
+		names = append(names, tc.Name)
+	}
+	return strings.Join(names, "+")
+}
+
+func attemptKey(a replayResult) string {
+	if len(a.tools) == 0 {
+		return "no_tools"
+	}
+	var names []string
+	for _, tc := range a.tools {
+		name, _, _ := strings.Cut(tc, "  ")
+		names = append(names, name)
+	}
+	return strings.Join(names, "+")
+}
+
+func printDistribution(attempts []replayResult, origKey, desiredKey string) {
+	counts := map[string]int{}
+	for _, a := range attempts {
+		counts[attemptKey(a)]++
+	}
+
+	fmt.Println("DISTRIBUTION:")
+	for k, v := range counts {
+		var labels []string
+		if k == origKey {
+			labels = append(labels, "original")
+		}
+		if desiredKey != "" && k == desiredKey {
+			labels = append(labels, "desired")
+		}
+		tag := ""
+		if len(labels) > 0 {
+			tag = " <- " + strings.Join(labels, ", ")
+		}
+		fmt.Printf("  %s: %d/%d (%.0f%%)%s\n", k, v, len(attempts), float64(v)/float64(len(attempts))*100, tag)
+	}
+}
+
+type jsonOutput struct {
+	ActivationID    string          `json:"activation_id"`
+	Round           int             `json:"round"`
+	Model           string          `json:"model"`
+	ReasoningEffort string          `json:"reasoning_effort,omitempty"`
+	Verbosity       string          `json:"verbosity,omitempty"`
+	OriginalKey     string          `json:"original_key"`
+	DesiredKey      string          `json:"desired_key,omitempty"`
+	OriginalTools   []string        `json:"original_tools"`
+	Attempts        []jsonAttempt   `json:"attempts"`
+	Distribution    []jsonDistEntry `json:"distribution"`
+}
+
+type jsonDistEntry struct {
+	Key        string `json:"key"`
+	Count      int    `json:"count"`
+	Percent    int    `json:"percent"`
+	IsOriginal bool   `json:"is_original"`
+	IsDesired  bool   `json:"is_desired"`
+}
+
+type jsonAttempt struct {
+	Tools           []jsonToolCall `json:"tools"`
+	Reasoning       string         `json:"reasoning,omitempty"`
+	Text            string         `json:"text,omitempty"`
+	InputTokens     int            `json:"input_tokens"`
+	OutputTokens    int            `json:"output_tokens"`
+	CachedTokens    int            `json:"cached_tokens"`
+	ReasoningTokens int            `json:"reasoning_tokens"`
+}
+
+type jsonToolCall struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+}
+
+func printJSON(act caseActivation, targetRound int, roundData *caseRound, attempts []replayResult, origKey, desiredKey string) {
+	var origTools []string
+	for _, tc := range roundData.ToolCalls {
+		origTools = append(origTools, tc.Name)
+	}
+
+	counts := map[string]int{}
+	var jAttempts []jsonAttempt
+
+	for _, a := range attempts {
+		var tcs []jsonToolCall
+		key := attemptKey(a)
+		if len(a.tools) > 0 {
+			for _, tc := range a.tools {
+				name, args, _ := strings.Cut(tc, "  ")
+				tcs = append(tcs, jsonToolCall{Name: name, Arguments: args})
+			}
+		}
+		counts[key]++
+
+		jAttempts = append(jAttempts, jsonAttempt{
+			Tools:           tcs,
+			Reasoning:       strings.TrimSpace(a.reasoning),
+			Text:            a.text,
+			InputTokens:     a.inputTokens,
+			OutputTokens:    a.outputTokens,
+			CachedTokens:    a.cachedTokens,
+			ReasoningTokens: a.reasoningTokens,
+		})
+	}
+
+	total := len(attempts)
+	var dist []jsonDistEntry
+	for k, v := range counts {
+		pct := 0
+		if total > 0 {
+			pct = v * 100 / total
+		}
+		dist = append(dist, jsonDistEntry{
+			Key:        k,
+			Count:      v,
+			Percent:    pct,
+			IsOriginal: k == origKey,
+			IsDesired:  desiredKey != "" && k == desiredKey,
+		})
+	}
+
+	out := jsonOutput{
+		ActivationID:    act.ID,
+		Round:           targetRound,
+		Model:           act.Model,
+		ReasoningEffort: act.ReasoningEffort,
+		Verbosity:       act.Verbosity,
+		OriginalKey:     origKey,
+		DesiredKey:      desiredKey,
+		OriginalTools:   origTools,
+		Attempts:        jAttempts,
+		Distribution:    dist,
+	}
+
+	data, _ := json.MarshalIndent(out, "", "  ")
+	fmt.Println(string(data))
 }
 
 type caseJSON struct {
@@ -183,21 +381,30 @@ type caseJSON struct {
 }
 
 type caseActivation struct {
-	ID         string      `json:"id"`
-	Model      string      `json:"model"`
-	Tools      []string    `json:"tools"`
-	CreatedAt  string      `json:"created_at"`
-	DurationMS int         `json:"duration_ms"`
-	Error      string      `json:"error,omitempty"`
-	Rounds     []caseRound `json:"rounds"`
+	ID              string      `json:"id"`
+	Model           string      `json:"model"`
+	ReasoningEffort string      `json:"reasoning_effort,omitempty"`
+	Verbosity       string      `json:"verbosity,omitempty"`
+	Sources         []string    `json:"sources,omitempty"`
+	Tools           []string    `json:"tools"`
+	CreatedAt       string      `json:"created_at"`
+	DurationMS      int         `json:"duration_ms"`
+	InputTokens     int         `json:"input_tokens"`
+	OutputTokens    int         `json:"output_tokens"`
+	CachedTokens    int         `json:"cached_tokens"`
+	ReasoningTokens int         `json:"reasoning_tokens"`
+	Error           string      `json:"error,omitempty"`
+	Rounds          []caseRound `json:"rounds"`
 }
 
 type caseRound struct {
-	Round          int            `json:"round"`
-	InputFile      string         `json:"input_file"`
-	MessagePresent bool           `json:"message_present"`
-	MessageInNew   bool           `json:"message_in_new"`
-	ToolCalls      []caseToolCall `json:"tool_calls"`
+	Round              int            `json:"round"`
+	InputFile          string         `json:"input_file"`
+	OutputFile         string         `json:"output_file,omitempty"`
+	MessagePresent     bool           `json:"message_present"`
+	MessageInNew       bool           `json:"message_in_new"`
+	ReasoningSummaries []string       `json:"reasoning_summaries,omitempty"`
+	ToolCalls          []caseToolCall `json:"tool_calls"`
 }
 
 type caseToolCall struct {
@@ -286,9 +493,13 @@ func buildCodexClient() (*openai.Client, error) {
 }
 
 type replayResult struct {
-	tools     []string
-	reasoning string
-	text      string
+	tools           []string
+	reasoning       string
+	text            string
+	inputTokens     int
+	outputTokens    int
+	cachedTokens    int
+	reasoningTokens int
 }
 
 func completeCall(ctx context.Context, client *openai.Client, params responses.ResponseNewParams) (*responses.Response, error) {
@@ -315,7 +526,58 @@ func completeCall(ctx context.Context, client *openai.Client, params responses.R
 	return final, nil
 }
 
-func replayOnce(ctx context.Context, client *openai.Client, instructions, userInput string, tools []toolSchema, model string) (replayResult, error) {
+type replayConfig struct {
+	model           string
+	reasoningEffort string
+	verbosity       string
+}
+
+func buildItems(caseDir string, act caseActivation, targetRound int) (responses.ResponseInputParam, error) {
+	var roundData *caseRound
+	for i := range act.Rounds {
+		if act.Rounds[i].Round == targetRound {
+			roundData = &act.Rounds[i]
+			break
+		}
+	}
+	if roundData == nil {
+		return nil, fmt.Errorf("round %d not found", targetRound)
+	}
+
+	userInput, err := os.ReadFile(filepath.Join(caseDir, roundData.InputFile))
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", roundData.InputFile, err)
+	}
+
+	items := responses.ResponseInputParam{
+		responses.ResponseInputItemParamOfMessage(string(userInput), responses.EasyInputMessageRoleUser),
+	}
+
+	callSeq := 0
+	for _, r := range act.Rounds {
+		if r.Round >= targetRound {
+			break
+		}
+
+		if r.OutputFile != "" {
+			modelOutput, readErr := os.ReadFile(filepath.Join(caseDir, r.OutputFile))
+			if readErr == nil && len(modelOutput) > 0 {
+				items = append(items, responses.ResponseInputItemParamOfMessage(string(modelOutput), responses.EasyInputMessageRoleAssistant))
+			}
+		}
+
+		for _, tc := range r.ToolCalls {
+			callID := fmt.Sprintf("call_replay_%d", callSeq)
+			callSeq++
+			items = append(items, responses.ResponseInputItemParamOfFunctionCall(tc.Input, callID, tc.Name))
+			items = append(items, responses.ResponseInputItemParamOfFunctionCallOutput(callID, tc.Output))
+		}
+	}
+
+	return items, nil
+}
+
+func replayOnce(ctx context.Context, client *openai.Client, instructions string, items responses.ResponseInputParam, tools []toolSchema, cfg replayConfig, fullArgs bool) (replayResult, error) {
 	toolParams := make([]responses.ToolUnionParam, len(tools))
 	for i, t := range tools {
 		toolParams[i] = responses.ToolUnionParam{
@@ -329,18 +591,26 @@ func replayOnce(ctx context.Context, client *openai.Client, instructions, userIn
 	}
 
 	params := responses.ResponseNewParams{
-		Model:        shared.ResponsesModel(model),
+		Model:        shared.ResponsesModel(cfg.model),
 		Instructions: openai.String(instructions),
 		Input: responses.ResponseNewParamsInputUnion{
-			OfInputItemList: responses.ResponseInputParam{
-				responses.ResponseInputItemParamOfMessage(userInput, responses.EasyInputMessageRoleUser),
-			},
+			OfInputItemList: items,
 		},
 		Tools: toolParams,
 		Store: openai.Bool(false),
 		Reasoning: shared.ReasoningParam{
 			Summary: shared.ReasoningSummaryDetailed,
 		},
+	}
+
+	if cfg.reasoningEffort != "" {
+		params.Reasoning.Effort = shared.ReasoningEffort(cfg.reasoningEffort)
+	}
+
+	if cfg.verbosity != "" {
+		params.Text = responses.ResponseTextConfigParam{
+			Verbosity: responses.ResponseTextConfigVerbosity(cfg.verbosity),
+		}
 	}
 
 	resp, err := completeCall(ctx, client, params)
@@ -350,11 +620,20 @@ func replayOnce(ctx context.Context, client *openai.Client, instructions, userIn
 
 	var result replayResult
 	result.text = resp.OutputText()
+	result.inputTokens = int(resp.Usage.InputTokens)
+	result.outputTokens = int(resp.Usage.OutputTokens)
+	result.cachedTokens = int(resp.Usage.InputTokensDetails.CachedTokens)
+	result.reasoningTokens = int(resp.Usage.OutputTokensDetails.ReasoningTokens)
+
+	argLimit := 100
+	if fullArgs {
+		argLimit = 2000
+	}
 
 	for _, item := range resp.Output {
 		if item.Type == "function_call" {
 			fc := item.AsFunctionCall()
-			result.tools = append(result.tools, fmt.Sprintf("%s  %s", fc.Name, truncate(fc.Arguments, 100)))
+			result.tools = append(result.tools, fmt.Sprintf("%s  %s", fc.Name, truncate(fc.Arguments, argLimit)))
 		}
 		if item.Type == "reasoning" {
 			for _, s := range item.AsReasoning().Summary {

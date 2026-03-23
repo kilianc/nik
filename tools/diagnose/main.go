@@ -112,15 +112,21 @@ type conversationRow struct {
 }
 
 type activationRow struct {
-	ID            string
-	Model         string
-	ToolCallCount int
-	DurationMS    int
-	Error         string
-	CreatedAt     string
-	Tools         string
-	Instructions  string
-	Rounds        []roundInfo
+	ID              string
+	Model           string
+	ReasoningEffort string
+	Verbosity       string
+	ToolCallCount   int
+	DurationMS      int
+	InputTokens     int64
+	OutputTokens    int64
+	CachedTokens    int64
+	ReasoningTokens int64
+	Error           string
+	CreatedAt       string
+	Tools           string
+	Instructions    string
+	Rounds          []roundInfo
 }
 
 type roundInfo struct {
@@ -207,7 +213,21 @@ func loadActivations(ctx context.Context, conn *sql.DB, convID string, sentAt ti
 	end := sentAt.Add(window).UTC().Format("2006-01-02T15:04:05.000Z")
 
 	rows, err := conn.QueryContext(ctx,
-		`SELECT id, model, tool_call_count, duration_ms, error, created_at, tools, instructions
+		`SELECT
+		   id,
+		   model,
+		   COALESCE(reasoning_effort, ''),
+		   COALESCE(verbosity, ''),
+		   tool_call_count,
+		   duration_ms,
+		   input_tokens,
+		   output_tokens,
+		   cached_tokens,
+		   reasoning_tokens,
+		   error,
+		   created_at,
+		   tools,
+		   instructions
 		 FROM activation
 		 WHERE conversation_id = ?1 AND task_id IS NULL
 		   AND created_at >= ?2 AND created_at <= ?3
@@ -220,7 +240,22 @@ func loadActivations(ctx context.Context, conn *sql.DB, convID string, sentAt ti
 	var result []activationRow
 	for rows.Next() {
 		var a activationRow
-		err = rows.Scan(&a.ID, &a.Model, &a.ToolCallCount, &a.DurationMS, &a.Error, &a.CreatedAt, &a.Tools, &a.Instructions)
+		err = rows.Scan(
+			&a.ID,
+			&a.Model,
+			&a.ReasoningEffort,
+			&a.Verbosity,
+			&a.ToolCallCount,
+			&a.DurationMS,
+			&a.InputTokens,
+			&a.OutputTokens,
+			&a.CachedTokens,
+			&a.ReasoningTokens,
+			&a.Error,
+			&a.CreatedAt,
+			&a.Tools,
+			&a.Instructions,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -499,21 +534,29 @@ type caseConversation struct {
 }
 
 type caseActivation struct {
-	ID         string      `json:"id"`
-	Model      string      `json:"model"`
-	Tools      []string    `json:"tools"`
-	CreatedAt  string      `json:"created_at"`
-	DurationMS int         `json:"duration_ms"`
-	Error      string      `json:"error,omitempty"`
-	Rounds     []caseRound `json:"rounds"`
+	ID              string      `json:"id"`
+	Model           string      `json:"model"`
+	ReasoningEffort string      `json:"reasoning_effort,omitempty"`
+	Verbosity       string      `json:"verbosity,omitempty"`
+	Tools           []string    `json:"tools"`
+	CreatedAt       string      `json:"created_at"`
+	DurationMS      int         `json:"duration_ms"`
+	InputTokens     int64       `json:"input_tokens"`
+	OutputTokens    int64       `json:"output_tokens"`
+	CachedTokens    int64       `json:"cached_tokens"`
+	ReasoningTokens int64       `json:"reasoning_tokens"`
+	Error           string      `json:"error,omitempty"`
+	Rounds          []caseRound `json:"rounds"`
 }
 
 type caseRound struct {
-	Round          int            `json:"round"`
-	InputFile      string         `json:"input_file"`
-	MessagePresent bool           `json:"message_present"`
-	MessageInNew   bool           `json:"message_in_new"`
-	ToolCalls      []caseToolCall `json:"tool_calls"`
+	Round              int            `json:"round"`
+	InputFile          string         `json:"input_file"`
+	OutputFile         string         `json:"output_file,omitempty"`
+	MessagePresent     bool           `json:"message_present"`
+	MessageInNew       bool           `json:"message_in_new"`
+	ReasoningSummaries []string       `json:"reasoning_summaries,omitempty"`
+	ToolCalls          []caseToolCall `json:"tool_calls"`
 }
 
 type caseToolCall struct {
@@ -635,25 +678,44 @@ func writeCase(home string, msg messageRow, conv conversationRow, contactName st
 		_ = json.Unmarshal([]byte(a.Tools), &tools)
 
 		ca := caseActivation{
-			ID:         a.ID,
-			Model:      a.Model,
-			Tools:      tools,
-			CreatedAt:  a.CreatedAt,
-			DurationMS: a.DurationMS,
-			Error:      a.Error,
+			ID:              a.ID,
+			Model:           a.Model,
+			ReasoningEffort: a.ReasoningEffort,
+			Verbosity:       a.Verbosity,
+			Tools:           tools,
+			CreatedAt:       a.CreatedAt,
+			DurationMS:      a.DurationMS,
+			InputTokens:     a.InputTokens,
+			OutputTokens:    a.OutputTokens,
+			CachedTokens:    a.CachedTokens,
+			ReasoningTokens: a.ReasoningTokens,
+			Error:           a.Error,
+		}
+
+		prefix := ""
+		if len(activations) > 1 {
+			prefix = shortID(a.ID) + "_"
 		}
 
 		for _, r := range a.Rounds {
-			inputFile := fmt.Sprintf("round_%d_input.txt", r.Round)
-			if len(activations) > 1 {
-				inputFile = fmt.Sprintf("%s_round_%d_input.txt", shortID(a.ID), r.Round)
-			}
+			inputFile := fmt.Sprintf("%sround_%d_input.txt", prefix, r.Round)
 
 			cr := caseRound{
 				Round:          r.Round,
 				InputFile:      inputFile,
 				MessagePresent: r.MessagePresent,
 				MessageInNew:   r.MessageInNew,
+			}
+
+			if r.Reasoning != "" {
+				var summaries []string
+				for _, line := range strings.Split(r.Reasoning, "\n") {
+					line = strings.TrimSpace(line)
+					if line != "" {
+						summaries = append(summaries, line)
+					}
+				}
+				cr.ReasoningSummaries = summaries
 			}
 
 			for _, tc := range r.ToolCalls {
@@ -665,14 +727,23 @@ func writeCase(home string, msg messageRow, conv conversationRow, contactName st
 				})
 			}
 
-			ca.Rounds = append(ca.Rounds, cr)
-
 			if r.UserInput != "" {
 				err = os.WriteFile(filepath.Join(caseDir, inputFile), []byte(r.UserInput), 0o644)
 				if err != nil {
 					return "", fmt.Errorf("write %s: %w", inputFile, err)
 				}
 			}
+
+			if r.ModelOutput != "" {
+				outputFile := fmt.Sprintf("%sround_%d_output.txt", prefix, r.Round)
+				err = os.WriteFile(filepath.Join(caseDir, outputFile), []byte(r.ModelOutput), 0o644)
+				if err != nil {
+					return "", fmt.Errorf("write %s: %w", outputFile, err)
+				}
+				cr.OutputFile = outputFile
+			}
+
+			ca.Rounds = append(ca.Rounds, cr)
 		}
 
 		cj.Activations = append(cj.Activations, ca)
@@ -786,7 +857,14 @@ func printReport(msg messageRow, conv conversationRow, contactName string, activ
 		if len(ct) > 19 {
 			ct = ct[11:19]
 		}
-		fmt.Printf("  %s (%s, %dms, %s)\n", shortID(a.ID), ct, a.DurationMS, a.Model)
+		configLabel := a.Model
+		if a.ReasoningEffort != "" {
+			configLabel += ", effort=" + a.ReasoningEffort
+		}
+		if a.Verbosity != "" {
+			configLabel += ", verbosity=" + a.Verbosity
+		}
+		fmt.Printf("  %s (%s, %dms, %s)\n", shortID(a.ID), ct, a.DurationMS, configLabel)
 		if a.Error != "" {
 			fmt.Printf("    ERROR: %s\n", truncate(a.Error, 100))
 		}
