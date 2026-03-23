@@ -222,7 +222,7 @@ func (b *Brain) think(ctx context.Context, getInput func() string) (string, llm.
 			}
 			nudged = true
 			act.AppendAssistantText(result.Text)
-			act.AppendUserMessage(b.loadNudge())
+			act.AppendUserMessage(b.loadNudge(result.Text))
 			continue
 		}
 
