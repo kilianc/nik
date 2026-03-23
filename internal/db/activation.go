@@ -15,6 +15,7 @@ type ActivationRow struct {
 	Sources         string
 	Model           string
 	ReasoningEffort string
+	Verbosity       string
 	InputTokens     int64
 	OutputTokens    int64
 	TotalTokens     int64
@@ -34,6 +35,11 @@ func ActivationInsert(ctx context.Context, db DBTX, row ActivationRow) error {
 		effort = row.ReasoningEffort
 	}
 
+	var verbosity any
+	if row.Verbosity != "" {
+		verbosity = row.Verbosity
+	}
+
 	var taskID any
 	if row.TaskID != "" {
 		taskID = row.TaskID
@@ -51,6 +57,7 @@ func ActivationInsert(ctx context.Context, db DBTX, row ActivationRow) error {
 		sources,
 		row.Model,
 		effort,
+		verbosity,
 		row.InputTokens,
 		row.OutputTokens,
 		row.TotalTokens,
@@ -71,6 +78,7 @@ func ActivationInsert(ctx context.Context, db DBTX, row ActivationRow) error {
 
 type ActivationStatsUpdate struct {
 	ReasoningEffort string
+	Verbosity       string
 	InputTokens     int64
 	OutputTokens    int64
 	TotalTokens     int64
@@ -103,6 +111,7 @@ func ActivationUpdateStats(ctx context.Context, db DBTX, id string, s Activation
 	_, err := db.ExecContext(ctx, queries.ActivationUpdateStats,
 		id,
 		s.ReasoningEffort,
+		s.Verbosity,
 		s.InputTokens,
 		s.OutputTokens,
 		s.TotalTokens,

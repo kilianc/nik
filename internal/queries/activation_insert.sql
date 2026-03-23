@@ -5,6 +5,7 @@ INSERT OR IGNORE INTO activation (
   sources,
   model,
   reasoning_effort,
+  verbosity,
   input_tokens,
   output_tokens,
   total_tokens,
@@ -16,4 +17,4 @@ INSERT OR IGNORE INTO activation (
   error,
   created_at
 )
-VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ISO8601_MS(?16))
+VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ISO8601_MS(?17))

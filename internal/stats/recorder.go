@@ -92,6 +92,7 @@ func (r *Recorder) Finish(ctx context.Context, stats llm.ActivationStats) {
 
 	err := db.ActivationUpdateStats(ctx, r.conn, actID, db.ActivationStatsUpdate{
 		ReasoningEffort: stats.ReasoningEffort,
+		Verbosity:       stats.Verbosity,
 		InputTokens:     stats.Usage.InputTokens,
 		OutputTokens:    stats.Usage.OutputTokens,
 		TotalTokens:     stats.Usage.TotalTokens,

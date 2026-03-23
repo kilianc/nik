@@ -157,6 +157,7 @@ CREATE TABLE IF NOT EXISTS activation (
   sources                    TEXT NOT NULL DEFAULT '[]',
   model                      TEXT NOT NULL,
   reasoning_effort           TEXT CHECK(reasoning_effort IN ('none', 'minimal', 'low', 'medium', 'high', 'xhigh')),
+  verbosity                  TEXT CHECK(verbosity IN ('low', 'medium', 'high')),
   input_tokens               INTEGER NOT NULL DEFAULT 0,
   output_tokens              INTEGER NOT NULL DEFAULT 0,
   total_tokens               INTEGER NOT NULL DEFAULT 0,

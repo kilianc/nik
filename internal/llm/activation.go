@@ -23,6 +23,7 @@ type ActivationRecorder interface {
 type ActivationStats struct {
 	Model           string
 	ReasoningEffort string
+	Verbosity       string
 	Usage           Usage
 	Rounds          RoundStats
 	ToolCallCount   int
@@ -64,6 +65,7 @@ type Activation struct {
 	lastRoundID  string
 	instructions string
 	toolNames    []string
+	verbosity    string
 }
 
 func NewActivation(client *Client, rec ActivationRecorder, instructions string, tools []ToolDef) *Activation {
@@ -108,6 +110,11 @@ func NewActivation(client *Client, rec ActivationRecorder, instructions string, 
 		names[i] = t.Name
 	}
 
+	var verbosity string
+	if client.verbosity != nil {
+		verbosity = *client.verbosity
+	}
+
 	return &Activation{
 		client:       client,
 		recorder:     rec,
@@ -116,6 +123,7 @@ func NewActivation(client *Client, rec ActivationRecorder, instructions string, 
 		startTime:    time.Now(),
 		instructions: instructions,
 		toolNames:    names,
+		verbosity:    verbosity,
 	}
 }
 
@@ -127,6 +135,7 @@ func (s *Activation) Close(ctx context.Context) {
 	s.recorder.Finish(ctx, ActivationStats{
 		Model:           *s.client.model,
 		ReasoningEffort: s.extra.ReasoningEffort,
+		Verbosity:       s.verbosity,
 		Usage:           s.total,
 		Rounds:          s.rounds,
 		ToolCallCount:   len(s.history),
