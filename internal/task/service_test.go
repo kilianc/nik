@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"testing"
+	"time"
 
 	"github.com/kciuffolo/nik/internal/db"
 )
@@ -191,6 +192,81 @@ func TestReportInsertAndList(t *testing.T) {
 	}
 	if status != "running" {
 		t.Fatalf("expected system message status 'running', got %q", status)
+	}
+}
+
+func TestCheckStaleInsertReports(t *testing.T) {
+	svc, conn := testDB(t)
+	ctx := context.Background()
+
+	old := time.Now().UTC().Add(-5 * time.Minute).Format("2006-01-02T15:04:05.000Z")
+
+	actID := "act-stale-test"
+	_, err := conn.ExecContext(ctx,
+		"INSERT INTO activation (id, conversation_id, sources, model, created_at) VALUES (?, ?, '[]', 'test', NOW_ISO8601_MS())",
+		actID, testConvID)
+	if err != nil {
+		t.Fatalf("insert dummy activation: %v", err)
+	}
+
+	pending, err := svc.Create(ctx, createParams{
+		Goal: "stuck pending", Thinking: "low", ConversationID: testConvID,
+	})
+	if err != nil {
+		t.Fatalf("create pending: %v", err)
+	}
+	_, err = conn.ExecContext(ctx,
+		"UPDATE task SET created_at = ? WHERE id = ?", old, pending.ID)
+	if err != nil {
+		t.Fatalf("backdate pending: %v", err)
+	}
+
+	running, err := svc.Create(ctx, createParams{
+		Goal: "stuck running", Thinking: "low", ConversationID: testConvID,
+	})
+	if err != nil {
+		t.Fatalf("create running: %v", err)
+	}
+	err = svc.Start(ctx, running.ID, actID)
+	if err != nil {
+		t.Fatalf("start running: %v", err)
+	}
+	_, err = conn.ExecContext(ctx,
+		"UPDATE task SET started_at = ? WHERE id = ?", old, running.ID)
+	if err != nil {
+		t.Fatalf("backdate running: %v", err)
+	}
+
+	fresh, err := svc.Create(ctx, createParams{
+		Goal: "fresh task", Thinking: "low", ConversationID: testConvID,
+	})
+	if err != nil {
+		t.Fatalf("create fresh: %v", err)
+	}
+
+	svc.CheckStale(ctx)
+
+	for _, tc := range []struct {
+		name   string
+		taskID string
+		want   int
+	}{
+		{"pending task gets report", pending.ID, 1},
+		{"running task gets report", running.ID, 1},
+		{"fresh task no report", fresh.ID, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var count int
+			err = conn.QueryRowContext(ctx,
+				"SELECT count(*) FROM task_report WHERE task_id = ?1", tc.taskID,
+			).Scan(&count)
+			if err != nil {
+				t.Fatalf("count reports: %v", err)
+			}
+			if count != tc.want {
+				t.Fatalf("expected %d reports, got %d", tc.want, count)
+			}
+		})
 	}
 }
 
