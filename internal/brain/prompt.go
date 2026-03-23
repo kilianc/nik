@@ -119,7 +119,7 @@ func (b *Brain) loadInstructions(now time.Time, recall string) (string, error) {
 	return htmlCommentRe.ReplaceAllString(buf.String(), ""), nil
 }
 
-func (b *Brain) loadNudge() string {
+func (b *Brain) loadNudge(text string) string {
 	promptRoot, err := os.OpenRoot(b.cfg.PromptsPath())
 	if err != nil {
 		slog.Warn("load retry nudge", "pkg", "brain", "error", err)
@@ -127,12 +127,26 @@ func (b *Brain) loadNudge() string {
 	}
 	defer promptRoot.Close()
 
-	data, err := readFromRoot(promptRoot, "nik-05-retry.md")
+	raw, err := readFromRoot(promptRoot, "nik-05-retry.md")
 	if err != nil {
 		slog.Warn("load retry nudge", "pkg", "brain", "error", err)
 		return ""
 	}
-	return string(data)
+
+	tmpl, err := template.New("nudge").Parse(string(raw))
+	if err != nil {
+		slog.Warn("parse retry nudge", "pkg", "brain", "error", err)
+		return string(raw)
+	}
+
+	var buf strings.Builder
+	err = tmpl.Execute(&buf, struct{ Text string }{text})
+	if err != nil {
+		slog.Warn("execute retry nudge", "pkg", "brain", "error", err)
+		return string(raw)
+	}
+
+	return buf.String()
 }
 
 func readFromRoot(root *os.Root, name string) ([]byte, error) {
