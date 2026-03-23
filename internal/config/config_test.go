@@ -52,6 +52,7 @@ func TestPathGetters(t *testing.T) {
 	}{
 		{"MediaPath", c.MediaPath(), filepath.Join("/tmp/nik", "media")},
 		{"TmpPath", c.TmpPath(), filepath.Join("/tmp/nik", "tmp")},
+		{"ErrLogPath", c.ErrLogPath(), filepath.Join("/tmp/nik", "nik.err.log")},
 	}
 
 	for _, tt := range tests {
