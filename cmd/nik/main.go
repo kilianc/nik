@@ -50,10 +50,19 @@ func main() {
 		os.Exit(1)
 	}
 	defer logFile.Close()
+
+	errLogFile, err := os.OpenFile(cfg.ErrLogPath(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error opening error log file: %v\n", err)
+		os.Exit(1)
+	}
+	defer errLogFile.Close()
+
 	logOpts := &slog.HandlerOptions{Level: slog.LevelInfo}
 	fileHandler := slog.NewTextHandler(logFile, logOpts)
 	stderrHandler := &niklog.TruncHandler{Inner: slog.NewTextHandler(os.Stderr, logOpts)}
-	logger := slog.New(&niklog.MultiHandler{Handlers: []slog.Handler{fileHandler, stderrHandler}})
+	errHandler := slog.NewTextHandler(errLogFile, &slog.HandlerOptions{Level: slog.LevelError})
+	logger := slog.New(&niklog.MultiHandler{Handlers: []slog.Handler{fileHandler, stderrHandler, errHandler}})
 	slog.SetDefault(logger)
 
 	ascii := []string{

@@ -79,6 +79,10 @@ func (c Config) LogPath() string {
 	return filepath.Join(c.Home, "nik.log")
 }
 
+func (c Config) ErrLogPath() string {
+	return filepath.Join(c.Home, "nik.err.log")
+}
+
 func (c Config) DBPath() string {
 	return filepath.Join(c.Home, "nik.db")
 }
