@@ -304,7 +304,7 @@ func TestAlarmUpdate(t *testing.T) {
 	t.Run("last_fired_at preserves next_fire_at", func(t *testing.T) {
 		alarm, err := CreateAlarm(ctx, conn, CreateAlarmParams{
 			OriginConversationID: convID,
-			Goal:                 "test",
+			Goal:                 "test last_fired_at",
 			NextFireAt:           now.Add(-time.Minute),
 		})
 		if err != nil {
@@ -364,7 +364,7 @@ func TestAlarmUpdate(t *testing.T) {
 	t.Run("recurrence", func(t *testing.T) {
 		alarm, err := CreateAlarm(ctx, conn, CreateAlarmParams{
 			OriginConversationID: convID,
-			Goal:                 "test",
+			Goal:                 "test recurrence",
 			Recurrence:           "every day",
 			NextFireAt:           now,
 		})
