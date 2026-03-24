@@ -141,6 +141,9 @@ CREATE TABLE IF NOT EXISTS alarm (
   CHECK (IS_ISO8601_MS(created_at))
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_alarm_active_goal
+  ON alarm (goal) WHERE cancelled_at IS NULL;
+
 -- fired alarm instances (alarm_id, note, fired_at)
 CREATE TABLE IF NOT EXISTS alarm_occurrence (
   id       TEXT PRIMARY KEY,

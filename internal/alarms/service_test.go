@@ -279,6 +279,72 @@ func TestHealStaleAlarms(t *testing.T) {
 	})
 }
 
+func TestCreateAlarmRejectsDuplicateGoal(t *testing.T) {
+	ctx := context.Background()
+
+	conn, err := db.OpenInMemory()
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer conn.Close()
+
+	err = db.EnsureSystemContact(ctx, conn)
+	if err != nil {
+		t.Fatalf("ensure system contact: %v", err)
+	}
+
+	convID := seedConversation(t, ctx, conn)
+	now := time.Now().UTC().Truncate(time.Second)
+	svc := New(nil, conn)
+
+	_, err = svc.CreateAlarm(ctx, "", convID, "remind me to buy milk", "every day", now.Add(time.Hour))
+	if err != nil {
+		t.Fatalf("first create: %v", err)
+	}
+
+	_, err = svc.CreateAlarm(ctx, "", convID, "remind me to buy milk", "every day", now.Add(2*time.Hour))
+	if err == nil {
+		t.Fatal("expected error for duplicate goal")
+	}
+	if !strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("expected 'already exists' error, got: %v", err)
+	}
+}
+
+func TestCreateAlarmAllowsGoalReuseAfterCancellation(t *testing.T) {
+	ctx := context.Background()
+
+	conn, err := db.OpenInMemory()
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer conn.Close()
+
+	err = db.EnsureSystemContact(ctx, conn)
+	if err != nil {
+		t.Fatalf("ensure system contact: %v", err)
+	}
+
+	convID := seedConversation(t, ctx, conn)
+	now := time.Now().UTC().Truncate(time.Second)
+	svc := New(nil, conn)
+
+	a, err := svc.CreateAlarm(ctx, "", convID, "remind me to buy milk", "", now.Add(time.Hour))
+	if err != nil {
+		t.Fatalf("first create: %v", err)
+	}
+
+	err = svc.Cancel(ctx, a.ID)
+	if err != nil {
+		t.Fatalf("cancel: %v", err)
+	}
+
+	_, err = svc.CreateAlarm(ctx, "", convID, "remind me to buy milk", "", now.Add(2*time.Hour))
+	if err != nil {
+		t.Fatalf("expected re-creation after cancel to succeed, got: %v", err)
+	}
+}
+
 func seedConversation(t *testing.T, ctx context.Context, conn *sql.DB) string {
 	t.Helper()
 

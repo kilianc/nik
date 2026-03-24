@@ -27,6 +27,21 @@ This applies in every scenario:
 Before finishing any recurring alarm activation, verify you called
 `update_alarm` with `next_fire_at`. If you didn't, do it now.
 
+## Before creating -- check for duplicates
+
+Before calling `alarm`, query for existing active alarms that cover the
+same intent:
+
+```sql
+SELECT id, goal, recurrence, next_fire_at FROM alarm
+WHERE cancelled_at IS NULL ORDER BY next_fire_at
+```
+
+Scan the results. If an alarm already covers what you're about to create
+-- even with different wording -- use `update_alarm` to adjust it instead
+of creating a new one. Creating a duplicate wastes resources and confuses
+future activations.
+
 ## Tools
 
 ### `alarm` -- create

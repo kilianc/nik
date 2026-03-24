@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/kciuffolo/nik/internal/config"
@@ -42,6 +43,9 @@ func (s *Service) CreateAlarm(ctx context.Context, originContactID, originConver
 		NextFireAt:           nextFireAt,
 	})
 	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			return nil, fmt.Errorf("an active alarm with this exact goal already exists (use update_alarm or cancel_alarm first)")
+		}
 		return nil, fmt.Errorf("create alarm: %w", err)
 	}
 
