@@ -188,3 +188,88 @@ type ToolCallInfo struct {
 	Error      bool
 	At         time.Time
 }
+
+type Experiment struct {
+	ID                string
+	ActivationRoundID string
+	Status            string
+	DesiredOutcome    string
+	Notes             string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+}
+
+type ExperimentVariant struct {
+	ID              string
+	ExperimentID    string
+	Name            string
+	Status          string
+	Hypothesis      string
+	Patches         string
+	ReasoningEffort string
+	Verbosity       string
+	RunCount        int
+	DesiredCount    int
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}
+
+type ExperimentRun struct {
+	ID                  string
+	ExperimentVariantID string
+	ToolCalls           string
+	ModelOutput         string
+	ReasoningSummaries  string
+	IsDesired           bool
+	InputTokens         int64
+	OutputTokens        int64
+	CachedTokens        int64
+	ReasoningTokens     int64
+	CreatedAt           time.Time
+}
+
+type ExperimentInsertParams struct {
+	ID                string
+	ActivationRoundID string
+	Status            string
+	DesiredOutcome    string
+	Notes             string
+}
+
+type ExperimentUpdateParams struct {
+	ID             string
+	Status         *string
+	DesiredOutcome *string
+	Notes          *string
+}
+
+type ExperimentVariantInsertParams struct {
+	ID              string
+	ExperimentID    string
+	Name            string
+	Status          string
+	Hypothesis      string
+	Patches         string
+	ReasoningEffort string
+	Verbosity       string
+}
+
+type ExperimentVariantUpdateParams struct {
+	ID           string
+	Status       *string
+	RunCount     *int
+	DesiredCount *int
+}
+
+type ExperimentRunInsertParams struct {
+	ID                  string
+	ExperimentVariantID string
+	ToolCalls           string
+	ModelOutput         string
+	ReasoningSummaries  string
+	IsDesired           bool
+	InputTokens         int64
+	OutputTokens        int64
+	CachedTokens        int64
+	ReasoningTokens     int64
+}

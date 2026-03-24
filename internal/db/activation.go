@@ -9,23 +9,75 @@ import (
 )
 
 type ActivationRow struct {
-	ID              string
-	ConversationID  string
-	TaskID          string
-	Sources         string
-	Model           string
-	ReasoningEffort string
-	Verbosity       string
-	InputTokens     int64
-	OutputTokens    int64
-	TotalTokens     int64
-	CachedTokens    int64
-	ReasoningTokens int64
-	CostUSD         float64
-	ToolCallCount   int
-	DurationMS      int64
-	Error           string
-	CreatedAt       time.Time
+	ID                     string
+	ConversationID         string
+	TaskID                 string
+	Sources                string
+	Model                  string
+	ReasoningEffort        string
+	Verbosity              string
+	InputTokens            int64
+	OutputTokens           int64
+	TotalTokens            int64
+	CachedTokens           int64
+	ReasoningTokens        int64
+	MaxInputTokensPerRound int64
+	MaxTotalTokensPerRound int64
+	RoundCount             int
+	CostUSD                float64
+	ToolCallCount          int
+	DurationMS             int64
+	Error                  string
+	Instructions           string
+	Tools                  string
+	ToolSchemas            string
+	CreatedAt              time.Time
+}
+
+func ActivationGet(ctx context.Context, db DBTX, id string) (ActivationRow, error) {
+	var r ActivationRow
+	var taskID, effort, verbosity *string
+
+	err := db.QueryRowContext(ctx, queries.ActivationGet, id).Scan(
+		&r.ID,
+		&r.ConversationID,
+		&taskID,
+		&r.Sources,
+		&r.Model,
+		&effort,
+		&verbosity,
+		&r.InputTokens,
+		&r.OutputTokens,
+		&r.TotalTokens,
+		&r.CachedTokens,
+		&r.ReasoningTokens,
+		&r.MaxInputTokensPerRound,
+		&r.MaxTotalTokensPerRound,
+		&r.RoundCount,
+		&r.CostUSD,
+		&r.ToolCallCount,
+		&r.DurationMS,
+		&r.Error,
+		&r.Instructions,
+		&r.Tools,
+		&r.ToolSchemas,
+		&r.CreatedAt,
+	)
+	if err != nil {
+		return r, fmt.Errorf("get activation %s: %w", id, err)
+	}
+
+	if taskID != nil {
+		r.TaskID = *taskID
+	}
+	if effort != nil {
+		r.ReasoningEffort = *effort
+	}
+	if verbosity != nil {
+		r.Verbosity = *verbosity
+	}
+
+	return r, nil
 }
 
 func ActivationInsert(ctx context.Context, db DBTX, row ActivationRow) error {

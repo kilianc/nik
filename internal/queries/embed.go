@@ -122,6 +122,9 @@ var SkillEventList string
 //go:embed activation_insert.sql
 var ActivationInsert string
 
+//go:embed activation_get.sql
+var ActivationGet string
+
 //go:embed activation_update_stats.sql
 var ActivationUpdateStats string
 
@@ -133,10 +136,19 @@ var ActivationUpdateDetail string
 //go:embed activation_round_insert.sql
 var ActivationRoundInsert string
 
+//go:embed activation_round_get.sql
+var ActivationRoundGet string
+
+//go:embed activation_round_list.sql
+var ActivationRoundList string
+
 // tool call queries
 
 //go:embed tool_call_insert.sql
 var ToolCallInsert string
+
+//go:embed tool_call_list.sql
+var ToolCallList string
 
 // task queries
 
@@ -190,3 +202,36 @@ var ShellSessionUpdate string
 
 //go:embed shell_session_alive.sql
 var ShellSessionAlive string
+
+// experiment queries
+
+//go:embed experiment_insert.sql
+var ExperimentInsert string
+
+//go:embed experiment_get.sql
+var ExperimentGet string
+
+//go:embed experiment_update.sql
+var ExperimentUpdate string
+
+// experiment variant queries
+
+//go:embed experiment_variant_insert.sql
+var ExperimentVariantInsert string
+
+//go:embed experiment_variant_get.sql
+var ExperimentVariantGet string
+
+//go:embed experiment_variant_list.sql
+var ExperimentVariantList string
+
+//go:embed experiment_variant_update.sql
+var ExperimentVariantUpdate string
+
+// experiment run queries
+
+//go:embed experiment_run_insert.sql
+var ExperimentRunInsert string
+
+//go:embed experiment_run_list.sql
+var ExperimentRunList string

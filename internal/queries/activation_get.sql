@@ -1,0 +1,26 @@
+SELECT
+  id,
+  conversation_id,
+  task_id,
+  sources,
+  model,
+  reasoning_effort,
+  verbosity,
+  input_tokens,
+  output_tokens,
+  total_tokens,
+  cached_tokens,
+  reasoning_tokens,
+  max_input_tokens_per_round,
+  max_total_tokens_per_round,
+  round_count,
+  cost_usd,
+  tool_call_count,
+  duration_ms,
+  error,
+  instructions,
+  tools,
+  tool_schemas,
+  created_at
+FROM activation
+WHERE id = ?1;
