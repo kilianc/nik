@@ -94,7 +94,7 @@ func main() {
 	}
 	defer conn.Close()
 
-	err = db.EnsureSystemContact(ctx, conn)
+	err = db.SystemContactEnsure(ctx, conn)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: ensure system contact: %v\n", err)
 		os.Exit(1)

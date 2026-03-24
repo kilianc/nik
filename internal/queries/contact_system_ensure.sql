@@ -3,3 +3,4 @@ INSERT OR IGNORE INTO contact (
   name
 )
 VALUES (?1, 'system')
+

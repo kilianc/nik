@@ -274,7 +274,7 @@ func messageEntry(msg db.Message, sender string, database *sql.DB) entry {
 	text := messaging.FormatMessageText(msg)
 
 	if msg.ContextStanzaID.Valid && database != nil {
-		target, err := db.GetMessage(context.Background(), database, db.GetMessageParams{
+		target, err := db.MessageGet(context.Background(), database, db.MessageGetParams{
 			Platform:          msg.Platform,
 			ExternalMessageID: msg.ContextStanzaID.String,
 		})
@@ -289,7 +289,7 @@ func messageEntry(msg db.Message, sender string, database *sql.DB) entry {
 	}
 
 	if msg.IsEdit && msg.EditTargetMessageID.Valid && database != nil {
-		target, err := db.GetMessage(context.Background(), database, db.GetMessageParams{
+		target, err := db.MessageGet(context.Background(), database, db.MessageGetParams{
 			Platform:          msg.Platform,
 			ExternalMessageID: msg.EditTargetMessageID.String,
 		})
@@ -334,7 +334,7 @@ func resolveContactName(ctx context.Context, database *sql.DB, msg db.Message) s
 		return "unknown"
 	}
 
-	contact, err := db.GetContact(ctx, database, msg.ContactID)
+	contact, err := db.ContactGet(ctx, database, msg.ContactID)
 	if err != nil {
 		return "unknown"
 	}

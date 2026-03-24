@@ -11,7 +11,7 @@ import (
 	"github.com/kciuffolo/nik/internal/queries"
 )
 
-type CreateAlarmParams struct {
+type AlarmCreateParams struct {
 	OriginContactID      string
 	OriginConversationID string
 	Goal                 string
@@ -19,7 +19,7 @@ type CreateAlarmParams struct {
 	NextFireAt           time.Time
 }
 
-func CreateAlarm(ctx context.Context, db DBTX, p CreateAlarmParams) (Alarm, error) {
+func AlarmCreate(ctx context.Context, db DBTX, p AlarmCreateParams) (Alarm, error) {
 	newID := id.V7()
 	now := time.Now()
 
@@ -65,7 +65,7 @@ func scanAlarm(s scanner) (Alarm, error) {
 	return a, err
 }
 
-func DueAlarms(ctx context.Context, db *sql.DB, now time.Time) ([]Alarm, error) {
+func AlarmListDue(ctx context.Context, db *sql.DB, now time.Time) ([]Alarm, error) {
 	rows, err := db.QueryContext(ctx, queries.AlarmDue, now)
 	if err != nil {
 		return nil, err
@@ -127,7 +127,7 @@ func AlarmGet(ctx context.Context, db DBTX, identifier string) (Alarm, bool, err
 	return a, true, nil
 }
 
-func StaleRecurringAlarms(ctx context.Context, db *sql.DB, now time.Time) ([]Alarm, error) {
+func AlarmListStale(ctx context.Context, db *sql.DB, now time.Time) ([]Alarm, error) {
 	rows, err := db.QueryContext(ctx, queries.AlarmStaleRecurring, now)
 	if err != nil {
 		return nil, err
@@ -171,7 +171,7 @@ func AlarmFire(ctx context.Context, conn *sql.DB, a Alarm, now time.Time) (Alarm
 	a.LastOccurrenceNote = sql.NullString{}
 
 	if a.OriginConversationID.Valid {
-		err = InsertSystemMessage(ctx, tx, SystemMessageParams{
+		err = SystemMessageInsert(ctx, tx, SystemMessageParams{
 			ConversationID: a.OriginConversationID.String,
 			Kind:           "alarm_fired",
 			Body:           a,

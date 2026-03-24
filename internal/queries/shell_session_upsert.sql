@@ -5,4 +5,4 @@ ON CONFLICT (id) DO UPDATE SET
   output     = ?5,
   exit_code  = ?6,
   alive      = ?7,
-  updated_at = NOW_ISO8601_MS();
+  updated_at = NOW_ISO8601_MS()

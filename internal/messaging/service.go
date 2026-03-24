@@ -58,7 +58,7 @@ func (s *Service) ReceiveConversation(ctx context.Context, conv Conversation) er
 		lastMessageAt = time.Now()
 	}
 
-	err := db.UpsertConversation(ctx, s.db, db.UpsertConversationParams{
+	err := db.ConversationUpsert(ctx, s.db, db.ConversationUpsertParams{
 		Platform:               conv.Platform,
 		ExternalConversationID: conv.ExternalConversationID,
 		Kind:                   conv.Kind,
@@ -107,7 +107,7 @@ func (s *Service) ReceiveMessage(ctx context.Context, msg InboundMessage) error 
 	var dmRecipientID string
 	var dmTitle string
 	if !msg.IsGroup && msg.ExternalConversationID != "" {
-		recipient, err := db.GetContact(ctx, s.db, msg.ExternalConversationID)
+		recipient, err := db.ContactGet(ctx, s.db, msg.ExternalConversationID)
 		if err == nil {
 			dmTitle = recipient.Name
 			if recipient.ID != contactID {
@@ -127,7 +127,7 @@ func (s *Service) ReceiveMessage(ctx context.Context, msg InboundMessage) error 
 	}
 	defer tx.Rollback()
 
-	err = db.UpsertConversation(ctx, tx, db.UpsertConversationParams{
+	err = db.ConversationUpsert(ctx, tx, db.ConversationUpsertParams{
 		Platform:               msg.Platform,
 		ExternalConversationID: msg.ExternalConversationID,
 		Kind:                   inferConversationKind(msg),
@@ -138,7 +138,7 @@ func (s *Service) ReceiveMessage(ctx context.Context, msg InboundMessage) error 
 		return fmt.Errorf("upsert message conversation: %w", err)
 	}
 
-	conversation, err := db.GetConversation(ctx, tx, db.GetConversationParams{
+	conversation, err := db.ConversationGet(ctx, tx, db.ConversationGetParams{
 		Platform:               msg.Platform,
 		ExternalConversationID: msg.ExternalConversationID,
 	})
@@ -168,7 +168,7 @@ func (s *Service) ReceiveMessage(ctx context.Context, msg InboundMessage) error 
 	}
 	slog.Info("receive inbound message", logAttrs...)
 
-	err = db.InsertMessage(ctx, tx, db.InsertMessageParams{
+	err = db.MessageInsert(ctx, tx, db.MessageInsertParams{
 		ID:                     msgID,
 		ConversationID:         conversationID,
 		ContactID:              contactID,
@@ -228,7 +228,7 @@ func (s *Service) ReceiveMessage(ctx context.Context, msg InboundMessage) error 
 			transcribedAt = &now
 		}
 
-		err = db.InsertMedia(ctx, tx, db.InsertMediaParams{
+		err = db.MediaInsert(ctx, tx, db.MediaInsertParams{
 			ID:             msg.MediaID,
 			MimeType:       mimeType,
 			LocalPath:      localPath,
@@ -240,7 +240,7 @@ func (s *Service) ReceiveMessage(ctx context.Context, msg InboundMessage) error 
 			return err
 		}
 
-		err = db.UpsertMessageMedia(ctx, tx, msgID, msg.MediaID)
+		err = db.MessageMediaUpsert(ctx, tx, msgID, msg.MediaID)
 		if err != nil {
 			return err
 		}
@@ -255,7 +255,7 @@ func (s *Service) ReceiveMessage(ctx context.Context, msg InboundMessage) error 
 }
 
 func (s *Service) OnHistorySyncComplete(ctx context.Context, platform string) error {
-	return db.MarkConversationsRead(ctx, s.db, db.MarkConversationsReadParams{
+	return db.ConversationMarkRead(ctx, s.db, db.ConversationMarkReadParams{
 		Platform: platform,
 	})
 }
@@ -281,7 +281,7 @@ func (s *Service) Reply(ctx context.Context, conversationID string, body string,
 		return err
 	}
 
-	conv, err := db.GetConversation(ctx, s.db, db.GetConversationParams{ID: conversationID})
+	conv, err := db.ConversationGet(ctx, s.db, db.ConversationGetParams{ID: conversationID})
 	if err != nil {
 		return err
 	}
@@ -368,7 +368,7 @@ func (s *Service) SendImage(ctx context.Context, conversationID string, imagePat
 		return err
 	}
 
-	conv, err := db.GetConversation(ctx, s.db, db.GetConversationParams{ID: conversationID})
+	conv, err := db.ConversationGet(ctx, s.db, db.ConversationGetParams{ID: conversationID})
 	if err != nil {
 		return err
 	}
@@ -456,7 +456,7 @@ func (s *Service) SendImage(ctx context.Context, conversationID string, imagePat
 }
 
 func (s *Service) SendAudio(ctx context.Context, conversationID string, audioPath string, voiceNote bool, body string) error {
-	conv, err := db.GetConversation(ctx, s.db, db.GetConversationParams{ID: conversationID})
+	conv, err := db.ConversationGet(ctx, s.db, db.ConversationGetParams{ID: conversationID})
 	if err != nil {
 		return err
 	}
@@ -525,12 +525,12 @@ func (s *Service) SendAudio(ctx context.Context, conversationID string, audioPat
 }
 
 func (s *Service) React(ctx context.Context, messageID string, emoji string) error {
-	msg, err := db.GetMessage(ctx, s.db, db.GetMessageParams{ID: messageID})
+	msg, err := db.MessageGet(ctx, s.db, db.MessageGetParams{ID: messageID})
 	if err != nil {
 		return err
 	}
 
-	conv, err := db.GetConversation(ctx, s.db, db.GetConversationParams{ID: msg.ConversationID})
+	conv, err := db.ConversationGet(ctx, s.db, db.ConversationGetParams{ID: msg.ConversationID})
 	if err != nil {
 		return err
 	}
@@ -581,12 +581,12 @@ func (s *Service) MarkRead(ctx context.Context, conversationID string, readAt ti
 		return nil
 	}
 
-	conv, err := db.GetConversation(ctx, s.db, db.GetConversationParams{ID: conversationID})
+	conv, err := db.ConversationGet(ctx, s.db, db.ConversationGetParams{ID: conversationID})
 	if err != nil {
 		return err
 	}
 
-	err = db.MarkConversationsRead(ctx, s.db, db.MarkConversationsReadParams{
+	err = db.ConversationMarkRead(ctx, s.db, db.ConversationMarkReadParams{
 		ConversationID: conversationID,
 		ReadAt:         readAt,
 	})
@@ -639,7 +639,7 @@ func (s *Service) MarkRead(ctx context.Context, conversationID string, readAt ti
 }
 
 func (s *Service) ConversationWithMessages(ctx context.Context, conversationID string, maxHistory int) (db.Conversation, []db.Message, error) {
-	conv, err := db.GetConversation(ctx, s.db, db.GetConversationParams{ID: conversationID})
+	conv, err := db.ConversationGet(ctx, s.db, db.ConversationGetParams{ID: conversationID})
 	if err != nil {
 		return db.Conversation{}, nil, err
 	}
@@ -657,7 +657,7 @@ func (s *Service) ConversationWithMessages(ctx context.Context, conversationID s
 }
 
 func (s *Service) ResolveConversation(ctx context.Context, contactID string) (string, error) {
-	contact, err := db.GetContact(ctx, s.db, contactID)
+	contact, err := db.ContactGet(ctx, s.db, contactID)
 	if err != nil {
 		return "", fmt.Errorf("get contact %s: %w", contactID, err)
 	}
@@ -668,7 +668,7 @@ func (s *Service) ResolveConversation(ctx context.Context, contactID string) (st
 	jid := contact.WhatsappIDs[0]
 
 	now := time.Now()
-	err = db.UpsertConversation(ctx, s.db, db.UpsertConversationParams{
+	err = db.ConversationUpsert(ctx, s.db, db.ConversationUpsertParams{
 		Platform:               "whatsapp",
 		ExternalConversationID: jid,
 		Kind:                   "dm",
@@ -679,7 +679,7 @@ func (s *Service) ResolveConversation(ctx context.Context, contactID string) (st
 		return "", fmt.Errorf("upsert conversation for contact %s: %w", contactID, err)
 	}
 
-	conv, err := db.GetConversation(ctx, s.db, db.GetConversationParams{
+	conv, err := db.ConversationGet(ctx, s.db, db.ConversationGetParams{
 		Platform:               "whatsapp",
 		ExternalConversationID: jid,
 	})
@@ -829,7 +829,7 @@ func (s *Service) contactLabel(ctx context.Context, contactID string) string {
 		return ""
 	}
 
-	contact, err := db.GetContact(ctx, s.db, contactID)
+	contact, err := db.ContactGet(ctx, s.db, contactID)
 	if err != nil {
 		return ""
 	}
@@ -948,7 +948,7 @@ func (s *Service) PersistMediaResult(ctx context.Context, localPath, text string
 		return err
 	}
 
-	return db.InsertSystemMessage(ctx, s.db, db.SystemMessageParams{
+	return db.SystemMessageInsert(ctx, s.db, db.SystemMessageParams{
 		ConversationID:  res.ConversationID,
 		Kind:            "media_processed",
 		Body:            struct{ FilePath string }{localPath},

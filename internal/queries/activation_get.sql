@@ -23,4 +23,4 @@ SELECT
   tool_schemas,
   created_at
 FROM activation
-WHERE id = ?1;
+WHERE id = ?1

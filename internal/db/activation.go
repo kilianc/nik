@@ -127,7 +127,10 @@ func ActivationInsert(ctx context.Context, db DBTX, row ActivationRow) error {
 	return nil
 }
 
-type ActivationStatsUpdate struct {
+type ActivationUpdateParams struct {
+	Instructions    *string
+	Tools           []string
+	ToolSchemas     *string
 	ReasoningEffort string
 	Verbosity       string
 	InputTokens     int64
@@ -144,40 +147,34 @@ type ActivationStatsUpdate struct {
 	Error           string
 }
 
-func ActivationUpdateDetail(ctx context.Context, db DBTX, id string, instructions string, tools []string, toolSchemas string) error {
-	_, err := db.ExecContext(ctx, queries.ActivationUpdateDetail,
-		id,
-		instructions,
-		MarshalStringSlice(tools),
-		toolSchemas,
-	)
-	if err != nil {
-		return fmt.Errorf("update activation detail %s: %w", id, err)
+func ActivationUpdate(ctx context.Context, db DBTX, id string, p ActivationUpdateParams) error {
+	var tools any
+	if p.Tools != nil {
+		tools = MarshalStringSlice(p.Tools)
 	}
 
-	return nil
-}
-
-func ActivationUpdateStats(ctx context.Context, db DBTX, id string, s ActivationStatsUpdate) error {
-	_, err := db.ExecContext(ctx, queries.ActivationUpdateStats,
+	_, err := db.ExecContext(ctx, queries.ActivationUpdate,
 		id,
-		s.ReasoningEffort,
-		s.Verbosity,
-		s.InputTokens,
-		s.OutputTokens,
-		s.TotalTokens,
-		s.CachedTokens,
-		s.ReasoningTokens,
-		s.CostUSD,
-		s.RoundCount,
-		s.MaxInputTokens,
-		s.MaxTotalTokens,
-		s.ToolCallCount,
-		s.DurationMS,
-		s.Error,
+		p.Instructions,
+		tools,
+		p.ToolSchemas,
+		p.ReasoningEffort,
+		p.Verbosity,
+		p.InputTokens,
+		p.OutputTokens,
+		p.TotalTokens,
+		p.CachedTokens,
+		p.ReasoningTokens,
+		p.CostUSD,
+		p.RoundCount,
+		p.MaxInputTokens,
+		p.MaxTotalTokens,
+		p.ToolCallCount,
+		p.DurationMS,
+		p.Error,
 	)
 	if err != nil {
-		return fmt.Errorf("update activation stats %s: %w", id, err)
+		return fmt.Errorf("update activation %s: %w", id, err)
 	}
 
 	return nil

@@ -42,7 +42,7 @@ func TestUpdateContactHandlerUpdatesEachField(t *testing.T) {
 	}
 	defer conn.Close()
 
-	seed, err := db.UpsertContact(ctx, conn, db.UpsertContactParams{
+	seed, err := db.ContactUpsert(ctx, conn, db.ContactUpsertParams{
 		Platform:      "whatsapp",
 		ExternalID:    "test@s.whatsapp.net",
 		Name:          "Test",
@@ -146,7 +146,7 @@ func TestUpdateContactHandlerUpdatesEachField(t *testing.T) {
 				t.Fatalf("expected ok, got %q", out)
 			}
 
-			got, err := db.GetContact(ctx, conn, seed.ID)
+			got, err := db.ContactGet(ctx, conn, seed.ID)
 			if err != nil {
 				t.Fatalf("get contact after update: %v", err)
 			}

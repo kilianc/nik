@@ -16,7 +16,7 @@ func TestConversationGroupMetadataRoundTrip(t *testing.T) {
 	defer conn.Close()
 
 	now := time.Now()
-	err = UpsertConversation(ctx, conn, UpsertConversationParams{
+	err = ConversationUpsert(ctx, conn, ConversationUpsertParams{
 		Platform:               "whatsapp",
 		ExternalConversationID: "12345-67890@g.us",
 		Kind:                   "group",
@@ -33,7 +33,7 @@ func TestConversationGroupMetadataRoundTrip(t *testing.T) {
 	owner := "11111@s.whatsapp.net"
 	participants := []string{"11111@s.whatsapp.net", "22222@s.whatsapp.net"}
 
-	err = UpsertConversation(ctx, conn, UpsertConversationParams{
+	err = ConversationUpsert(ctx, conn, ConversationUpsertParams{
 		Platform:               "whatsapp",
 		ExternalConversationID: "12345-67890@g.us",
 		Kind:                   "group",
@@ -49,7 +49,7 @@ func TestConversationGroupMetadataRoundTrip(t *testing.T) {
 		t.Fatalf("upsert conversation group metadata: %v", err)
 	}
 
-	conv, err := GetConversation(ctx, conn, GetConversationParams{
+	conv, err := ConversationGet(ctx, conn, ConversationGetParams{
 		Platform:               "whatsapp",
 		ExternalConversationID: "12345-67890@g.us",
 	})
@@ -83,7 +83,7 @@ func TestConversationParticipantListIncludesContactProfile(t *testing.T) {
 	}
 	defer conn.Close()
 
-	contact, err := UpsertContact(ctx, conn, UpsertContactParams{
+	contact, err := ContactUpsert(ctx, conn, ContactUpsertParams{
 		Platform:      "whatsapp",
 		ExternalID:    "alice@s.whatsapp.net",
 		Name:          "Alice",
@@ -95,7 +95,7 @@ func TestConversationParticipantListIncludesContactProfile(t *testing.T) {
 	}
 
 	now := time.Now()
-	err = UpsertConversation(ctx, conn, UpsertConversationParams{
+	err = ConversationUpsert(ctx, conn, ConversationUpsertParams{
 		Platform:               "whatsapp",
 		ExternalConversationID: "alice@s.whatsapp.net",
 		Kind:                   "dm",
@@ -105,7 +105,7 @@ func TestConversationParticipantListIncludesContactProfile(t *testing.T) {
 		t.Fatalf("upsert conversation: %v", err)
 	}
 
-	conversation, err := GetConversation(ctx, conn, GetConversationParams{
+	conversation, err := ConversationGet(ctx, conn, ConversationGetParams{
 		Platform:               "whatsapp",
 		ExternalConversationID: "alice@s.whatsapp.net",
 	})
@@ -141,7 +141,7 @@ func TestConversationParticipantListIncludesContactProfile(t *testing.T) {
 	}
 }
 
-func TestUpsertConversationParticipantDeduplicatesByContactID(t *testing.T) {
+func TestConversationUpsertParticipantDeduplicatesByContactID(t *testing.T) {
 	ctx := context.Background()
 
 	conn, err := OpenInMemory()
@@ -150,7 +150,7 @@ func TestUpsertConversationParticipantDeduplicatesByContactID(t *testing.T) {
 	}
 	defer conn.Close()
 
-	contact, err := UpsertContact(ctx, conn, UpsertContactParams{
+	contact, err := ContactUpsert(ctx, conn, ContactUpsertParams{
 		Platform:      "whatsapp",
 		ExternalID:    "alice@s.whatsapp.net",
 		Name:          "Alice",

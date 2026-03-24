@@ -10,7 +10,7 @@ import (
 	"github.com/kciuffolo/nik/internal/queries"
 )
 
-type UpsertConversationParams struct {
+type ConversationUpsertParams struct {
 	Platform               string
 	ExternalConversationID string
 	Kind                   string
@@ -23,13 +23,13 @@ type UpsertConversationParams struct {
 	LastMessageAt          *time.Time
 }
 
-type GetConversationParams struct {
+type ConversationGetParams struct {
 	ID                     string
 	Platform               string
 	ExternalConversationID string
 }
 
-type MarkConversationsReadParams struct {
+type ConversationMarkReadParams struct {
 	ConversationID string
 	Platform       string
 	ReadAt         time.Time
@@ -67,7 +67,7 @@ func scanConversation(s scanner) (Conversation, error) {
 	return conv, nil
 }
 
-func UpsertConversation(ctx context.Context, db DBTX, p UpsertConversationParams) error {
+func ConversationUpsert(ctx context.Context, db DBTX, p ConversationUpsertParams) error {
 	if p.Platform == "" {
 		return fmt.Errorf("empty platform")
 	}
@@ -135,7 +135,7 @@ func UpsertConversation(ctx context.Context, db DBTX, p UpsertConversationParams
 	return nil
 }
 
-func GetConversation(ctx context.Context, db DBTX, p GetConversationParams) (Conversation, error) {
+func ConversationGet(ctx context.Context, db DBTX, p ConversationGetParams) (Conversation, error) {
 	if p.ID == "" && (p.Platform == "" || p.ExternalConversationID == "") {
 		return Conversation{}, fmt.Errorf("get conversation: no filter provided")
 	}
@@ -144,7 +144,7 @@ func GetConversation(ctx context.Context, db DBTX, p GetConversationParams) (Con
 	return scanConversation(row)
 }
 
-func MarkConversationsRead(ctx context.Context, db *sql.DB, p MarkConversationsReadParams) error {
+func ConversationMarkRead(ctx context.Context, db *sql.DB, p ConversationMarkReadParams) error {
 	if p.ConversationID != "" {
 		_, err := db.ExecContext(ctx, queries.ConversationMarkRead, p.ConversationID, p.ReadAt)
 		if err != nil {
@@ -179,7 +179,7 @@ func ConversationParticipantUpsert(ctx context.Context, db DBTX, p ConversationP
 
 	_, err := db.ExecContext(
 		ctx,
-		queries.ConversationUpsertParticipant,
+		queries.ConversationParticipantUpsert,
 		id.V7(),
 		p.ConversationID,
 		p.ContactID,
@@ -193,7 +193,7 @@ func ConversationParticipantUpsert(ctx context.Context, db DBTX, p ConversationP
 }
 
 func ConversationParticipantList(ctx context.Context, db *sql.DB, conversationID string) ([]ConversationParticipant, error) {
-	rows, err := db.QueryContext(ctx, queries.ConversationGetParticipants, conversationID)
+	rows, err := db.QueryContext(ctx, queries.ConversationParticipantList, conversationID)
 	if err != nil {
 		return nil, fmt.Errorf("get conversation participants %s: %w", conversationID, err)
 	}

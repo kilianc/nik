@@ -12,4 +12,4 @@ SET
     ELSE completed_at
   END,
   last_report_at = COALESCE(NULLABLE_ISO8601_MS(?4), last_report_at)
-WHERE id = ?1;
+WHERE id = ?1

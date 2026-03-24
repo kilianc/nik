@@ -8,3 +8,4 @@ SELECT
   updated_at
 FROM experiment
 WHERE id LIKE '%' || ?1
+

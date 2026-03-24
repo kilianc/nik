@@ -13,3 +13,4 @@ SELECT
   updated_at
 FROM experiment_variant
 WHERE id LIKE '%' || ?1
+

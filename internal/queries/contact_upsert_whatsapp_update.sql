@@ -18,4 +18,4 @@ SET
     ELSE last_message_at
   END,
   updated_at = NOW_ISO8601_MS()
-WHERE EXISTS (SELECT 1 FROM json_each(whatsapp_ids) WHERE value = ?4);
+WHERE EXISTS (SELECT 1 FROM json_each(whatsapp_ids) WHERE value = ?4)

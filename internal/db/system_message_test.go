@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func TestInsertSystemMessageWritesSystemRow(t *testing.T) {
+func TestSystemMessageInsertWritesSystemRow(t *testing.T) {
 	ctx := context.Background()
 
 	conn, err := OpenInMemory()
@@ -15,7 +15,7 @@ func TestInsertSystemMessageWritesSystemRow(t *testing.T) {
 	}
 	defer conn.Close()
 
-	err = EnsureSystemContact(ctx, conn)
+	err = SystemContactEnsure(ctx, conn)
 	if err != nil {
 		t.Fatalf("ensure system contact: %v", err)
 	}
@@ -23,7 +23,7 @@ func TestInsertSystemMessageWritesSystemRow(t *testing.T) {
 	convID := seedConversation(t, ctx, conn, "whatsapp", "system-msg@s.whatsapp.net", "dm")
 	sentAt := time.Now().UTC().Truncate(time.Second)
 
-	err = InsertSystemMessage(ctx, conn, SystemMessageParams{
+	err = SystemMessageInsert(ctx, conn, SystemMessageParams{
 		ConversationID: convID,
 		Kind:           "task_report",
 		Body: map[string]any{

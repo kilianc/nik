@@ -6,3 +6,4 @@ INSERT INTO task_report (
   created_at
 )
 VALUES (?1, ?2, ?3, ?4, ISO8601_MS(?5))
+

@@ -12,4 +12,4 @@ SELECT
   NOW_ISO8601_MS()
 WHERE NOT EXISTS (
   SELECT 1 FROM contact WHERE EXISTS (SELECT 1 FROM json_each(whatsapp_ids) WHERE value = ?3)
-);
+)

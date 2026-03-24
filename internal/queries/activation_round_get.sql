@@ -11,4 +11,4 @@ SELECT
   reasoning_tokens,
   created_at
 FROM activation_round
-WHERE id LIKE '%' || ?1;
+WHERE id LIKE '%' || ?1

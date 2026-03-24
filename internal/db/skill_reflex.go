@@ -13,7 +13,7 @@ import (
 func SkillReflexLatest(ctx context.Context, db DBTX, skillName string) (string, error) {
 	var meta string
 
-	err := db.QueryRowContext(ctx, queries.SkillReflexLatest, skillName).Scan(&meta)
+	err := db.QueryRowContext(ctx, queries.SkillReflexGet, skillName).Scan(&meta)
 	if err == sql.ErrNoRows {
 		return "", nil
 	}

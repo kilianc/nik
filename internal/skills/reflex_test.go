@@ -48,7 +48,7 @@ func setupReflexTest(t *testing.T) (*reflexHarness, func(context.Context)) {
 
 	ctx := context.Background()
 
-	err = db.EnsureSystemContact(ctx, conn)
+	err = db.SystemContactEnsure(ctx, conn)
 	if err != nil {
 		t.Fatalf("ensure system contact: %v", err)
 	}
@@ -119,218 +119,167 @@ func countSystemMessages(t *testing.T, ctx context.Context, conn *sql.DB, kind s
 	return count
 }
 
-func TestSkillChangeReflexDetectsAdded(t *testing.T) {
-	h, reflex := setupReflexTest(t)
+func TestSkillChangeReflex(t *testing.T) {
+	t.Run("detects added", func(t *testing.T) {
+		h, reflex := setupReflexTest(t)
+		writeSkillFile(t, h.skillsDir, "journal", "---\nname: journal\nsummary: daily journal\n---\n# Journal\n")
+		reflex(h.ctx)
 
-	writeSkillFile(t, h.skillsDir, "journal", "---\nname: journal\nsummary: daily journal\n---\n# Journal\n")
+		skills, err := db.SkillList(h.ctx, h.conn)
+		if err != nil {
+			t.Fatalf("list skills: %v", err)
+		}
+		if len(skills) != 1 {
+			t.Fatalf("expected 1 skill, got %d", len(skills))
+		}
+		if skills[0].Name != "journal" || skills[0].Status != "active" {
+			t.Fatalf("expected journal active, got %s %s", skills[0].Name, skills[0].Status)
+		}
+		if latestSkillEvent(t, h.ctx, h.conn, "journal").Kind != "added" {
+			t.Fatalf("expected latest event added")
+		}
+		if count := countSystemMessages(t, h.ctx, h.conn, "skill_added"); count != 1 {
+			t.Fatalf("expected 1 skill_added message, got %d", count)
+		}
+	})
 
-	reflex(h.ctx)
+	t.Run("detects removed", func(t *testing.T) {
+		h, reflex := setupReflexTest(t)
+		writeSkillFile(t, h.skillsDir, "journal", "---\nname: journal\nsummary: daily journal\n---\n# Journal\n")
+		reflex(h.ctx)
 
-	skills, err := db.SkillList(h.ctx, h.conn)
-	if err != nil {
-		t.Fatalf("list skills: %v", err)
-	}
-	if len(skills) != 1 {
-		t.Fatalf("expected 1 skill, got %d", len(skills))
-	}
-	if skills[0].Name != "journal" || skills[0].Status != "active" {
-		t.Fatalf("expected journal active, got %s %s", skills[0].Name, skills[0].Status)
-	}
+		err := os.RemoveAll(filepath.Join(h.skillsDir, "journal"))
+		if err != nil {
+			t.Fatalf("remove skill dir: %v", err)
+		}
+		reflex(h.ctx)
 
-	event := latestSkillEvent(t, h.ctx, h.conn, "journal")
-	if event.Kind != "added" {
-		t.Fatalf("expected latest event added, got %s", event.Kind)
-	}
+		skills, err := db.SkillList(h.ctx, h.conn)
+		if err != nil {
+			t.Fatalf("list skills: %v", err)
+		}
+		if len(skills) != 1 || skills[0].Status != "removed" {
+			t.Fatalf("expected removed status, got %v", skills)
+		}
+		if latestSkillEvent(t, h.ctx, h.conn, "journal").Kind != "removed" {
+			t.Fatalf("expected latest event removed")
+		}
+		if count := countSystemMessages(t, h.ctx, h.conn, "skill_removed"); count != 1 {
+			t.Fatalf("expected 1 skill_removed message, got %d", count)
+		}
+	})
 
-	if count := countSystemMessages(t, h.ctx, h.conn, "skill_added"); count != 1 {
-		t.Fatalf("expected 1 skill_added message, got %d", count)
-	}
-}
+	t.Run("ignores prompt-only changes", func(t *testing.T) {
+		h, reflex := setupReflexTest(t)
+		writeSkillFile(t, h.skillsDir, "journal", "---\nname: journal\nsummary: daily journal\n---\n# Journal\nSome prompt\n")
+		reflex(h.ctx)
+		writeSkillFile(t, h.skillsDir, "journal", "---\nname: journal\nsummary: daily journal\n---\n# Journal\nUpdated prompt\n")
+		reflex(h.ctx)
 
-func TestSkillChangeReflexDetectsRemoved(t *testing.T) {
-	h, reflex := setupReflexTest(t)
+		events, err := db.SkillEventList(h.ctx, h.conn, time.Time{})
+		if err != nil {
+			t.Fatalf("list skill events: %v", err)
+		}
+		if len(events) != 1 {
+			t.Fatalf("expected 1 skill event, got %d", len(events))
+		}
+		if count := countSystemMessages(t, h.ctx, h.conn, "skill_changed"); count != 0 {
+			t.Fatalf("expected 0 skill_changed messages, got %d", count)
+		}
+	})
 
-	writeSkillFile(t, h.skillsDir, "journal", "---\nname: journal\nsummary: daily journal\n---\n# Journal\n")
-	reflex(h.ctx)
+	t.Run("detects install change", func(t *testing.T) {
+		h, reflex := setupReflexTest(t)
+		writeSkillFile(t, h.skillsDir, "journal", "---\nname: journal\nsummary: daily journal\ninstall: true\n---\n# Journal\n\n## Install\nCreate alarm at 9pm\n")
+		reflex(h.ctx)
 
-	err := os.RemoveAll(filepath.Join(h.skillsDir, "journal"))
-	if err != nil {
-		t.Fatalf("remove skill dir: %v", err)
-	}
+		skillsBefore, err := db.SkillList(h.ctx, h.conn)
+		if err != nil {
+			t.Fatalf("list skills before: %v", err)
+		}
+		firstHash := skillsBefore[0].InstallHash.String
 
-	reflex(h.ctx)
+		writeSkillFile(t, h.skillsDir, "journal", "---\nname: journal\nsummary: daily journal\ninstall: true\n---\n# Journal\n\n## Install\nCreate alarm at 10pm\n")
+		reflex(h.ctx)
 
-	skills, err := db.SkillList(h.ctx, h.conn)
-	if err != nil {
-		t.Fatalf("list skills: %v", err)
-	}
-	if len(skills) != 1 {
-		t.Fatalf("expected 1 skill row, got %d", len(skills))
-	}
-	if skills[0].Status != "removed" {
-		t.Fatalf("expected removed status, got %s", skills[0].Status)
-	}
+		skillsAfter, err := db.SkillList(h.ctx, h.conn)
+		if err != nil {
+			t.Fatalf("list skills after: %v", err)
+		}
+		if skillsAfter[0].InstallHash.String == firstHash {
+			t.Fatalf("expected install hash to change")
+		}
+		if latestSkillEvent(t, h.ctx, h.conn, "journal").Kind != "changed" {
+			t.Fatalf("expected latest event changed")
+		}
+		if count := countSystemMessages(t, h.ctx, h.conn, "skill_changed"); count != 1 {
+			t.Fatalf("expected 1 skill_changed message, got %d", count)
+		}
+	})
 
-	event := latestSkillEvent(t, h.ctx, h.conn, "journal")
-	if event.Kind != "removed" {
-		t.Fatalf("expected latest event removed, got %s", event.Kind)
-	}
+	t.Run("idempotent", func(t *testing.T) {
+		h, reflex := setupReflexTest(t)
+		writeSkillFile(t, h.skillsDir, "journal", "---\nname: journal\nsummary: daily journal\n---\n# Journal\n")
+		reflex(h.ctx)
+		reflex(h.ctx)
+		reflex(h.ctx)
 
-	if count := countSystemMessages(t, h.ctx, h.conn, "skill_removed"); count != 1 {
-		t.Fatalf("expected 1 skill_removed message, got %d", count)
-	}
-}
+		events, err := db.SkillEventList(h.ctx, h.conn, time.Time{})
+		if err != nil {
+			t.Fatalf("list skill events: %v", err)
+		}
+		if len(events) != 1 {
+			t.Fatalf("expected 1 skill event total, got %d", len(events))
+		}
+	})
 
-func TestSkillChangeReflexIgnoresPromptOnlyChanges(t *testing.T) {
-	h, reflex := setupReflexTest(t)
+	t.Run("recovers from db wipe", func(t *testing.T) {
+		h, reflex := setupReflexTest(t)
+		writeSkillFile(t, h.skillsDir, "journal", "---\nname: journal\nsummary: daily journal\ninstall: true\n---\n# Journal\n\n## Install\nCreate alarm\n")
+		writeSkillFile(t, h.skillsDir, "briefing", "---\nname: briefing\nsummary: morning briefing\ninstall: true\n---\n# Briefing\n\n## Install\nCreate alarm\n")
+		reflex(h.ctx)
 
-	original := "---\nname: journal\nsummary: daily journal\n---\n# Journal\nSome prompt\n"
-	writeSkillFile(t, h.skillsDir, "journal", original)
-	reflex(h.ctx)
+		_, err := h.conn.ExecContext(h.ctx, "DELETE FROM skill")
+		if err != nil {
+			t.Fatalf("wipe skill table: %v", err)
+		}
+		reflex(h.ctx)
 
-	updated := "---\nname: journal\nsummary: daily journal\n---\n# Journal\nUpdated prompt\n"
-	writeSkillFile(t, h.skillsDir, "journal", updated)
-	reflex(h.ctx)
+		skills, err := db.SkillList(h.ctx, h.conn)
+		if err != nil {
+			t.Fatalf("list skills after recovery: %v", err)
+		}
+		if len(skills) != 2 {
+			t.Fatalf("expected 2 skills after recovery, got %d", len(skills))
+		}
+		if count := countSystemMessages(t, h.ctx, h.conn, "skill_added"); count != 4 {
+			t.Fatalf("expected 4 skill_added messages after recovery, got %d", count)
+		}
+	})
 
-	events, err := db.SkillEventList(h.ctx, h.conn, time.Time{})
-	if err != nil {
-		t.Fatalf("list skill events: %v", err)
-	}
-	if len(events) != 1 {
-		t.Fatalf("expected 1 skill event, got %d", len(events))
-	}
+	t.Run("null install hash when no install section", func(t *testing.T) {
+		h, reflex := setupReflexTest(t)
+		writeSkillFile(t, h.skillsDir, "shell", "---\nname: shell\nsummary: shell tool\n---\n# Shell\nRun commands\n")
+		writeSkillFile(t, h.skillsDir, "journal", "---\nname: journal\nsummary: daily journal\ninstall: true\n---\n# Journal\n\n## Install\nCreate alarm at 11:30pm\n")
+		reflex(h.ctx)
 
-	if count := countSystemMessages(t, h.ctx, h.conn, "skill_added"); count != 1 {
-		t.Fatalf("expected only initial skill_added message, got %d", count)
-	}
-	if count := countSystemMessages(t, h.ctx, h.conn, "skill_changed"); count != 0 {
-		t.Fatalf("expected 0 skill_changed messages, got %d", count)
-	}
-}
-
-func TestSkillChangeReflexDetectsInstallChange(t *testing.T) {
-	h, reflex := setupReflexTest(t)
-
-	original := "---\nname: journal\nsummary: daily journal\ninstall: true\n---\n# Journal\n\n## Install\nCreate alarm at 9pm\n"
-	writeSkillFile(t, h.skillsDir, "journal", original)
-	reflex(h.ctx)
-
-	skillsBefore, err := db.SkillList(h.ctx, h.conn)
-	if err != nil {
-		t.Fatalf("list skills before: %v", err)
-	}
-	firstHash := skillsBefore[0].InstallHash.String
-
-	updated := "---\nname: journal\nsummary: daily journal\ninstall: true\n---\n# Journal\n\n## Install\nCreate alarm at 10pm\n"
-	writeSkillFile(t, h.skillsDir, "journal", updated)
-	reflex(h.ctx)
-
-	skillsAfter, err := db.SkillList(h.ctx, h.conn)
-	if err != nil {
-		t.Fatalf("list skills after: %v", err)
-	}
-	if len(skillsAfter) != 1 {
-		t.Fatalf("expected 1 skill row, got %d", len(skillsAfter))
-	}
-	if skillsAfter[0].InstallHash.String == firstHash {
-		t.Fatalf("expected install hash to change")
-	}
-
-	event := latestSkillEvent(t, h.ctx, h.conn, "journal")
-	if event.Kind != "changed" {
-		t.Fatalf("expected latest event changed, got %s", event.Kind)
-	}
-
-	if count := countSystemMessages(t, h.ctx, h.conn, "skill_changed"); count != 1 {
-		t.Fatalf("expected 1 skill_changed message, got %d", count)
-	}
-}
-
-func TestSkillChangeReflexIdempotent(t *testing.T) {
-	h, reflex := setupReflexTest(t)
-
-	writeSkillFile(t, h.skillsDir, "journal", "---\nname: journal\nsummary: daily journal\n---\n# Journal\n")
-
-	reflex(h.ctx)
-	reflex(h.ctx)
-	reflex(h.ctx)
-
-	events, err := db.SkillEventList(h.ctx, h.conn, time.Time{})
-	if err != nil {
-		t.Fatalf("list skill events: %v", err)
-	}
-	if len(events) != 1 {
-		t.Fatalf("expected 1 skill event total, got %d", len(events))
-	}
-
-	if count := countSystemMessages(t, h.ctx, h.conn, "skill_added"); count != 1 {
-		t.Fatalf("expected 1 skill_added message, got %d", count)
-	}
-}
-
-func TestSkillChangeReflexRecoversFromDBWipe(t *testing.T) {
-	h, reflex := setupReflexTest(t)
-
-	writeSkillFile(t, h.skillsDir, "journal", "---\nname: journal\nsummary: daily journal\ninstall: true\n---\n# Journal\n\n## Install\nCreate alarm\n")
-	writeSkillFile(t, h.skillsDir, "briefing", "---\nname: briefing\nsummary: morning briefing\ninstall: true\n---\n# Briefing\n\n## Install\nCreate alarm\n")
-
-	reflex(h.ctx)
-
-	_, err := h.conn.ExecContext(h.ctx, "DELETE FROM skill")
-	if err != nil {
-		t.Fatalf("wipe skill table: %v", err)
-	}
-
-	reflex(h.ctx)
-
-	skills, err := db.SkillList(h.ctx, h.conn)
-	if err != nil {
-		t.Fatalf("list skills after recovery: %v", err)
-	}
-	if len(skills) != 2 {
-		t.Fatalf("expected 2 skills after recovery, got %d", len(skills))
-	}
-
-	if latestSkillEvent(t, h.ctx, h.conn, "journal").Kind != "added" {
-		t.Fatalf("expected journal to be re-added")
-	}
-	if latestSkillEvent(t, h.ctx, h.conn, "briefing").Kind != "added" {
-		t.Fatalf("expected briefing to be re-added")
-	}
-
-	if count := countSystemMessages(t, h.ctx, h.conn, "skill_added"); count != 4 {
-		t.Fatalf("expected 4 skill_added messages after recovery, got %d", count)
-	}
-}
-
-func TestSkillChangeReflexNullInstallHashWhenNoInstallSection(t *testing.T) {
-	h, reflex := setupReflexTest(t)
-
-	writeSkillFile(t, h.skillsDir, "shell", "---\nname: shell\nsummary: shell tool\n---\n# Shell\nRun commands\n")
-	writeSkillFile(t, h.skillsDir, "journal", "---\nname: journal\nsummary: daily journal\ninstall: true\n---\n# Journal\n\n## Install\nCreate alarm at 11:30pm\n")
-
-	reflex(h.ctx)
-
-	skills, err := db.SkillList(h.ctx, h.conn)
-	if err != nil {
-		t.Fatalf("list skills: %v", err)
-	}
-	if len(skills) != 2 {
-		t.Fatalf("expected 2 skills, got %d", len(skills))
-	}
-
-	for _, s := range skills {
-		switch s.Name {
-		case "shell":
-			if s.InstallHash.Valid {
-				t.Fatalf("expected NULL install_hash for shell, got %q", s.InstallHash.String)
-			}
-		case "journal":
-			if !s.InstallHash.Valid || s.InstallHash.String == "" {
-				t.Fatalf("expected non-empty install_hash for journal")
+		skills, err := db.SkillList(h.ctx, h.conn)
+		if err != nil {
+			t.Fatalf("list skills: %v", err)
+		}
+		for _, s := range skills {
+			switch s.Name {
+			case "shell":
+				if s.InstallHash.Valid {
+					t.Fatalf("expected NULL install_hash for shell, got %q", s.InstallHash.String)
+				}
+			case "journal":
+				if !s.InstallHash.Valid || s.InstallHash.String == "" {
+					t.Fatalf("expected non-empty install_hash for journal")
+				}
 			}
 		}
-	}
+	})
 }
 
 func TestSkillChangeReflexOnlyFirstPrivilegedConv(t *testing.T) {
@@ -342,7 +291,7 @@ func TestSkillChangeReflexOnlyFirstPrivilegedConv(t *testing.T) {
 
 	ctx := context.Background()
 
-	err = db.EnsureSystemContact(ctx, conn)
+	err = db.SystemContactEnsure(ctx, conn)
 	if err != nil {
 		t.Fatalf("ensure system contact: %v", err)
 	}

@@ -136,7 +136,7 @@ func applySkillChange(ctx context.Context, conn *sql.DB, privIDs []string, kind 
 		return
 	}
 
-	err = db.InsertSystemMessage(ctx, tx, db.SystemMessageParams{
+	err = db.SystemMessageInsert(ctx, tx, db.SystemMessageParams{
 		ConversationID: privIDs[0],
 		Kind:           "skill_" + kind,
 		Body:           skill,
@@ -286,7 +286,7 @@ func runSkillCheck(ctx context.Context, cfg *config.Config, conn *sql.DB, key st
 		body["meta"] = newMeta
 	}
 
-	err = db.InsertSystemMessage(ctx, conn, db.SystemMessageParams{
+	err = db.SystemMessageInsert(ctx, conn, db.SystemMessageParams{
 		ConversationID: privIDs[0],
 		Kind:           "skill_reflex_fired",
 		Body:           body,

@@ -39,7 +39,7 @@ func TestReceiveMessageFromMeUsesNikContactID(t *testing.T) {
 		t.Fatalf("receive message: %v", err)
 	}
 
-	msg, err := db.GetMessage(ctx, conn, db.GetMessageParams{
+	msg, err := db.MessageGet(ctx, conn, db.MessageGetParams{
 		Platform:          "whatsapp",
 		ExternalMessageID: "msg-1",
 	})
@@ -139,7 +139,7 @@ func TestSenderLabelsResolvesContactName(t *testing.T) {
 	}
 	defer conn.Close()
 
-	_, err = db.UpsertContact(ctx, conn, db.UpsertContactParams{
+	_, err = db.ContactUpsert(ctx, conn, db.ContactUpsertParams{
 		Platform:      "whatsapp",
 		ExternalID:    "44444@s.whatsapp.net",
 		Name:          "Alice",
@@ -166,7 +166,7 @@ func TestSenderLabelsResolvesContactName(t *testing.T) {
 		t.Fatalf("receive message: %v", err)
 	}
 
-	msg, err := db.GetMessage(ctx, conn, db.GetMessageParams{
+	msg, err := db.MessageGet(ctx, conn, db.MessageGetParams{
 		Platform:          "whatsapp",
 		ExternalMessageID: "msg-4",
 	})
@@ -251,7 +251,7 @@ func TestReplyPersistsOutboundImmediately(t *testing.T) {
 	svc.replyDelay = func(string) time.Duration { return 0 }
 
 	now := time.Now()
-	err = db.UpsertConversation(ctx, conn, db.UpsertConversationParams{
+	err = db.ConversationUpsert(ctx, conn, db.ConversationUpsertParams{
 		Platform:               "whatsapp",
 		ExternalConversationID: "conversation@s.whatsapp.net",
 		Kind:                   "dm",
@@ -261,7 +261,7 @@ func TestReplyPersistsOutboundImmediately(t *testing.T) {
 		t.Fatalf("upsert conversation: %v", err)
 	}
 
-	conversation, err := db.GetConversation(ctx, conn, db.GetConversationParams{
+	conversation, err := db.ConversationGet(ctx, conn, db.ConversationGetParams{
 		Platform:               "whatsapp",
 		ExternalConversationID: "conversation@s.whatsapp.net",
 	})
@@ -288,7 +288,7 @@ func TestReplyPersistsOutboundImmediately(t *testing.T) {
 		t.Fatalf("reply: %v", err)
 	}
 
-	msg, err := db.GetMessage(ctx, conn, db.GetMessageParams{
+	msg, err := db.MessageGet(ctx, conn, db.MessageGetParams{
 		Platform:          "whatsapp",
 		ExternalMessageID: "out-1",
 	})
@@ -324,7 +324,7 @@ func TestReplyWithQuoteTargetSetsContextStanza(t *testing.T) {
 	svc.replyDelay = func(string) time.Duration { return 0 }
 
 	now := time.Now()
-	err = db.UpsertConversation(ctx, conn, db.UpsertConversationParams{
+	err = db.ConversationUpsert(ctx, conn, db.ConversationUpsertParams{
 		Platform:               "whatsapp",
 		ExternalConversationID: "conversation@s.whatsapp.net",
 		Kind:                   "group",
@@ -334,7 +334,7 @@ func TestReplyWithQuoteTargetSetsContextStanza(t *testing.T) {
 		t.Fatalf("upsert conversation: %v", err)
 	}
 
-	conversation, err := db.GetConversation(ctx, conn, db.GetConversationParams{
+	conversation, err := db.ConversationGet(ctx, conn, db.ConversationGetParams{
 		Platform:               "whatsapp",
 		ExternalConversationID: "conversation@s.whatsapp.net",
 	})
@@ -373,7 +373,7 @@ func TestReplyWithQuoteTargetSetsContextStanza(t *testing.T) {
 		t.Fatalf("expected quote external_message_id original-msg-id, got %q", platform.lastQuote.ExternalMessageID)
 	}
 
-	msg, err := db.GetMessage(ctx, conn, db.GetMessageParams{
+	msg, err := db.MessageGet(ctx, conn, db.MessageGetParams{
 		Platform:          "whatsapp",
 		ExternalMessageID: "out-quote-1",
 	})
@@ -403,7 +403,7 @@ func TestSendImagePersistsOutbound(t *testing.T) {
 	svc.replyDelay = func(string) time.Duration { return 0 }
 
 	now := time.Now()
-	err = db.UpsertConversation(ctx, conn, db.UpsertConversationParams{
+	err = db.ConversationUpsert(ctx, conn, db.ConversationUpsertParams{
 		Platform:               "whatsapp",
 		ExternalConversationID: "conversation@s.whatsapp.net",
 		Kind:                   "dm",
@@ -413,7 +413,7 @@ func TestSendImagePersistsOutbound(t *testing.T) {
 		t.Fatalf("upsert conversation: %v", err)
 	}
 
-	conversation, err := db.GetConversation(ctx, conn, db.GetConversationParams{
+	conversation, err := db.ConversationGet(ctx, conn, db.ConversationGetParams{
 		Platform:               "whatsapp",
 		ExternalConversationID: "conversation@s.whatsapp.net",
 	})
@@ -448,7 +448,7 @@ func TestSendImagePersistsOutbound(t *testing.T) {
 		t.Fatalf("send image: %v", err)
 	}
 
-	msg, err := db.GetMessage(ctx, conn, db.GetMessageParams{
+	msg, err := db.MessageGet(ctx, conn, db.MessageGetParams{
 		Platform:          "whatsapp",
 		ExternalMessageID: "img-1",
 	})
@@ -486,7 +486,7 @@ func TestSendAudioPersistsOutbound(t *testing.T) {
 	svc := NewService(&config.Config{}, conn, contactsSvc)
 
 	now := time.Now()
-	err = db.UpsertConversation(ctx, conn, db.UpsertConversationParams{
+	err = db.ConversationUpsert(ctx, conn, db.ConversationUpsertParams{
 		Platform:               "whatsapp",
 		ExternalConversationID: "conversation@s.whatsapp.net",
 		Kind:                   "dm",
@@ -496,7 +496,7 @@ func TestSendAudioPersistsOutbound(t *testing.T) {
 		t.Fatalf("upsert conversation: %v", err)
 	}
 
-	conversation, err := db.GetConversation(ctx, conn, db.GetConversationParams{
+	conversation, err := db.ConversationGet(ctx, conn, db.ConversationGetParams{
 		Platform:               "whatsapp",
 		ExternalConversationID: "conversation@s.whatsapp.net",
 	})
@@ -530,7 +530,7 @@ func TestSendAudioPersistsOutbound(t *testing.T) {
 		t.Fatalf("send audio: %v", err)
 	}
 
-	msg, err := db.GetMessage(ctx, conn, db.GetMessageParams{
+	msg, err := db.MessageGet(ctx, conn, db.MessageGetParams{
 		Platform:          "whatsapp",
 		ExternalMessageID: "audio-1",
 	})
@@ -564,7 +564,7 @@ func TestSendAudioStoresTranscript(t *testing.T) {
 	svc := NewService(cfg, conn, contactsSvc)
 
 	now := time.Now()
-	err = db.UpsertConversation(ctx, conn, db.UpsertConversationParams{
+	err = db.ConversationUpsert(ctx, conn, db.ConversationUpsertParams{
 		Platform:               "whatsapp",
 		ExternalConversationID: "conversation@s.whatsapp.net",
 		Kind:                   "dm",
@@ -574,7 +574,7 @@ func TestSendAudioStoresTranscript(t *testing.T) {
 		t.Fatalf("upsert conversation: %v", err)
 	}
 
-	conversation, err := db.GetConversation(ctx, conn, db.GetConversationParams{
+	conversation, err := db.ConversationGet(ctx, conn, db.ConversationGetParams{
 		Platform:               "whatsapp",
 		ExternalConversationID: "conversation@s.whatsapp.net",
 	})
@@ -609,7 +609,7 @@ func TestSendAudioStoresTranscript(t *testing.T) {
 		t.Fatalf("send audio: %v", err)
 	}
 
-	msg, err := db.GetMessage(ctx, conn, db.GetMessageParams{
+	msg, err := db.MessageGet(ctx, conn, db.MessageGetParams{
 		Platform:          "whatsapp",
 		ExternalMessageID: "audio-transcript-1",
 	})
@@ -654,7 +654,7 @@ func TestMarkReadCapsAtReadUpTo(t *testing.T) {
 	sendInboundMessageForReadTest(t, ctx, svc, externalConversationID, externalSenderID, "in-2", "second", t2)
 	sendInboundMessageForReadTest(t, ctx, svc, externalConversationID, externalSenderID, "in-3", "third", t3)
 
-	conv, err := db.GetConversation(ctx, conn, db.GetConversationParams{
+	conv, err := db.ConversationGet(ctx, conn, db.ConversationGetParams{
 		Platform:               "whatsapp",
 		ExternalConversationID: externalConversationID,
 	})
@@ -663,12 +663,12 @@ func TestMarkReadCapsAtReadUpTo(t *testing.T) {
 	}
 	conversationID := conv.ID
 
-	err = db.EnsureSystemContact(ctx, conn)
+	err = db.SystemContactEnsure(ctx, conn)
 	if err != nil {
 		t.Fatalf("ensure system contact: %v", err)
 	}
 
-	err = db.InsertSystemMessage(ctx, conn, db.SystemMessageParams{
+	err = db.SystemMessageInsert(ctx, conn, db.SystemMessageParams{
 		ConversationID: conversationID,
 		Kind:           "task_report",
 		Body: map[string]any{
@@ -701,7 +701,7 @@ func TestMarkReadCapsAtReadUpTo(t *testing.T) {
 		}
 	}
 
-	conv, err = db.GetConversation(ctx, conn, db.GetConversationParams{ID: conversationID})
+	conv, err = db.ConversationGet(ctx, conn, db.ConversationGetParams{ID: conversationID})
 	if err != nil {
 		t.Fatalf("get conversation: %v", err)
 	}
@@ -769,7 +769,7 @@ func TestMarkReadPicksUpMessagesAfterOutbound(t *testing.T) {
 
 	sendInboundMessageForReadTest(t, ctx, svc, externalConversationID, externalSenderID, "in-1", "hello", t1)
 
-	conv, err := db.GetConversation(ctx, conn, db.GetConversationParams{
+	conv, err := db.ConversationGet(ctx, conn, db.ConversationGetParams{
 		Platform:               "whatsapp",
 		ExternalConversationID: externalConversationID,
 	})
@@ -796,7 +796,7 @@ func TestMarkReadPicksUpMessagesAfterOutbound(t *testing.T) {
 		t.Fatalf("reply: %v", err)
 	}
 
-	conv, err = db.GetConversation(ctx, conn, db.GetConversationParams{ID: conversationID})
+	conv, err = db.ConversationGet(ctx, conn, db.ConversationGetParams{ID: conversationID})
 	if err != nil {
 		t.Fatalf("get conversation after reply: %v", err)
 	}
@@ -938,7 +938,7 @@ func TestConversationHeaderUnifiedDM(t *testing.T) {
 
 	seedConversation(t, ctx, svc, "whatsapp", "conv-dm@s.whatsapp.net", "dm")
 
-	conv, err := db.GetConversation(ctx, conn, db.GetConversationParams{
+	conv, err := db.ConversationGet(ctx, conn, db.ConversationGetParams{
 		Platform:               "whatsapp",
 		ExternalConversationID: "conv-dm@s.whatsapp.net",
 	})
@@ -984,7 +984,7 @@ func TestReplyRejectsBannedWords(t *testing.T) {
 	svc.replyDelay = func(string) time.Duration { return 0 }
 
 	now := time.Now()
-	err = db.UpsertConversation(ctx, conn, db.UpsertConversationParams{
+	err = db.ConversationUpsert(ctx, conn, db.ConversationUpsertParams{
 		Platform:               "whatsapp",
 		ExternalConversationID: "conv-banned@s.whatsapp.net",
 		Kind:                   "dm",
@@ -994,7 +994,7 @@ func TestReplyRejectsBannedWords(t *testing.T) {
 		t.Fatalf("upsert conversation: %v", err)
 	}
 
-	conv, err := db.GetConversation(ctx, conn, db.GetConversationParams{
+	conv, err := db.ConversationGet(ctx, conn, db.ConversationGetParams{
 		Platform:               "whatsapp",
 		ExternalConversationID: "conv-banned@s.whatsapp.net",
 	})
@@ -1056,7 +1056,7 @@ func TestSendImageRejectsBannedWordsInCaption(t *testing.T) {
 	svc.replyDelay = func(string) time.Duration { return 0 }
 
 	now := time.Now()
-	err = db.UpsertConversation(ctx, conn, db.UpsertConversationParams{
+	err = db.ConversationUpsert(ctx, conn, db.ConversationUpsertParams{
 		Platform:               "whatsapp",
 		ExternalConversationID: "conv-img-ban@s.whatsapp.net",
 		Kind:                   "dm",
@@ -1066,7 +1066,7 @@ func TestSendImageRejectsBannedWordsInCaption(t *testing.T) {
 		t.Fatalf("upsert conversation: %v", err)
 	}
 
-	conv, err := db.GetConversation(ctx, conn, db.GetConversationParams{
+	conv, err := db.ConversationGet(ctx, conn, db.ConversationGetParams{
 		Platform:               "whatsapp",
 		ExternalConversationID: "conv-img-ban@s.whatsapp.net",
 	})
@@ -1115,7 +1115,7 @@ func TestResolveConversation(t *testing.T) {
 	}
 	defer conn.Close()
 
-	_, err = db.UpsertContact(ctx, conn, db.UpsertContactParams{
+	_, err = db.ContactUpsert(ctx, conn, db.ContactUpsertParams{
 		Platform:      "whatsapp",
 		ExternalID:    "55555@s.whatsapp.net",
 		Name:          "Charlie",
@@ -1126,7 +1126,7 @@ func TestResolveConversation(t *testing.T) {
 		t.Fatalf("seed contact: %v", err)
 	}
 
-	contact, err := db.GetContact(ctx, conn, "55555@s.whatsapp.net")
+	contact, err := db.ContactGet(ctx, conn, "55555@s.whatsapp.net")
 	if err != nil {
 		t.Fatalf("get contact: %v", err)
 	}
@@ -1142,7 +1142,7 @@ func TestResolveConversation(t *testing.T) {
 		t.Fatalf("expected non-empty conversation id")
 	}
 
-	conv, err := db.GetConversation(ctx, conn, db.GetConversationParams{ID: convID})
+	conv, err := db.ConversationGet(ctx, conn, db.ConversationGetParams{ID: convID})
 	if err != nil {
 		t.Fatalf("get conversation: %v", err)
 	}
@@ -1208,7 +1208,7 @@ func seedConversation(t *testing.T, ctx context.Context, svc *Service, platform,
 	t.Helper()
 
 	now := time.Now()
-	err := db.UpsertConversation(ctx, svc.db, db.UpsertConversationParams{
+	err := db.ConversationUpsert(ctx, svc.db, db.ConversationUpsertParams{
 		Platform:               platform,
 		ExternalConversationID: externalConvID,
 		Kind:                   kind,
@@ -1218,7 +1218,7 @@ func seedConversation(t *testing.T, ctx context.Context, svc *Service, platform,
 		t.Fatalf("seed conversation: %v", err)
 	}
 
-	conv, err := db.GetConversation(ctx, svc.db, db.GetConversationParams{
+	conv, err := db.ConversationGet(ctx, svc.db, db.ConversationGetParams{
 		Platform:               platform,
 		ExternalConversationID: externalConvID,
 	})

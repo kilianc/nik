@@ -21,7 +21,7 @@ func testDB(t *testing.T) (*Service, *sql.DB) {
 
 	ctx := context.Background()
 
-	err = db.EnsureSystemContact(ctx, conn)
+	err = db.SystemContactEnsure(ctx, conn)
 	if err != nil {
 		t.Fatalf("ensure system contact: %v", err)
 	}

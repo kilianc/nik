@@ -16,4 +16,4 @@ SELECT
   updated_at
 FROM conversation
 WHERE (?1 != '' AND id = ?1)
-   OR (?1 = '' AND platform = ?2 AND external_conversation_id = ?3);
+   OR (?1 = '' AND platform = ?2 AND external_conversation_id = ?3)

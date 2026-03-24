@@ -5,3 +5,4 @@ SET
   notes = COALESCE(?4, notes),
   updated_at = NOW_ISO8601_MS()
 WHERE id = ?1
+

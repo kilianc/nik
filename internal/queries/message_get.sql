@@ -31,4 +31,4 @@ FROM message m
 LEFT JOIN message_media mm ON mm.message_id = m.id
 LEFT JOIN media ON media.id = mm.media_id
 WHERE (?1 != '' AND m.id = ?1)
-   OR (?1 = '' AND m.platform = ?2 AND m.external_message_id = ?3);
+   OR (?1 = '' AND m.platform = ?2 AND m.external_message_id = ?3)

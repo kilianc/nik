@@ -100,7 +100,7 @@ func seedConversation(t *testing.T, ctx context.Context, conn *sql.DB, platform,
 	t.Helper()
 
 	now := time.Now()
-	err := UpsertConversation(ctx, conn, UpsertConversationParams{
+	err := ConversationUpsert(ctx, conn, ConversationUpsertParams{
 		Platform:               platform,
 		ExternalConversationID: externalID,
 		Kind:                   kind,
@@ -110,7 +110,7 @@ func seedConversation(t *testing.T, ctx context.Context, conn *sql.DB, platform,
 		t.Fatalf("seed conversation: %v", err)
 	}
 
-	conv, err := GetConversation(ctx, conn, GetConversationParams{
+	conv, err := ConversationGet(ctx, conn, ConversationGetParams{
 		Platform:               platform,
 		ExternalConversationID: externalID,
 	})

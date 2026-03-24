@@ -224,7 +224,7 @@ func allowlistAdd(ctx context.Context, cfg *Config, conn *sql.DB, conversationID
 		return `{"error":"empty conversation_id"}`, nil
 	}
 
-	conv, err := db.GetConversation(ctx, conn, db.GetConversationParams{ID: conversationID})
+	conv, err := db.ConversationGet(ctx, conn, db.ConversationGetParams{ID: conversationID})
 	if err != nil {
 		return llm.ToolErrorf("conversation not found: %s", conversationID), nil
 	}

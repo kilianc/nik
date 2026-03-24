@@ -68,7 +68,7 @@ func TestEnsureContactJIDLinking(t *testing.T) {
 			t.Fatalf("ensure: %v", err)
 		}
 
-		contact, err := db.GetContact(ctx, conn, id1)
+		contact, err := db.ContactGet(ctx, conn, id1)
 		if err != nil {
 			t.Fatalf("get contact: %v", err)
 		}
@@ -91,7 +91,7 @@ func TestEnsureContactJIDLinking(t *testing.T) {
 			t.Fatalf("expected same contact id, got %s and %s", id1, id2)
 		}
 
-		contact, err := db.GetContact(ctx, conn, id1)
+		contact, err := db.ContactGet(ctx, conn, id1)
 		if err != nil {
 			t.Fatalf("get contact: %v", err)
 		}
@@ -109,7 +109,7 @@ func TestEnsureContactJIDLinking(t *testing.T) {
 			t.Fatalf("expected nik contact id, got %s", id)
 		}
 
-		contact, err := db.GetContact(ctx, conn, NikContactID)
+		contact, err := db.ContactGet(ctx, conn, NikContactID)
 		if err != nil {
 			t.Fatalf("get nik contact: %v", err)
 		}

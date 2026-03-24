@@ -19,7 +19,7 @@ func TestFireDueAlarmsClearsLastOccurrenceNote(t *testing.T) {
 	}
 	defer conn.Close()
 
-	err = db.EnsureSystemContact(ctx, conn)
+	err = db.SystemContactEnsure(ctx, conn)
 	if err != nil {
 		t.Fatalf("ensure system contact: %v", err)
 	}
@@ -27,7 +27,7 @@ func TestFireDueAlarmsClearsLastOccurrenceNote(t *testing.T) {
 	convID := seedConversation(t, ctx, conn)
 	now := time.Now().UTC().Truncate(time.Second)
 
-	alarm, err := db.CreateAlarm(ctx, conn, db.CreateAlarmParams{
+	alarm, err := db.AlarmCreate(ctx, conn, db.AlarmCreateParams{
 		OriginConversationID: convID,
 		Goal:                 "journal",
 		NextFireAt:           now.Add(-time.Minute),
@@ -80,7 +80,7 @@ func TestUpdateAlarmNoteWritesBothStores(t *testing.T) {
 	}
 	defer conn.Close()
 
-	err = db.EnsureSystemContact(ctx, conn)
+	err = db.SystemContactEnsure(ctx, conn)
 	if err != nil {
 		t.Fatalf("ensure system contact: %v", err)
 	}
@@ -88,7 +88,7 @@ func TestUpdateAlarmNoteWritesBothStores(t *testing.T) {
 	convID := seedConversation(t, ctx, conn)
 	now := time.Now().UTC().Truncate(time.Second)
 
-	alarm, err := db.CreateAlarm(ctx, conn, db.CreateAlarmParams{
+	alarm, err := db.AlarmCreate(ctx, conn, db.AlarmCreateParams{
 		OriginConversationID: convID,
 		Goal:                 "journal",
 		NextFireAt:           now.Add(time.Hour),
@@ -158,7 +158,7 @@ func TestUpdateAlarmNoteBeforeFirstOccurrenceReturnsError(t *testing.T) {
 	}
 	defer conn.Close()
 
-	err = db.EnsureSystemContact(ctx, conn)
+	err = db.SystemContactEnsure(ctx, conn)
 	if err != nil {
 		t.Fatalf("ensure system contact: %v", err)
 	}
@@ -166,7 +166,7 @@ func TestUpdateAlarmNoteBeforeFirstOccurrenceReturnsError(t *testing.T) {
 	convID := seedConversation(t, ctx, conn)
 	now := time.Now().UTC().Truncate(time.Second)
 
-	alarm, err := db.CreateAlarm(ctx, conn, db.CreateAlarmParams{
+	alarm, err := db.AlarmCreate(ctx, conn, db.AlarmCreateParams{
 		OriginConversationID: convID,
 		Goal:                 "journal",
 		NextFireAt:           now.Add(time.Hour),
@@ -196,7 +196,7 @@ func TestHealStaleAlarms(t *testing.T) {
 		}
 		defer conn.Close()
 
-		err = db.EnsureSystemContact(ctx, conn)
+		err = db.SystemContactEnsure(ctx, conn)
 		if err != nil {
 			t.Fatalf("ensure system contact: %v", err)
 		}
@@ -204,7 +204,7 @@ func TestHealStaleAlarms(t *testing.T) {
 		convID := seedConversation(t, ctx, conn)
 		now := time.Now().UTC().Truncate(time.Second)
 
-		alarm, err := db.CreateAlarm(ctx, conn, db.CreateAlarmParams{
+		alarm, err := db.AlarmCreate(ctx, conn, db.AlarmCreateParams{
 			OriginConversationID: convID,
 			Goal:                 "[NIK_JOURNAL] End of day journal",
 			Recurrence:           "every day",
@@ -244,7 +244,7 @@ func TestHealStaleAlarms(t *testing.T) {
 		}
 		defer conn.Close()
 
-		err = db.EnsureSystemContact(ctx, conn)
+		err = db.SystemContactEnsure(ctx, conn)
 		if err != nil {
 			t.Fatalf("ensure system contact: %v", err)
 		}
@@ -252,7 +252,7 @@ func TestHealStaleAlarms(t *testing.T) {
 		convID := seedConversation(t, ctx, conn)
 		now := time.Now().UTC().Truncate(time.Second)
 
-		_, err = db.CreateAlarm(ctx, conn, db.CreateAlarmParams{
+		_, err = db.AlarmCreate(ctx, conn, db.AlarmCreateParams{
 			OriginConversationID: convID,
 			Goal:                 "[NIK_JOURNAL] End of day journal",
 			Recurrence:           "every day",
@@ -279,7 +279,7 @@ func TestHealStaleAlarms(t *testing.T) {
 	})
 }
 
-func TestCreateAlarmRejectsDuplicateGoal(t *testing.T) {
+func TestCreateAlarmDuplicateGoal(t *testing.T) {
 	ctx := context.Background()
 
 	conn, err := db.OpenInMemory()
@@ -288,7 +288,7 @@ func TestCreateAlarmRejectsDuplicateGoal(t *testing.T) {
 	}
 	defer conn.Close()
 
-	err = db.EnsureSystemContact(ctx, conn)
+	err = db.SystemContactEnsure(ctx, conn)
 	if err != nil {
 		t.Fatalf("ensure system contact: %v", err)
 	}
@@ -297,59 +297,44 @@ func TestCreateAlarmRejectsDuplicateGoal(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	svc := New(nil, conn)
 
-	_, err = svc.CreateAlarm(ctx, "", convID, "remind me to buy milk", "every day", now.Add(time.Hour))
-	if err != nil {
-		t.Fatalf("first create: %v", err)
-	}
+	t.Run("rejects duplicate", func(t *testing.T) {
+		_, err := svc.CreateAlarm(ctx, "", convID, "remind me to buy milk", "every day", now.Add(time.Hour))
+		if err != nil {
+			t.Fatalf("first create: %v", err)
+		}
 
-	_, err = svc.CreateAlarm(ctx, "", convID, "remind me to buy milk", "every day", now.Add(2*time.Hour))
-	if err == nil {
-		t.Fatal("expected error for duplicate goal")
-	}
-	if !strings.Contains(err.Error(), "already exists") {
-		t.Fatalf("expected 'already exists' error, got: %v", err)
-	}
-}
+		_, err = svc.CreateAlarm(ctx, "", convID, "remind me to buy milk", "every day", now.Add(2*time.Hour))
+		if err == nil {
+			t.Fatal("expected error for duplicate goal")
+		}
+		if !strings.Contains(err.Error(), "already exists") {
+			t.Fatalf("expected 'already exists' error, got: %v", err)
+		}
+	})
 
-func TestCreateAlarmAllowsGoalReuseAfterCancellation(t *testing.T) {
-	ctx := context.Background()
+	t.Run("allows reuse after cancellation", func(t *testing.T) {
+		a, err := svc.CreateAlarm(ctx, "", convID, "reusable goal", "", now.Add(time.Hour))
+		if err != nil {
+			t.Fatalf("first create: %v", err)
+		}
 
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
-	defer conn.Close()
+		err = svc.Cancel(ctx, a.ID)
+		if err != nil {
+			t.Fatalf("cancel: %v", err)
+		}
 
-	err = db.EnsureSystemContact(ctx, conn)
-	if err != nil {
-		t.Fatalf("ensure system contact: %v", err)
-	}
-
-	convID := seedConversation(t, ctx, conn)
-	now := time.Now().UTC().Truncate(time.Second)
-	svc := New(nil, conn)
-
-	a, err := svc.CreateAlarm(ctx, "", convID, "remind me to buy milk", "", now.Add(time.Hour))
-	if err != nil {
-		t.Fatalf("first create: %v", err)
-	}
-
-	err = svc.Cancel(ctx, a.ID)
-	if err != nil {
-		t.Fatalf("cancel: %v", err)
-	}
-
-	_, err = svc.CreateAlarm(ctx, "", convID, "remind me to buy milk", "", now.Add(2*time.Hour))
-	if err != nil {
-		t.Fatalf("expected re-creation after cancel to succeed, got: %v", err)
-	}
+		_, err = svc.CreateAlarm(ctx, "", convID, "reusable goal", "", now.Add(2*time.Hour))
+		if err != nil {
+			t.Fatalf("expected re-creation after cancel to succeed, got: %v", err)
+		}
+	})
 }
 
 func seedConversation(t *testing.T, ctx context.Context, conn *sql.DB) string {
 	t.Helper()
 
 	now := time.Now()
-	err := db.UpsertConversation(ctx, conn, db.UpsertConversationParams{
+	err := db.ConversationUpsert(ctx, conn, db.ConversationUpsertParams{
 		Platform:               "whatsapp",
 		ExternalConversationID: "stale-alarm-test@s.whatsapp.net",
 		Kind:                   "dm",
@@ -359,7 +344,7 @@ func seedConversation(t *testing.T, ctx context.Context, conn *sql.DB) string {
 		t.Fatalf("seed conversation: %v", err)
 	}
 
-	conv, err := db.GetConversation(ctx, conn, db.GetConversationParams{
+	conv, err := db.ConversationGet(ctx, conn, db.ConversationGetParams{
 		Platform:               "whatsapp",
 		ExternalConversationID: "stale-alarm-test@s.whatsapp.net",
 	})

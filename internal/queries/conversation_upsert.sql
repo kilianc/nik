@@ -30,4 +30,4 @@ ON CONFLICT (platform, external_conversation_id) DO UPDATE SET
     WHEN excluded.last_message_at > conversation.last_message_at THEN excluded.last_message_at
     ELSE conversation.last_message_at
   END,
-  updated_at = NOW_ISO8601_MS();
+  updated_at = NOW_ISO8601_MS()

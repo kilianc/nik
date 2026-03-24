@@ -30,12 +30,12 @@ func (s *Service) EnsureContactForMessage(ctx context.Context, platform string, 
 	switch platform {
 	case "whatsapp":
 		if isFromMe {
-			existing, err := db.GetContact(ctx, s.db, primaryID)
+			existing, err := db.ContactGet(ctx, s.db, primaryID)
 			if err == nil && existing.ID != NikContactID {
 				return "", fmt.Errorf("sender %s belongs to non-nik contact %s", primaryID, existing.ID)
 			}
 
-			self, err := db.UpsertContact(ctx, s.db, db.UpsertContactParams{
+			self, err := db.ContactUpsert(ctx, s.db, db.ContactUpsertParams{
 				Platform:      platform,
 				ExternalID:    primaryID,
 				IsSelf:        true,
@@ -61,7 +61,7 @@ func (s *Service) EnsureContactForMessage(ctx context.Context, platform string, 
 
 		if matched == nil {
 			phone := phoneFromWhatsAppID(primaryID)
-			created, err := db.UpsertContact(ctx, s.db, db.UpsertContactParams{
+			created, err := db.ContactUpsert(ctx, s.db, db.ContactUpsertParams{
 				Platform:      platform,
 				ExternalID:    primaryID,
 				Name:          "",
@@ -98,7 +98,7 @@ func (s *Service) EnsureContactForMessage(ctx context.Context, platform string, 
 			return "", fmt.Errorf("self-contact upsert not implemented for platform %s", platform)
 		}
 
-		contact, err := db.GetContact(ctx, s.db, primaryID)
+		contact, err := db.ContactGet(ctx, s.db, primaryID)
 		if err != nil {
 			return "", fmt.Errorf("resolve contact %s/%s: %w", platform, primaryID, err)
 		}
@@ -109,7 +109,7 @@ func (s *Service) EnsureContactForMessage(ctx context.Context, platform string, 
 
 func (s *Service) resolveWhatsAppContact(ctx context.Context, externalIDs []string) *db.Contact {
 	for _, id := range externalIDs {
-		c, err := db.GetContact(ctx, s.db, id)
+		c, err := db.ContactGet(ctx, s.db, id)
 		if err == nil {
 			return &c
 		}

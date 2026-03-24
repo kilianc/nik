@@ -23,7 +23,7 @@ func setupTestDB(t *testing.T) (*sql.DB, string) {
 
 	ctx := context.Background()
 
-	_, err = db.UpsertContact(ctx, conn, db.UpsertContactParams{
+	_, err = db.ContactUpsert(ctx, conn, db.ContactUpsertParams{
 		Platform:      "whatsapp",
 		ExternalID:    "sender@s.whatsapp.net",
 		Name:          "Sender",
@@ -34,13 +34,13 @@ func setupTestDB(t *testing.T) (*sql.DB, string) {
 		t.Fatalf("seed contact: %v", err)
 	}
 
-	contact, err := db.GetContact(ctx, conn, "sender@s.whatsapp.net")
+	contact, err := db.ContactGet(ctx, conn, "sender@s.whatsapp.net")
 	if err != nil {
 		t.Fatalf("get contact: %v", err)
 	}
 
 	now := time.Now()
-	err = db.UpsertConversation(ctx, conn, db.UpsertConversationParams{
+	err = db.ConversationUpsert(ctx, conn, db.ConversationUpsertParams{
 		Platform:               "whatsapp",
 		ExternalConversationID: "ext-conv@s.whatsapp.net",
 		Kind:                   "dm",
@@ -50,7 +50,7 @@ func setupTestDB(t *testing.T) (*sql.DB, string) {
 		t.Fatalf("seed conversation: %v", err)
 	}
 
-	conv, err := db.GetConversation(ctx, conn, db.GetConversationParams{
+	conv, err := db.ConversationGet(ctx, conn, db.ConversationGetParams{
 		Platform:               "whatsapp",
 		ExternalConversationID: "ext-conv@s.whatsapp.net",
 	})
@@ -65,12 +65,12 @@ func setupTestDB(t *testing.T) (*sql.DB, string) {
 func insertMsg(t *testing.T, conn *sql.DB, convID string, id string, extMsgID string, kind string, body string, sentAt time.Time) {
 	t.Helper()
 
-	contact, err := db.GetContact(context.Background(), conn, "sender@s.whatsapp.net")
+	contact, err := db.ContactGet(context.Background(), conn, "sender@s.whatsapp.net")
 	if err != nil {
 		t.Fatalf("get contact: %v", err)
 	}
 
-	err = db.InsertMessage(context.Background(), conn, db.InsertMessageParams{
+	err = db.MessageInsert(context.Background(), conn, db.MessageInsertParams{
 		ID: id, ConversationID: convID, ContactID: contact.ID,
 		Platform: "whatsapp", ExternalConversationID: "ext-conv@s.whatsapp.net",
 		ExternalMessageID: extMsgID, ExternalSenderID: "sender@s.whatsapp.net",
@@ -241,12 +241,12 @@ func TestRenderUsesSystemMessagesOnly(t *testing.T) {
 	conn, convID := setupTestDB(t)
 	ctx := context.Background()
 
-	err := db.EnsureSystemContact(ctx, conn)
+	err := db.SystemContactEnsure(ctx, conn)
 	if err != nil {
 		t.Fatalf("ensure system contact: %v", err)
 	}
 
-	err = db.InsertSystemMessage(ctx, conn, db.SystemMessageParams{
+	err = db.SystemMessageInsert(ctx, conn, db.SystemMessageParams{
 		ConversationID: convID,
 		Kind:           "task_report",
 		Body: db.TaskReport{

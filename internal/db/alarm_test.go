@@ -20,7 +20,7 @@ func TestCreateAlarmPersistsRow(t *testing.T) {
 	convID := seedConversation(t, ctx, conn, "whatsapp", "alarm-conv@g.us", "group")
 
 	fireAt := time.Now().Add(2 * time.Minute).UTC().Truncate(time.Second)
-	alarm, err := CreateAlarm(ctx, conn, CreateAlarmParams{
+	alarm, err := AlarmCreate(ctx, conn, AlarmCreateParams{
 		OriginContactID:      contact.ID,
 		OriginConversationID: convID,
 		Goal:                 "follow up",
@@ -94,7 +94,7 @@ func TestAlarmOccurrenceInsertPersistsRow(t *testing.T) {
 
 	convID := seedConversation(t, ctx, conn, "whatsapp", "occ-test@g.us", "group")
 	now := time.Now().UTC().Truncate(time.Second)
-	alarm, err := CreateAlarm(ctx, conn, CreateAlarmParams{
+	alarm, err := AlarmCreate(ctx, conn, AlarmCreateParams{
 		OriginConversationID: convID,
 		Goal:                 "test",
 		NextFireAt:           now.Add(-time.Minute),
@@ -131,7 +131,7 @@ func TestCreateAlarmWithRecurrence(t *testing.T) {
 	convID := seedConversation(t, ctx, conn, "whatsapp", "rec-alarm@g.us", "group")
 
 	fireAt := time.Now().Add(2 * time.Minute).UTC().Truncate(time.Second)
-	alarm, err := CreateAlarm(ctx, conn, CreateAlarmParams{
+	alarm, err := AlarmCreate(ctx, conn, AlarmCreateParams{
 		OriginConversationID: convID,
 		Goal:                 "check in",
 		Recurrence:           "every Sunday at 7pm",
@@ -145,7 +145,7 @@ func TestCreateAlarmWithRecurrence(t *testing.T) {
 		t.Fatalf("unexpected recurrence: %+v", alarm.Recurrence)
 	}
 
-	_, err = CreateAlarm(ctx, conn, CreateAlarmParams{
+	_, err = AlarmCreate(ctx, conn, AlarmCreateParams{
 		Goal:       "reminder",
 		NextFireAt: fireAt,
 	})
@@ -154,97 +154,93 @@ func TestCreateAlarmWithRecurrence(t *testing.T) {
 	}
 }
 
-func TestDueAlarmsReturnsOnlyActiveAndDue(t *testing.T) {
-	ctx := context.Background()
+func TestAlarmListDue(t *testing.T) {
+	t.Run("returns only active and due", func(t *testing.T) {
+		ctx := context.Background()
+		conn, err := OpenInMemory()
+		if err != nil {
+			t.Fatalf("open in-memory db: %v", err)
+		}
+		defer conn.Close()
 
-	conn, err := OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
+		convID := seedConversation(t, ctx, conn, "whatsapp", "due-alarms@g.us", "group")
+		now := time.Now().UTC().Truncate(time.Second)
 
-	convID := seedConversation(t, ctx, conn, "whatsapp", "due-alarms@g.us", "group")
-	now := time.Now().UTC().Truncate(time.Second)
+		dueAlarm, err := AlarmCreate(ctx, conn, AlarmCreateParams{
+			OriginConversationID: convID,
+			Goal:                 "due",
+			NextFireAt:           now.Add(-1 * time.Minute),
+		})
+		if err != nil {
+			t.Fatalf("create due alarm: %v", err)
+		}
 
-	dueAlarm, err := CreateAlarm(ctx, conn, CreateAlarmParams{
-		OriginConversationID: convID,
-		Goal:                 "due",
-		NextFireAt:           now.Add(-1 * time.Minute),
+		cancelledAlarm, err := AlarmCreate(ctx, conn, AlarmCreateParams{
+			OriginConversationID: convID,
+			Goal:                 "cancelled",
+			NextFireAt:           now.Add(-30 * time.Second),
+		})
+		if err != nil {
+			t.Fatalf("create cancelled alarm: %v", err)
+		}
+		err = AlarmCancel(ctx, conn, cancelledAlarm.ID)
+		if err != nil {
+			t.Fatalf("cancel alarm: %v", err)
+		}
+
+		_, err = AlarmCreate(ctx, conn, AlarmCreateParams{
+			OriginConversationID: convID,
+			Goal:                 "future",
+			NextFireAt:           now.Add(5 * time.Minute),
+		})
+		if err != nil {
+			t.Fatalf("create future alarm: %v", err)
+		}
+
+		alarms, err := AlarmListDue(ctx, conn, now)
+		if err != nil {
+			t.Fatalf("due alarms: %v", err)
+		}
+		if len(alarms) != 1 {
+			t.Fatalf("expected 1 due alarm, got %d", len(alarms))
+		}
+		if alarms[0].ID != dueAlarm.ID {
+			t.Fatalf("expected due alarm id %q, got %q", dueAlarm.ID, alarms[0].ID)
+		}
 	})
-	if err != nil {
-		t.Fatalf("create due alarm: %v", err)
-	}
 
-	cancelledAlarm, err := CreateAlarm(ctx, conn, CreateAlarmParams{
-		OriginConversationID: convID,
-		Goal:                 "cancelled",
-		NextFireAt:           now.Add(-30 * time.Second),
+	t.Run("excludes claimed", func(t *testing.T) {
+		ctx := context.Background()
+		conn, err := OpenInMemory()
+		if err != nil {
+			t.Fatalf("open in-memory db: %v", err)
+		}
+		defer conn.Close()
+
+		convID := seedConversation(t, ctx, conn, "whatsapp", "claimed-alarms@g.us", "group")
+		now := time.Now().UTC().Truncate(time.Second)
+
+		alarm, err := AlarmCreate(ctx, conn, AlarmCreateParams{
+			OriginConversationID: convID,
+			Goal:                 "claimed",
+			NextFireAt:           now.Add(-1 * time.Minute),
+		})
+		if err != nil {
+			t.Fatalf("create alarm: %v", err)
+		}
+		err = AlarmUpdate(ctx, conn, alarm.ID, AlarmUpdateParams{LastFiredAt: now})
+		if err != nil {
+			t.Fatalf("set alarm fired: %v", err)
+		}
+
+		alarms, err := AlarmListDue(ctx, conn, now)
+		if err != nil {
+			t.Fatalf("due alarms: %v", err)
+		}
+		if len(alarms) != 0 {
+			t.Fatalf("expected claimed alarm to be excluded, got %d", len(alarms))
+		}
 	})
-	if err != nil {
-		t.Fatalf("create cancelled alarm: %v", err)
-	}
-
-	err = AlarmCancel(ctx, conn, cancelledAlarm.ID)
-	if err != nil {
-		t.Fatalf("cancel alarm: %v", err)
-	}
-
-	_, err = CreateAlarm(ctx, conn, CreateAlarmParams{
-		OriginConversationID: convID,
-		Goal:                 "future",
-		NextFireAt:           now.Add(5 * time.Minute),
-	})
-	if err != nil {
-		t.Fatalf("create future alarm: %v", err)
-	}
-
-	alarms, err := DueAlarms(ctx, conn, now)
-	if err != nil {
-		t.Fatalf("due alarms: %v", err)
-	}
-
-	if len(alarms) != 1 {
-		t.Fatalf("expected 1 due alarm, got %d", len(alarms))
-	}
-	if alarms[0].ID != dueAlarm.ID {
-		t.Fatalf("expected due alarm id %q, got %q", dueAlarm.ID, alarms[0].ID)
-	}
-}
-
-func TestDueAlarmsExcludesClaimedAlarms(t *testing.T) {
-	ctx := context.Background()
-
-	conn, err := OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
-
-	convID := seedConversation(t, ctx, conn, "whatsapp", "claimed-alarms@g.us", "group")
-	now := time.Now().UTC().Truncate(time.Second)
-
-	alarm, err := CreateAlarm(ctx, conn, CreateAlarmParams{
-		OriginConversationID: convID,
-		Goal:                 "claimed",
-		NextFireAt:           now.Add(-1 * time.Minute),
-	})
-	if err != nil {
-		t.Fatalf("create alarm: %v", err)
-	}
-
-	err = AlarmUpdate(ctx, conn, alarm.ID, AlarmUpdateParams{LastFiredAt: now})
-	if err != nil {
-		t.Fatalf("set alarm fired: %v", err)
-	}
-
-	alarms, err := DueAlarms(ctx, conn, now)
-	if err != nil {
-		t.Fatalf("due alarms: %v", err)
-	}
-
-	if len(alarms) != 0 {
-		t.Fatalf("expected claimed alarm to be excluded, got %d", len(alarms))
-	}
 }
 
 func TestAlarmCancelRemovesFromDueList(t *testing.T) {
@@ -258,7 +254,7 @@ func TestAlarmCancelRemovesFromDueList(t *testing.T) {
 
 	convID := seedConversation(t, ctx, conn, "whatsapp", "cancel-alarms@g.us", "group")
 	now := time.Now().UTC().Truncate(time.Second)
-	alarm, err := CreateAlarm(ctx, conn, CreateAlarmParams{
+	alarm, err := AlarmCreate(ctx, conn, AlarmCreateParams{
 		OriginConversationID: convID,
 		Goal:                 "cancel me",
 		NextFireAt:           now.Add(-time.Minute),
@@ -267,7 +263,7 @@ func TestAlarmCancelRemovesFromDueList(t *testing.T) {
 		t.Fatalf("create alarm: %v", err)
 	}
 
-	before, err := DueAlarms(ctx, conn, now)
+	before, err := AlarmListDue(ctx, conn, now)
 	if err != nil {
 		t.Fatalf("due alarms before cancel: %v", err)
 	}
@@ -280,7 +276,7 @@ func TestAlarmCancelRemovesFromDueList(t *testing.T) {
 		t.Fatalf("cancel alarm: %v", err)
 	}
 
-	after, err := DueAlarms(ctx, conn, now)
+	after, err := AlarmListDue(ctx, conn, now)
 	if err != nil {
 		t.Fatalf("due alarms after cancel: %v", err)
 	}
@@ -302,7 +298,7 @@ func TestAlarmUpdate(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 
 	t.Run("last_fired_at preserves next_fire_at", func(t *testing.T) {
-		alarm, err := CreateAlarm(ctx, conn, CreateAlarmParams{
+		alarm, err := AlarmCreate(ctx, conn, AlarmCreateParams{
 			OriginConversationID: convID,
 			Goal:                 "test last_fired_at",
 			NextFireAt:           now.Add(-time.Minute),
@@ -336,7 +332,7 @@ func TestAlarmUpdate(t *testing.T) {
 	})
 
 	t.Run("goal", func(t *testing.T) {
-		alarm, err := CreateAlarm(ctx, conn, CreateAlarmParams{
+		alarm, err := AlarmCreate(ctx, conn, AlarmCreateParams{
 			OriginConversationID: convID,
 			Goal:                 "old goal",
 			NextFireAt:           now,
@@ -362,7 +358,7 @@ func TestAlarmUpdate(t *testing.T) {
 	})
 
 	t.Run("recurrence", func(t *testing.T) {
-		alarm, err := CreateAlarm(ctx, conn, CreateAlarmParams{
+		alarm, err := AlarmCreate(ctx, conn, AlarmCreateParams{
 			OriginConversationID: convID,
 			Goal:                 "test recurrence",
 			Recurrence:           "every day",
@@ -417,7 +413,7 @@ func TestAlarmGet(t *testing.T) {
 			convID := seedConversation(t, ctx, conn, "whatsapp", "alarm-get@g.us", "group")
 			fireAt := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
 
-			created, err := CreateAlarm(ctx, conn, CreateAlarmParams{
+			created, err := AlarmCreate(ctx, conn, AlarmCreateParams{
 				OriginConversationID: convID,
 				Goal:                 tt.goal,
 				NextFireAt:           fireAt,
@@ -466,7 +462,7 @@ func TestAlarmFireAtomicCommit(t *testing.T) {
 	}
 	defer conn.Close()
 
-	err = EnsureSystemContact(ctx, conn)
+	err = SystemContactEnsure(ctx, conn)
 	if err != nil {
 		t.Fatalf("ensure system contact: %v", err)
 	}
@@ -474,7 +470,7 @@ func TestAlarmFireAtomicCommit(t *testing.T) {
 	convID := seedConversation(t, ctx, conn, "whatsapp", "fire-atomic@g.us", "group")
 	now := time.Now().UTC().Truncate(time.Second)
 
-	alarm, err := CreateAlarm(ctx, conn, CreateAlarmParams{
+	alarm, err := AlarmCreate(ctx, conn, AlarmCreateParams{
 		OriginConversationID: convID,
 		Goal:                 "atomic fire test",
 		Recurrence:           "every day",
@@ -511,7 +507,7 @@ func TestAlarmFireAtomicCommit(t *testing.T) {
 func seedContactForAlarm(t *testing.T, ctx context.Context, conn *sql.DB) Contact {
 	t.Helper()
 
-	contact, err := UpsertContact(ctx, conn, UpsertContactParams{
+	contact, err := ContactUpsert(ctx, conn, ContactUpsertParams{
 		Platform:      "whatsapp",
 		ExternalID:    "alarm-test@s.whatsapp.net",
 		Name:          "Alarm Test",

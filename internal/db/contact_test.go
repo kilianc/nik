@@ -9,7 +9,7 @@ import (
 	"github.com/kciuffolo/nik/internal/id"
 )
 
-func TestGetContactByIdentifier(t *testing.T) {
+func TestContactGetByIdentifier(t *testing.T) {
 	ctx := context.Background()
 
 	conn, err := OpenInMemory()
@@ -18,7 +18,7 @@ func TestGetContactByIdentifier(t *testing.T) {
 	}
 	defer conn.Close()
 
-	seed, err := UpsertContact(ctx, conn, UpsertContactParams{
+	seed, err := ContactUpsert(ctx, conn, ContactUpsertParams{
 		Platform:      "whatsapp",
 		ExternalID:    "alice@s.whatsapp.net",
 		Name:          "Alice",
@@ -29,7 +29,7 @@ func TestGetContactByIdentifier(t *testing.T) {
 		t.Fatalf("upsert contact: %v", err)
 	}
 
-	gotByID, err := GetContact(ctx, conn, seed.ID)
+	gotByID, err := ContactGet(ctx, conn, seed.ID)
 	if err != nil {
 		t.Fatalf("get contact by id: %v", err)
 	}
@@ -37,7 +37,7 @@ func TestGetContactByIdentifier(t *testing.T) {
 		t.Fatalf("expected id %q, got %q", seed.ID, gotByID.ID)
 	}
 
-	gotByJID, err := GetContact(ctx, conn, "alice@s.whatsapp.net")
+	gotByJID, err := ContactGet(ctx, conn, "alice@s.whatsapp.net")
 	if err != nil {
 		t.Fatalf("get contact by whatsapp id: %v", err)
 	}
@@ -49,7 +49,7 @@ func TestGetContactByIdentifier(t *testing.T) {
 	}
 }
 
-func TestEnsureSystemContactIsIdempotent(t *testing.T) {
+func TestSystemContactEnsureIsIdempotent(t *testing.T) {
 	ctx := context.Background()
 
 	conn, err := OpenInMemory()
@@ -58,17 +58,17 @@ func TestEnsureSystemContactIsIdempotent(t *testing.T) {
 	}
 	defer conn.Close()
 
-	err = EnsureSystemContact(ctx, conn)
+	err = SystemContactEnsure(ctx, conn)
 	if err != nil {
 		t.Fatalf("first ensure: %v", err)
 	}
 
-	err = EnsureSystemContact(ctx, conn)
+	err = SystemContactEnsure(ctx, conn)
 	if err != nil {
 		t.Fatalf("second ensure: %v", err)
 	}
 
-	contact, err := GetContact(ctx, conn, SystemContactID)
+	contact, err := ContactGet(ctx, conn, SystemContactID)
 	if err != nil {
 		t.Fatalf("get system contact: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestEnsureSystemContactIsIdempotent(t *testing.T) {
 	}
 }
 
-func TestUpsertContactWhatsAppInsertThenUpdate(t *testing.T) {
+func TestContactUpsertWhatsAppInsertThenUpdate(t *testing.T) {
 	ctx := context.Background()
 
 	conn, err := OpenInMemory()
@@ -91,7 +91,7 @@ func TestUpsertContactWhatsAppInsertThenUpdate(t *testing.T) {
 	defer conn.Close()
 
 	t0 := time.Now().Add(-time.Minute)
-	inserted, err := UpsertContact(ctx, conn, UpsertContactParams{
+	inserted, err := ContactUpsert(ctx, conn, ContactUpsertParams{
 		Platform:      "whatsapp",
 		ExternalID:    "wa-user@s.whatsapp.net",
 		Name:          "Alice",
@@ -103,7 +103,7 @@ func TestUpsertContactWhatsAppInsertThenUpdate(t *testing.T) {
 	}
 
 	t1 := time.Now()
-	updated, err := UpsertContact(ctx, conn, UpsertContactParams{
+	updated, err := ContactUpsert(ctx, conn, ContactUpsertParams{
 		Platform:      "whatsapp",
 		ExternalID:    "wa-user@s.whatsapp.net",
 		Name:          "Alice A",
@@ -131,7 +131,7 @@ func TestUpsertContactWhatsAppInsertThenUpdate(t *testing.T) {
 	}
 }
 
-func TestUpsertContactSelfWhatsApp(t *testing.T) {
+func TestContactUpsertSelfWhatsApp(t *testing.T) {
 	ctx := context.Background()
 
 	conn, err := OpenInMemory()
@@ -140,7 +140,7 @@ func TestUpsertContactSelfWhatsApp(t *testing.T) {
 	}
 	defer conn.Close()
 
-	_, err = UpsertContact(ctx, conn, UpsertContactParams{
+	_, err = ContactUpsert(ctx, conn, ContactUpsertParams{
 		Platform:      "whatsapp",
 		ExternalID:    "self@s.whatsapp.net",
 		IsSelf:        true,
@@ -155,7 +155,7 @@ func TestUpsertContactSelfWhatsApp(t *testing.T) {
 	}
 
 	selfID := id.V7()
-	first, err := UpsertContact(ctx, conn, UpsertContactParams{
+	first, err := ContactUpsert(ctx, conn, ContactUpsertParams{
 		Platform:      "whatsapp",
 		ExternalID:    "self@s.whatsapp.net",
 		IsSelf:        true,
@@ -166,7 +166,7 @@ func TestUpsertContactSelfWhatsApp(t *testing.T) {
 		t.Fatalf("upsert self contact first: %v", err)
 	}
 
-	second, err := UpsertContact(ctx, conn, UpsertContactParams{
+	second, err := ContactUpsert(ctx, conn, ContactUpsertParams{
 		Platform:      "whatsapp",
 		ExternalID:    "self2@s.whatsapp.net",
 		IsSelf:        true,
@@ -191,7 +191,7 @@ func TestUpsertContactSelfWhatsApp(t *testing.T) {
 	}
 }
 
-func TestUpsertContactSelfWhatsAppPreservesRenamedName(t *testing.T) {
+func TestContactUpsertSelfWhatsAppPreservesRenamedName(t *testing.T) {
 	ctx := context.Background()
 
 	conn, err := OpenInMemory()
@@ -202,7 +202,7 @@ func TestUpsertContactSelfWhatsAppPreservesRenamedName(t *testing.T) {
 
 	selfID := id.V7()
 
-	_, err = UpsertContact(ctx, conn, UpsertContactParams{
+	_, err = ContactUpsert(ctx, conn, ContactUpsertParams{
 		Platform:      "whatsapp",
 		ExternalID:    "self@s.whatsapp.net",
 		IsSelf:        true,
@@ -222,7 +222,7 @@ func TestUpsertContactSelfWhatsAppPreservesRenamedName(t *testing.T) {
 		t.Fatalf("rename self contact: %v", err)
 	}
 
-	after, err := UpsertContact(ctx, conn, UpsertContactParams{
+	after, err := ContactUpsert(ctx, conn, ContactUpsertParams{
 		Platform:      "whatsapp",
 		ExternalID:    "self@s.whatsapp.net",
 		IsSelf:        true,
@@ -247,7 +247,7 @@ func TestContactUpdateAllowedFields(t *testing.T) {
 	}
 	defer conn.Close()
 
-	seed, err := UpsertContact(ctx, conn, UpsertContactParams{
+	seed, err := ContactUpsert(ctx, conn, ContactUpsertParams{
 		Platform:      "whatsapp",
 		ExternalID:    "update@s.whatsapp.net",
 		Name:          "Updater",
@@ -276,7 +276,7 @@ func TestContactUpdateAllowedFields(t *testing.T) {
 		t.Fatalf("update nicknames: %v", err)
 	}
 
-	got, err := GetContact(ctx, conn, seed.ID)
+	got, err := ContactGet(ctx, conn, seed.ID)
 	if err != nil {
 		t.Fatalf("get contact: %v", err)
 	}
@@ -332,7 +332,7 @@ func TestContactAddWhatsAppID(t *testing.T) {
 	})
 
 	t.Run("appends new JID", func(t *testing.T) {
-		contact, err := UpsertContact(ctx, conn, UpsertContactParams{
+		contact, err := ContactUpsert(ctx, conn, ContactUpsertParams{
 			Platform:      "whatsapp",
 			ExternalID:    "12345@s.whatsapp.net",
 			Name:          "Alice",
@@ -351,7 +351,7 @@ func TestContactAddWhatsAppID(t *testing.T) {
 			t.Fatalf("add whatsapp id: %v", err)
 		}
 
-		got, err := GetContact(ctx, conn, contact.ID)
+		got, err := ContactGet(ctx, conn, contact.ID)
 		if err != nil {
 			t.Fatalf("get contact: %v", err)
 		}
@@ -364,7 +364,7 @@ func TestContactAddWhatsAppID(t *testing.T) {
 	})
 
 	t.Run("skips duplicate", func(t *testing.T) {
-		contact, err := UpsertContact(ctx, conn, UpsertContactParams{
+		contact, err := ContactUpsert(ctx, conn, ContactUpsertParams{
 			Platform:      "whatsapp",
 			ExternalID:    "dup@s.whatsapp.net",
 			Name:          "Bob",
@@ -384,7 +384,7 @@ func TestContactAddWhatsAppID(t *testing.T) {
 			t.Fatalf("add whatsapp id: %v", err)
 		}
 
-		got, err := GetContact(ctx, conn, contact.ID)
+		got, err := ContactGet(ctx, conn, contact.ID)
 		if err != nil {
 			t.Fatalf("get contact: %v", err)
 		}
@@ -394,7 +394,7 @@ func TestContactAddWhatsAppID(t *testing.T) {
 	})
 
 	t.Run("also adds phone", func(t *testing.T) {
-		contact, err := UpsertContact(ctx, conn, UpsertContactParams{
+		contact, err := ContactUpsert(ctx, conn, ContactUpsertParams{
 			Platform:      "whatsapp",
 			ExternalID:    "88888@lid",
 			Name:          "",
@@ -414,7 +414,7 @@ func TestContactAddWhatsAppID(t *testing.T) {
 			t.Fatalf("add whatsapp id: %v", err)
 		}
 
-		got, err := GetContact(ctx, conn, contact.ID)
+		got, err := ContactGet(ctx, conn, contact.ID)
 		if err != nil {
 			t.Fatalf("get contact: %v", err)
 		}
