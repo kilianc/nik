@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/kciuffolo/nik/internal/db"
-	"github.com/kciuffolo/nik/internal/id"
 	"github.com/kciuffolo/nik/internal/llm"
 )
 
@@ -47,12 +46,9 @@ func (r *Runner) RunCritic(ctx context.Context, t db.Task) {
 	ctx, cancel := context.WithTimeout(ctx, criticTimeout)
 	defer cancel()
 
-	actID := id.V7()
-
 	ctx = context.WithValue(ctx, "meta", map[string]string{
 		"conversation_id": t.ConversationID,
 		"task_id":         t.ID,
-		"activation_id":   actID,
 		"sources":         `["critic"]`,
 	})
 
@@ -98,7 +94,6 @@ func (r *Runner) RunCritic(ctx context.Context, t db.Task) {
 
 	err = r.svc.InsertAssessment(ctx, db.TaskAssessmentInsertParams{
 		TaskID:                  t.ID,
-		ActivationID:            actID,
 		EffectivenessScore:      assessment.EffectivenessScore,
 		EffectivenessFeedback:   assessment.EffectivenessFeedback,
 		ExpectedDurationSeconds: assessment.ExpectedDurationSeconds,

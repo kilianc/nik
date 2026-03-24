@@ -17,14 +17,6 @@ func TestTaskAssessmentInsertAndQuery(t *testing.T) {
 
 	convID := seedConversation(t, ctx, conn, "whatsapp", "ext-assess", "")
 
-	actID := "act-assess-worker"
-	_, err = conn.ExecContext(ctx,
-		"INSERT INTO activation (id, conversation_id, sources, model, created_at) VALUES (?, ?, '[\"task\"]', 'gpt-4', NOW_ISO8601_MS())",
-		actID, convID)
-	if err != nil {
-		t.Fatalf("insert worker activation: %v", err)
-	}
-
 	taskID := "task-assess-001"
 	_, err = conn.ExecContext(ctx,
 		"INSERT INTO task (id, conversation_id, goal, status, thinking, created_at) VALUES (?, ?, 'test goal', 'completed', 'low', NOW_ISO8601_MS())",
@@ -33,17 +25,8 @@ func TestTaskAssessmentInsertAndQuery(t *testing.T) {
 		t.Fatalf("insert task: %v", err)
 	}
 
-	criticActID := "act-assess-critic"
-	_, err = conn.ExecContext(ctx,
-		"INSERT INTO activation (id, conversation_id, sources, model, created_at) VALUES (?, ?, '[\"critic\"]', 'gpt-4.1-nano', NOW_ISO8601_MS())",
-		criticActID, convID)
-	if err != nil {
-		t.Fatalf("insert critic activation: %v", err)
-	}
-
 	err = TaskAssessmentInsert(ctx, conn, TaskAssessmentInsertParams{
 		TaskID:                  taskID,
-		ActivationID:            criticActID,
 		EffectivenessScore:      4,
 		EffectivenessFeedback:   "completed on first try with clean output, one minor formatting issue.",
 		ExpectedDurationSeconds: 120,
@@ -110,22 +93,6 @@ func TestTaskAssessmentUniquePerTask(t *testing.T) {
 
 	convID := seedConversation(t, ctx, conn, "whatsapp", "ext-assess-dup", "")
 
-	actID := "act-assess-dup"
-	_, err = conn.ExecContext(ctx,
-		"INSERT INTO activation (id, conversation_id, sources, model, created_at) VALUES (?, ?, '[\"critic\"]', 'gpt-4.1-nano', NOW_ISO8601_MS())",
-		actID, convID)
-	if err != nil {
-		t.Fatalf("insert activation: %v", err)
-	}
-
-	actID2 := "act-assess-dup-2"
-	_, err = conn.ExecContext(ctx,
-		"INSERT INTO activation (id, conversation_id, sources, model, created_at) VALUES (?, ?, '[\"critic\"]', 'gpt-4.1-nano', NOW_ISO8601_MS())",
-		actID2, convID)
-	if err != nil {
-		t.Fatalf("insert activation 2: %v", err)
-	}
-
 	taskID := "task-assess-dup"
 	_, err = conn.ExecContext(ctx,
 		"INSERT INTO task (id, conversation_id, goal, status, thinking, created_at) VALUES (?, ?, 'goal', 'completed', 'low', NOW_ISO8601_MS())",
@@ -136,7 +103,6 @@ func TestTaskAssessmentUniquePerTask(t *testing.T) {
 
 	err = TaskAssessmentInsert(ctx, conn, TaskAssessmentInsertParams{
 		TaskID:                  taskID,
-		ActivationID:            actID,
 		EffectivenessScore:      3,
 		ExpectedDurationSeconds: 60,
 	})
@@ -146,7 +112,6 @@ func TestTaskAssessmentUniquePerTask(t *testing.T) {
 
 	err = TaskAssessmentInsert(ctx, conn, TaskAssessmentInsertParams{
 		TaskID:                  taskID,
-		ActivationID:            actID2,
 		EffectivenessScore:      5,
 		ExpectedDurationSeconds: 30,
 	})
