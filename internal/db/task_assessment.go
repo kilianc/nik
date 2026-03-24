@@ -12,7 +12,6 @@ import (
 
 type TaskAssessmentInsertParams struct {
 	TaskID                  string
-	ActivationID            string
 	EffectivenessScore      int
 	EffectivenessFeedback   string
 	ExpectedDurationSeconds int
@@ -26,7 +25,6 @@ func TaskAssessmentInsert(ctx context.Context, db *sql.DB, p TaskAssessmentInser
 	_, err := db.ExecContext(ctx, queries.TaskAssessmentInsert,
 		id.V7(),
 		p.TaskID,
-		p.ActivationID,
 		p.EffectivenessScore,
 		p.EffectivenessFeedback,
 		p.ExpectedDurationSeconds,

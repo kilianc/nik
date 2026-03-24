@@ -243,6 +243,21 @@ CREATE TABLE IF NOT EXISTS task_report (
   CHECK (IS_ISO8601_MS(created_at))
 );
 
+-- critic evaluations of completed tasks
+CREATE TABLE IF NOT EXISTS task_assessment (
+  id                        TEXT PRIMARY KEY,
+  task_id                   TEXT NOT NULL UNIQUE REFERENCES task(id),
+  effectiveness_score       INTEGER NOT NULL CHECK(effectiveness_score BETWEEN 1 AND 5),
+  effectiveness_feedback    TEXT NOT NULL DEFAULT '',
+  expected_duration_seconds INTEGER NOT NULL CHECK(expected_duration_seconds >= 0),
+  duration_feedback         TEXT NOT NULL DEFAULT '',
+  tool_feedback             TEXT NOT NULL DEFAULT '',
+  skill_feedback            TEXT NOT NULL DEFAULT '',
+  recommendations           TEXT NOT NULL DEFAULT '',
+  created_at                TIMESTAMP NOT NULL DEFAULT (NOW_ISO8601_MS()),
+  CHECK (IS_ISO8601_MS(created_at))
+);
+
 -- persistent shell sessions (command, output, exit_code, alive)
 CREATE TABLE IF NOT EXISTS shell_session (
   id            TEXT PRIMARY KEY,
@@ -338,21 +353,5 @@ CREATE TABLE IF NOT EXISTS experiment_run (
   cached_tokens         INTEGER NOT NULL DEFAULT 0,
   reasoning_tokens      INTEGER NOT NULL DEFAULT 0,
   created_at            TIMESTAMP NOT NULL DEFAULT (NOW_ISO8601_MS()),
-  CHECK (IS_ISO8601_MS(created_at))
-);
-
--- critic evaluations of completed tasks
-CREATE TABLE IF NOT EXISTS task_assessment (
-  id                        TEXT PRIMARY KEY,
-  task_id                   TEXT NOT NULL UNIQUE REFERENCES task(id),
-  activation_id             TEXT NOT NULL UNIQUE REFERENCES activation(id),
-  effectiveness_score       INTEGER NOT NULL CHECK(effectiveness_score BETWEEN 1 AND 5),
-  effectiveness_feedback    TEXT NOT NULL DEFAULT '',
-  expected_duration_seconds INTEGER NOT NULL CHECK(expected_duration_seconds >= 0),
-  duration_feedback         TEXT NOT NULL DEFAULT '',
-  tool_feedback             TEXT NOT NULL DEFAULT '',
-  skill_feedback            TEXT NOT NULL DEFAULT '',
-  recommendations           TEXT NOT NULL DEFAULT '',
-  created_at                TIMESTAMP NOT NULL DEFAULT (NOW_ISO8601_MS()),
   CHECK (IS_ISO8601_MS(created_at))
 );
