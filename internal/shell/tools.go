@@ -3,6 +3,7 @@ package shell
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -100,8 +101,7 @@ func (s *Service) ensureReady() error {
 	if s.container != "" {
 		err := s.ensureContainer()
 		if err != nil {
-			slog.Warn("shell container failed, falling back to local tmux", "pkg", "shell", "error", err)
-			s.container = ""
+			return fmt.Errorf("shell container: %w", err)
 		}
 	}
 
