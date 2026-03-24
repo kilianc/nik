@@ -10,6 +10,7 @@ build:
 lint:
 	gofmt -w .
 	go vet ./...
+	@test ! -f $(NIK_HOME)/nik.db || go run ./tools/schemadiff -db $(NIK_HOME)/nik.db
 
 .PHONY: test
 test:
