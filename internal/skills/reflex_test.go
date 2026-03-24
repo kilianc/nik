@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/kciuffolo/nik/internal/config"
+	"github.com/kciuffolo/nik/internal/cron"
 	"github.com/kciuffolo/nik/internal/db"
 )
 
@@ -395,6 +396,106 @@ func TestSkillChangeReflexOnlyFirstPrivilegedConv(t *testing.T) {
 	if targetConv != convA {
 		t.Fatalf("expected skill_added in %s, got %s", convA, targetConv)
 	}
+}
+
+func mustParseCron(t *testing.T, expr string) *cron.Schedule {
+	t.Helper()
+	s, err := cron.Parse(expr)
+	if err != nil {
+		t.Fatalf("parse cron %q: %v", expr, err)
+	}
+	return s
+}
+
+func TestSkillCheckReflex(t *testing.T) {
+	t.Run("new meta from check", func(t *testing.T) {
+		h, _ := setupReflexTest(t)
+
+		def := SkillReflexDef{
+			Name:     "check",
+			Command:  `echo '{"new":"data"}'`,
+			Schedule: mustParseCron(t, "* * * * *"),
+		}
+
+		runSkillCheck(h.ctx, h.cfg, h.conn, "test_skill/check", def)
+
+		meta, err := db.SkillReflexLatest(h.ctx, h.conn, "test_skill/check")
+		if err != nil {
+			t.Fatalf("get latest: %v", err)
+		}
+		if meta != `{"new":"data"}` {
+			t.Fatalf("expected meta, got %q", meta)
+		}
+	})
+
+	t.Run("no output", func(t *testing.T) {
+		h, _ := setupReflexTest(t)
+
+		def := SkillReflexDef{
+			Name:     "check",
+			Command:  "true",
+			Schedule: mustParseCron(t, "* * * * *"),
+		}
+
+		runSkillCheck(h.ctx, h.cfg, h.conn, "silent_skill/check", def)
+
+		meta, err := db.SkillReflexLatest(h.ctx, h.conn, "silent_skill/check")
+		if err != nil {
+			t.Fatalf("get latest: %v", err)
+		}
+		if meta != "" {
+			t.Fatalf("expected empty meta, got %q", meta)
+		}
+	})
+
+	t.Run("same meta skipped", func(t *testing.T) {
+		h, _ := setupReflexTest(t)
+
+		err := db.SkillReflexInsert(h.ctx, h.conn, "stable_skill/check", "same-meta")
+		if err != nil {
+			t.Fatalf("seed meta: %v", err)
+		}
+
+		def := SkillReflexDef{
+			Name:     "check",
+			Command:  "echo 'same-meta'",
+			Schedule: mustParseCron(t, "* * * * *"),
+		}
+
+		runSkillCheck(h.ctx, h.cfg, h.conn, "stable_skill/check", def)
+
+		var count int
+		err = h.conn.QueryRowContext(h.ctx, "SELECT count(*) FROM skill_reflex WHERE skill_name = 'stable_skill/check'").Scan(&count)
+		if err != nil {
+			t.Fatalf("count: %v", err)
+		}
+		if count != 1 {
+			t.Fatalf("expected 1 row (no new insert), got %d", count)
+		}
+	})
+
+	t.Run("schedule-only fires with timestamp", func(t *testing.T) {
+		h, _ := setupReflexTest(t)
+
+		def := SkillReflexDef{
+			Name:     "journal",
+			Schedule: mustParseCron(t, "0 6 * * *"),
+		}
+
+		runSkillCheck(h.ctx, h.cfg, h.conn, "journal/journal", def)
+
+		meta, err := db.SkillReflexLatest(h.ctx, h.conn, "journal/journal")
+		if err != nil {
+			t.Fatalf("get latest: %v", err)
+		}
+		if meta == "" {
+			t.Fatal("expected non-empty meta for schedule-only reflex")
+		}
+
+		if count := countSystemMessages(t, h.ctx, h.conn, "skill_reflex_fired"); count != 1 {
+			t.Fatalf("expected 1 skill_reflex_fired message, got %d", count)
+		}
+	})
 }
 
 func TestExtractInstallSection(t *testing.T) {

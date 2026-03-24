@@ -368,7 +368,7 @@ Each prompt file has one job. Don't duplicate rules across files.
 
 The brain owns the round loop and all policy. The LLM package (`llm.Activation`) is a dumb API client — protocol state only, no retries, no loop detection, no stopping decisions. The brain (and task runner) drive `Activation.Round()` in a loop, handling 5xx retry, loop detection, idle nudges, and terminal tool detection inline.
 
-- **Reflex** (`func(ctx context.Context)`): runs every tick before perception. A reflex is an optimization -- without it, the brain would poll every 2 seconds. Reflexes detect that something changed and trigger the brain to re-evaluate the timeline. Some reflexes materialize mechanical facts (e.g. `FireDueAlarms` creates occurrences), but reflexes never decide or fix on behalf of the LLM (see *Single decision-maker*). Examples: `task.CheckStale` (inserts stale reports), `alarms.FireDueAlarms` (creates occurrences and claims alarms), `alarms.StaleAlarmReflex` (detects stale recurring alarms), `skills.SkillChangeReflex` (detects skill add/remove/change), `shell.CheckSessions` (reaps dead shell sessions).
+- **Reflex** (`func(ctx context.Context)`): runs every tick before perception. A reflex is an optimization -- without it, the brain would poll every 2 seconds. Reflexes detect that something changed and trigger the brain to re-evaluate the timeline. Some reflexes materialize mechanical facts (e.g. `FireDueAlarms` creates occurrences), but reflexes never decide or fix on behalf of the LLM (see *Single decision-maker*). Examples: `task.CheckStale` (inserts stale reports), `alarms.FireDueAlarms` (creates occurrences and claims alarms), `alarms.StaleAlarmReflex` (detects stale recurring alarms), `skills.SkillChangeReflex` (detects skill add/remove/change), `skills.SkillCheckReflex` (runs skill-declared check commands, fires `skill_reflex_fired` on new records), `shell.CheckSessions` (reaps dead shell sessions).
 - **Sense** (`interface { Scan(ctx) ([]Stimulus, error) }`): the brain's single, unified perception. Strictly read-only -- no side effects. Returns `[]Stimulus`, one per conversation with new events.
 - **Stimulus**: structured perception output (`Preamble`, `Timeline []TimelineEntry`, `ReadLine`, `Meta`, `LiveInput`, `Processed`). The timeline is a chronological mix of messages, task reports, alarm occurrences, and skill events.
 
@@ -378,6 +378,20 @@ The brain owns the round loop and all policy. The LLM package (`llm.Activation`)
 
 **Prompt purity**: the prompt builder is a deterministic function of current database state, config, and filesystem reads performed within the activation. It never maintains inter-activation state.
 
+### Skill reflexes
+
+Skills can declare a periodic check command in their YAML frontmatter:
+
+```yaml
+reflex:
+  command: ./skills/google_workspace/check_gmail.sh
+  every: 2m
+```
+
+The system runs this command on the host, piping the previous opaque record via stdin. If the command outputs a non-empty string that differs from the last record, the system stores it in the `skill_reflex` table (time series) and inserts a `skill_reflex_fired` system message. The brain wakes up, sees the event, and loads the skill.
+
+The skill's script owns all "what's new" logic. The system is just storage + trigger. Empty stdout = nothing new. Same stdout as last record = nothing new.
+
 ### Registration flow (`main.go`)
 
 The `brain` package provides registration machinery (`Tool`, `ToolDeps`, `ToolHandler`, `Sense`, `Reflex`) but **never defines tools, sense, or reflexes itself**. Each domain package defines its own pieces, and `main.go` wires them in.
@@ -385,7 +399,7 @@ The `brain` package provides registration machinery (`Tool`, `ToolDeps`, `ToolHa
 Each domain package exposes a `BuildTools() []llm.Tool` function that returns tool definitions + handlers. `main.go` calls `b.RegisterTools(pkg.BuildTools()...)`.
 
 - **Sense**: `internal/timeline/` — single `Sense` implementation. Registered via `b.SetSense(...)`.
-- **Reflexes**: defined in domain packages — `task.Service.CheckStale`, `alarms.Service.FireDueAlarms`, `alarms.Service.StaleAlarmReflex`, `skills.SkillChangeReflex`, `shell.Service.CheckSessions`. Registered in `main.go` via `b.RegisterReflex(...)`.
+- **Reflexes**: defined in domain packages — `task.Service.CheckStale`, `alarms.Service.FireDueAlarms`, `alarms.Service.StaleAlarmReflex`, `skills.SkillChangeReflex`, `skills.SkillCheckReflex`, `shell.Service.CheckSessions`. Registered in `main.go` via `b.RegisterReflex(...)`.
 
 Wiring steps:
 
@@ -483,8 +497,6 @@ Before applying any migration to the live DB:
 Things to revisit periodically. The agent adds entries here when the user flags a mistake or suggests a different approach. Only the user removes entries.
 
 <!-- example: - 2026-03-14: user prefers X over Y for error handling -- revisit error style rules -->
-- 2026-03-20: workspace skill names are PII -- they reveal what services/devices the owner uses. Never reference specific workspace skill names in files that could leak (skill_builder docs, prompts, etc.). Use generic placeholders instead. Built-in skill names (git-tracked under `skills/`) are fine.
-- 2026-03-22: agent repeatedly misread log timestamps (local -07:00) as UTC, claiming nik was running old code when it had already been restarted. Added explicit timezone documentation to the Log file section. Always `date -u` and convert before comparing log vs DB times.
 
 ## Fin
 

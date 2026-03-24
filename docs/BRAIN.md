@@ -208,6 +208,10 @@ they're triggers that mutate DB state so the timeline has something new to show:
 - `CheckStale` — flags tasks with no activity and inserts stale task reports.
 - `SkillChangeReflex` — detects skill file additions, removals, and changes;
   emits `skill_added`/`skill_removed`/`skill_changed` events.
+- `SkillCheckReflex` — runs skill-declared check commands (declared in SKILL.md
+  frontmatter via `reflex:` block). Pipes the previous record via stdin, checks
+  stdout. Non-empty + different = new record, stored in `skill_reflex` table and
+  emits `skill_reflex_fired` system message.
 - `CheckSessions` — reaps dead/stale shell sessions.
 
 Without reflexes, the brain would still work — it would just wait passively for
@@ -234,6 +238,7 @@ necessary.
 - `alarm_fired`, `alarm_stale` — require model action
 - `skill_added`, `skill_removed`, `skill_changed` — may require install steps
 - `trigger` — explicit activation request
+- `skill_reflex_fired` — skill check command detected something new
 - `task_report` (completed/failed) — task finished, model should review
 
 **Typically noop** (nik should usually ignore):

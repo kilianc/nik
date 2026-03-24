@@ -475,6 +475,137 @@ Do things.
 	}
 }
 
+func TestParseFrontmatterReflex(t *testing.T) {
+	tests := []struct {
+		name         string
+		content      string
+		wantCount    int
+		wantName     string
+		wantCommand  string
+		wantSchedule bool
+	}{
+		{
+			name:         "check reflex with cron",
+			content:      "---\nname: gmail\nsummary: check gmail\ntools: [shell]\nreflex:\n  - name: check_gmail\n    command: gws gmail +triage --format json\n    every: \"*/15 * * * *\"\n---\n",
+			wantCount:    1,
+			wantName:     "check_gmail",
+			wantCommand:  "gws gmail +triage --format json",
+			wantSchedule: true,
+		},
+		{
+			name:      "no reflex",
+			content:   "---\nname: journal\nsummary: write journal\ntools: [shell]\n---\n",
+			wantCount: 0,
+		},
+		{
+			name:      "reflex item missing every",
+			content:   "---\nname: partial\nsummary: partial reflex\ntools: [shell]\nreflex:\n  - name: check\n    command: check-something\n---\n",
+			wantCount: 0,
+		},
+		{
+			name:         "schedule-only reflex",
+			content:      "---\nname: journal\nsummary: daily journal\ntools: [shell]\nreflex:\n  - name: journal\n    every: \"0 6 * * *\"\n---\n",
+			wantCount:    1,
+			wantName:     "journal",
+			wantCommand:  "",
+			wantSchedule: true,
+		},
+		{
+			name:      "invalid cron expression",
+			content:   "---\nname: bad\nsummary: bad cron\ntools: [shell]\nreflex:\n  - name: check\n    command: check\n    every: nope\n---\n",
+			wantCount: 0,
+		},
+		{
+			name:         "reflex before tools",
+			content:      "---\nname: ordered\nsummary: test ordering\nreflex:\n  - name: check\n    command: check-stuff\n    every: \"*/5 * * * *\"\ntools: [shell]\n---\n",
+			wantCount:    1,
+			wantName:     "check",
+			wantCommand:  "check-stuff",
+			wantSchedule: true,
+		},
+		{
+			name:      "multiple reflexes",
+			content:   "---\nname: memory\nsummary: memory management\ntools: [shell]\nreflex:\n  - name: extract\n    every: \"0 6 * * *\"\n  - name: compact\n    every: \"30 7 * * *\"\n---\n",
+			wantCount: 2,
+		},
+		{
+			name:         "shorthand cron",
+			content:      "---\nname: daily\nsummary: daily task\ntools: [shell]\nreflex:\n  - name: run\n    every: \"@daily\"\n---\n",
+			wantCount:    1,
+			wantName:     "run",
+			wantSchedule: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s, err := parseFrontmatter([]byte(tt.content))
+			if err != nil {
+				t.Fatalf("parseFrontmatter: %v", err)
+			}
+
+			if len(s.Reflexes) != tt.wantCount {
+				t.Fatalf("reflexes count = %d, want %d", len(s.Reflexes), tt.wantCount)
+			}
+
+			if tt.wantCount == 0 {
+				return
+			}
+
+			r := s.Reflexes[0]
+			if tt.wantName != "" && r.Name != tt.wantName {
+				t.Errorf("name = %q, want %q", r.Name, tt.wantName)
+			}
+			if r.Command != tt.wantCommand {
+				t.Errorf("command = %q, want %q", r.Command, tt.wantCommand)
+			}
+			if tt.wantSchedule && r.Schedule == nil {
+				t.Error("expected non-nil schedule")
+			}
+		})
+	}
+}
+
+func TestListReflexes(t *testing.T) {
+	dir := t.TempDir()
+
+	skillDir := filepath.Join(dir, "gmail")
+	os.MkdirAll(skillDir, 0o755)
+	os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\nname: gmail\nsummary: check\ntools: [shell]\nreflex:\n  - name: check_mail\n    command: check-mail\n    every: \"* * * * *\"\n---\n"), 0o644)
+
+	normalDir := filepath.Join(dir, "journal")
+	os.MkdirAll(normalDir, 0o755)
+	os.WriteFile(filepath.Join(normalDir, "SKILL.md"), []byte("---\nname: journal\nsummary: write\ntools: [shell]\n---\n"), 0o644)
+
+	reflexes, err := ListReflexes(dir)
+	if err != nil {
+		t.Fatalf("ListReflexes: %v", err)
+	}
+
+	if len(reflexes) != 1 {
+		t.Fatalf("got %d reflexes, want 1", len(reflexes))
+	}
+
+	r, ok := reflexes["gmail/check_mail"]
+	if !ok {
+		t.Fatalf("expected gmail/check_mail reflex, got keys: %v", keys(reflexes))
+	}
+	if r.Command != "check-mail" {
+		t.Errorf("command = %q, want check-mail", r.Command)
+	}
+	if r.Schedule == nil {
+		t.Error("expected non-nil schedule")
+	}
+}
+
+func keys(m map[string]SkillReflexDef) []string {
+	var ks []string
+	for k := range m {
+		ks = append(ks, k)
+	}
+	return ks
+}
+
 func writeSkill(t *testing.T, dir, folder, name, summary, tools string) {
 	t.Helper()
 	skillDir := filepath.Join(dir, folder)

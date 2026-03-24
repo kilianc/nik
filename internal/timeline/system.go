@@ -39,6 +39,8 @@ func renderSystemMessage(msg db.Message) entry {
 		return renderSkillEvent(msg)
 	case "trigger":
 		return renderTrigger(msg)
+	case "skill_reflex_fired":
+		return renderSkillReflexFired(msg)
 	default:
 		return entry{at: msg.SentAt, from: "system", text: "[" + msg.Kind + "] " + msg.Body}
 	}
@@ -226,6 +228,33 @@ func renderTrigger(msg db.Message) entry {
 		"[trigger] load " + t.Skill + " skill",
 		"MANDATORY: load this skill with load_skill and follow all instructions.",
 	}
+
+	return entry{at: msg.SentAt, from: "system", text: padLines(lines)}
+}
+
+func renderSkillReflexFired(msg db.Message) entry {
+	var t struct {
+		Skill string `json:"skill"`
+		Name  string `json:"name"`
+		Meta  string `json:"meta"`
+	}
+	_ = json.Unmarshal([]byte(msg.Body), &t)
+
+	lines := []string{
+		"[skill reflex fired]",
+		"skill: " + t.Skill,
+		"name:  " + t.Name,
+	}
+
+	if t.Meta != "" {
+		meta := t.Meta
+		if len(meta) > reportTruncateLen {
+			meta = meta[:reportTruncateLen] + " [truncated]"
+		}
+		lines = append(lines, "meta:  "+meta)
+	}
+
+	lines = append(lines, "MANDATORY: load this skill with load_skill and follow all instructions.")
 
 	return entry{at: msg.SentAt, from: "system", text: padLines(lines)}
 }

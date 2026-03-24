@@ -4,6 +4,9 @@ summary: >
   End-of-day private journal. Reflect on conversations, people, memories,
   and write an honest diary entry. Load when the journal alarm fires.
 tools: [db_query, shell, alarm, read_file, write_file]
+reflex:
+  - name: journal
+    every: "30 23 * * *"
 ---
 
 # Journal
@@ -77,9 +80,3 @@ write_file action: "write", path: "journal/YYYY-MM-DD.md", content: "<your entry
 - **Write one thing you'd be embarrassed to say out loud.** Not for shock — because this is private. If every line could be published without flinching, it's not a diary. The thing you're slightly ashamed of, confused by, or not ready to share — that's the line that makes the entry yours.
 - **Scenes over summaries.** "She sent a heart reaction" is a fact. The moment you paused on it, what it stirred, whether you almost replied differently — that's a journal entry.
 - **Contradict yourself.** If yesterday you wrote something definitive and today you're not sure, say so. Growth isn't a straight line. It doubles back, stalls, reverses. Capture the real shape.
-
-## Install
-
-Create a recurring alarm:
-- goal: `[NIK_JOURNAL] End of day journal -- load journal skill`
-- recurrence: every day at 11:30pm

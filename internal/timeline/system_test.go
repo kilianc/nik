@@ -209,6 +209,20 @@ func TestRenderSystemMessage(t *testing.T) {
 			wantFrom: "system",
 			wantSub:  "[trigger] load breathing skill",
 		},
+		{
+			name:     "skill_reflex_fired with meta",
+			kind:     "skill_reflex_fired",
+			body:     map[string]string{"skill": "google_workspace", "name": "check_gmail", "meta": `{"count":3}`},
+			wantFrom: "system",
+			wantSub:  "[skill reflex fired]",
+		},
+		{
+			name:     "skill_reflex_fired schedule only",
+			kind:     "skill_reflex_fired",
+			body:     map[string]string{"skill": "journal", "name": "journal"},
+			wantFrom: "system",
+			wantSub:  "[skill reflex fired]",
+		},
 	}
 
 	for _, tt := range tests {
