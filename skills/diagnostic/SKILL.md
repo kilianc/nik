@@ -1,349 +1,228 @@
 ---
 name: diagnostic
 summary: >
-  Nightly system diagnostic. Discovers all skills and services, tests auth
-  for anything that needs credentials, verifies alarm chains and skill
-  outputs, checks data integrity. Load when the diagnostic alarm fires.
+  Nightly system diagnostic. Tests auth for credentialed services, verifies
+  alarm chains and skill outputs, checks data integrity and spending.
+  Load when the diagnostic alarm fires. Use medium thinking.
 tools: [db_query, shell, alarm, load_skill]
+diagnostic_skip: true
 ---
 
 # Diagnostic
 
-Nightly health check that predicts what will break tomorrow. Everything
-lives on the file system under `diagnostics/`.
+Nightly health check that predicts what will break tomorrow. Output
+goes to `diagnostics/YYYY-MM-DD.md`.
 
-## File layout
+## Constraints
 
-```
-diagnostics/
-  2026-03-06.md
-  2026-03-07.md
-```
-
-Use `shell` to write these files. Create the directory if it doesn't exist.
+- Target: **under 25 rounds**. Batch shell commands into scripts.
+- Load this skill exactly once. Do not re-load it mid-run.
+- Read the prior diagnostic at most once.
+- Do not fix anything. Report only.
 
 ## Scheduling
 
-The recurring alarm `[NIK_DIAGNOSTIC]` triggers this workflow. When it fires, follow the full workflow below.
+The recurring alarm `[NIK_DIAGNOSTIC]` triggers this workflow.
 
-## Design principle
+## Skip policy
 
-This skill defines **rules**, not a checklist. Never hardcode skill or
-service names — discover what exists at runtime and apply universal
-rules. The goal is to predict what will break tomorrow so you can fix
-it before it matters.
+A skill may opt out of nightly auth/install checks by setting
+`diagnostic_skip: true` in its frontmatter. Record `SKIP` with the
+reason from the skill docs.
 
-A skill may opt out of nightly diagnostic auth/install checks by setting
-`diagnostic_skip: true` in its frontmatter and documenting why. That
-skip only affects the diagnostic; the skill remains usable when
-explicitly requested.
+## Step 1 — Collect
 
-## Phase 1 — Discover
+Run these in order. Each is one tool call.
 
-Before checking anything, build a picture of what exists right now.
+### 1a — Skill inventory
 
-### 1a — Enumerate skills
+`load_skill` action `list`. Note each skill's name, summary, tools,
+and whether it has `diagnostic_skip`.
 
-`load_skill` action `list`. Note each skill's name, summary, and tools.
+### 1b — Runtime probes
 
-### 1b — Find CLIs
+Run a **single** shell script that performs all of the following and
+prints structured output. Adapt the script to the skills discovered
+in 1a — if a CLI is missing, print SKIP for that service.
 
+```sh
+#!/bin/sh
+echo "=== AUTH ==="
+
+echo "-- vault"
+timeout 10 ./vault/cli list >/dev/null 2>&1 && echo "PASS" || echo "FAIL exit=$?"
+
+echo "-- gws"
+if command -v gws >/dev/null; then
+  timeout 15 env GOOGLE_WORKSPACE_CLI_CONFIG_DIR=skills/google_workspace \
+    GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE=skills/google_workspace/nik.json \
+    gws auth status 2>&1 | head -5 || echo "FAIL exit=$?"
+else echo "SKIP no-cli"; fi
+
+echo "-- blockware"
+if command -v go >/dev/null && [ -f skills/blockware/main.go ]; then
+  timeout 30 go run ./skills/blockware/main.go summary 2>&1 | head -3 && echo "PASS" || echo "FAIL exit=$?"
+else echo "SKIP no-cli"; fi
+
+echo "-- robinhood"
+if command -v go >/dev/null && [ -f skills/robinhood/main.go ]; then
+  timeout 30 go run ./skills/robinhood/main.go account 2>&1 | head -3 && echo "PASS" || echo "FAIL exit=$?"
+else echo "SKIP no-cli"; fi
+
+echo "-- tesla"
+if command -v go >/dev/null && [ -f skills/tesla/main.go ]; then
+  timeout 30 go run ./skills/tesla/main.go vehicles 2>&1 | head -3 && echo "PASS" || echo "FAIL exit=$?"
+else echo "SKIP no-cli"; fi
+
+echo "-- lights"
+if command -v openhue >/dev/null; then
+  timeout 15 openhue get light 2>&1 | head -3 && echo "PASS" || echo "FAIL exit=$?"
+else echo "SKIP no-cli"; fi
+
+echo "-- browse"
+if command -v agent-browser >/dev/null; then
+  timeout 10 agent-browser --help >/dev/null 2>&1 && echo "PASS" || echo "FAIL exit=$?"
+else echo "SKIP no-cli"; fi
+
+echo "=== OUTPUTS ==="
+for d in awareness backups breathing briefings diagnostics dreams journal memories soul; do
+  if [ -d "$d" ]; then
+    latest=$(ls -1 "$d" | grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}\.md$' | sort | tail -1)
+    if [ -n "$latest" ]; then
+      size=$(wc -c < "$d/$latest" | tr -d ' ')
+      echo "$d: $latest ${size}B"
+    else
+      echo "$d: EMPTY"
+    fi
+  fi
+done
+
+echo "=== META ==="
+echo "db_size=$(wc -c < nik.db | tr -d ' ')"
+echo "tmux_sessions=$(tmux list-sessions -F '#{session_name} #{pane_dead}' 2>/dev/null | grep -c '^nik-' || echo 0)"
 ```
-ls skills/*/main.go
-```
 
-For each `main.go`, run it with no arguments. Go-based skill CLIs
-typically print a JSON usage object with a `commands` list. Capture
-the available commands for each.
+If vault fails, note that downstream vault-dependent services are
+blocked and skip their individual probes. If a new skill with a CLI
+appears in the `load_skill list` that is not in the script above,
+test it with its lightest read-only command (prefer `status`, then
+`list`/`get`/`account`/`info`). A "command not found" is not a
+failure — record SKIP.
 
-### 1c — Find recurring alarms
+### 1c — Prior diagnostic (optional)
+
+If a prior diagnostic exists, `read_file` the most recent one to
+compare trends. Do this at most once.
+
+## Step 2 — Query
+
+Run these as `db_query` calls. Combine into as few calls as possible.
+
+### 2a — Alarm health
 
 ```sql
-SELECT id, goal, recurrence, next_fire_at
+SELECT
+  id, goal, recurrence, next_fire_at, cancelled_at
 FROM alarm
 WHERE cancelled_at IS NULL
   AND recurrence IS NOT NULL
   AND recurrence != ''
+ORDER BY next_fire_at
 ```
 
-Map each alarm to the skill it serves by matching alarm goal text to
-skill names from 1a.
+Check each row:
+- `next_fire_at IS NULL` → FAIL (dead recurring alarm)
+- `next_fire_at` in the past → FAIL (stale)
+- Duplicate goals across rows → WARN
 
-### 1d — Find output directories
+### 2b — Data quality + stale tasks
 
-Scan the home directory for subdirectories that contain dated files
-(the `YYYY-MM-DD.md` pattern). These are skill output directories.
-Note the most recent file in each.
-
-## Phase 2 — Test auth
-
-The highest-value phase. For every skill with a CLI (from 1b),
-determine if it needs external credentials and test them. Every test
-is read-only — no mutations, no messages, no writes.
-
-### Rules
-
-0. **Honor explicit diagnostic skips** — if a skill's frontmatter has
-   `diagnostic_skip: true`, do not auth-test it. Record `SKIP` with the
-   reason from the skill docs.
-
-1. **If the CLI has a `status` command** — run it. Check for
-   `ready: true` or exit code 0. This is the preferred test.
-
-2. **If no `status` but there's a read-only command** — run the
-   lightest one. Success = auth works. Look for commands that read
-   without side effects (words like `list`, `get`, `status`, `info`,
-   `account`, `whoami`).
-
-3. **For API-key services** (any key in config ending in `_key` or
-   `_token`) — test with a minimal HTTP request if the skill
-   documents an endpoint, or verify the key is non-empty.
-
-4. **For services that pull credentials from a secrets manager** —
-   test the secrets manager first. If it fails, skip downstream
-   services and attribute all failures to the root cause.
-
-5. **Skip skills with no external auth** — if the skill has no CLI
-   and its tools list only contains local tools (`alarm`, `db_query`,
-   `load_skill`), it doesn't need auth testing.
-
-### How to identify auth-dependent skills
-
-A skill likely needs auth if any of:
-
-- It has a CLI with a `setup` command
-- Its SKILL.md mentions credentials, tokens, API keys, OAuth, or a
-  secrets manager
-- Its tools list includes `shell` and its summary references an
-  external service
-
-When uncertain, try running the lightest available command. An auth
-error is a finding worth reporting. A "command not found" or "no such
-file" is not — just skip it.
-
-## Phase 3 — Verify alarm chains
-
-For every recurring alarm from 1c:
-
-1. **Alive**: `cancelled_at IS NULL` and `next_fire_at IS NOT NULL`
-2. **Scheduled**: `next_fire_at` is in the future
-3. **Not duplicated**: no other active alarm with the same goal and
-   overlapping schedule
-
-Also find **dead recurring alarms**: `recurrence IS NOT NULL` but
-`next_fire_at IS NULL` and `cancelled_at IS NULL`. These will never
-fire again.
-
-Severity:
-
-- Dead alarm = FAIL
-- Duplicate alarm = WARN
-- Stale `next_fire_at` (in the past) = FAIL
-
-## Phase 3b — Self-healing audit
-
-Skill installation and alarm health are handled automatically by reflexes (skill change reflex detects new/changed skills, stale alarm reflex re-fires unscheduled recurring alarms). This phase verifies those mechanisms are working.
-
-For every skill with `install: true`:
-1. Check that its expected resources exist (alarm with future `next_fire_at`, credentials configured, binaries present)
-2. If the skill has `diagnostic_skip: true`, treat intentionally skipped auth/install prerequisites as `SKIP`, not `FAIL`, and note that the owner disabled nightly diagnostic checks for that skill
-3. If something is still broken despite reflexes having run, that's a real problem — flag it to the user
-
-Do NOT attempt to fix anything here. The reflexes and Nik's normal activation handle repairs. This phase only audits.
-
-Severity:
-
-- Resource healthy = PASS
-- Intentionally skipped by `diagnostic_skip: true` = SKIP
-- Resource missing or broken despite reflexes = FAIL (flag to user with details)
-
-## Phase 4 — Verify skill outputs
-
-Using the output directories discovered in 1d:
-
-1. Check for today's (or yesterday's, depending on schedule timing)
-   dated file
-2. Check that the file is non-empty
-3. If the most recent file has clear section markers (headings), check
-   they're all present
-
-Severity:
-
-- Missing for 1 day = WARN (single miss, could be transient)
-- Missing for 2+ consecutive days = FAIL (systematic failure)
-
-Cross-reference with Phase 3: if output is missing AND the alarm is
-dead, the alarm is the root cause.
-
-## Phase 5 — Shell sessions
-
-Discover and clean up orphaned `nik-*` tmux sessions.
-
-### 5a — List sessions
-
-Via `shell`:
-
-```
-tmux list-sessions -F '#{session_name} #{pane_dead}' 2>/dev/null | grep '^nik-'
+```sql
+SELECT 'integrity' AS check_name, integrity_check AS result
+FROM pragma_integrity_check
+UNION ALL
+SELECT 'fk' AS check_name,
+  COALESCE(
+    (SELECT GROUP_CONCAT(table_name) FROM pragma_foreign_key_check),
+    'ok'
+  ) AS result
 ```
 
-If no sessions exist, skip to the next phase.
+Stale tasks:
 
-### 5b — Kill dead sessions
-
-Sessions with `pane_dead` = 1 are finished commands whose sessions
-were never cleaned up. Kill each one:
-
-```
-tmux kill-session -t <session_name>
-```
-
-### 5c — Flag long-running sessions
-
-For live sessions (`pane_dead` = 0), read the metadata env var:
-
-```
-tmux show-environment -t <session_name> NIK_META
+```sql
+SELECT t.id, t.goal, t.status, t.created_at,
+  MAX(tr.created_at) AS last_report
+FROM task t
+LEFT JOIN task_report tr ON tr.task_id = t.id
+WHERE t.status IN ('running', 'pending')
+GROUP BY t.id
+HAVING last_report IS NULL
+   OR last_report < DATETIME('now', '-24 hours')
 ```
 
-`NIK_META` is JSON containing `started_at`. If a session has been
-alive for 24h+, flag it — it may be stuck.
+### 2c — Spending
 
-Severity:
+```sql
+SELECT
+  COALESCE(SUM(cost_usd), 0) AS total_30d,
+  COALESCE(SUM(CASE WHEN created_at >= DATETIME('now', '-1 day') THEN cost_usd END), 0) AS last_24h,
+  COALESCE(SUM(CASE WHEN created_at >= DATETIME('now', '-7 days') THEN cost_usd END) / 7.0, 0) AS avg_7d
+FROM activation
+WHERE created_at >= DATETIME('now', '-30 days')
+```
 
-- Dead sessions found and cleaned = INFO (routine, note the count)
-- Live session running 24h+ = WARN (may be stuck)
+## Step 3 — Write report
 
-## Phase 6 — Data quality
+Write `diagnostics/YYYY-MM-DD.md` via `shell`. Create the directory
+if it doesn't exist. Lead with failures.
 
-Via `db_query`:
-
-- `PRAGMA integrity_check`
-- `PRAGMA foreign_key_check`
-- Stale tasks: `status IN ('running', 'pending')` with no
-  `task_report` in 24h+
-
-Keep this lean — only check things that indicate real data problems.
-
-## Phase 7 — Spending
-
-- 30-day spend: `SUM(cost_usd)` from `activation` for the last
-  30 days
-- 24h cost vs 7-day daily average
-- DB file size via `shell`
-
-## Phase 8 — Report
-
-Write to `diagnostics/YYYY-MM-DD.md` via `shell`. Lead with failures.
-The report is written for your future self — tomorrow morning,
-scanning it should immediately tell you what needs attention.
-
-### Structure
+### Report structure
 
 ```markdown
 # Diagnostic — YYYY-MM-DD
 
 ## Summary
-all clear / N issues — one-line per FAIL/CRITICAL
+all clear / N issues — one-line per FAIL/WARN
 
 ## Auth & Services
-per-skill: tested command, result, error detail if any
-group downstream failures under root cause
+per-service: command, PASS/FAIL/SKIP, error detail if any
+for install:true skills, note whether expected resources are healthy
+group downstream failures under root cause (e.g. vault down)
 
-## Alarm Chains
-dead, duplicate, or stale alarms with IDs and goals
-
-## Self-Healing Audit
-per-skill: PASS / FAIL (what's still broken despite reflexes)
+## Alarms
+dead, duplicate, or stale alarms with short IDs and goals
 
 ## Skill Outputs
-per-directory: last file date, gap analysis
-
-## Shell Sessions
-dead sessions cleaned: N (list IDs)
-long-running sessions: list with age and description
+per-directory: latest file, gap analysis
+missing 1 day = WARN, missing 2+ days = FAIL
+cross-reference: if alarm dead, that's the root cause
 
 ## Data Quality
 PRAGMA results, stale tasks
 
 ## Spending
-30-day total, 24h vs average, DB size
+30-day total, 24h vs 7-day avg, DB size
 
 ## Recommendations
-see patterns below
+concrete action for every FAIL
 ```
 
-### Recommendations
+### Recommendation patterns
 
-For every FAIL or CRITICAL finding, include a concrete recommendation.
-
-**Auth failures:**
-
-- Expired OAuth token → "re-run `setup` for [skill] to refresh the
-  token"
-- Revoked or invalid API key → "rotate the key in [secrets source]
-  and update config"
-- Secrets manager unreachable → "check the service account token or
-  network connectivity; N downstream skills are blocked"
-- Unknown auth error → quote the error and suggest loading the skill
-  for its setup instructions
-- Intentionally skipped skill → "re-enable nightly checks by removing
-  `diagnostic_skip: true` from the skill frontmatter when ready"
-
-**Dead alarms:**
-
-- "alarm [short ID] has recurrence but no next_fire_at — reschedule
-  with `update_alarm` setting `next_fire_at` to the next occurrence"
-- If multiple alarms are dead, note whether they share a pattern
-  (e.g. all died on the same date)
-
-**Duplicate alarms:**
-
-- "alarms [ID1] and [ID2] have the same goal — cancel one with
-  `cancel_alarm`"
-
-**Missing skill outputs:**
-
-- Alarm healthy but output missing → "the alarm is firing but the
-  skill isn't producing output — load the skill and check for errors
-  in recent activations"
-- Alarm dead → "output missing because the alarm is dead (see above)"
-
-**Long-running shell sessions:**
-
-- "session [ID] has been alive for [duration] running `[command]` —
-  check if stuck, kill with `tmux kill-session -t nik-[ID]` if no
-  longer needed"
-
-**Stale tasks:**
-
-- "task [short ID] has been in [status] for [duration] with no
-  report — check `task_status` and cancel if stuck"
-
-**Data integrity:**
-
-- Corruption → "PRAGMA integrity_check failed — back up the database
-  immediately and investigate"
-- FK violations → list affected tables and row counts
-
-**Spending anomalies:**
-
-- 24h cost > 2x the 7-day average → "spending spike — check recent
-  activations for loops or unusually large contexts"
+- Auth failure → re-run `setup` or rotate credentials
+- Dead alarm → reschedule with `update_alarm`
+- Duplicate alarms → cancel one with `cancel_alarm`
+- Missing output + healthy alarm → load skill, check recent activations
+- Missing output + dead alarm → fix alarm first
+- Stale task → check `task_status`, cancel if stuck
+- Integrity failure → back up DB immediately
+- Spend > 2x average → check for loops or large contexts
 
 ### Escalation
 
-If any finding is CRITICAL (cascading failure), or 3+ findings are
-FAIL, proactively message the owner. Otherwise, note findings in the
-next journal entry.
-
-## Tips
-
-- Run auth tests sequentially — if the secrets manager fails, skip
-  everything downstream
-- Read yesterday's diagnostic before writing today's to track trends
-- The diagnostic alarm is itself a recurring alarm — don't forget to
-  reschedule it at the end
+If any CRITICAL finding or 3+ FAIL findings, proactively message the
+owner. Otherwise note in the next journal entry.
 
 ## Install
 
