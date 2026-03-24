@@ -8,4 +8,4 @@ SELECT
 FROM media med
 JOIN message_media mm ON mm.media_id = med.id
 JOIN message m ON m.id = mm.message_id
-WHERE med.local_path = ?1;
+WHERE med.local_path = ?1

@@ -14,3 +14,4 @@ SELECT
 FROM experiment_variant
 WHERE experiment_id = ?1
 ORDER BY created_at ASC
+

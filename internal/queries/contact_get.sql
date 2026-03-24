@@ -20,4 +20,4 @@ FROM contact
 WHERE id = ?1
    OR EXISTS (SELECT 1 FROM json_each(whatsapp_ids) WHERE value = ?1)
    OR EXISTS (SELECT 1 FROM json_each(telegram_ids) WHERE value = ?1)
-   OR EXISTS (SELECT 1 FROM json_each(slack_ids) WHERE value = ?1);
+   OR EXISTS (SELECT 1 FROM json_each(slack_ids) WHERE value = ?1)

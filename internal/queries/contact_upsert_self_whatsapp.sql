@@ -33,4 +33,4 @@ ON CONFLICT (id) DO UPDATE SET
     WHEN contact.last_message_at IS NULL OR ISO8601_MS(?3) > contact.last_message_at THEN ISO8601_MS(?3)
     ELSE contact.last_message_at
   END,
-  updated_at = NOW_ISO8601_MS();
+  updated_at = NOW_ISO8601_MS()

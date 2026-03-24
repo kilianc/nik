@@ -8,3 +8,4 @@ SELECT
 FROM skill_event
 WHERE created_at >= ISO8601_MS(?1)
 ORDER BY created_at ASC
+

@@ -5,3 +5,4 @@ SET
   desired_count = COALESCE(?4, desired_count),
   updated_at = NOW_ISO8601_MS()
 WHERE id = ?1
+

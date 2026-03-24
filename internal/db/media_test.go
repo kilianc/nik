@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func TestInsertMediaValidatesID(t *testing.T) {
+func TestMediaInsertValidatesID(t *testing.T) {
 	ctx := context.Background()
 
 	conn, err := OpenInMemory()
@@ -17,7 +17,7 @@ func TestInsertMediaValidatesID(t *testing.T) {
 	}
 	defer conn.Close()
 
-	err = InsertMedia(ctx, conn, InsertMediaParams{})
+	err = MediaInsert(ctx, conn, MediaInsertParams{})
 	if err == nil {
 		t.Fatalf("expected error for empty media id")
 	}
@@ -40,7 +40,7 @@ func TestMessageMediaRoundTrip(t *testing.T) {
 	mediaID := "019590a0-0000-7000-8000-000000000001"
 	mimeType := "image/jpeg"
 	localPath := "media/2026/03/img.jpg"
-	err = InsertMedia(ctx, conn, InsertMediaParams{
+	err = MediaInsert(ctx, conn, MediaInsertParams{
 		ID:        mediaID,
 		MimeType:  &mimeType,
 		LocalPath: &localPath,
@@ -49,7 +49,7 @@ func TestMessageMediaRoundTrip(t *testing.T) {
 		t.Fatalf("insert media: %v", err)
 	}
 
-	err = UpsertMessageMedia(ctx, conn, messageID, mediaID)
+	err = MessageMediaUpsert(ctx, conn, messageID, mediaID)
 	if err != nil {
 		t.Fatalf("upsert message_media: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestMessageMediaRoundTrip(t *testing.T) {
 		t.Fatalf("expected non-empty message_media id")
 	}
 
-	msg, err := GetMessage(ctx, conn, GetMessageParams{ID: messageID})
+	msg, err := MessageGet(ctx, conn, MessageGetParams{ID: messageID})
 	if err != nil {
 		t.Fatalf("get message: %v", err)
 	}
@@ -89,7 +89,7 @@ func TestMediaResolveByPath(t *testing.T) {
 	mediaID := "019590a0-0000-7000-8000-000000000002"
 	mimeType := "image/jpeg"
 	localPath := "media/2026/03/resolve-test.jpg"
-	err = InsertMedia(ctx, conn, InsertMediaParams{
+	err = MediaInsert(ctx, conn, MediaInsertParams{
 		ID:        mediaID,
 		MimeType:  &mimeType,
 		LocalPath: &localPath,
@@ -98,7 +98,7 @@ func TestMediaResolveByPath(t *testing.T) {
 		t.Fatalf("insert media: %v", err)
 	}
 
-	err = UpsertMessageMedia(ctx, conn, messageID, mediaID)
+	err = MessageMediaUpsert(ctx, conn, messageID, mediaID)
 	if err != nil {
 		t.Fatalf("upsert message_media: %v", err)
 	}
@@ -142,7 +142,7 @@ func TestMediaUpdate(t *testing.T) {
 	mediaID := "019590a0-0000-7000-8000-000000000003"
 	mimeType := "audio/ogg"
 	localPath := "media/2026/03/transcript-test.ogg"
-	err = InsertMedia(ctx, conn, InsertMediaParams{
+	err = MediaInsert(ctx, conn, MediaInsertParams{
 		ID:        mediaID,
 		MimeType:  &mimeType,
 		LocalPath: &localPath,
@@ -185,7 +185,7 @@ func TestMediaUpdate(t *testing.T) {
 func seedMessageForMediaTest(t *testing.T, ctx context.Context, conn *sql.DB) string {
 	t.Helper()
 
-	contact, err := UpsertContact(ctx, conn, UpsertContactParams{
+	contact, err := ContactUpsert(ctx, conn, ContactUpsertParams{
 		Platform:      "whatsapp",
 		ExternalID:    "media@s.whatsapp.net",
 		Name:          "Media Tester",

@@ -441,14 +441,14 @@ All queries live in `internal/queries/*.sql` files with exact executable SQL (po
 
 **One SQL file per CRUD verb per entity.** Each entity gets at most one INSERT, one SELECT-single, one SELECT-list, one UPDATE, and one DELETE `.sql` file. Use `COALESCE`/nullable params to handle field-level optionality within a single file — callers pass `nil` when unused. Only split into separate files when there is a real security or performance need (e.g. different WHERE-clause index patterns, fundamentally different return shapes).
 
-Good — `GetContact` already does this (`contact_get.sql` uses `WHERE id = ?1 OR EXISTS (SELECT 1 FROM json_each(whatsapp_ids) WHERE value = ?1) OR ...`). `MarkConversationsRead` dispatches between two SQL files because the WHERE clauses target different indexes (`id` vs `platform`).
+Good — `ContactGet` already does this (`contact_get.sql` uses `WHERE id = ?1 OR EXISTS (SELECT 1 FROM json_each(whatsapp_ids) WHERE value = ?1) OR ...`). `ConversationMarkRead` dispatches between two SQL files because the WHERE clauses target different indexes (`id` vs `platform`).
 
 **Service layering:** `db/` is the only package that touches `internal/queries`. It owns model types (`db/models.go`), scan helpers, and query functions. Domain packages (`internal/<name>/`) hold services, tools, and reflexes — they call `db.*` functions for all persistence.
 
 - model types (plain data structs, no methods) go in `db/models.go`
 - query functions are standalone: `func TaskGet(ctx, db, taskID) (Task, error)`
 - scan helpers are unexported: `func scanTask(s scanner) (Task, error)`
-- any db function with 3+ domain params uses a Params struct: `TaskInsertParams`, `CreateAlarmParams`
+- any db function with 3+ domain params uses a Params struct: `TaskInsertParams`, `AlarmCreateParams`
 - services own business logic: ID generation, LLM calls, time calculations, type transforms
 
 **UUIDs:** all primary keys are **UUIDv7** (time-ordered), generated via `id.V7()` from `internal/id/` (`github.com/google/uuid`). `id.V4()` for random UUIDs, `id.Short(n)` for short hex IDs (e.g. shell session names). Stored as plain `TEXT` in SQLite.

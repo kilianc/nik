@@ -9,7 +9,7 @@ import (
 	"github.com/kciuffolo/nik/internal/queries"
 )
 
-type InsertMediaParams struct {
+type MediaInsertParams struct {
 	ID             string
 	MimeType       *string
 	SizeBytes      *int64
@@ -20,7 +20,7 @@ type InsertMediaParams struct {
 	TranscribedAt  *time.Time
 }
 
-func InsertMedia(ctx context.Context, db DBTX, p InsertMediaParams) error {
+func MediaInsert(ctx context.Context, db DBTX, p MediaInsertParams) error {
 	if p.ID == "" {
 		return fmt.Errorf("empty media id")
 	}
@@ -92,7 +92,7 @@ func MediaResolveByPath(ctx context.Context, db DBTX, localPath string) (MediaRe
 	return r, nil
 }
 
-func UpsertMessageMedia(ctx context.Context, db DBTX, messageID, mediaID string) error {
+func MessageMediaUpsert(ctx context.Context, db DBTX, messageID, mediaID string) error {
 	_, err := db.ExecContext(ctx, queries.MessageMediaUpsert, id.V7(), messageID, mediaID)
 	if err != nil {
 		return fmt.Errorf("upsert message media %s/%s: %w", messageID, mediaID, err)

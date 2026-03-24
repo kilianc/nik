@@ -13,4 +13,4 @@ SELECT
 FROM activation_round
 WHERE activation_id = ?1
   AND (?2 IS NULL OR round < ?2)
-ORDER BY round ASC;
+ORDER BY round ASC

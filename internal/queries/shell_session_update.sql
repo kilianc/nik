@@ -5,4 +5,4 @@ SET
   exit_code = ?3,
   alive = ?4,
   updated_at = NOW_ISO8601_MS()
-WHERE id = ?1;
+WHERE id = ?1

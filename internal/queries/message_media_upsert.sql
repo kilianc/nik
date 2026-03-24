@@ -7,4 +7,4 @@ INSERT INTO message_media (
 )
 VALUES (?1, ?2, ?3, NOW_ISO8601_MS())
 ON CONFLICT (message_id) DO UPDATE SET
-  media_id = excluded.media_id;
+  media_id = excluded.media_id

@@ -95,7 +95,21 @@ func (r *Recorder) Finish(ctx context.Context, stats llm.ActivationStats) {
 
 	ctx = context.WithoutCancel(ctx)
 
-	err := db.ActivationUpdateStats(ctx, r.conn, actID, db.ActivationStatsUpdate{
+	schemas := "[]"
+	if len(stats.ToolSchemas) > 0 {
+		data, jsonErr := json.Marshal(stats.ToolSchemas)
+		if jsonErr != nil {
+			slog.Warn("marshal tool schemas", "pkg", "stats", "activation_id", actID, "error", jsonErr)
+		} else {
+			schemas = string(data)
+		}
+	}
+
+	instructions := stats.Instructions
+	err := db.ActivationUpdate(ctx, r.conn, actID, db.ActivationUpdateParams{
+		Instructions:    &instructions,
+		Tools:           stats.Tools,
+		ToolSchemas:     &schemas,
 		ReasoningEffort: stats.ReasoningEffort,
 		Verbosity:       stats.Verbosity,
 		InputTokens:     stats.Usage.InputTokens,
@@ -112,22 +126,7 @@ func (r *Recorder) Finish(ctx context.Context, stats llm.ActivationStats) {
 		Error:           stats.Error,
 	})
 	if err != nil {
-		slog.Warn("update activation stats", "pkg", "stats", "activation_id", actID, "error", err)
-	}
-
-	schemas := "[]"
-	if len(stats.ToolSchemas) > 0 {
-		data, jsonErr := json.Marshal(stats.ToolSchemas)
-		if jsonErr != nil {
-			slog.Warn("marshal tool schemas", "pkg", "stats", "activation_id", actID, "error", jsonErr)
-		} else {
-			schemas = string(data)
-		}
-	}
-
-	err = db.ActivationUpdateDetail(ctx, r.conn, actID, stats.Instructions, stats.Tools, schemas)
-	if err != nil {
-		slog.Warn("update activation detail", "pkg", "stats", "activation_id", actID, "error", err)
+		slog.Warn("update activation", "pkg", "stats", "activation_id", actID, "error", err)
 	}
 }
 

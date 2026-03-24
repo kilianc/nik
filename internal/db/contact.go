@@ -58,12 +58,12 @@ func scanContact(s scanner) (Contact, error) {
 	return c, nil
 }
 
-func GetContact(ctx context.Context, db *sql.DB, identifier string) (Contact, error) {
+func ContactGet(ctx context.Context, db *sql.DB, identifier string) (Contact, error) {
 	row := db.QueryRowContext(ctx, queries.ContactGet, identifier)
 	return scanContact(row)
 }
 
-type UpsertContactParams struct {
+type ContactUpsertParams struct {
 	Platform      string
 	ExternalID    string
 	Name          string
@@ -73,7 +73,7 @@ type UpsertContactParams struct {
 	LastMessageAt time.Time
 }
 
-func UpsertContact(ctx context.Context, db *sql.DB, p UpsertContactParams) (Contact, error) {
+func ContactUpsert(ctx context.Context, db *sql.DB, p ContactUpsertParams) (Contact, error) {
 	switch p.Platform {
 	case "whatsapp":
 		if p.IsSelf {
@@ -86,7 +86,7 @@ func UpsertContact(ctx context.Context, db *sql.DB, p UpsertContactParams) (Cont
 	}
 }
 
-func upsertContactWhatsApp(ctx context.Context, db *sql.DB, p UpsertContactParams) (Contact, error) {
+func upsertContactWhatsApp(ctx context.Context, db *sql.DB, p ContactUpsertParams) (Contact, error) {
 	newID := id.V7()
 
 	_, err := db.ExecContext(ctx, queries.ContactUpsertWhatsAppInsert,
@@ -103,10 +103,10 @@ func upsertContactWhatsApp(ctx context.Context, db *sql.DB, p UpsertContactParam
 		return Contact{}, fmt.Errorf("update: %w", err)
 	}
 
-	return GetContact(ctx, db, p.ExternalID)
+	return ContactGet(ctx, db, p.ExternalID)
 }
 
-func upsertSelfContactWhatsApp(ctx context.Context, db *sql.DB, p UpsertContactParams) (Contact, error) {
+func upsertSelfContactWhatsApp(ctx context.Context, db *sql.DB, p ContactUpsertParams) (Contact, error) {
 	if p.SelfID == "" {
 		return Contact{}, fmt.Errorf("empty self contact id")
 	}
@@ -119,7 +119,7 @@ func upsertSelfContactWhatsApp(ctx context.Context, db *sql.DB, p UpsertContactP
 		return Contact{}, fmt.Errorf("upsert self contact: %w", err)
 	}
 
-	return GetContact(ctx, db, p.SelfID)
+	return ContactGet(ctx, db, p.SelfID)
 }
 
 type ContactUpdateParams struct {

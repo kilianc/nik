@@ -10,4 +10,4 @@ SELECT
 FROM conversation_participant cp
 LEFT JOIN contact c ON c.id = cp.contact_id
 WHERE cp.conversation_id = ?1
-ORDER BY cp.created_at ASC;
+ORDER BY cp.created_at ASC

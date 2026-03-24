@@ -263,7 +263,7 @@ func renderMediaProcessed(msg db.Message, database *sql.DB) entry {
 	text := "[media described]"
 
 	if msg.ContextStanzaID.Valid && database != nil {
-		target, err := db.GetMessage(context.Background(), database, db.GetMessageParams{
+		target, err := db.MessageGet(context.Background(), database, db.MessageGetParams{
 			ID: msg.ContextStanzaID.String,
 		})
 		if err == nil {

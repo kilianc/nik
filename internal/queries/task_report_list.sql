@@ -6,3 +6,4 @@ SELECT
 FROM task_report
 WHERE task_id = ?1
 ORDER BY created_at ASC
+

@@ -16,3 +16,4 @@ ORDER BY
   CASE WHEN status IN ('pending', 'running') THEN 0 ELSE 1 END,
   created_at DESC
 LIMIT 20
+

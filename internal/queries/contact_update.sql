@@ -13,4 +13,4 @@ SET
   emails = CASE WHEN ?2 = 'emails' THEN ?4 ELSE emails END,
   phone_numbers = CASE WHEN ?2 = 'phone_numbers' THEN ?4 ELSE phone_numbers END,
   updated_at = NOW_ISO8601_MS()
-WHERE id = ?1;
+WHERE id = ?1

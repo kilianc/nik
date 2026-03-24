@@ -54,4 +54,4 @@ ON CONFLICT (platform, external_message_id) DO UPDATE SET
   context_forwarding_score = COALESCE(excluded.context_forwarding_score, message.context_forwarding_score),
   context_mentioned_ids = excluded.context_mentioned_ids,
   is_ephemeral = excluded.is_ephemeral,
-  is_view_once = excluded.is_view_once;
+  is_view_once = excluded.is_view_once

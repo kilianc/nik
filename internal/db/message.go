@@ -53,13 +53,13 @@ func scanMessage(s scanner) (Message, error) {
 	return m, nil
 }
 
-type GetMessageParams struct {
+type MessageGetParams struct {
 	ID                string
 	Platform          string
 	ExternalMessageID string
 }
 
-func GetMessage(ctx context.Context, db *sql.DB, p GetMessageParams) (Message, error) {
+func MessageGet(ctx context.Context, db *sql.DB, p MessageGetParams) (Message, error) {
 	if p.ID == "" && (p.Platform == "" || p.ExternalMessageID == "") {
 		return Message{}, fmt.Errorf("get message: no filter provided")
 	}
@@ -102,7 +102,7 @@ func MessageList(ctx context.Context, db *sql.DB, p MessageListParams) ([]Messag
 	return out, nil
 }
 
-type InsertMessageParams struct {
+type MessageInsertParams struct {
 	ID                     string
 	ConversationID         string
 	ContactID              string
@@ -127,7 +127,7 @@ type InsertMessageParams struct {
 	IsViewOnce             bool
 }
 
-func InsertMessage(ctx context.Context, db DBTX, p InsertMessageParams) error {
+func MessageInsert(ctx context.Context, db DBTX, p MessageInsertParams) error {
 	_, err := db.ExecContext(ctx, queries.MessageInsert,
 		p.ID,
 		p.ConversationID,
@@ -159,7 +159,7 @@ func InsertMessage(ctx context.Context, db DBTX, p InsertMessageParams) error {
 	return nil
 }
 
-func UpdateMessageBody(ctx context.Context, db *sql.DB, messageID, body string) error {
+func MessageUpdateBody(ctx context.Context, db *sql.DB, messageID, body string) error {
 	_, err := db.ExecContext(ctx, queries.MessageUpdate, messageID, body)
 	if err != nil {
 		return fmt.Errorf("update message body %s: %w", messageID, err)

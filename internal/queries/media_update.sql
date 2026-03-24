@@ -6,4 +6,4 @@ SET
   transcript_text = COALESCE(?4, transcript_text),
   transcribed_at = COALESCE(NULLABLE_ISO8601_MS(?5), transcribed_at),
   updated_at = NOW_ISO8601_MS()
-WHERE id = ?1;
+WHERE id = ?1

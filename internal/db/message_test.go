@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func TestGetMessageIncludesJoinedMediaFields(t *testing.T) {
+func TestMessageGetIncludesJoinedMediaFields(t *testing.T) {
 	ctx := context.Background()
 
 	conn, err := OpenInMemory()
@@ -15,7 +15,7 @@ func TestGetMessageIncludesJoinedMediaFields(t *testing.T) {
 	}
 	defer conn.Close()
 
-	contact, err := UpsertContact(ctx, conn, UpsertContactParams{
+	contact, err := ContactUpsert(ctx, conn, ContactUpsertParams{
 		Platform:      "whatsapp",
 		ExternalID:    "bob@s.whatsapp.net",
 		Name:          "Bob",
@@ -27,7 +27,7 @@ func TestGetMessageIncludesJoinedMediaFields(t *testing.T) {
 	}
 
 	now := time.Now()
-	err = UpsertConversation(ctx, conn, UpsertConversationParams{
+	err = ConversationUpsert(ctx, conn, ConversationUpsertParams{
 		Platform:               "whatsapp",
 		ExternalConversationID: "bob@s.whatsapp.net",
 		Kind:                   "dm",
@@ -37,7 +37,7 @@ func TestGetMessageIncludesJoinedMediaFields(t *testing.T) {
 		t.Fatalf("upsert conversation: %v", err)
 	}
 
-	conversation, err := GetConversation(ctx, conn, GetConversationParams{
+	conversation, err := ConversationGet(ctx, conn, ConversationGetParams{
 		Platform:               "whatsapp",
 		ExternalConversationID: "bob@s.whatsapp.net",
 	})
@@ -62,7 +62,7 @@ func TestGetMessageIncludesJoinedMediaFields(t *testing.T) {
 	localPath := "media/2026/03/img.jpg"
 	describe := "bob holding a camera"
 	transcript := "hello from audio"
-	err = InsertMedia(ctx, conn, InsertMediaParams{
+	err = MediaInsert(ctx, conn, MediaInsertParams{
 		ID:             mediaID,
 		MimeType:       strPtr("image/jpeg"),
 		LocalPath:      &localPath,
@@ -73,12 +73,12 @@ func TestGetMessageIncludesJoinedMediaFields(t *testing.T) {
 		t.Fatalf("insert media: %v", err)
 	}
 
-	err = UpsertMessageMedia(ctx, conn, messageID, mediaID)
+	err = MessageMediaUpsert(ctx, conn, messageID, mediaID)
 	if err != nil {
 		t.Fatalf("upsert message media: %v", err)
 	}
 
-	msg, err := GetMessage(ctx, conn, GetMessageParams{ID: messageID})
+	msg, err := MessageGet(ctx, conn, MessageGetParams{ID: messageID})
 	if err != nil {
 		t.Fatalf("get message by id: %v", err)
 	}

@@ -15,3 +15,4 @@ SET
     ELSE cancelled_at
   END
 WHERE id = ?1
+

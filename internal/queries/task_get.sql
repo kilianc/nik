@@ -15,3 +15,4 @@ SELECT
   last_report_at
 FROM task
 WHERE id = ?1
+

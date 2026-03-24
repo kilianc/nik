@@ -3,4 +3,4 @@ UPDATE conversation
 SET
   last_read_at = ISO8601_MS(?2),
   updated_at = NOW_ISO8601_MS()
-WHERE id = ?1;
+WHERE id = ?1

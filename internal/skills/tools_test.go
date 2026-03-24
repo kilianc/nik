@@ -80,81 +80,170 @@ func TestParseFrontmatter(t *testing.T) {
 }
 
 func TestListSkills(t *testing.T) {
-	dir := t.TempDir()
+	t.Run("single dir", func(t *testing.T) {
+		dir := t.TempDir()
+		for _, name := range []string{"skill_a", "skill_b"} {
+			writeSkill(t, dir, name, name, "desc for "+name, "[t1]")
+		}
 
-	for _, name := range []string{"skill_a", "skill_b"} {
-		skillDir := filepath.Join(dir, name)
-		os.MkdirAll(skillDir, 0o755)
-		content := "---\nname: " + name + "\nsummary: desc for " + name + "\ntools: [t1]\n---\n"
-		os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(content), 0o644)
-	}
+		summaries, err := ListSkills(dir)
+		if err != nil {
+			t.Fatalf("ListSkills: %v", err)
+		}
+		if len(summaries) != 2 {
+			t.Fatalf("got %d summaries, want 2", len(summaries))
+		}
+	})
 
-	summaries, err := ListSkills(dir)
-	if err != nil {
-		t.Fatalf("ListSkills: %v", err)
-	}
+	t.Run("multiple dirs", func(t *testing.T) {
+		builtinDir := t.TempDir()
+		workspaceDir := t.TempDir()
+		writeSkill(t, builtinDir, "alarm", "alarm", "manage alarms", "[create_alarm]")
+		writeSkill(t, builtinDir, "search", "search", "search things", "[db_query]")
+		writeSkill(t, workspaceDir, "custom", "custom", "nik-authored skill", "[shell]")
 
-	if len(summaries) != 2 {
-		t.Fatalf("got %d summaries, want 2", len(summaries))
-	}
+		summaries, err := ListSkills(builtinDir, workspaceDir)
+		if err != nil {
+			t.Fatalf("ListSkills: %v", err)
+		}
+		if len(summaries) != 3 {
+			t.Fatalf("got %d summaries, want 3", len(summaries))
+		}
+		names := map[string]bool{}
+		for _, s := range summaries {
+			names[s.Name] = true
+		}
+		for _, want := range []string{"alarm", "search", "custom"} {
+			if !names[want] {
+				t.Errorf("missing skill %q", want)
+			}
+		}
+	})
+
+	t.Run("workspace overrides builtin", func(t *testing.T) {
+		builtinDir := t.TempDir()
+		workspaceDir := t.TempDir()
+		writeSkill(t, builtinDir, "alarm", "alarm", "builtin alarms", "[create_alarm]")
+		writeSkill(t, workspaceDir, "alarm", "alarm", "custom alarms", "[create_alarm, delete_alarm]")
+
+		summaries, err := ListSkills(builtinDir, workspaceDir)
+		if err != nil {
+			t.Fatalf("ListSkills: %v", err)
+		}
+		if len(summaries) != 1 {
+			t.Fatalf("got %d summaries, want 1 (deduped)", len(summaries))
+		}
+		if summaries[0].Summary != "custom alarms" {
+			t.Errorf("summary = %q, want workspace override %q", summaries[0].Summary, "custom alarms")
+		}
+	})
+
+	t.Run("missing dir tolerated", func(t *testing.T) {
+		builtinDir := t.TempDir()
+		writeSkill(t, builtinDir, "alarm", "alarm", "manage alarms", "[create_alarm]")
+		missingDir := filepath.Join(t.TempDir(), "does_not_exist")
+
+		summaries, err := ListSkills(builtinDir, missingDir)
+		if err != nil {
+			t.Fatalf("ListSkills with missing dir: %v", err)
+		}
+		if len(summaries) != 1 {
+			t.Fatalf("got %d summaries, want 1", len(summaries))
+		}
+	})
 }
 
 func TestPreloadedSkills(t *testing.T) {
-	dir := t.TempDir()
+	t.Run("filters and strips frontmatter", func(t *testing.T) {
+		dir := t.TempDir()
+		writePreloadSkill(t, dir, "pre", "Preloaded body.")
+		writeSkill(t, dir, "normal", "normal", "not preloaded", "[t2]")
 
-	// preloaded skill
-	preDir := filepath.Join(dir, "pre")
-	os.MkdirAll(preDir, 0o755)
-	os.WriteFile(filepath.Join(preDir, "SKILL.md"), []byte(`---
-name: pre
-preload: true
-summary: preloaded
-tools: [t1]
----
+		result, err := PreloadedSkills(dir)
+		if err != nil {
+			t.Fatalf("PreloadedSkills: %v", err)
+		}
+		if len(result) != 1 {
+			t.Fatalf("got %d preloaded skills, want 1", len(result))
+		}
+		if result[0].Name != "pre" {
+			t.Errorf("name = %q, want %q", result[0].Name, "pre")
+		}
+		if len(result[0].Tools) != 1 || result[0].Tools[0] != "t1" {
+			t.Errorf("tools = %v, want [t1]", result[0].Tools)
+		}
+		if !strings.Contains(result[0].Content, "Preloaded body.") {
+			t.Errorf("content missing body, got: %q", result[0].Content)
+		}
+		if strings.Contains(result[0].Content, "---") {
+			t.Errorf("content should not contain frontmatter delimiters, got: %q", result[0].Content)
+		}
+	})
 
-# Pre
+	t.Run("multiple dirs", func(t *testing.T) {
+		builtinDir := t.TempDir()
+		workspaceDir := t.TempDir()
+		writePreloadSkill(t, builtinDir, "messaging", "Builtin messaging body.")
+		writeSkill(t, workspaceDir, "custom", "custom", "not preloaded", "[shell]")
+		writePreloadSkill(t, workspaceDir, "ws_pre", "Workspace preloaded body.")
 
-Preloaded body.
-`), 0o644)
+		result, err := PreloadedSkills(builtinDir, workspaceDir)
+		if err != nil {
+			t.Fatalf("PreloadedSkills: %v", err)
+		}
+		if len(result) != 2 {
+			t.Fatalf("got %d preloaded skills, want 2", len(result))
+		}
+		names := map[string]string{}
+		for _, p := range result {
+			names[p.Name] = p.Content
+		}
+		if !strings.Contains(names["messaging"], "Builtin messaging body.") {
+			t.Error("missing builtin preloaded skill")
+		}
+		if !strings.Contains(names["ws_pre"], "Workspace preloaded body.") {
+			t.Error("missing workspace preloaded skill")
+		}
+	})
 
-	// non-preloaded skill
-	normalDir := filepath.Join(dir, "normal")
-	os.MkdirAll(normalDir, 0o755)
-	os.WriteFile(filepath.Join(normalDir, "SKILL.md"), []byte(`---
-name: normal
-summary: not preloaded
-tools: [t2]
----
+	t.Run("workspace overrides builtin", func(t *testing.T) {
+		builtinDir := t.TempDir()
+		workspaceDir := t.TempDir()
+		writePreloadSkill(t, builtinDir, "messaging", "Builtin version.")
+		writePreloadSkill(t, workspaceDir, "messaging", "Workspace override.")
 
-# Normal
+		result, err := PreloadedSkills(builtinDir, workspaceDir)
+		if err != nil {
+			t.Fatalf("PreloadedSkills: %v", err)
+		}
+		if len(result) != 1 {
+			t.Fatalf("got %d preloaded skills, want 1 (deduped)", len(result))
+		}
+		if !strings.Contains(result[0].Content, "Workspace override.") {
+			t.Errorf("content = %q, want workspace override", result[0].Content)
+		}
+	})
 
-Normal body.
-`), 0o644)
+	t.Run("strips install section", func(t *testing.T) {
+		dir := t.TempDir()
+		skillDir := filepath.Join(dir, "myskill")
+		os.MkdirAll(skillDir, 0o755)
+		os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\nname: myskill\npreload: true\nsummary: a skill\ntools: [t1]\n---\n\n# My Skill\n\nBody content.\n\n## Install\n\nCreate a recurring alarm.\n\n## Behavior\n\nDo things.\n"), 0o644)
 
-	result, err := PreloadedSkills(dir)
-	if err != nil {
-		t.Fatalf("PreloadedSkills: %v", err)
-	}
-
-	if len(result) != 1 {
-		t.Fatalf("got %d preloaded skills, want 1", len(result))
-	}
-
-	if result[0].Name != "pre" {
-		t.Errorf("name = %q, want %q", result[0].Name, "pre")
-	}
-
-	if len(result[0].Tools) != 1 || result[0].Tools[0] != "t1" {
-		t.Errorf("tools = %v, want [t1]", result[0].Tools)
-	}
-
-	if !strings.Contains(result[0].Content, "Preloaded body.") {
-		t.Errorf("content missing body, got: %q", result[0].Content)
-	}
-
-	if strings.Contains(result[0].Content, "---") {
-		t.Errorf("content should not contain frontmatter delimiters, got: %q", result[0].Content)
-	}
+		result, err := PreloadedSkills(dir)
+		if err != nil {
+			t.Fatalf("PreloadedSkills: %v", err)
+		}
+		if strings.Contains(result[0].Content, "## Install") {
+			t.Errorf("content should not contain install section, got: %q", result[0].Content)
+		}
+		if !strings.Contains(result[0].Content, "Body content.") {
+			t.Errorf("content missing body, got: %q", result[0].Content)
+		}
+		if !strings.Contains(result[0].Content, "## Behavior") {
+			t.Errorf("content missing behavior section, got: %q", result[0].Content)
+		}
+	})
 }
 
 func TestStripFrontmatter(t *testing.T) {
@@ -191,156 +280,34 @@ func TestParseFlowSequence(t *testing.T) {
 	}
 }
 
-func TestListSkillsMultipleDirs(t *testing.T) {
-	builtinDir := t.TempDir()
-	workspaceDir := t.TempDir()
-
-	writeSkill(t, builtinDir, "alarm", "alarm", "manage alarms", "[create_alarm]")
-	writeSkill(t, builtinDir, "search", "search", "search things", "[db_query]")
-	writeSkill(t, workspaceDir, "custom", "custom", "nik-authored skill", "[shell]")
-
-	summaries, err := ListSkills(builtinDir, workspaceDir)
-	if err != nil {
-		t.Fatalf("ListSkills: %v", err)
-	}
-
-	if len(summaries) != 3 {
-		t.Fatalf("got %d summaries, want 3", len(summaries))
-	}
-
-	names := map[string]bool{}
-	for _, s := range summaries {
-		names[s.Name] = true
-	}
-
-	for _, want := range []string{"alarm", "search", "custom"} {
-		if !names[want] {
-			t.Errorf("missing skill %q", want)
+func TestHandleLoad(t *testing.T) {
+	t.Run("rejects path traversal", func(t *testing.T) {
+		dir := t.TempDir()
+		for _, name := range []string{"../../../etc", "foo/bar", "valid\\..\\etc"} {
+			out, err := handleLoad([]string{dir}, name)
+			if err != nil {
+				t.Fatalf("unexpected error for %q: %v", name, err)
+			}
+			if !strings.Contains(out, "not found") {
+				t.Fatalf("expected not found error for %q, got %q", name, out)
+			}
 		}
-	}
-}
+	})
 
-func TestListSkillsWorkspaceOverridesBuiltin(t *testing.T) {
-	builtinDir := t.TempDir()
-	workspaceDir := t.TempDir()
+	t.Run("accepts valid name", func(t *testing.T) {
+		dir := t.TempDir()
+		skillDir := filepath.Join(dir, "vault")
+		os.MkdirAll(skillDir, 0o755)
+		os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# Vault"), 0o644)
 
-	writeSkill(t, builtinDir, "alarm", "alarm", "builtin alarms", "[create_alarm]")
-	writeSkill(t, workspaceDir, "alarm", "alarm", "custom alarms", "[create_alarm, delete_alarm]")
-
-	summaries, err := ListSkills(builtinDir, workspaceDir)
-	if err != nil {
-		t.Fatalf("ListSkills: %v", err)
-	}
-
-	if len(summaries) != 1 {
-		t.Fatalf("got %d summaries, want 1 (deduped)", len(summaries))
-	}
-
-	if summaries[0].Summary != "custom alarms" {
-		t.Errorf("summary = %q, want workspace override %q", summaries[0].Summary, "custom alarms")
-	}
-}
-
-func TestListSkillsMissingDirTolerated(t *testing.T) {
-	builtinDir := t.TempDir()
-	writeSkill(t, builtinDir, "alarm", "alarm", "manage alarms", "[create_alarm]")
-
-	missingDir := filepath.Join(t.TempDir(), "does_not_exist")
-
-	summaries, err := ListSkills(builtinDir, missingDir)
-	if err != nil {
-		t.Fatalf("ListSkills with missing dir: %v", err)
-	}
-
-	if len(summaries) != 1 {
-		t.Fatalf("got %d summaries, want 1", len(summaries))
-	}
-}
-
-func TestPreloadedSkillsMultipleDirs(t *testing.T) {
-	builtinDir := t.TempDir()
-	workspaceDir := t.TempDir()
-
-	writePreloadSkill(t, builtinDir, "messaging", "Builtin messaging body.")
-	writeSkill(t, workspaceDir, "custom", "custom", "not preloaded", "[shell]")
-	writePreloadSkill(t, workspaceDir, "ws_pre", "Workspace preloaded body.")
-
-	result, err := PreloadedSkills(builtinDir, workspaceDir)
-	if err != nil {
-		t.Fatalf("PreloadedSkills: %v", err)
-	}
-
-	if len(result) != 2 {
-		t.Fatalf("got %d preloaded skills, want 2", len(result))
-	}
-
-	names := map[string]string{}
-	for _, p := range result {
-		names[p.Name] = p.Content
-	}
-
-	if !strings.Contains(names["messaging"], "Builtin messaging body.") {
-		t.Error("missing builtin preloaded skill")
-	}
-
-	if !strings.Contains(names["ws_pre"], "Workspace preloaded body.") {
-		t.Error("missing workspace preloaded skill")
-	}
-}
-
-func TestPreloadedSkillsWorkspaceOverride(t *testing.T) {
-	builtinDir := t.TempDir()
-	workspaceDir := t.TempDir()
-
-	writePreloadSkill(t, builtinDir, "messaging", "Builtin version.")
-	writePreloadSkill(t, workspaceDir, "messaging", "Workspace override.")
-
-	result, err := PreloadedSkills(builtinDir, workspaceDir)
-	if err != nil {
-		t.Fatalf("PreloadedSkills: %v", err)
-	}
-
-	if len(result) != 1 {
-		t.Fatalf("got %d preloaded skills, want 1 (deduped)", len(result))
-	}
-
-	if !strings.Contains(result[0].Content, "Workspace override.") {
-		t.Errorf("content = %q, want workspace override", result[0].Content)
-	}
-}
-
-func TestHandleLoadRejectsPathTraversal(t *testing.T) {
-	dir := t.TempDir()
-
-	cases := []string{
-		"../../../etc",
-		"foo/bar",
-		"valid\\..\\etc",
-	}
-	for _, name := range cases {
-		out, err := handleLoad([]string{dir}, name)
+		out, err := handleLoad([]string{dir}, "vault")
 		if err != nil {
-			t.Fatalf("unexpected error for %q: %v", name, err)
+			t.Fatalf("unexpected error: %v", err)
 		}
-		if !strings.Contains(out, "not found") {
-			t.Fatalf("expected not found error for %q, got %q", name, out)
+		if !strings.Contains(out, "# Vault") {
+			t.Fatalf("expected skill content, got %q", out)
 		}
-	}
-}
-
-func TestHandleLoadAcceptsValidName(t *testing.T) {
-	dir := t.TempDir()
-	skillDir := filepath.Join(dir, "vault")
-	os.MkdirAll(skillDir, 0o755)
-	os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# Vault"), 0o644)
-
-	out, err := handleLoad([]string{dir}, "vault")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.Contains(out, "# Vault") {
-		t.Fatalf("expected skill content, got %q", out)
-	}
+	})
 }
 
 func TestSymlinkEscapeBlocked(t *testing.T) {
@@ -425,53 +392,6 @@ func TestStripInstallSection(t *testing.T) {
 				t.Errorf("stripInstallSection =\n%q\nwant\n%q", got, tt.want)
 			}
 		})
-	}
-}
-
-func TestPreloadedSkillsStripsInstall(t *testing.T) {
-	dir := t.TempDir()
-
-	skillDir := filepath.Join(dir, "myskill")
-	os.MkdirAll(skillDir, 0o755)
-	os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(`---
-name: myskill
-preload: true
-summary: a skill
-tools: [t1]
----
-
-# My Skill
-
-Body content.
-
-## Install
-
-Create a recurring alarm.
-
-## Behavior
-
-Do things.
-`), 0o644)
-
-	result, err := PreloadedSkills(dir)
-	if err != nil {
-		t.Fatalf("PreloadedSkills: %v", err)
-	}
-
-	if len(result) != 1 {
-		t.Fatalf("got %d preloaded skills, want 1", len(result))
-	}
-
-	if strings.Contains(result[0].Content, "## Install") {
-		t.Errorf("content should not contain install section, got: %q", result[0].Content)
-	}
-
-	if !strings.Contains(result[0].Content, "Body content.") {
-		t.Errorf("content missing body, got: %q", result[0].Content)
-	}
-
-	if !strings.Contains(result[0].Content, "## Behavior") {
-		t.Errorf("content missing behavior section, got: %q", result[0].Content)
 	}
 }
 

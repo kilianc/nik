@@ -76,7 +76,7 @@ func TestActivationInsertPersistsRow(t *testing.T) {
 	}
 }
 
-func TestActivationUpdateStatsPersistsRow(t *testing.T) {
+func TestActivationUpdate(t *testing.T) {
 	ctx := context.Background()
 
 	conn, err := OpenInMemory()
@@ -99,95 +99,88 @@ func TestActivationUpdateStatsPersistsRow(t *testing.T) {
 		t.Fatalf("insert activation: %v", err)
 	}
 
-	errText := "complete round 3: context deadline exceeded"
+	t.Run("stats and detail", func(t *testing.T) {
+		instructions := "test instructions"
+		schemas := `[{"Name":"db_query","Description":"run a query","Parameters":{"type":"object"}}]`
+		errText := "complete round 3: context deadline exceeded"
 
-	err = ActivationUpdateStats(ctx, conn, actID, ActivationStatsUpdate{
-		InputTokens:    1000,
-		OutputTokens:   200,
-		TotalTokens:    1200,
-		RoundCount:     4,
-		MaxInputTokens: 300,
-		MaxTotalTokens: 360,
-		DurationMS:     500,
-		Error:          errText,
+		err := ActivationUpdate(ctx, conn, actID, ActivationUpdateParams{
+			Instructions:   &instructions,
+			Tools:          []string{"db_query"},
+			ToolSchemas:    &schemas,
+			InputTokens:    1000,
+			OutputTokens:   200,
+			TotalTokens:    1200,
+			RoundCount:     4,
+			MaxInputTokens: 300,
+			MaxTotalTokens: 360,
+			DurationMS:     500,
+			Error:          errText,
+		})
+		if err != nil {
+			t.Fatalf("update: %v", err)
+		}
+
+		var gotErr, gotInstructions, gotTools, gotSchemas string
+		var gotRoundCount int
+		var gotMaxInput, gotMaxTotal int64
+		err = conn.QueryRowContext(ctx,
+			"SELECT error, round_count, max_input_tokens_per_round, max_total_tokens_per_round, instructions, tools, tool_schemas FROM activation WHERE id = ?1",
+			actID,
+		).Scan(&gotErr, &gotRoundCount, &gotMaxInput, &gotMaxTotal, &gotInstructions, &gotTools, &gotSchemas)
+		if err != nil {
+			t.Fatalf("query: %v", err)
+		}
+
+		if gotErr != errText {
+			t.Fatalf("expected error %q, got %q", errText, gotErr)
+		}
+		if gotRoundCount != 4 {
+			t.Fatalf("expected round_count 4, got %d", gotRoundCount)
+		}
+		if gotMaxInput != 300 {
+			t.Fatalf("expected max_input_tokens_per_round 300, got %d", gotMaxInput)
+		}
+		if gotMaxTotal != 360 {
+			t.Fatalf("expected max_total_tokens_per_round 360, got %d", gotMaxTotal)
+		}
+		if gotInstructions != "test instructions" {
+			t.Fatalf("expected instructions %q, got %q", "test instructions", gotInstructions)
+		}
+		if gotTools != `["db_query"]` {
+			t.Fatalf("expected tools %q, got %q", `["db_query"]`, gotTools)
+		}
+		if gotSchemas != schemas {
+			t.Fatalf("expected tool_schemas %q, got %q", schemas, gotSchemas)
+		}
 	})
-	if err != nil {
-		t.Fatalf("update stats: %v", err)
-	}
 
-	var gotErr string
-	var gotRoundCount int
-	var gotMaxInput int64
-	var gotMaxTotal int64
-	err = conn.QueryRowContext(ctx,
-		"SELECT error, round_count, max_input_tokens_per_round, max_total_tokens_per_round FROM activation WHERE id = ?1",
-		actID,
-	).Scan(&gotErr, &gotRoundCount, &gotMaxInput, &gotMaxTotal)
-	if err != nil {
-		t.Fatalf("query stats: %v", err)
-	}
+	t.Run("stats only preserves detail", func(t *testing.T) {
+		err := ActivationUpdate(ctx, conn, actID, ActivationUpdateParams{
+			InputTokens: 500,
+			RoundCount:  5,
+		})
+		if err != nil {
+			t.Fatalf("update stats only: %v", err)
+		}
 
-	if gotErr != errText {
-		t.Fatalf("expected error %q, got %q", errText, gotErr)
-	}
-	if gotRoundCount != 4 {
-		t.Fatalf("expected round_count 4, got %d", gotRoundCount)
-	}
-	if gotMaxInput != 300 {
-		t.Fatalf("expected max_input_tokens_per_round 300, got %d", gotMaxInput)
-	}
-	if gotMaxTotal != 360 {
-		t.Fatalf("expected max_total_tokens_per_round 360, got %d", gotMaxTotal)
-	}
-}
+		var gotInstructions string
+		var gotInput int64
+		err = conn.QueryRowContext(ctx,
+			"SELECT instructions, input_tokens FROM activation WHERE id = ?1",
+			actID,
+		).Scan(&gotInstructions, &gotInput)
+		if err != nil {
+			t.Fatalf("query: %v", err)
+		}
 
-func TestActivationUpdateDetailPersistsToolSchemas(t *testing.T) {
-	ctx := context.Background()
-
-	conn, err := OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
-
-	convID := seedActivationConv(t, conn)
-	actID := id.V7()
-
-	err = ActivationInsert(ctx, conn, ActivationRow{
-		ID:             actID,
-		ConversationID: convID,
-		Sources:        `["message"]`,
-		Model:          "gpt-5",
-		CreatedAt:      time.Now().UTC(),
+		if gotInstructions != "test instructions" {
+			t.Fatalf("expected instructions preserved, got %q", gotInstructions)
+		}
+		if gotInput != 1500 {
+			t.Fatalf("expected cumulative input_tokens 1500, got %d", gotInput)
+		}
 	})
-	if err != nil {
-		t.Fatalf("insert activation: %v", err)
-	}
-
-	schemas := `[{"Name":"db_query","Description":"run a query","Parameters":{"type":"object"}}]`
-	err = ActivationUpdateDetail(ctx, conn, actID, "test instructions", []string{"db_query"}, schemas)
-	if err != nil {
-		t.Fatalf("update detail: %v", err)
-	}
-
-	var gotInstructions, gotTools, gotSchemas string
-	err = conn.QueryRowContext(ctx,
-		"SELECT instructions, tools, tool_schemas FROM activation WHERE id = ?1",
-		actID,
-	).Scan(&gotInstructions, &gotTools, &gotSchemas)
-	if err != nil {
-		t.Fatalf("query detail: %v", err)
-	}
-
-	if gotInstructions != "test instructions" {
-		t.Fatalf("expected instructions %q, got %q", "test instructions", gotInstructions)
-	}
-	if gotTools != `["db_query"]` {
-		t.Fatalf("expected tools %q, got %q", `["db_query"]`, gotTools)
-	}
-	if gotSchemas != schemas {
-		t.Fatalf("expected tool_schemas %q, got %q", schemas, gotSchemas)
-	}
 }
 
 func TestActivationGet(t *testing.T) {
@@ -213,10 +206,15 @@ func TestActivationGet(t *testing.T) {
 		t.Fatalf("insert activation: %v", err)
 	}
 
+	instructions := "test instructions"
 	schemas := `[{"Name":"db_query"}]`
-	err = ActivationUpdateDetail(ctx, conn, actID, "test instructions", []string{"db_query"}, schemas)
+	err = ActivationUpdate(ctx, conn, actID, ActivationUpdateParams{
+		Instructions: &instructions,
+		Tools:        []string{"db_query"},
+		ToolSchemas:  &schemas,
+	})
 	if err != nil {
-		t.Fatalf("update detail: %v", err)
+		t.Fatalf("update: %v", err)
 	}
 
 	got, err := ActivationGet(ctx, conn, actID)

@@ -17,7 +17,7 @@ type SystemMessageParams struct {
 	ContextStanzaID string
 }
 
-func InsertSystemMessage(ctx context.Context, db DBTX, p SystemMessageParams) error {
+func SystemMessageInsert(ctx context.Context, db DBTX, p SystemMessageParams) error {
 	msgID := id.V7()
 
 	bodyJSON, err := json.Marshal(p.Body)
@@ -25,7 +25,7 @@ func InsertSystemMessage(ctx context.Context, db DBTX, p SystemMessageParams) er
 		return fmt.Errorf("marshal system message body: %w", err)
 	}
 
-	params := InsertMessageParams{
+	params := MessageInsertParams{
 		ID:                     msgID,
 		ConversationID:         p.ConversationID,
 		ContactID:              SystemContactID,
@@ -43,5 +43,5 @@ func InsertSystemMessage(ctx context.Context, db DBTX, p SystemMessageParams) er
 		params.ContextStanzaID = p.ContextStanzaID
 	}
 
-	return InsertMessage(ctx, db, params)
+	return MessageInsert(ctx, db, params)
 }

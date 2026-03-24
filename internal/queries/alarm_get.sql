@@ -14,3 +14,4 @@ WHERE cancelled_at IS NULL
   AND ?1 != ''
   AND (id = ?1 OR goal LIKE ?1 || '%')
 LIMIT 1
+

@@ -39,11 +39,11 @@ var ConversationMarkRead string
 //go:embed conversation_mark_all_read.sql
 var ConversationMarkAllRead string
 
-//go:embed conversation_upsert_participant.sql
-var ConversationUpsertParticipant string
+//go:embed conversation_participant_upsert.sql
+var ConversationParticipantUpsert string
 
-//go:embed conversation_get_participants.sql
-var ConversationGetParticipants string
+//go:embed conversation_participant_list.sql
+var ConversationParticipantList string
 
 // message queries
 
@@ -108,8 +108,8 @@ var SkillUpsert string
 
 // skill reflex queries
 
-//go:embed skill_reflex_latest.sql
-var SkillReflexLatest string
+//go:embed skill_reflex_get.sql
+var SkillReflexGet string
 
 //go:embed skill_reflex_insert.sql
 var SkillReflexInsert string
@@ -133,11 +133,8 @@ var ActivationInsert string
 //go:embed activation_get.sql
 var ActivationGet string
 
-//go:embed activation_update_stats.sql
-var ActivationUpdateStats string
-
-//go:embed activation_update_detail.sql
-var ActivationUpdateDetail string
+//go:embed activation_update.sql
+var ActivationUpdate string
 
 // activation round queries
 
@@ -189,13 +186,13 @@ var TaskAssessmentInsert string
 //go:embed task_assessment_tool_calls.sql
 var TaskAssessmentToolCalls string
 
-//go:embed task_report_list.sql
-var TaskReportList string
-
 // task report queries
 
 //go:embed task_report_insert.sql
 var TaskReportInsert string
+
+//go:embed task_report_list.sql
+var TaskReportList string
 
 //go:embed task_report_last_status.sql
 var TaskReportLastStatus string

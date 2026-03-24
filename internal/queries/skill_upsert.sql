@@ -21,3 +21,4 @@ RETURNING
   install_hash,
   created_at,
   updated_at
+

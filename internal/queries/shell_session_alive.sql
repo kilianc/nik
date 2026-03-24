@@ -1,3 +1,3 @@
 SELECT id
 FROM shell_session
-WHERE alive = 1;
+WHERE alive = 1

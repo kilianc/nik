@@ -221,7 +221,7 @@ func seedStatsConversation(t *testing.T, ctx context.Context, conn db.DBTX) stri
 	t.Helper()
 
 	now := time.Now()
-	err := db.UpsertConversation(ctx, conn, db.UpsertConversationParams{
+	err := db.ConversationUpsert(ctx, conn, db.ConversationUpsertParams{
 		Platform:               "whatsapp",
 		ExternalConversationID: "stats-test@s.whatsapp.net",
 		Kind:                   "dm",
@@ -231,7 +231,7 @@ func seedStatsConversation(t *testing.T, ctx context.Context, conn db.DBTX) stri
 		t.Fatalf("seed conversation: %v", err)
 	}
 
-	conv, err := db.GetConversation(ctx, conn, db.GetConversationParams{
+	conv, err := db.ConversationGet(ctx, conn, db.ConversationGetParams{
 		Platform:               "whatsapp",
 		ExternalConversationID: "stats-test@s.whatsapp.net",
 	})

@@ -35,7 +35,7 @@ func (s *Service) CreateAlarm(ctx context.Context, originContactID, originConver
 	}
 	defer tx.Rollback()
 
-	alarm, err := db.CreateAlarm(ctx, tx, db.CreateAlarmParams{
+	alarm, err := db.AlarmCreate(ctx, tx, db.AlarmCreateParams{
 		OriginContactID:      originContactID,
 		OriginConversationID: originConversationID,
 		Goal:                 goal,
@@ -49,7 +49,7 @@ func (s *Service) CreateAlarm(ctx context.Context, originContactID, originConver
 		return nil, fmt.Errorf("create alarm: %w", err)
 	}
 
-	err = db.InsertSystemMessage(ctx, tx, db.SystemMessageParams{
+	err = db.SystemMessageInsert(ctx, tx, db.SystemMessageParams{
 		ConversationID: originConversationID,
 		Kind:           "alarm_created",
 		Body:           alarm,
@@ -70,7 +70,7 @@ func (s *Service) CreateAlarm(ctx context.Context, originContactID, originConver
 func (s *Service) FireDueAlarms(ctx context.Context) {
 	now := time.Now()
 
-	alarms, err := db.DueAlarms(ctx, s.db, now)
+	alarms, err := db.AlarmListDue(ctx, s.db, now)
 	if err != nil {
 		slog.Warn("fire due alarms", "pkg", "alarms", "error", err)
 		return
@@ -150,7 +150,7 @@ func (s *Service) Update(ctx context.Context, alarmID string, p UpdateParams) er
 	}
 
 	if a.OriginConversationID.Valid {
-		err = db.InsertSystemMessage(ctx, tx, db.SystemMessageParams{
+		err = db.SystemMessageInsert(ctx, tx, db.SystemMessageParams{
 			ConversationID: a.OriginConversationID.String,
 			Kind:           "alarm_updated",
 			Body:           AlarmUpdated{Alarm: a, Note: p.Note},
@@ -186,7 +186,7 @@ func (s *Service) StaleAlarmReflex() func(ctx context.Context) {
 func (s *Service) healStaleAlarms(ctx context.Context) {
 	now := time.Now()
 
-	stale, err := db.StaleRecurringAlarms(ctx, s.db, now)
+	stale, err := db.AlarmListStale(ctx, s.db, now)
 	if err != nil {
 		slog.Warn("find stale alarms", "pkg", "alarms", "error", err)
 		return
@@ -197,7 +197,7 @@ func (s *Service) healStaleAlarms(ctx context.Context) {
 			continue
 		}
 
-		err = db.InsertSystemMessage(ctx, s.db, db.SystemMessageParams{
+		err = db.SystemMessageInsert(ctx, s.db, db.SystemMessageParams{
 			ConversationID: a.OriginConversationID.String,
 			Kind:           "alarm_stale",
 			Body:           a,

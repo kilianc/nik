@@ -13,3 +13,4 @@ WHERE id IN (
   ORDER BY se2.created_at DESC, se2.id DESC
   LIMIT 1
 )
+
