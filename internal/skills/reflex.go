@@ -1,12 +1,15 @@
 package skills
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
 	"log/slog"
+	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/db"
@@ -191,4 +194,108 @@ func extractInstallSection(content string) string {
 // ExtractInstallSection is exported for testing.
 func ExtractInstallSection(content string) string {
 	return extractInstallSection(content)
+}
+
+const maxCheckTimeout = 30 * time.Second
+
+func SkillCheckReflex(cfg *config.Config, conn *sql.DB) func(ctx context.Context) {
+	lastRun := map[string]time.Time{}
+
+	return func(ctx context.Context) {
+		dirs := []string{cfg.SkillsPath(), cfg.WorkspaceSkillsPath()}
+
+		reflexes, err := ListReflexes(dirs...)
+		if err != nil {
+			slog.Warn("skill check reflex: list reflexes", "error", err)
+			return
+		}
+
+		now := time.Now().In(cfg.TZ())
+
+		for key, def := range reflexes {
+			if t, ok := lastRun[key]; ok && !def.IsDue(t, now) {
+				continue
+			}
+			lastRun[key] = now
+
+			runSkillCheck(ctx, cfg, conn, key, def)
+		}
+	}
+}
+
+func runSkillCheck(ctx context.Context, cfg *config.Config, conn *sql.DB, key string, def SkillReflexDef) {
+	lastMeta, err := db.SkillReflexLatest(ctx, conn, key)
+	if err != nil {
+		slog.Warn("skill check reflex: get latest", "key", key, "error", err)
+		return
+	}
+
+	var newMeta string
+
+	if def.Command == "" {
+		newMeta = time.Now().UTC().Format(time.RFC3339)
+	} else {
+		cmdCtx, cancel := context.WithTimeout(ctx, maxCheckTimeout)
+		defer cancel()
+
+		cmd := exec.CommandContext(cmdCtx, "sh", "-c", def.Command)
+		cmd.Dir = cfg.Home
+		cmd.Stdin = strings.NewReader(lastMeta)
+
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+
+		err = cmd.Run()
+		if err != nil {
+			slog.Warn("skill check reflex: command failed",
+				"key", key,
+				"command", def.Command,
+				"error", err,
+				"stderr", stderr.String(),
+			)
+			return
+		}
+
+		newMeta = strings.TrimSpace(stdout.String())
+	}
+
+	if newMeta == "" || newMeta == lastMeta {
+		return
+	}
+
+	err = db.SkillReflexInsert(ctx, conn, key, newMeta)
+	if err != nil {
+		slog.Warn("skill check reflex: insert meta", "key", key, "error", err)
+		return
+	}
+
+	privIDs := cfg.PrivilegedIDs()
+	if len(privIDs) == 0 {
+		slog.Warn("skill check reflex: no privileged conversations", "key", key)
+		return
+	}
+
+	skillName, _, _ := strings.Cut(key, "/")
+
+	body := map[string]string{
+		"skill": skillName,
+		"name":  def.Name,
+	}
+	if def.Command != "" {
+		body["meta"] = newMeta
+	}
+
+	err = db.InsertSystemMessage(ctx, conn, db.SystemMessageParams{
+		ConversationID: privIDs[0],
+		Kind:           "skill_reflex_fired",
+		Body:           body,
+		SentAt:         time.Now().UTC(),
+	})
+	if err != nil {
+		slog.Warn("skill check reflex: insert system message", "key", key, "error", err)
+		return
+	}
+
+	slog.Info("skill reflex fired", "key", key)
 }

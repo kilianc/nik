@@ -6,6 +6,9 @@ summary: >
   Load when the diagnostic alarm fires. Use medium thinking.
 tools: [db_query, shell, alarm, load_skill]
 diagnostic_skip: true
+reflex:
+  - name: diagnostic
+    every: "0 6 * * *"
 ---
 
 # Diagnostic
@@ -223,9 +226,3 @@ concrete action for every FAIL
 
 If any CRITICAL finding or 3+ FAIL findings, proactively message the
 owner. Otherwise note in the next journal entry.
-
-## Install
-
-Create a recurring alarm:
-- goal: `[NIK_DIAGNOSTIC] System diagnostic -- load diagnostic skill`
-- recurrence: every day at 6am

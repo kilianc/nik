@@ -10,8 +10,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/kciuffolo/nik/internal/config"
+	"github.com/kciuffolo/nik/internal/cron"
 	"github.com/kciuffolo/nik/internal/llm"
 )
 
@@ -40,11 +42,26 @@ var loadSkillDef = llm.ToolDef{
 	},
 }
 
+type SkillReflexDef struct {
+	Name     string
+	Command  string // empty for schedule-only reflexes
+	Schedule *cron.Schedule
+}
+
+func (d SkillReflexDef) IsDue(lastRun, now time.Time) bool {
+	if d.Schedule == nil {
+		return false
+	}
+	next, err := d.Schedule.NextAfter(lastRun)
+	return err == nil && !next.After(now)
+}
+
 type SkillSummary struct {
-	Name    string   `json:"name"`
-	Summary string   `json:"summary"`
-	Tools   []string `json:"tools"`
-	Preload bool     `json:"preload"`
+	Name     string           `json:"name"`
+	Summary  string           `json:"summary"`
+	Tools    []string         `json:"tools"`
+	Preload  bool             `json:"preload"`
+	Reflexes []SkillReflexDef `json:"-"`
 }
 
 func BuildTools(cfg *config.Config) []llm.Tool {
@@ -214,6 +231,42 @@ func parseFrontmatter(data []byte) (SkillSummary, error) {
 	var descLines []string
 	inDesc := false
 	inTools := false
+	inReflex := false
+	inReflexItem := false
+	var curReflexName, curReflexCmd, curReflexEvery string
+
+	finishDesc := func() {
+		if inDesc && len(descLines) > 0 {
+			s.Summary = strings.Join(descLines, " ")
+		}
+	}
+
+	flushReflexItem := func() {
+		if curReflexName == "" || curReflexEvery == "" {
+			curReflexName, curReflexCmd, curReflexEvery = "", "", ""
+			return
+		}
+		sched, err := cron.Parse(curReflexEvery)
+		if err == nil {
+			s.Reflexes = append(s.Reflexes, SkillReflexDef{
+				Name:     curReflexName,
+				Command:  curReflexCmd,
+				Schedule: sched,
+			})
+		}
+		curReflexName, curReflexCmd, curReflexEvery = "", "", ""
+	}
+
+	resetBlock := func() {
+		finishDesc()
+		if inReflexItem {
+			flushReflexItem()
+		}
+		inDesc = false
+		inTools = false
+		inReflex = false
+		inReflexItem = false
+	}
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -223,48 +276,44 @@ func parseFrontmatter(data []byte) (SkillSummary, error) {
 		}
 
 		if strings.HasPrefix(line, "name:") {
-			inDesc = false
-			inTools = false
+			resetBlock()
 			s.Name = strings.TrimSpace(strings.TrimPrefix(line, "name:"))
 			continue
 		}
 
 		if strings.HasPrefix(line, "summary:") {
-			inTools = false
+			resetBlock()
 			rest := strings.TrimSpace(strings.TrimPrefix(line, "summary:"))
 			if rest == ">" || rest == "|" {
 				inDesc = true
 				descLines = nil
 			} else {
-				inDesc = false
 				s.Summary = rest
 			}
 			continue
 		}
 
 		if strings.HasPrefix(line, "preload:") {
-			if inDesc && len(descLines) > 0 {
-				s.Summary = strings.Join(descLines, " ")
-			}
-			inDesc = false
-			inTools = false
+			resetBlock()
 			val := strings.TrimSpace(strings.TrimPrefix(line, "preload:"))
 			s.Preload = val == "true"
 			continue
 		}
 
 		if strings.HasPrefix(line, "tools:") {
-			if inDesc && len(descLines) > 0 {
-				s.Summary = strings.Join(descLines, " ")
-			}
-			inDesc = false
+			resetBlock()
 			rest := strings.TrimSpace(strings.TrimPrefix(line, "tools:"))
 			if rest != "" {
 				s.Tools = parseFlowSequence(rest)
-				inTools = false
 			} else {
 				inTools = true
 			}
+			continue
+		}
+
+		if strings.HasPrefix(line, "reflex:") {
+			resetBlock()
+			inReflex = true
 			continue
 		}
 
@@ -290,13 +339,56 @@ func parseFrontmatter(data []byte) (SkillSummary, error) {
 			}
 			inTools = false
 		}
+
+		if inReflex {
+			trimmed := strings.TrimSpace(line)
+
+			if strings.HasPrefix(trimmed, "- name:") {
+				flushReflexItem()
+				inReflexItem = true
+				curReflexName = strings.TrimSpace(strings.TrimPrefix(trimmed, "- name:"))
+				continue
+			}
+
+			if inReflexItem {
+				if strings.HasPrefix(trimmed, "command:") {
+					curReflexCmd = strings.TrimSpace(strings.TrimPrefix(trimmed, "command:"))
+					continue
+				}
+				if strings.HasPrefix(trimmed, "every:") {
+					raw := strings.TrimSpace(strings.TrimPrefix(trimmed, "every:"))
+					curReflexEvery = strings.Trim(raw, "\"'")
+					continue
+				}
+			}
+
+			if !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "\t") {
+				flushReflexItem()
+				inReflex = false
+				inReflexItem = false
+			}
+		}
 	}
 
-	if inDesc && len(descLines) > 0 {
-		s.Summary = strings.Join(descLines, " ")
+	finishDesc()
+	if inReflexItem {
+		flushReflexItem()
 	}
 
 	return s, nil
+}
+
+func ListReflexes(dirs ...string) (map[string]SkillReflexDef, error) {
+	result := map[string]SkillReflexDef{}
+
+	err := walkSkillDirs(dirs, func(s SkillSummary, _ []byte) {
+		for _, r := range s.Reflexes {
+			key := s.Name + "/" + r.Name
+			result[key] = r
+		}
+	})
+
+	return result, err
 }
 
 type PreloadedSkill struct {

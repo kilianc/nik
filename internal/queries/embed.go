@@ -106,6 +106,14 @@ var SkillList string
 //go:embed skill_upsert.sql
 var SkillUpsert string
 
+// skill reflex queries
+
+//go:embed skill_reflex_latest.sql
+var SkillReflexLatest string
+
+//go:embed skill_reflex_insert.sql
+var SkillReflexInsert string
+
 // skill event queries
 
 //go:embed skill_event_insert.sql

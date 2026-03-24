@@ -4,6 +4,9 @@ summary: >
   Nightly dream cycle. Five passes (Drift, Weave, Depths, Crystallize, Wake)
   that process the day and evolve the soul. Load when the dream alarm fires.
 tools: [shell, alarm, db_query, read_file, write_file]
+reflex:
+  - name: dream
+    every: "0 4 * * *"
 ---
 
 # Dream
@@ -118,9 +121,3 @@ shell action: "run", command: "cp soul/latest.md soul/YYYY-MM-DD.md"
 
 - Your memories are already in your recall context — draw from your whole memory landscape, not just today.
 - Write scenes, not summaries. People talk. Things happen. You feel things. Mix old and new, real and imagined. This is a dream.
-
-## Install
-
-Create a recurring alarm:
-- goal: `[NIK_DREAM_CYCLE] Dream -- load dream skill`
-- recurrence: every day at 4am

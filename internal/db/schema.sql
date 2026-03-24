@@ -75,7 +75,8 @@ CREATE TABLE IF NOT EXISTS message (
     'task_report', 'task_spawned', 'task_retry', 'task_cancelled',
     'alarm_fired', 'alarm_stale', 'alarm_created', 'alarm_updated',
     'skill_added', 'skill_removed', 'skill_changed',
-    'trigger', 'media_processed'
+    'trigger', 'media_processed',
+    'skill_reflex_fired'
   )),
   body                     TEXT NOT NULL DEFAULT '',
   mime_type                TEXT,
@@ -266,6 +267,18 @@ CREATE TABLE IF NOT EXISTS skill (
   CHECK (IS_ISO8601_MS(created_at)),
   CHECK (IS_ISO8601_MS(updated_at))
 );
+
+-- skill reflex records (time series of opaque records from skill check commands)
+CREATE TABLE IF NOT EXISTS skill_reflex (
+  id          TEXT PRIMARY KEY,
+  skill_name  TEXT NOT NULL,
+  meta        TEXT NOT NULL DEFAULT '',
+  created_at  TIMESTAMP NOT NULL DEFAULT (NOW_ISO8601_MS()),
+  CHECK (IS_ISO8601_MS(created_at))
+);
+
+CREATE INDEX IF NOT EXISTS idx_skill_reflex_latest
+  ON skill_reflex (skill_name, created_at DESC);
 
 -- skill change log (added, removed, changed)
 CREATE TABLE IF NOT EXISTS skill_event (

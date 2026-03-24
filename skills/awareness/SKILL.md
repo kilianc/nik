@@ -5,6 +5,9 @@ summary: >
   and recent conversations for upcoming events and writes to awareness/upcoming.md.
   Load when the awareness alarm fires.
 tools: [db_query, shell, alarm, write_file]
+reflex:
+  - name: awareness
+    every: "0 8,19 * * *"
 ---
 
 # Awareness
@@ -102,9 +105,3 @@ Always reschedule via `update_alarm`:
 - Morning run: ~8am (before the first breath of the day)
 - Evening run: ~7pm (catch anything for tomorrow)
 - If calendars were inaccessible, try again in 2 hours
-
-## Install
-
-Create a recurring alarm:
-- goal: `[NIK_AWARENESS] Check what's coming up for people -- load awareness skill`
-- recurrence: twice daily, morning (~8am) and evening (~7pm)

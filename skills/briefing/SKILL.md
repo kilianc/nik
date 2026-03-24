@@ -4,6 +4,9 @@ summary: >
   Morning news research session and topic management.
   Load when someone mentions an interest or when a briefing alarm fires.
 tools: [shell, alarm, db_query, load_skill, read_file, write_file]
+reflex:
+  - name: briefing
+    every: "0 7 * * *"
 ---
 
 # Briefing
@@ -84,9 +87,3 @@ write_file action: "write", path: "briefings/YYYY-MM-DD.md", content: "<your sum
 ```
 
 Include: what you read and stored, topic changes and why, anything to bring up with someone next time you talk to them.
-
-## Install
-
-Create a recurring alarm:
-- goal: `[NIK_BRIEFING] Morning briefing -- load briefing skill`
-- recurrence: every day at 7am
