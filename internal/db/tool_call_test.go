@@ -101,6 +101,89 @@ func TestToolCallInsert(t *testing.T) {
 		})
 	}
 
+	t.Run("list by activation", func(t *testing.T) {
+		ctx := context.Background()
+
+		conn, err := OpenInMemory()
+		if err != nil {
+			t.Fatalf("open in-memory db: %v", err)
+		}
+		defer conn.Close()
+
+		convID := seedConversation(t, ctx, conn, "whatsapp", "ext-tc-list", "")
+
+		actID := "act-tc-list"
+		_, err = conn.ExecContext(ctx,
+			"INSERT INTO activation (id, conversation_id, sources, model, created_at) VALUES (?, ?, '[\"task\"]', 'gpt-4', NOW_ISO8601_MS())",
+			actID, convID)
+		if err != nil {
+			t.Fatalf("insert activation: %v", err)
+		}
+
+		r0ID, err := ActivationRoundInsert(ctx, conn, ActivationRoundInsertParams{
+			ActivationID: actID,
+			Round:        0,
+			UserInput:    "round 0",
+		})
+		if err != nil {
+			t.Fatalf("insert round 0: %v", err)
+		}
+
+		r1ID, err := ActivationRoundInsert(ctx, conn, ActivationRoundInsertParams{
+			ActivationID: actID,
+			Round:        1,
+			UserInput:    "round 1",
+		})
+		if err != nil {
+			t.Fatalf("insert round 1: %v", err)
+		}
+		_ = r1ID
+
+		err = ToolCallInsert(ctx, conn, ToolCallInsertParams{
+			ActivationID:      actID,
+			ActivationRoundID: r0ID,
+			Name:              "shell",
+			Input:             "{}",
+			Output:            "ok",
+			Duration:          10 * time.Millisecond,
+		})
+		if err != nil {
+			t.Fatalf("insert tc round 0: %v", err)
+		}
+
+		err = ToolCallInsert(ctx, conn, ToolCallInsertParams{
+			ActivationID:      actID,
+			ActivationRoundID: r1ID,
+			Name:              "db_query",
+			Input:             "{}",
+			Output:            "rows",
+			Duration:          5 * time.Millisecond,
+		})
+		if err != nil {
+			t.Fatalf("insert tc round 1: %v", err)
+		}
+
+		all, err := ToolCallList(ctx, conn, actID, nil)
+		if err != nil {
+			t.Fatalf("list all: %v", err)
+		}
+		if len(all) != 2 {
+			t.Fatalf("expected 2 tool calls, got %d", len(all))
+		}
+
+		round0 := 0
+		r0Only, err := ToolCallList(ctx, conn, actID, &round0)
+		if err != nil {
+			t.Fatalf("list round 0: %v", err)
+		}
+		if len(r0Only) != 1 {
+			t.Fatalf("expected 1 tool call for round 0, got %d", len(r0Only))
+		}
+		if r0Only[0].Name != "shell" {
+			t.Fatalf("expected name %q, got %q", "shell", r0Only[0].Name)
+		}
+	})
+
 	t.Run("nil round id", func(t *testing.T) {
 		ctx := context.Background()
 

@@ -278,6 +278,53 @@ CREATE TABLE IF NOT EXISTS skill_event (
   CHECK (IS_ISO8601_MS(created_at))
 );
 
+-- prompt workbench experiments (activation_round_id, status, desired_outcome)
+CREATE TABLE IF NOT EXISTS experiment (
+  id                  TEXT PRIMARY KEY,
+  activation_round_id TEXT NOT NULL REFERENCES activation_round(id),
+  status              TEXT NOT NULL DEFAULT 'analysis' CHECK(status IN ('analysis', 'experimenting', 'complete')),
+  desired_outcome     TEXT NOT NULL DEFAULT '',
+  notes               TEXT NOT NULL DEFAULT '',
+  created_at          TIMESTAMP NOT NULL DEFAULT (NOW_ISO8601_MS()),
+  updated_at          TIMESTAMP NOT NULL DEFAULT (NOW_ISO8601_MS()),
+  CHECK (IS_ISO8601_MS(created_at)),
+  CHECK (IS_ISO8601_MS(updated_at))
+);
+
+-- experiment variants with patches and hypothesis
+CREATE TABLE IF NOT EXISTS experiment_variant (
+  id               TEXT PRIMARY KEY,
+  experiment_id    TEXT NOT NULL REFERENCES experiment(id),
+  name             TEXT NOT NULL,
+  status           TEXT NOT NULL DEFAULT 'proposed' CHECK(status IN ('proposed', 'running', 'complete')),
+  hypothesis       TEXT NOT NULL DEFAULT '',
+  patches          TEXT NOT NULL DEFAULT '[]',
+  reasoning_effort TEXT NOT NULL DEFAULT '',
+  verbosity        TEXT NOT NULL DEFAULT '',
+  run_count        INTEGER NOT NULL DEFAULT 0,
+  desired_count    INTEGER NOT NULL DEFAULT 0,
+  created_at       TIMESTAMP NOT NULL DEFAULT (NOW_ISO8601_MS()),
+  updated_at       TIMESTAMP NOT NULL DEFAULT (NOW_ISO8601_MS()),
+  CHECK (IS_ISO8601_MS(created_at)),
+  CHECK (IS_ISO8601_MS(updated_at))
+);
+
+-- individual replay runs within a variant
+CREATE TABLE IF NOT EXISTS experiment_run (
+  id                    TEXT PRIMARY KEY,
+  experiment_variant_id TEXT NOT NULL REFERENCES experiment_variant(id),
+  tool_calls            TEXT NOT NULL DEFAULT '[]',
+  model_output          TEXT NOT NULL DEFAULT '',
+  reasoning_summaries   TEXT NOT NULL DEFAULT '[]',
+  is_desired            INTEGER NOT NULL DEFAULT 0,
+  input_tokens          INTEGER NOT NULL DEFAULT 0,
+  output_tokens         INTEGER NOT NULL DEFAULT 0,
+  cached_tokens         INTEGER NOT NULL DEFAULT 0,
+  reasoning_tokens      INTEGER NOT NULL DEFAULT 0,
+  created_at            TIMESTAMP NOT NULL DEFAULT (NOW_ISO8601_MS()),
+  CHECK (IS_ISO8601_MS(created_at))
+);
+
 -- critic evaluations of completed tasks
 CREATE TABLE IF NOT EXISTS task_assessment (
   id                        TEXT PRIMARY KEY,

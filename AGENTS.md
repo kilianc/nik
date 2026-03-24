@@ -65,11 +65,12 @@ Canonical tables are the source of truth (`conversation`, `message`, `media`, `m
 
 ## Project Structure
 
-Entry point: `cmd/nik/main.go`
+Entry points: `cmd/nik/main.go`, `cmd/workbench/main.go`
 
 | Package | Purpose |
 |---------|---------|
-| `cmd/nik/` | binary entry point — config, DB, WhatsApp client wiring, signal handling |
+| `cmd/nik/` | daemon entry point — config, DB, WhatsApp client wiring, signal handling |
+| `cmd/workbench/` | workbench CLI entry point — config, DB, OpenAI client wiring, subcommand dispatch |
 | `internal/config/` | `Config` struct + `Load(home)` from `config.yaml` in home dir |
 | `internal/db/` | SQLite open/schema, models, one Go file per query function |
 | `internal/queries/` | embedded `.sql` files for canonical entities (`conversation_*`, `message_*`, `media_*`, etc.) |
@@ -315,6 +316,7 @@ EOF
 - never chain multiple operations in a single if condition
 - use blank lines to separate logical blocks within a function (guard clauses, parse steps, main logic, return)
 - `cmd/nik/main.go` is wiring only — no types, no helper functions, no adapters. If you need a bridge between packages, put it in the domain package that owns the logic.
+- types go at the top of the file, before functions
 - follows standard gofmt conventions
 - one Go file per query function, one test file per query function
 - one field per line in Go `Scan()` calls -- never pack multiple fields onto a single line
@@ -452,7 +454,7 @@ SQLite, single file at `$NIK_HOME/nik.db`. Schema applied on startup via `db.Ope
 - no inline SQL in Go files
 - all table names are **singular**: `contact`, `conversation`, `message`, `media`, `alarm`, `task`, etc.
 - canonical query files use canonical prefixes: `conversation_*`, `message_*`, `media_*`, `contact_*`, `alarm_*`
-- FK columns always include the target table name: `<table>_id` for simple references, `<qualifier>_<table>_id` when disambiguation is needed (e.g. `origin_contact_id`, `retry_for_task_id`)
+- FK columns always include the **full** target table name: `<table>_id` for simple references, `<qualifier>_<table>_id` when disambiguation is needed (e.g. `origin_contact_id`, `retry_for_task_id`). Never abbreviate — use `experiment_variant_id`, not `variant_id`
 - enums are `TEXT` columns with a `CHECK(col IN (...))` constraint — never use a separate lookup table
 
 ### Row lifecycle columns

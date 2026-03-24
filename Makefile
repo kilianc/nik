@@ -66,13 +66,9 @@ trigger:
 call:
 	@cd $(NIK_HOME) && go run ../tools/call $(ARGS)
 
-.PHONY: diagnose
-diagnose:
-	@go run ./tools/diagnose -home $(NIK_HOME) $(ARGS)
-
-.PHONY: replay
-replay:
-	@go run ./tools/replay $(ARGS)
+.PHONY: workbench
+workbench:
+	@cd $(NIK_HOME) && CGO_ENABLED=1 go run ../cmd/workbench $(ARGS)
 
 .PHONY: shell-image
 shell-image:

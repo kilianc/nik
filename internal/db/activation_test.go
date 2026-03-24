@@ -190,6 +190,57 @@ func TestActivationUpdateDetailPersistsToolSchemas(t *testing.T) {
 	}
 }
 
+func TestActivationGet(t *testing.T) {
+	ctx := context.Background()
+
+	conn, err := OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	convID := seedActivationConv(t, conn)
+	actID := id.V7()
+
+	err = ActivationInsert(ctx, conn, ActivationRow{
+		ID:              actID,
+		ConversationID:  convID,
+		Model:           "gpt-5",
+		ReasoningEffort: "medium",
+		CreatedAt:       time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("insert activation: %v", err)
+	}
+
+	schemas := `[{"Name":"db_query"}]`
+	err = ActivationUpdateDetail(ctx, conn, actID, "test instructions", []string{"db_query"}, schemas)
+	if err != nil {
+		t.Fatalf("update detail: %v", err)
+	}
+
+	got, err := ActivationGet(ctx, conn, actID)
+	if err != nil {
+		t.Fatalf("get activation: %v", err)
+	}
+
+	if got.ID != actID {
+		t.Fatalf("expected id %q, got %q", actID, got.ID)
+	}
+	if got.Model != "gpt-5" {
+		t.Fatalf("expected model %q, got %q", "gpt-5", got.Model)
+	}
+	if got.ReasoningEffort != "medium" {
+		t.Fatalf("expected reasoning_effort %q, got %q", "medium", got.ReasoningEffort)
+	}
+	if got.Instructions != "test instructions" {
+		t.Fatalf("expected instructions %q, got %q", "test instructions", got.Instructions)
+	}
+	if got.ToolSchemas != schemas {
+		t.Fatalf("expected tool_schemas %q, got %q", schemas, got.ToolSchemas)
+	}
+}
+
 func seedActivationConv(t *testing.T, conn DBTX) string {
 	t.Helper()
 	convID := id.V7()
