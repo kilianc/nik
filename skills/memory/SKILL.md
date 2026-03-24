@@ -90,7 +90,7 @@ For each fact, write a table row:
 | date | type | entity | memory | conversation |
 ```
 
-**Types**: `preference`, `personal_fact`, `standing_decision`, `open_loop`, `relationship_fact`, `procedure`, `retraction`
+**Types**: `preference`, `personal_fact`, `standing_decision`, `open_loop`, `closed_loop`, `relationship_fact`, `procedure`, `retraction`
 
 **Entity**: the person's name (never "user", never "Nik")
 
@@ -107,6 +107,7 @@ Good memories (specific, durable, actionable):
 | 2025-07-03 | standing_decision | Sam | never schedule meetings on Fridays | [Sam's DMs](019b...) |
 | 2025-06-20 | personal_fact | Mei | runs a pottery studio in Portland | [Group Chat](019c...) |
 | 2025-08-15 | open_loop | Raj | looking for a new apartment downtown | [Group Chat](019c...) |
+| 2025-09-20 | closed_loop | Raj | found new apartment downtown (was searching since Aug) | [Group Chat](019c...) |
 ```
 
 **NOT memories** (skip these):
@@ -193,7 +194,7 @@ Go through every row and apply:
 
 - **Dedup**: same entity + same type + substantially same content — keep the row with the newer date, drop the older.
 - **Contradictions**: same entity + same type + conflicting content — newer date wins, drop the older row.
-- **Resolved open loops**: an `open_loop` that later facts show is resolved (e.g., "looking for apartment" then "moved to new place") — drop the open_loop row.
+- **Resolved open loops**: an `open_loop` that later facts show is resolved (e.g., "looking for apartment" then "moved to new place") — convert the `open_loop` to a `closed_loop`, update the date to the resolution date, and rewrite the memory to reflect the outcome. Drop the resolving fact if it's now redundant with the closed_loop row.
 - **Retractions**: a `retraction` row targets an existing row (same entity, content matches the referenced fact) — drop both the original and the retraction.
 - **Stale**: facts that are clearly expired or no longer relevant — drop.
 
