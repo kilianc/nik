@@ -85,8 +85,12 @@ var cancelToolDef = llm.ToolDef{
 				"type":        "string",
 				"description": "ID of the task to cancel.",
 			},
+			"reason": map[string]any{
+				"type":        "string",
+				"description": "Why the task is being cancelled.",
+			},
 		},
-		"required":             []string{"task_id"},
+		"required":             []string{"task_id", "reason"},
 		"additionalProperties": false,
 	},
 }
@@ -129,6 +133,7 @@ type listArgs struct {
 
 type cancelArgs struct {
 	TaskID string `json:"task_id"`
+	Reason string `json:"reason"`
 }
 
 type reportArgs struct {
@@ -306,6 +311,10 @@ func statusHandler(svc *Service) llm.ToolExecutor {
 			"plan":    t.Plan,
 		}
 
+		if t.Status == "cancelled" && t.CancellationReason != "" {
+			result["cancellation_reason"] = t.CancellationReason
+		}
+
 		reports, _ := svc.ReportsByTask(ctx, t.ID)
 		if len(reports) > 0 {
 			formatted := make([]map[string]any, len(reports))
@@ -355,18 +364,20 @@ func cancelHandler(svc *Service, runner *Runner) llm.ToolExecutor {
 			return llm.ToolError(err), nil
 		}
 
+		if args.Reason == "" {
+			return llm.ToolErrorf("reason is required"), nil
+		}
+
 		taskID, err := svc.ResolveTaskID(ctx, args.TaskID)
 		if err != nil {
 			return llm.ToolError(err), nil
 		}
 
-		cancelled := runner.Cancel(taskID)
+		runner.Cancel(taskID)
 
-		if !cancelled {
-			err = svc.UpdateStatus(ctx, taskID, "cancelled")
-			if err != nil {
-				return llm.ToolError(err), nil
-			}
+		err = svc.Cancel(ctx, taskID, args.Reason)
+		if err != nil {
+			return llm.ToolError(err), nil
 		}
 
 		return llm.ToolResult(map[string]any{
@@ -405,7 +416,7 @@ func retryHandler(svc *Service, runner *Runner) llm.ToolExecutor {
 		if original.Status == "pending" || original.Status == "running" {
 			runner.Cancel(original.ID)
 
-			err = svc.UpdateStatus(ctx, original.ID, "cancelled")
+			err = svc.Cancel(ctx, original.ID, "superseded by retry")
 			if err != nil {
 				return llm.ToolError(err), nil
 			}

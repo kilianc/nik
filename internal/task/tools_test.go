@@ -3,6 +3,7 @@ package task
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/kciuffolo/nik/internal/llm"
@@ -67,7 +68,7 @@ func TestCancelHandlerNoRunner(t *testing.T) {
 	runner := &Runner{}
 	handler := cancelHandler(svc, runner)
 
-	args, _ := json.Marshal(cancelArgs{TaskID: task.ID})
+	args, _ := json.Marshal(cancelArgs{TaskID: task.ID, Reason: "user changed their mind"})
 
 	result, err := handler(ctx, llm.ToolCall{
 		CallID:    "call-1",
@@ -87,5 +88,35 @@ func TestCancelHandlerNoRunner(t *testing.T) {
 	}
 	if got.Status != "cancelled" {
 		t.Fatalf("expected cancelled, got %s", got.Status)
+	}
+	if got.CancellationReason != "user changed their mind" {
+		t.Fatalf("expected cancellation reason 'user changed their mind', got %q", got.CancellationReason)
+	}
+}
+
+func TestCancelHandlerRequiresReason(t *testing.T) {
+	svc, _ := testDB(t)
+	ctx := context.Background()
+
+	task, err := svc.Create(ctx, createParams{Goal: "test goal", Thinking: "low", ConversationID: testConvID})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+
+	runner := &Runner{}
+	handler := cancelHandler(svc, runner)
+
+	args, _ := json.Marshal(cancelArgs{TaskID: task.ID})
+
+	result, err := handler(ctx, llm.ToolCall{
+		CallID:    "call-1",
+		Name:      "task_cancel",
+		Arguments: string(args),
+	})
+	if err != nil {
+		t.Fatalf("handler error: %v", err)
+	}
+	if !strings.Contains(result, "reason is required") {
+		t.Fatalf("expected error about reason, got %q", result)
 	}
 }

@@ -9,6 +9,7 @@ SELECT
   plan,
   thinking,
   status,
+  cancellation_reason,
   created_at,
   started_at,
   completed_at,

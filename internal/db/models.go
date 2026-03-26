@@ -103,20 +103,21 @@ type AlarmOccurrence struct {
 }
 
 type Task struct {
-	ID             string       `json:"id"`
-	ConversationID string       `json:"conversation_id"`
-	ContactID      string       `json:"contact_id"`
-	ActivationID   string       `json:"activation_id"`
-	RetryForTaskID string       `json:"retry_for_task_id"`
-	RetryNumber    int          `json:"retry_number"`
-	Goal           string       `json:"goal"`
-	Plan           string       `json:"plan"`
-	Thinking       string       `json:"thinking"`
-	Status         string       `json:"status"`
-	CreatedAt      time.Time    `json:"created_at"`
-	StartedAt      sql.NullTime `json:"started_at"`
-	CompletedAt    sql.NullTime `json:"completed_at"`
-	LastReportAt   sql.NullTime `json:"last_report_at"`
+	ID                 string       `json:"id"`
+	ConversationID     string       `json:"conversation_id"`
+	ContactID          string       `json:"contact_id"`
+	ActivationID       string       `json:"activation_id"`
+	RetryForTaskID     string       `json:"retry_for_task_id"`
+	RetryNumber        int          `json:"retry_number"`
+	Goal               string       `json:"goal"`
+	Plan               string       `json:"plan"`
+	Thinking           string       `json:"thinking"`
+	Status             string       `json:"status"`
+	CancellationReason string       `json:"cancellation_reason,omitempty"`
+	CreatedAt          time.Time    `json:"created_at"`
+	StartedAt          sql.NullTime `json:"started_at"`
+	CompletedAt        sql.NullTime `json:"completed_at"`
+	LastReportAt       sql.NullTime `json:"last_report_at"`
 }
 
 type ActiveTask struct {

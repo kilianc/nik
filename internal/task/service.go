@@ -114,35 +114,42 @@ func (s *Service) Start(ctx context.Context, taskID, activationID string) error 
 }
 
 func (s *Service) UpdateStatus(ctx context.Context, taskID, status string) error {
+	return db.TaskUpdate(ctx, s.conn, db.TaskUpdateParams{
+		ID:     taskID,
+		Status: &status,
+	})
+}
+
+func (s *Service) Cancel(ctx context.Context, taskID, reason string) error {
 	tx, err := s.conn.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
 	defer tx.Rollback()
 
+	status := "cancelled"
 	err = db.TaskUpdate(ctx, tx, db.TaskUpdateParams{
-		ID:     taskID,
-		Status: &status,
+		ID:                 taskID,
+		Status:             &status,
+		CancellationReason: &reason,
 	})
 	if err != nil {
 		return err
 	}
 
-	if status == "cancelled" {
-		t, err := db.TaskGet(ctx, tx, taskID)
-		if err != nil {
-			return fmt.Errorf("get task for cancel message: %w", err)
-		}
+	t, err := db.TaskGet(ctx, tx, taskID)
+	if err != nil {
+		return fmt.Errorf("get task for cancel message: %w", err)
+	}
 
-		err = db.SystemMessageInsert(ctx, tx, db.SystemMessageParams{
-			ConversationID: t.ConversationID,
-			Kind:           "task_cancelled",
-			Body:           t,
-			SentAt:         time.Now().UTC(),
-		})
-		if err != nil {
-			return fmt.Errorf("insert system message: %w", err)
-		}
+	err = db.SystemMessageInsert(ctx, tx, db.SystemMessageParams{
+		ConversationID: t.ConversationID,
+		Kind:           "task_cancelled",
+		Body:           t,
+		SentAt:         time.Now().UTC(),
+	})
+	if err != nil {
+		return fmt.Errorf("insert system message: %w", err)
 	}
 
 	err = tx.Commit()
