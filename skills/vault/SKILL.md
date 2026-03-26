@@ -94,14 +94,15 @@ adapter without their input. Follow these steps in order:
 ```
 #!/bin/sh
 set -eu
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # --- auth: load bootstrap credential from disk ---
-export PROVIDER_TOKEN=$(cat ./vault/TOKEN_FILE)
+export PROVIDER_TOKEN=$(cat "$SCRIPT_DIR/TOKEN_FILE")
 
 # --- cache: plain text file, one name per line, never values ---
 # use item/field paths as names to avoid collisions
 # (e.g. "My Service/username" not just "username")
-CACHE=./vault/.cache.txt
+CACHE="$SCRIPT_DIR/.cache.txt"
 TTL=604800  # 7 days
 
 _build_cache() {
