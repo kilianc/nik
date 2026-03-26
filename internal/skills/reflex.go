@@ -199,8 +199,6 @@ func ExtractInstallSection(content string) string {
 const maxCheckTimeout = 30 * time.Second
 
 func SkillCheckReflex(cfg *config.Config, conn *sql.DB) func(ctx context.Context) {
-	lastRun := map[string]time.Time{}
-
 	return func(ctx context.Context) {
 		dirs := []string{cfg.SkillsPath(), cfg.WorkspaceSkillsPath()}
 
@@ -213,23 +211,29 @@ func SkillCheckReflex(cfg *config.Config, conn *sql.DB) func(ctx context.Context
 		now := time.Now().In(cfg.TZ())
 
 		for key, def := range reflexes {
-			if t, ok := lastRun[key]; ok && !def.IsDue(t, now) {
+			lastMeta, firedAt, err := db.SkillReflexLatest(ctx, conn, key)
+			if err != nil {
+				slog.Warn("skill check reflex: get latest", "key", key, "error", err)
 				continue
 			}
-			lastRun[key] = now
 
-			runSkillCheck(ctx, cfg, conn, key, def)
+			// no prior record: use start-of-today so new reflexes wait for
+			// their first scheduled time instead of firing immediately.
+			baseline := firedAt
+			if baseline.IsZero() {
+				baseline = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+			}
+
+			if !def.IsDue(baseline, now) {
+				continue
+			}
+
+			runSkillCheck(ctx, cfg, conn, key, def, lastMeta)
 		}
 	}
 }
 
-func runSkillCheck(ctx context.Context, cfg *config.Config, conn *sql.DB, key string, def SkillReflexDef) {
-	lastMeta, err := db.SkillReflexLatest(ctx, conn, key)
-	if err != nil {
-		slog.Warn("skill check reflex: get latest", "key", key, "error", err)
-		return
-	}
-
+func runSkillCheck(ctx context.Context, cfg *config.Config, conn *sql.DB, key string, def SkillReflexDef, lastMeta string) {
 	var newMeta string
 
 	if def.Command == "" {
@@ -246,7 +250,7 @@ func runSkillCheck(ctx context.Context, cfg *config.Config, conn *sql.DB, key st
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
 
-		err = cmd.Run()
+		err := cmd.Run()
 		if err != nil {
 			slog.Warn("skill check reflex: command failed",
 				"key", key,
@@ -264,7 +268,7 @@ func runSkillCheck(ctx context.Context, cfg *config.Config, conn *sql.DB, key st
 		return
 	}
 
-	err = db.SkillReflexInsert(ctx, conn, key, newMeta)
+	err := db.SkillReflexInsert(ctx, conn, key, newMeta)
 	if err != nil {
 		slog.Warn("skill check reflex: insert meta", "key", key, "error", err)
 		return

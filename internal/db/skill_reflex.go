@@ -10,18 +10,23 @@ import (
 	"github.com/kciuffolo/nik/internal/queries"
 )
 
-func SkillReflexLatest(ctx context.Context, db DBTX, skillName string) (string, error) {
-	var meta string
+func SkillReflexLatest(ctx context.Context, db DBTX, skillName string) (string, time.Time, error) {
+	var meta, ts string
 
-	err := db.QueryRowContext(ctx, queries.SkillReflexGet, skillName).Scan(&meta)
+	err := db.QueryRowContext(ctx, queries.SkillReflexGet, skillName).Scan(&meta, &ts)
 	if err == sql.ErrNoRows {
-		return "", nil
+		return "", time.Time{}, nil
 	}
 	if err != nil {
-		return "", fmt.Errorf("skill reflex latest %s: %w", skillName, err)
+		return "", time.Time{}, fmt.Errorf("skill reflex latest %s: %w", skillName, err)
 	}
 
-	return meta, nil
+	parsed, err := parseTimestampString(ts)
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("skill reflex latest %s: %w", skillName, err)
+	}
+
+	return meta, parsed, nil
 }
 
 func SkillReflexInsert(ctx context.Context, db DBTX, skillName, meta string) error {
