@@ -366,9 +366,9 @@ func TestSkillCheckReflex(t *testing.T) {
 			Schedule: mustParseCron(t, "* * * * *"),
 		}
 
-		runSkillCheck(h.ctx, h.cfg, h.conn, "test_skill/check", def)
+		runSkillCheck(h.ctx, h.cfg, h.conn, "test_skill/check", def, "")
 
-		meta, err := db.SkillReflexLatest(h.ctx, h.conn, "test_skill/check")
+		meta, _, err := db.SkillReflexLatest(h.ctx, h.conn, "test_skill/check")
 		if err != nil {
 			t.Fatalf("get latest: %v", err)
 		}
@@ -386,9 +386,9 @@ func TestSkillCheckReflex(t *testing.T) {
 			Schedule: mustParseCron(t, "* * * * *"),
 		}
 
-		runSkillCheck(h.ctx, h.cfg, h.conn, "silent_skill/check", def)
+		runSkillCheck(h.ctx, h.cfg, h.conn, "silent_skill/check", def, "")
 
-		meta, err := db.SkillReflexLatest(h.ctx, h.conn, "silent_skill/check")
+		meta, _, err := db.SkillReflexLatest(h.ctx, h.conn, "silent_skill/check")
 		if err != nil {
 			t.Fatalf("get latest: %v", err)
 		}
@@ -411,7 +411,7 @@ func TestSkillCheckReflex(t *testing.T) {
 			Schedule: mustParseCron(t, "* * * * *"),
 		}
 
-		runSkillCheck(h.ctx, h.cfg, h.conn, "stable_skill/check", def)
+		runSkillCheck(h.ctx, h.cfg, h.conn, "stable_skill/check", def, "same-meta")
 
 		var count int
 		err = h.conn.QueryRowContext(h.ctx, "SELECT count(*) FROM skill_reflex WHERE skill_name = 'stable_skill/check'").Scan(&count)
@@ -431,9 +431,9 @@ func TestSkillCheckReflex(t *testing.T) {
 			Schedule: mustParseCron(t, "0 6 * * *"),
 		}
 
-		runSkillCheck(h.ctx, h.cfg, h.conn, "journal/journal", def)
+		runSkillCheck(h.ctx, h.cfg, h.conn, "journal/journal", def, "")
 
-		meta, err := db.SkillReflexLatest(h.ctx, h.conn, "journal/journal")
+		meta, _, err := db.SkillReflexLatest(h.ctx, h.conn, "journal/journal")
 		if err != nil {
 			t.Fatalf("get latest: %v", err)
 		}
@@ -443,6 +443,59 @@ func TestSkillCheckReflex(t *testing.T) {
 
 		if count := countSystemMessages(t, h.ctx, h.conn, "skill_reflex_fired"); count != 1 {
 			t.Fatalf("expected 1 skill_reflex_fired message, got %d", count)
+		}
+	})
+
+	t.Run("skips not-due reflexes on restart", func(t *testing.T) {
+		h, _ := setupReflexTest(t)
+
+		writeSkillFile(t, h.skillsDir, "journal", "---\nname: journal\nsummary: daily journal\nreflex:\n  - name: journal\n    every: \"0 23 * * *\"\n---\n# Journal\n")
+
+		err := db.SkillReflexInsert(h.ctx, h.conn, "journal/journal", "2026-03-25T23:00:00Z")
+		if err != nil {
+			t.Fatalf("seed reflex: %v", err)
+		}
+
+		checkReflex := SkillCheckReflex(h.cfg, h.conn)
+		checkReflex(h.ctx)
+
+		var count int
+		err = h.conn.QueryRowContext(h.ctx,
+			"SELECT count(*) FROM skill_reflex WHERE skill_name = 'journal/journal'",
+		).Scan(&count)
+		if err != nil {
+			t.Fatalf("count: %v", err)
+		}
+		if count != 1 {
+			t.Fatalf("expected 1 row (not due yet), got %d", count)
+		}
+
+		if msgCount := countSystemMessages(t, h.ctx, h.conn, "skill_reflex_fired"); msgCount != 0 {
+			t.Fatalf("expected 0 skill_reflex_fired messages (not due), got %d", msgCount)
+		}
+	})
+
+	t.Run("skips new reflex not yet due today", func(t *testing.T) {
+		h, _ := setupReflexTest(t)
+
+		writeSkillFile(t, h.skillsDir, "journal", "---\nname: journal\nsummary: daily journal\nreflex:\n  - name: journal\n    every: \"0 23 * * *\"\n---\n# Journal\n")
+
+		checkReflex := SkillCheckReflex(h.cfg, h.conn)
+		checkReflex(h.ctx)
+
+		var count int
+		err := h.conn.QueryRowContext(h.ctx,
+			"SELECT count(*) FROM skill_reflex WHERE skill_name = 'journal/journal'",
+		).Scan(&count)
+		if err != nil {
+			t.Fatalf("count: %v", err)
+		}
+		if count != 0 {
+			t.Fatalf("expected 0 rows (new reflex, not due yet), got %d", count)
+		}
+
+		if msgCount := countSystemMessages(t, h.ctx, h.conn, "skill_reflex_fired"); msgCount != 0 {
+			t.Fatalf("expected 0 skill_reflex_fired messages, got %d", msgCount)
 		}
 	})
 }
