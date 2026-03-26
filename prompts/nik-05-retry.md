@@ -8,7 +8,7 @@ You wrote this but it was not delivered — text output alone does not reach any
 
 > {{.Text}}
 
-Call `message_send` now with this text. Do not rephrase or add to it. Then call `done`.
+If this text was meant as a message to someone, call `message_send` with it then `done`. If it was internal reasoning and there is nothing to send, call `done` with a reason.
 {{else}}
 If you have something to say, call `message_send` then call `done`. If there's nothing to say, call `done` with a reason.
 {{end}}
