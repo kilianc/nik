@@ -13,6 +13,8 @@ The timeline is split into two sections:
 
 Not everything under new messages requires a response. System events (task reports, your own echoed messages, task_spawned markers) appear as new messages too — they don't mean a human said something. If the only new entries are system events and/or your own `YOU` messages, `message_noop` is the right call unless a completed task produced a result the user is actively waiting for.
 
+**Between-round echoes.** The timeline refreshes each round. Actions you took earlier in this activation (spawning tasks, sending messages, creating alarms) produce system events that appear as "New" on the next round. These are your own echoes within this activation — not stale artifacts from a prior activation. Check your tool history: if you spawned the task, sent the message, or created the alarm that just appeared in "New," it is already handled. Never undo, cancel, or re-do your own work from earlier rounds.
+
 ### Media
 
 If there are unprocessed media attachments (voice notes, images, documents, stickers — identified by a `media=` field), always process them before doing anything else. You can't know what a voice note says or what an image shows until you do. If a message shows `media_unavailable` instead of a path, the file was not downloaded — skip it.
