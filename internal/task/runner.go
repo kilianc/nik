@@ -14,8 +14,6 @@ import (
 	"github.com/kciuffolo/nik/internal/log"
 )
 
-const runnerTimeout = 60 * time.Minute
-
 const (
 	runnerMaxAttempts   = 3
 	runnerLoopThreshold = 4
@@ -54,7 +52,7 @@ func (r *Runner) Wait() { r.wg.Wait() }
 
 func (r *Runner) Run(ctx context.Context, t db.Task) {
 	defer r.wg.Done()
-	ctx, cancel := context.WithTimeout(ctx, runnerTimeout)
+	ctx, cancel := context.WithTimeout(ctx, r.cfg.Task.TimeoutOrDefault())
 	r.cancels.Store(t.ID, cancel)
 	defer r.cancels.Delete(t.ID)
 	defer cancel()
@@ -80,6 +78,7 @@ func (r *Runner) Run(ctx context.Context, t db.Task) {
 	instructions := r.renderPrompt(t, defs)
 
 	act := llm.NewActivation(r.llm, r.recorder, instructions, defs)
+	act.SetMaxRounds(r.cfg.Task.MaxRoundsOrDefault())
 	act.Start(ctx)
 	defer act.Close(ctx)
 

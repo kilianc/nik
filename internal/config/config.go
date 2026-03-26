@@ -57,6 +57,25 @@ type ShellConfig struct {
 	DockerImage string `yaml:"docker_image"`
 }
 
+type TaskConfig struct {
+	MaxRounds int           `yaml:"max_rounds"`
+	Timeout   time.Duration `yaml:"timeout"`
+}
+
+func (t TaskConfig) MaxRoundsOrDefault() int {
+	if t.MaxRounds > 0 {
+		return t.MaxRounds
+	}
+	return 200
+}
+
+func (t TaskConfig) TimeoutOrDefault() time.Duration {
+	if t.Timeout > 0 {
+		return t.Timeout
+	}
+	return 60 * time.Minute
+}
+
 type Config struct {
 	Home        string    `yaml:"-"`
 	lastModTime time.Time `yaml:"-"`
@@ -64,6 +83,7 @@ type Config struct {
 	OpenAIKey       string       `yaml:"openai_key"`
 	AnthropicKey    string       `yaml:"anthropic_key"`
 	Models          ModelsConfig `yaml:"models"`
+	Task            TaskConfig   `yaml:"task"`
 	Shell           ShellConfig  `yaml:"shell"`
 	PromptsDirValue string       `yaml:"prompts_dir"`
 	SkillsDirValue  string       `yaml:"skills_dir"`

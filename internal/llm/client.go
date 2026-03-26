@@ -222,7 +222,7 @@ type ToolCallRecord struct {
 }
 
 const (
-	maxRounds = 75
+	defaultMaxRounds = 75
 
 	historyBudgetFraction = 0.50
 	estTokensPerPair      = 8000

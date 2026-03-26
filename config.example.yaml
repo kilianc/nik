@@ -29,6 +29,11 @@ models:
     voice: ash                # alloy, ash, ballad, coral, echo, fable, onyx, nova, sage, shimmer
     speed: 1.0                # 0.25 – 4.0
 
+# task runner limits
+task:
+  max_rounds: 200             # max LLM rounds per task (default 200)
+  timeout: 60m                # max wall-clock time per task (default 60m)
+
 # paths (relative to home dir)
 prompts_dir: ../prompts
 skills_dir: ../skills

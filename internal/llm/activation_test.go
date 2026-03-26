@@ -89,6 +89,21 @@ func TestActivationAppendMessages(t *testing.T) {
 	s.AppendAssistantText("")
 }
 
+func TestActivationSetMaxRounds(t *testing.T) {
+	model := "gpt-5.4"
+	client := &Client{model: &model}
+
+	s := NewActivation(client, NoopRecorder{}, "instructions", nil)
+	if s.maxRounds != 0 {
+		t.Fatalf("expected 0 (use default), got %d", s.maxRounds)
+	}
+
+	s.SetMaxRounds(200)
+	if s.maxRounds != 200 {
+		t.Fatalf("expected 200, got %d", s.maxRounds)
+	}
+}
+
 func TestActivationRepeats(t *testing.T) {
 	model := "gpt-5.4"
 	client := &Client{model: &model}

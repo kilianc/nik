@@ -56,6 +56,7 @@ type Activation struct {
 	history       []ToolCallRecord
 	round         int
 	attempt       int
+	maxRounds     int
 	startTime     time.Time
 	prevSig       string
 	repeats       int
@@ -129,9 +130,15 @@ func (s *Activation) SetInput(content string) {
 
 func (s *Activation) Attempt() int { return s.attempt }
 
+func (s *Activation) SetMaxRounds(n int) { s.maxRounds = n }
+
 func (s *Activation) Round(ctx context.Context) (*RoundResult, error) {
-	if s.round >= maxRounds {
-		return nil, fmt.Errorf("max rounds (%d) reached without completion", maxRounds)
+	limit := s.maxRounds
+	if limit <= 0 {
+		limit = defaultMaxRounds
+	}
+	if s.round >= limit {
+		return nil, fmt.Errorf("max rounds (%d) reached without completion", limit)
 	}
 
 	pr, err := s.prov.complete(ctx)
