@@ -2,11 +2,46 @@ package brain
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 
 	"github.com/kciuffolo/nik/internal/llm"
 )
+
+const doneToolName = "done"
+
+var doneToolDef = llm.ToolDef{
+	Name:        doneToolName,
+	Description: "Signal that you are done with this activation. Do all your work first -- messages, reactions, tasks, lookups -- then call done to declare completion.",
+	Parameters: map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"reason": map[string]any{
+				"type":        "string",
+				"description": "Why you are done. What you did, or why there is nothing to do.",
+			},
+		},
+		"required":             []string{"reason"},
+		"additionalProperties": false,
+	},
+}
+
+func doneHandler() llm.ToolExecutor {
+	return func(ctx context.Context, call llm.ToolCall) (string, error) {
+		var args struct {
+			Reason string `json:"reason"`
+		}
+
+		err := json.Unmarshal([]byte(call.Arguments), &args)
+		if err != nil {
+			return llm.ToolError(err), nil
+		}
+
+		slog.Info("done", "pkg", "brain", "reason", args.Reason)
+		return `{"ok":true}`, nil
+	}
+}
 
 func (b *Brain) RegisterTool(t llm.Tool) {
 	if t.Def.Name == "" {

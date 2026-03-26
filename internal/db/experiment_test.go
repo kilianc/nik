@@ -24,7 +24,7 @@ func TestExperimentInsertAndGet(t *testing.T) {
 		ID:                expID,
 		ActivationRoundID: roundID,
 		Status:            "analysis",
-		DesiredOutcome:    "model should call message_noop",
+		DesiredOutcome:    "model should call done",
 		Analysis:          "trace analysis here",
 	})
 	if err != nil {
@@ -45,8 +45,8 @@ func TestExperimentInsertAndGet(t *testing.T) {
 	if got.Status != "analysis" {
 		t.Fatalf("expected status %q, got %q", "analysis", got.Status)
 	}
-	if got.DesiredOutcome != "model should call message_noop" {
-		t.Fatalf("expected desired_outcome %q, got %q", "model should call message_noop", got.DesiredOutcome)
+	if got.DesiredOutcome != "model should call done" {
+		t.Fatalf("expected desired_outcome %q, got %q", "model should call done", got.DesiredOutcome)
 	}
 	if got.Analysis != "trace analysis here" {
 		t.Fatalf("expected analysis %q, got %q", "trace analysis here", got.Analysis)

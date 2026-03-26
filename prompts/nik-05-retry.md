@@ -8,9 +8,9 @@ You wrote this but it was not delivered — text output alone does not reach any
 
 > {{.Text}}
 
-Call `message_send` now with this text. Do not rephrase or add to it.
+Call `message_send` now with this text. Do not rephrase or add to it. Then call `done`.
 {{else}}
-If you have something to say, call `message_send`. Otherwise call `message_noop`.
+If you have something to say, call `message_send` then call `done`. If there's nothing to say, call `done` with a reason.
 {{end}}
 
 You MUST call at least one tool.

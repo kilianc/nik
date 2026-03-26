@@ -16,8 +16,8 @@ whatever is new. The timeline is split into two sections:
 - **New** — messages the brain hasn't seen yet.
 
 The brain's job is to resolve everything in "New" — reply, spawn work, or
-intentionally noop — then go back to sleep. When something new appears, it
-wakes up again.
+call `done` — then go back to sleep. When something new appears, it wakes
+up again.
 
 ```
   ┌──────────────────────────────────────────────────┐
@@ -40,7 +40,7 @@ wakes up again.
   │          ├── build prompt                        │
   │          └── LLM loop (continuous steering)      │
   │               ├── tool calls → execute → next    │
-  │               └── terminal tool + empty round → done │
+  │               └── done + empty round → exit      │
   │                                                  │
   └──────────────────────────────────────────────────┘
 ```
@@ -143,21 +143,31 @@ accumulates and eventually gets pruned.
 
 **Files:** `internal/brain/brain.go` (`think`), `internal/llm/activation.go` (`Prune`, `maxPairsForModel`)
 
-## Terminal tools and the end of an activation
+## The `done` tool and the end of an activation
 
-Terminal tools (`message_send`, `message_noop`, `message_react`) are tools
-that can validly conclude an activation. Calling one does not immediately end
-the loop — it marks the round as a valid stopping point. The brain tracks a
-`concluded` flag across rounds:
+Every activation ends with the model calling `done`. The `done` tool takes a
+`reason` parameter (for debug logging) and signals that the model has finished
+all its work for this activation. The brain tracks a `done` flag across rounds:
 
-1. Model calls a terminal tool → execute → re-read input → next round.
-2. Next round produces tool calls → continue (supports multi-message activations).
-3. Next round produces zero tool calls → clean exit (the model confirmed it's done).
+1. Model calls `done` (possibly alongside other tools) → execute → set flag →
+   re-read input → next round.
+2. Next round produces tool calls → continue (the model changed its mind or has
+   more work).
+3. Next round produces zero tool calls → clean exit.
 
-If the model produces zero tool calls without a prior terminal tool, the brain
-injects `nik-05-retry.md` as a follow-up user message (one shot). This nudge
-warns about common failure modes and insists on at least one tool call. If the
-nudge also produces no tool calls, the activation fails.
+**Why the extra round?** The model almost never produces text output on
+tool-call rounds. In practice, 99.4% of rounds with tool calls have empty
+`model_output`. The model writes its trace (the five-wave summary stored in
+`activation_round.model_output`) on a dedicated empty round after all tools are
+done. Exiting immediately after `done` would lose this trace, which is the
+primary debugging artifact for understanding what the model was thinking. The
+extra round preserves the model's natural pattern: do work silently, then
+reflect.
+
+If the model produces zero tool calls without a prior `done`, the brain injects
+`nik-05-retry.md` as a follow-up user message (one shot). This nudge warns
+about common failure modes and insists on at least one tool call. If the nudge
+also produces no tool calls, the activation fails.
 
 **Worker nudge:** task workers have an analogous mechanism. If a worker produces
 text with no tool calls (meaning it finished without calling `task_report`), it
@@ -165,7 +175,8 @@ checks whether a final report already exists. If not, `task-01-nudge.md` is
 injected once. If the worker still produces no tool calls, the task is resolved
 based on the last report status (or fails if no report exists).
 
-**Files:** `internal/brain/brain.go` (`think`, `terminalTools`),
+**Files:** `internal/brain/brain.go` (`think`, `doneToolName`),
+`internal/brain/tools.go` (`doneToolDef`, `doneHandler`),
 `internal/task/runner.go` (`runLoop`),
 `prompts/nik-05-retry.md`, `prompts/task-01-nudge.md`
 
@@ -181,11 +192,11 @@ group chats where nik's reply is rarely the last message. Marking nik's own
 messages as read preemptively would create race conditions — new messages from
 others could land between the reply and the mark, and get silently buried. The
 complexity to solve that isn't worth it. So nik always sees its own messages as
-"New" on the next tick, re-evaluates, and decides whether to act or noop.
+"New" on the next tick, re-evaluates, and decides whether to act or call `done`.
 
 This wastes tokens when nik is the only entry in the "New" section, but it also
 tests the model's self-restraint — it must recognize there's nothing to do and
-noop instead of talking to itself.
+call `done` instead of talking to itself.
 
 The same applies to all tool side effects: `task_spawned`, `task_report`,
 `alarm_updated`, etc. are stored as system messages. They land after
@@ -227,7 +238,7 @@ skills as `added` and re-emits events. Install sections are idempotent.
 As described in [Everything is a message](#everything-is-a-message), system
 messages are stored alongside real messages and the brain treats them
 identically when checking for new activity. The brain doesn't have to act on
-all of them — most will be noops. We never decide for the model; it sees
+all of them — most will result in `done`. We never decide for the model; it sees
 everything and chooses. This is a deliberate test of model performance. We
 manage it by tweaking prompts and adding simple code fallbacks only when
 necessary.
@@ -241,7 +252,7 @@ necessary.
 - `skill_reflex_fired` — skill check command detected something new
 - `task_report` (completed/failed) — task finished, model should review
 
-**Typically noop** (nik should usually ignore):
+**Typically `done`** (nik should usually ignore):
 
 - `task_report` (running) — progress updates (though a nonsensical report
   might warrant stopping the task)
@@ -251,7 +262,7 @@ necessary.
 
 **Known risk:** `check()` does not distinguish between these categories. Any
 entry after `last_read_at` triggers activation, so passive system messages
-cause activations where the correct answer is noop. When nik does something
+cause activations where the correct answer is `done`. When nik does something
 unexpected, we analyze the timeline to understand why and improve the prompt or
 reasoning — not add filtering in code.
 
@@ -340,9 +351,9 @@ tick
               session.Round ── model output
               API error? ── retry up to 3× with backoff, else fail
               tool calls? ── execute in parallel ── add results to session
-                             track concluded flag
+                             track done flag
                              prune if >limit ── refresh input ── next round
-              no tool calls? ── concluded? ── done
+              no tool calls? ── done? ── exit
                              else nudge once (nik-05-retry.md), else fail
               identical tool calls 4× in a row? ── fail (loop detection)
 
@@ -361,8 +372,8 @@ The `brain` and `task runner` own the round loop and all policy:
 - **Loop detection**: consecutive identical tool call signatures, fail after 4
 - **Idle nudge**: brain loads `nik-05-retry.md`, runner loads `task-01-nudge.md`,
   injected as user messages — one shot
-- **Terminal tool detection**: brain tracks `concluded` flag; activation
-  ends when the round after a terminal tool produces zero tool calls
+- **Done detection**: brain checks for `done` tool in each round's calls;
+  activation exits immediately when `done` is called
 - **Activation ID**: generated by the caller, passed via context metadata
 
 The `llm.Activation` type wraps the items array and provides: `SetInput` (replace
@@ -375,9 +386,9 @@ items[0]), `Round` (single API call, no retries), `AddToolResult`, `Prune`,
 ## Known issues
 
 **markRead before model decides** — consuming the timeline advances the read
-marker before the model chooses what to do. A bad noop buries unhandled
-messages with no recovery until an unrelated event arrives. Root cause of the
-3-hour "Send it to him" delay.
+marker before the model chooses what to do. A bad `done` (calling `done` without
+handling new messages) buries unhandled messages with no recovery until an
+unrelated event arrives. Root cause of the 3-hour "Send it to him" delay.
 
 **Rejected fix: defer markRead until after activation.** This breaks
 at-most-once delivery. If markRead is deferred, a crash or timeout mid-activation
@@ -385,9 +396,5 @@ leaves the read marker behind. The next tick re-reads the same messages,
 triggers a new activation, and the model acts on them again — duplicate replies,
 duplicate tasks, duplicate side effects. The consumable timeline's core guarantee
 is that messages appear as "New" exactly once. Deferring markRead violates that.
-The fix for the noop-buries-messages problem must preserve at-most-once; it
+The fix for the done-buries-messages problem must preserve at-most-once; it
 cannot move markRead later in the pipeline.
-
-**Noop exits cleanly** — `message_noop` is a terminal tool. When nik calls it,
-the `concluded` flag is set. On the next round, if the model produces zero
-tool calls, the activation ends with a clean exit (no nudge, no error).

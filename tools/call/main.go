@@ -127,12 +127,6 @@ func buildTools(cfg *config.Config, llmClient, taskLLMClient *llm.Client, conn *
 			tools[t.Def.Name] = t.Handler
 		}
 
-		for _, t := range messaging.BuildTools(msgSvc) {
-			if t.Def.Name == "message_noop" {
-				tools[t.Def.Name] = t.Handler
-			}
-		}
-
 		for _, t := range llm.BuildTools(llmClient, cfg.Home, msgSvc) {
 			tools[t.Def.Name] = t.Handler
 		}

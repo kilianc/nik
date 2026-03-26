@@ -96,7 +96,7 @@ Supported surfaces:
 
 - `instructions` — the system prompt (flat text)
 - `input` — the target round's user input / timeline (flat text)
-- `tools/<name>/<field>` — field in a tool definition (e.g. `tools/message_noop/Description`)
+- `tools/<name>/<field>` — field in a tool definition (e.g. `tools/done/Description`)
 - `tool-result/<round>/<name>` — entire output of a tool call (plain text)
 - `tool-result/<round>/<name>/<field>` — field within a JSON tool call output (e.g. `tool-result/0/load_skill/content`)
 
@@ -108,14 +108,14 @@ Example `v1.patch`:
 --- a/instructions
 +++ b/instructions
 @@ -12,3 +12,4 @@
- When you see only system events under ### New, call message_noop.
+ When you see only system events under ### New, call done.
 +Do NOT re-acknowledge a user request that appears under ### Already handled.
  
---- a/tools/message_noop/Description
-+++ b/tools/message_noop/Description
+--- a/tools/done/Description
++++ b/tools/done/Description
 @@ -1,2 +1,2 @@
--Signal that no response is needed for this activation.
-+Signal that no response is needed — use when ### New contains only system events or YOUR own messages.
+-Signal that you are done with this activation.
++Signal that you are done — use when ### New contains only system events or YOUR own messages.
 ```
 
 Create the variant (report auto-renders). Present the hypothesis to the user. Ask and address any feedback.
