@@ -30,14 +30,8 @@ type Brain struct {
 	wg      sync.WaitGroup
 }
 
-var terminalTools = map[string]bool{
-	"message_send":  true,
-	"message_noop":  true,
-	"message_react": true,
-}
-
 func New(cfg *config.Config, llmClient *llm.Client) *Brain {
-	return &Brain{
+	b := &Brain{
 		cfg:        cfg,
 		llm:        llmClient,
 		recorder:   llm.NoopRecorder{},
@@ -46,6 +40,10 @@ func New(cfg *config.Config, llmClient *llm.Client) *Brain {
 		now:        time.Now,
 		claimed:    NewSyncSet(),
 	}
+
+	b.RegisterTool(llm.Tool{Def: doneToolDef, Handler: doneHandler()})
+
+	return b
 }
 
 func (b *Brain) SetRecorder(rec llm.ActivationRecorder) {
@@ -197,8 +195,8 @@ func (b *Brain) think(ctx context.Context, getInput func() string) (_ string, _ 
 	act.SetInput(input)
 
 	var (
-		nudged    bool
-		concluded bool
+		nudged bool
+		done   bool
 	)
 
 	for {
@@ -217,11 +215,11 @@ func (b *Brain) think(ctx context.Context, getInput func() string) (_ string, _ 
 		}
 
 		if len(result.ToolCalls) == 0 {
-			if concluded {
+			if done {
 				return "", act.Usage(), nil
 			}
 			if nudged {
-				return "", act.Usage(), fmt.Errorf("no terminal tool call")
+				return "", act.Usage(), fmt.Errorf("no done call")
 			}
 			nudged = true
 			act.AppendAssistantText(result.Text)
@@ -236,13 +234,13 @@ func (b *Brain) think(ctx context.Context, getInput func() string) (_ string, _ 
 		for _, call := range result.ToolCalls {
 			slog.Info("tool call", log.ToolCallAttrs(thinkCtx, "brain", call.Name, act.RoundNumber()-1, call.Arguments)...)
 		}
-		results := act.ExecuteTools(thinkCtx, result, executor)
 
-		concluded = false
-		for i, call := range result.ToolCalls {
-			_ = results[i]
-			if terminalTools[call.Name] {
-				concluded = true
+		act.ExecuteTools(thinkCtx, result, executor)
+
+		done = false
+		for _, call := range result.ToolCalls {
+			if call.Name == doneToolName {
+				done = true
 			}
 		}
 

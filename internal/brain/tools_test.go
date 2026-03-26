@@ -42,14 +42,14 @@ func TestToolsForContextFiltersPrivilegedTools(t *testing.T) {
 
 	nonOwnerCtx := context.WithValue(context.Background(), "meta", map[string]string{"conversation_id": "other"})
 	nonOwnerTools := b.toolsForContext(nonOwnerCtx)
-	if len(nonOwnerTools) != 1 || nonOwnerTools[0].Name != "public_tool" {
-		t.Fatalf("expected only public tool for non-owner context, got %+v", nonOwnerTools)
+	if len(nonOwnerTools) != 2 {
+		t.Fatalf("expected done + public tool for non-owner context, got %d tools", len(nonOwnerTools))
 	}
 
 	ownerCtx := context.WithValue(context.Background(), "meta", map[string]string{"conversation_id": "owner-conv"})
 	ownerTools := b.toolsForContext(ownerCtx)
-	if len(ownerTools) != 2 {
-		t.Fatalf("expected both tools for owner context, got %+v", ownerTools)
+	if len(ownerTools) != 3 {
+		t.Fatalf("expected done + public + private tools for owner context, got %d tools", len(ownerTools))
 	}
 }
 

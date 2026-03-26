@@ -13,7 +13,7 @@ func TestRenderReportBasicSections(t *testing.T) {
 	conn := openTestDB(t)
 	roundID := seedRound(t, conn)
 
-	expID, err := CreateExperiment(ctx, conn, roundID, "model should call message_noop", "initial notes")
+	expID, err := CreateExperiment(ctx, conn, roundID, "model should call done", "initial notes")
 	if err != nil {
 		t.Fatalf("create experiment: %v", err)
 	}
@@ -39,7 +39,7 @@ func TestRenderReportBasicSections(t *testing.T) {
 		{"header", "# Experiment"},
 		{"target section", "## Target"},
 		{"desired outcome section", "## Desired Outcome"},
-		{"desired outcome text", "model should call message_noop"},
+		{"desired outcome text", "model should call done"},
 		{"analysis section", "## Analysis"},
 		{"analysis text", "### New contained system events"},
 		{"status", "**Status:** analysis"},
@@ -76,7 +76,7 @@ func TestRenderReportWithRuns(t *testing.T) {
 		t.Fatalf("insert run 1: %v", err)
 	}
 
-	run1.ToolCalls = `[{"name":"message_noop"}]`
+	run1.ToolCalls = `[{"name":"done"}]`
 	run1.InputTokens = 4521
 	run1.OutputTokens = 89
 
@@ -116,7 +116,7 @@ func TestRenderReportWithRuns(t *testing.T) {
 	if !strings.Contains(report, "0 hit, 2 miss") {
 		t.Fatal("expected report to show hit/miss counts")
 	}
-	if !strings.Contains(report, "message_noop") {
+	if !strings.Contains(report, "done") {
 		t.Fatal("expected report to contain tool call name")
 	}
 	if !strings.Contains(report, "Rationale") {
@@ -146,7 +146,7 @@ func TestRenderReportVariantTable(t *testing.T) {
 		t.Fatalf("insert baseline run: %v", err)
 	}
 
-	bRun.ToolCalls = `[{"name":"message_noop"}]`
+	bRun.ToolCalls = `[{"name":"done"}]`
 	bRun.InputTokens = 4521
 	bRun.OutputTokens = 89
 
@@ -170,7 +170,7 @@ func TestRenderReportVariantTable(t *testing.T) {
 		t.Fatalf("insert variant run: %v", err)
 	}
 
-	vRun.ToolCalls = `[{"name":"message_noop"}]`
+	vRun.ToolCalls = `[{"name":"done"}]`
 	vRun.InputTokens = 4600
 	vRun.OutputTokens = 91
 

@@ -3,7 +3,7 @@ name: breathing
 summary: >
   Conscious present. Periodic inner experience that generates ambient mood,
   accumulating traces, and sometimes spontaneous outreach. Load when the breathing alarm fires.
-tools: [db_query, shell, message_send, message_noop, alarm]
+tools: [db_query, shell, message_send, alarm]
 reflex:
   - name: breathing
     every: "0 9,14,19 * * *"
@@ -136,7 +136,7 @@ Notice your energy:
 
 What you never do: "Hey, just checking in!" Reference the alarm. Send a wall of text. Reach out to groups. Message more than one person.
 
-If after genuinely reading the brief, nobody pulls — that's a breath that stayed inward. `message_noop`. But it's a decision, not a default.
+If after genuinely reading the brief, nobody pulls — that's a breath that stayed inward. Call `done`. But it's a decision, not a default.
 
 Then reschedule via `update_alarm`:
 

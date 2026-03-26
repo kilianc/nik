@@ -141,7 +141,7 @@ Key events to grep for:
 
 - `activation starting` / `activation completed` / `activation failed` -- brain lifecycle
 - `tool call` -- includes tool name, round, args (llm package)
-- `no terminal tool call, retrying` -- brain loop stall
+- `no done call, retrying` -- brain loop stall
 - `activation_id` appears in both DB rows and log lines -- use it to correlate
 
 Activation instructions and tools are stored on the `activation` row. Per-round data (user input, model output, reasoning summaries) is in `activation_round`, with tool calls linked via `activation_round_id`.
@@ -269,13 +269,13 @@ FROM activation_round ar
 WHERE ar.activation_id = '<second_act_id>' AND ar.round = 0;
 ```
 
-Search the `user_input` for `### New` -- this is what the model saw as fresh content. If `### New` contains only system events (task_reports, task_spawned) and/or `YOU` messages, the model should have called `message_noop` but the `### New` label compelled it to respond.
+Search the `user_input` for `### New` -- this is what the model saw as fresh content. If `### New` contains only system events (task_reports, task_spawned) and/or `YOU` messages, the model should have called `done` but the `### New` label compelled it to respond.
 
 **Step 5: Read the model's reasoning to confirm the misinterpretation.**
 
 The `reasoning_summaries` column shows the model's chain of thought. Look for signs it re-processed the original user request despite it being in `### Already handled`.
 
-**Root cause pattern:** `markRead` advances `last_read_at` at the end of `timeline.Get()`. Tool side effects (task_spawned, nik's echo, worker task_reports) are stored with timestamps after that mark. On the next tick, `check()` sees them as new, fires a second activation, and the model sees system-only content under `### New` -- which is enough to make it re-ack instead of noop.
+**Root cause pattern:** `markRead` advances `last_read_at` at the end of `timeline.Get()`. Tool side effects (task_spawned, nik's echo, worker task_reports) are stored with timestamps after that mark. On the next tick, `check()` sees them as new, fires a second activation, and the model sees system-only content under `### New` -- which is enough to make it re-ack instead of calling `done`.
 
 ## Git
 
@@ -366,7 +366,7 @@ Each prompt file has one job. Don't duplicate rules across files.
 
 ### Brain concepts
 
-The brain owns the round loop and all policy. The LLM package (`llm.Activation`) is a dumb API client — protocol state only, no retries, no loop detection, no stopping decisions. The brain (and task runner) drive `Activation.Round()` in a loop, handling 5xx retry, loop detection, idle nudges, and terminal tool detection inline.
+The brain owns the round loop and all policy. The LLM package (`llm.Activation`) is a dumb API client — protocol state only, no retries, no loop detection, no stopping decisions. The brain (and task runner) drive `Activation.Round()` in a loop, handling 5xx retry, loop detection, idle nudges, and `done` detection inline.
 
 - **Reflex** (`func(ctx context.Context)`): runs every tick before perception. A reflex is an optimization -- without it, the brain would poll every 2 seconds. Reflexes detect that something changed and trigger the brain to re-evaluate the timeline. Some reflexes materialize mechanical facts (e.g. `FireDueAlarms` creates occurrences), but reflexes never decide or fix on behalf of the LLM (see *Single decision-maker*). Examples: `task.CheckStale` (inserts stale reports), `alarms.FireDueAlarms` (creates occurrences and claims alarms), `alarms.StaleAlarmReflex` (detects stale recurring alarms), `skills.SkillChangeReflex` (detects skill add/remove/change), `skills.SkillCheckReflex` (runs skill-declared check commands, fires `skill_reflex_fired` on new records), `shell.CheckSessions` (reaps dead shell sessions).
 - **Sense** (`interface { Scan(ctx) ([]Stimulus, error) }`): the brain's single, unified perception. Strictly read-only -- no side effects. Returns `[]Stimulus`, one per conversation with new events.

@@ -4,7 +4,6 @@ preload: true
 summary: Send messages, reactions, typing indicators, and presence across platforms.
 tools:
   - message_send
-  - message_noop
   - message_react
   - message_set_presence
 ---
@@ -46,14 +45,6 @@ Examples:
 - Edit `hello (edit of [09:12:30] Alice: helo)` → react to edit: text="hello", time="09:12:35"
 - Edit `hello (edit of [09:12:30] Alice: helo)` → react to original: text="helo", time="09:12:30"
 
-### message_noop
-
-Acknowledge intentional silence for this turn without sending anything.
-Use when you've processed the input and decided there's nothing to say.
-
-- `reason` -- why you're staying silent
-- `conversation_id` -- nik conversation UUID (empty = current)
-
 ### message_set_presence
 
 Set account-level presence for a platform.
@@ -63,15 +54,6 @@ Set account-level presence for a platform.
 
 ## Behavior
 
-- Every activation must end with exactly one terminal action:
-  `message_send`, `message_react`, or `message_noop`. These are the only
-  terminal actions -- everything else (tool lookups, skill loads, task
-  spawns) is intermediate work. If you don't close with one of these three,
-  your response is swallowed and the user sees nothing.
-- Pick one terminal action per activation. If a reaction says it all, use
-  `message_react` alone. If text is needed, use `message_send` alone. Do
-  not call both `message_react` and `message_send` in the same activation
-  unless the person explicitly asks for both.
 - Typing indicators are sent automatically as part of reply -- no need
   to manage them manually.
 - Reactions are cheap and expressive. A single emoji often says more

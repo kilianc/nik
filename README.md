@@ -32,10 +32,10 @@ Awake(ctx, 2s)
 │               └─ round loop
 │                   ├─ act.Round(ctx) → RoundResult
 │                   ├─ transient error? → retry (up to 3)
-│                   ├─ no tool calls? → nudge once, then fail
+│                   ├─ no tool calls? → done flag set? exit : nudge once, then fail
 │                   ├─ loop detected (4 identical rounds)? → fail
 │                   ├─ execute tools (parallel)
-│                   ├─ terminal tool? (message_send/noop/react) → mark concluded
+│                   ├─ done called? → set flag
 │                   ├─ act.Prune() → trim old tool pairs if context too large
 │                   └─ act.SetInput(getInput()) → re-read timeline (continuous steering)
 │
@@ -44,9 +44,9 @@ Awake(ctx, 2s)
 
 Every tick, the brain reloads config, runs all reflexes, then asks the sensor for new stimuli. The sensor (`Timeline`) checks each allowed conversation for events newer than the read marker. For each stimulus, the brain claims the conversation (preventing concurrent activations) and spawns a goroutine.
 
-Inside the goroutine, `think` reads the timeline, runs recall (LLM-filtered memories), loads instructions (base prompt + identity + conversation rules + skills + brain waves + soul), and enters the round loop. Each round calls the LLM, executes any tool calls in parallel, then re-reads the timeline so the model sees its own side effects. The loop ends when the model calls a terminal tool (`message_send`, `message_noop`, or `message_react`).
+Inside the goroutine, `think` reads the timeline, runs recall (LLM-filtered memories), loads instructions (base prompt + identity + conversation rules + skills + brain waves + soul), and enters the round loop. Each round calls the LLM, executes any tool calls in parallel, then re-reads the timeline so the model sees its own side effects. The loop ends when the model calls `done`.
 
-One activation = one conversation. The model does all its work -- perceiving, planning, acting -- in a single burst of rounds. When the terminal tool fires, it's over.
+One activation = one conversation. The model does all its work -- perceiving, planning, acting -- in a single burst of rounds. When `done` is called, it's over.
 
 ```mermaid
 flowchart TD
@@ -68,14 +68,15 @@ flowchart TD
     subgraph RoundLoop [Round Loop]
         Round["act.Round(ctx)"] --> ToolCheck{"Tool calls?"}
         ToolCheck -- yes --> Exec["Execute tools ∥"]
-        Exec --> Terminal{"Terminal\ntool?"}
-        Terminal -- no --> Steer["act.SetInput(getInput())\n— continuous steering"]
+        Exec --> DoneFlag["Track done flag"]
+        DoneFlag --> Steer["act.SetInput(getInput())\n— continuous steering"]
         Steer --> Round
-        ToolCheck -- no --> Nudge{"Already\nnudged?"}
+        ToolCheck -- no --> DoneCheck{"done flag\nset?"}
+        DoneCheck -- yes --> Done["Activation complete"]
+        DoneCheck -- no --> Nudge{"Already\nnudged?"}
         Nudge -- no --> SendNudge["Append retry prompt"]
         SendNudge --> Round
-        Nudge -- yes --> Fail["Fail: no terminal tool"]
-        Terminal -- yes --> Done["Activation complete"]
+        Nudge -- yes --> Fail["Fail: no done call"]
     end
 ```
 
@@ -214,7 +215,7 @@ Domain packages define tools via `BuildTools()` and register them in `main.go`. 
 
 | Package | Tools |
 |---------|-------|
-| **messaging** | `message_send`, `message_noop`, `message_react`, `message_set_presence` |
+| **messaging** | `message_send`, `message_react`, `message_set_presence` |
 | **shell** | `shell`, `shell-rebuild`, `shell-factory-reset` |
 | **alarms** | `alarm`, `update_alarm`, `cancel_alarm` |
 | **contacts** | `update_contact` |

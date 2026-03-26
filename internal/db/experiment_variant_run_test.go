@@ -55,8 +55,8 @@ func TestExperimentVariantRunInsertAndList(t *testing.T) {
 		t.Fatalf("expected default tool_calls, got %q", run1.ToolCalls)
 	}
 
-	run1.ToolCalls = `[{"name":"message_noop"}]`
-	run1.ReasoningSummaries = `["considered noop"]`
+	run1.ToolCalls = `[{"name":"done"}]`
+	run1.ReasoningSummaries = `["nothing to do"]`
 	run1.InputTokens = 4521
 	run1.OutputTokens = 89
 	run1.CachedTokens = 200
@@ -101,8 +101,8 @@ func TestExperimentVariantRunInsertAndList(t *testing.T) {
 	if runs[0].InputTokens != 4521 {
 		t.Fatalf("expected input_tokens 4521, got %d", runs[0].InputTokens)
 	}
-	if runs[0].ToolCalls != `[{"name":"message_noop"}]` {
-		t.Fatalf("expected tool_calls %q, got %q", `[{"name":"message_noop"}]`, runs[0].ToolCalls)
+	if runs[0].ToolCalls != `[{"name":"done"}]` {
+		t.Fatalf("expected tool_calls %q, got %q", `[{"name":"done"}]`, runs[0].ToolCalls)
 	}
 
 	if runs[1].IsDesired != nil {
