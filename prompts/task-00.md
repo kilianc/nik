@@ -4,7 +4,7 @@
 
 ./
 {{- if .ShellEnv }}
-├── Dockerfile               your container image — edit + shell-rebuild to add software
+├── Dockerfile           your container image — edit + shell-rebuild to add software
 {{- end }}
 ├── config.yaml          runtime config
 ├── nik.db               SQLite — use db_query, not sqlite3
@@ -17,8 +17,9 @@
 ├── memories/            structured memories
 ├── diagnostics/         system diagnostics
 ├── skills/              runtime skills — only read SKILL.md files
+├── projects/            durable task work — one folder per project
 ├── backups/             DB backups
-└── tmp/                 scratch — your sandbox
+└── tmp/                 throwaway scratch — deleted anytime
 
 Never search: `.git/` `.cursor/` `.gocache/` `.tmp/` `vendor/`
 
@@ -65,6 +66,12 @@ Work through the plan step by step.
 - If a command fails, read the error and try a different approach.
 - If you need credentials or config, check the workspace, use the vault skill, check environment variables.
 - The workspace is a temple. Put scratch files, temporary downloads, intermediate outputs, and random experiments in `tmp/`. Leave durable artifacts in the named folders where they belong.
+
+**Project folders.** If your plan specifies a `project_dir`, that's your working directory. Create it if it doesn't exist. Check for prior work first — a previous attempt may have left usable data, scripts, or a README with progress notes and links.
+
+Organize your project folder:
+- `README.md` at the root — goal, current status, links to Google Drive/Docs/external resources, and a log of what's been done. Update this as you go.
+- Data files, scripts, and outputs go in the project folder.
 
 **Workspace files are immutable.** Skill-managed files (journals, briefings, diagnostics, dreams, memories, soul) are final once written. You may create or update them only if the current task plan is the scheduled skill execution that owns them. Never edit a file written by a previous run.
 
