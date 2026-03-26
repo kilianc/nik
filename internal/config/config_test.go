@@ -412,6 +412,74 @@ func TestAnySubscription(t *testing.T) {
 	}
 }
 
+func TestTaskConfigDefaults(t *testing.T) {
+	var tc TaskConfig
+
+	if got := tc.MaxRoundsOrDefault(); got != 200 {
+		t.Fatalf("expected default max_rounds 200, got %d", got)
+	}
+	if got := tc.TimeoutOrDefault(); got != 60*time.Minute {
+		t.Fatalf("expected default timeout 60m, got %v", got)
+	}
+
+	tc.MaxRounds = 150
+	tc.Timeout = 90 * time.Minute
+
+	if got := tc.MaxRoundsOrDefault(); got != 150 {
+		t.Fatalf("expected max_rounds 150, got %d", got)
+	}
+	if got := tc.TimeoutOrDefault(); got != 90*time.Minute {
+		t.Fatalf("expected timeout 90m, got %v", got)
+	}
+}
+
+func TestLoadParsesTaskConfig(t *testing.T) {
+	dir := t.TempDir()
+	writeTestConfig(t, dir, `
+openai_key: sk-test
+models:
+  main:
+    model: gpt-5
+task:
+  max_rounds: 250
+  timeout: 45m
+`)
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	if cfg.Task.MaxRounds != 250 {
+		t.Fatalf("expected task.max_rounds 250, got %d", cfg.Task.MaxRounds)
+	}
+	if cfg.Task.Timeout != 45*time.Minute {
+		t.Fatalf("expected task.timeout 45m, got %v", cfg.Task.Timeout)
+	}
+}
+
+func TestLoadOmittedTaskConfigUsesDefaults(t *testing.T) {
+	dir := t.TempDir()
+	writeTestConfig(t, dir, `
+openai_key: sk-test
+models:
+  main:
+    model: gpt-5
+`)
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	if got := cfg.Task.MaxRoundsOrDefault(); got != 200 {
+		t.Fatalf("expected default max_rounds 200, got %d", got)
+	}
+	if got := cfg.Task.TimeoutOrDefault(); got != 60*time.Minute {
+		t.Fatalf("expected default timeout 60m, got %v", got)
+	}
+}
+
 func TestLoadIgnoresLegacyExaAPIKey(t *testing.T) {
 	dir := t.TempDir()
 	writeTestConfig(t, dir, `

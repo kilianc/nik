@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/id"
@@ -27,7 +28,7 @@ var configDef = llm.ToolDef{
 			},
 			"field": map[string]any{
 				"type":        "string",
-				"description": "Config field name for 'set'. Writable fields: timezone, location, max_history, models.main.*, models.task.*, models.recall.*, models.critic.*.",
+				"description": "Config field name for 'set'. Writable fields: timezone, location, max_history, task.max_rounds, task.timeout, models.main.*, models.task.*, models.recall.*, models.critic.*.",
 			},
 			"value": map[string]any{
 				"type":        "string",
@@ -102,6 +103,10 @@ func configGet(cfg *Config) (string, error) {
 				"verbosity":        cfg.Models.Critic.Verbosity,
 			},
 		},
+		"task": map[string]any{
+			"max_rounds": cfg.Task.MaxRoundsOrDefault(),
+			"timeout":    cfg.Task.TimeoutOrDefault().String(),
+		},
 		"max_history":                 cfg.MaxHistory,
 		"timezone":                    cfg.Timezone,
 		"location":                    cfg.Location,
@@ -144,6 +149,24 @@ func configSet(cfg *Config, field, value string) (string, error) {
 			return llm.ToolErrorf("invalid max_history: %s", value), nil
 		}
 		cfg.MaxHistory = n
+	case "task.max_rounds":
+		n, err := strconv.Atoi(value)
+		if err != nil {
+			return llm.ToolErrorf("invalid task.max_rounds: %s", value), nil
+		}
+		if n < 1 {
+			return llm.ToolErrorf("task.max_rounds must be >= 1"), nil
+		}
+		cfg.Task.MaxRounds = n
+	case "task.timeout":
+		d, err := time.ParseDuration(value)
+		if err != nil {
+			return llm.ToolErrorf("invalid task.timeout: %s", value), nil
+		}
+		if d < time.Minute {
+			return llm.ToolErrorf("task.timeout must be >= 1m"), nil
+		}
+		cfg.Task.Timeout = d
 	case "models.main.model":
 		cfg.Models.Main.Model = value
 	case "models.main.reasoning_effort":
