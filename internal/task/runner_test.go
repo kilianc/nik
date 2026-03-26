@@ -9,6 +9,49 @@ import (
 	"github.com/kciuffolo/nik/internal/llm"
 )
 
+func TestReportTimerReset(t *testing.T) {
+	if StaleThreshold != 2*time.Minute {
+		t.Fatalf("StaleThreshold = %v, want 2m", StaleThreshold)
+	}
+
+	tests := []struct {
+		name      string
+		calls     []llm.ToolCall
+		wantReset bool
+	}{
+		{
+			"task_report resets timer",
+			[]llm.ToolCall{{Name: "shell"}, {Name: "task_report"}, {Name: "write_file"}},
+			true,
+		},
+		{
+			"non-report calls do not reset",
+			[]llm.ToolCall{{Name: "shell"}, {Name: "write_file"}, {Name: "load_skill"}},
+			false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lastReport := time.Now().Add(-3 * time.Minute)
+
+			for _, call := range tt.calls {
+				if call.Name == "task_report" {
+					lastReport = time.Now()
+				}
+			}
+
+			stale := time.Since(lastReport) >= StaleThreshold
+			if tt.wantReset && stale {
+				t.Fatal("timer should have been reset by task_report")
+			}
+			if !tt.wantReset && !stale {
+				t.Fatal("timer should not have been reset")
+			}
+		})
+	}
+}
+
 func TestCancelReturnsFalseForUnknownTask(t *testing.T) {
 	runner := &Runner{}
 	if runner.Cancel("nonexistent") {

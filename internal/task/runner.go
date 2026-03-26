@@ -14,7 +14,7 @@ import (
 	"github.com/kciuffolo/nik/internal/log"
 )
 
-const runnerTimeout = 20 * time.Minute
+const runnerTimeout = 60 * time.Minute
 
 const (
 	runnerMaxAttempts   = 3
@@ -128,8 +128,14 @@ func (r *Runner) Run(ctx context.Context, t db.Task) {
 
 func (r *Runner) runLoop(ctx context.Context, t db.Task, act *llm.Activation, exec llm.ToolExecutor) error {
 	var nudged bool
+	lastReport := time.Now()
 
 	for {
+		if time.Since(lastReport) >= StaleThreshold {
+			act.AppendUserMessage("You haven't reported in 2 minutes. Call task_report now with your current status before continuing.")
+			lastReport = time.Now()
+		}
+
 		result, err := act.Round(ctx)
 		if err != nil && llm.IsTransient(err) && act.Attempt() <= runnerMaxAttempts {
 			slog.Warn("transient API error, retrying", "pkg", "task", "task_id", t.ID, "attempt", act.Attempt(), "error", err)
@@ -167,6 +173,9 @@ func (r *Runner) runLoop(ctx context.Context, t db.Task, act *llm.Activation, ex
 
 		for _, call := range result.ToolCalls {
 			slog.Info("tool call", log.ToolCallAttrs(ctx, "task", call.Name, act.RoundNumber()-1, call.Arguments)...)
+			if call.Name == "task_report" {
+				lastReport = time.Now()
+			}
 		}
 
 		act.ExecuteTools(ctx, result, exec)

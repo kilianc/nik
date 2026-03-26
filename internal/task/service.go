@@ -232,10 +232,10 @@ func (s *Service) RetryChain(ctx context.Context, rootID string) ([]db.RetryChai
 	return db.TaskRetryChain(ctx, s.conn, rootID)
 }
 
-const staleThreshold = 2 * time.Minute
+const StaleThreshold = 2 * time.Minute
 
 func (s *Service) CheckStale(ctx context.Context) {
-	staleCutoff := time.Now().UTC().Add(-staleThreshold)
+	staleCutoff := time.Now().UTC().Add(-StaleThreshold)
 
 	staleIDs, err := db.TaskStaleIDs(ctx, s.conn, staleCutoff)
 	if err != nil {
@@ -244,7 +244,7 @@ func (s *Service) CheckStale(ctx context.Context) {
 	}
 
 	for _, taskID := range staleIDs {
-		msg := fmt.Sprintf("No activity for %s. Task may be stuck.", staleThreshold)
+		msg := fmt.Sprintf("No activity for %s. Task may be stuck.", StaleThreshold)
 		err = s.InsertReport(ctx, taskID, "running", msg)
 		if err != nil {
 			slog.Warn("insert stale report", "pkg", "task", "task_id", taskID, "error", err)
