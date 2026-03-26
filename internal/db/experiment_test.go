@@ -25,7 +25,7 @@ func TestExperimentInsertAndGet(t *testing.T) {
 		ActivationRoundID: roundID,
 		Status:            "analysis",
 		DesiredOutcome:    "model should call message_noop",
-		Notes:             "trace analysis here",
+		Analysis:          "trace analysis here",
 	})
 	if err != nil {
 		t.Fatalf("insert experiment: %v", err)
@@ -48,8 +48,8 @@ func TestExperimentInsertAndGet(t *testing.T) {
 	if got.DesiredOutcome != "model should call message_noop" {
 		t.Fatalf("expected desired_outcome %q, got %q", "model should call message_noop", got.DesiredOutcome)
 	}
-	if got.Notes != "trace analysis here" {
-		t.Fatalf("expected notes %q, got %q", "trace analysis here", got.Notes)
+	if got.Analysis != "trace analysis here" {
+		t.Fatalf("expected analysis %q, got %q", "trace analysis here", got.Analysis)
 	}
 
 	gotShort, err := ExperimentGet(ctx, conn, id.Shorten(expID))
@@ -83,12 +83,12 @@ func TestExperimentUpdate(t *testing.T) {
 	}
 
 	newStatus := "experimenting"
-	newNotes := "updated trace"
+	newAnalysis := "updated trace"
 
 	err = ExperimentUpdate(ctx, conn, ExperimentUpdateParams{
-		ID:     expID,
-		Status: &newStatus,
-		Notes:  &newNotes,
+		ID:       expID,
+		Status:   &newStatus,
+		Analysis: &newAnalysis,
 	})
 	if err != nil {
 		t.Fatalf("update experiment: %v", err)
@@ -102,8 +102,8 @@ func TestExperimentUpdate(t *testing.T) {
 	if got.Status != "experimenting" {
 		t.Fatalf("expected status %q, got %q", "experimenting", got.Status)
 	}
-	if got.Notes != "updated trace" {
-		t.Fatalf("expected notes %q, got %q", "updated trace", got.Notes)
+	if got.Analysis != "updated trace" {
+		t.Fatalf("expected analysis %q, got %q", "updated trace", got.Analysis)
 	}
 }
 

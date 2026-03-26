@@ -315,7 +315,7 @@ CREATE TABLE IF NOT EXISTS experiment (
   activation_round_id TEXT NOT NULL REFERENCES activation_round(id),
   status              TEXT NOT NULL DEFAULT 'analysis' CHECK(status IN ('analysis', 'experimenting', 'complete')),
   desired_outcome     TEXT NOT NULL DEFAULT '',
-  notes               TEXT NOT NULL DEFAULT '',
+  analysis            TEXT NOT NULL DEFAULT '',
   created_at          TIMESTAMP NOT NULL DEFAULT (NOW_ISO8601_MS()),
   updated_at          TIMESTAMP NOT NULL DEFAULT (NOW_ISO8601_MS()),
   CHECK (IS_ISO8601_MS(created_at)),
@@ -327,9 +327,8 @@ CREATE TABLE IF NOT EXISTS experiment_variant (
   id               TEXT PRIMARY KEY,
   experiment_id    TEXT NOT NULL REFERENCES experiment(id),
   name             TEXT NOT NULL,
-  status           TEXT NOT NULL DEFAULT 'proposed' CHECK(status IN ('proposed', 'running', 'complete')),
   hypothesis       TEXT NOT NULL DEFAULT '',
-  patches          TEXT NOT NULL DEFAULT '[]',
+  patches          TEXT NOT NULL DEFAULT '',
   reasoning_effort TEXT NOT NULL DEFAULT '',
   verbosity        TEXT NOT NULL DEFAULT '',
   run_count        INTEGER NOT NULL DEFAULT 0,
@@ -341,13 +340,14 @@ CREATE TABLE IF NOT EXISTS experiment_variant (
 );
 
 -- individual replay runs within a variant
-CREATE TABLE IF NOT EXISTS experiment_run (
+CREATE TABLE IF NOT EXISTS experiment_variant_run (
   id                    TEXT PRIMARY KEY,
   experiment_variant_id TEXT NOT NULL REFERENCES experiment_variant(id),
   tool_calls            TEXT NOT NULL DEFAULT '[]',
   model_output          TEXT NOT NULL DEFAULT '',
   reasoning_summaries   TEXT NOT NULL DEFAULT '[]',
-  is_desired            INTEGER NOT NULL DEFAULT 0,
+  is_desired            INTEGER,
+  rationale             TEXT NOT NULL DEFAULT '',
   input_tokens          INTEGER NOT NULL DEFAULT 0,
   output_tokens         INTEGER NOT NULL DEFAULT 0,
   cached_tokens         INTEGER NOT NULL DEFAULT 0,

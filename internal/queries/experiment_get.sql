@@ -3,7 +3,7 @@ SELECT
   activation_round_id,
   status,
   desired_outcome,
-  notes,
+  analysis,
   created_at,
   updated_at
 FROM experiment

@@ -13,6 +13,9 @@
 !internal/db/schema.sql
 !internal/queries/*.sql
 
+# Track templates
+!*.tpl
+
 # Track build
 !Makefile
 !internal/shell/Dockerfile

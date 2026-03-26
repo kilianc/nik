@@ -12,7 +12,6 @@ func ExperimentVariantInsert(ctx context.Context, db DBTX, p ExperimentVariantIn
 		p.ID,
 		p.ExperimentID,
 		p.Name,
-		p.Status,
 		p.Hypothesis,
 		p.Patches,
 		p.ReasoningEffort,
@@ -32,7 +31,6 @@ func ExperimentVariantGet(ctx context.Context, db DBTX, idOrShort string) (Exper
 		&v.ID,
 		&v.ExperimentID,
 		&v.Name,
-		&v.Status,
 		&v.Hypothesis,
 		&v.Patches,
 		&v.ReasoningEffort,
@@ -65,7 +63,6 @@ func ExperimentVariantList(ctx context.Context, db DBTX, experimentID string) ([
 			&v.ID,
 			&v.ExperimentID,
 			&v.Name,
-			&v.Status,
 			&v.Hypothesis,
 			&v.Patches,
 			&v.ReasoningEffort,
@@ -85,10 +82,18 @@ func ExperimentVariantList(ctx context.Context, db DBTX, experimentID string) ([
 	return variants, rows.Err()
 }
 
+func ExperimentVariantRefreshCounts(ctx context.Context, db DBTX, variantID string) error {
+	_, err := db.ExecContext(ctx, queries.ExperimentVariantRefreshCounts, variantID)
+	if err != nil {
+		return fmt.Errorf("refresh counts for experiment_variant %s: %w", variantID, err)
+	}
+
+	return nil
+}
+
 func ExperimentVariantUpdate(ctx context.Context, db DBTX, p ExperimentVariantUpdateParams) error {
 	_, err := db.ExecContext(ctx, queries.ExperimentVariantUpdate,
 		p.ID,
-		p.Status,
 		p.RunCount,
 		p.DesiredCount,
 	)

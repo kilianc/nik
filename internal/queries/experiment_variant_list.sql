@@ -2,7 +2,6 @@ SELECT
   id,
   experiment_id,
   name,
-  status,
   hypothesis,
   patches,
   reasoning_effort,
@@ -14,4 +13,3 @@ SELECT
 FROM experiment_variant
 WHERE experiment_id = ?1
 ORDER BY created_at ASC
-

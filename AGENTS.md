@@ -34,7 +34,7 @@ When debugging or investigating an issue, present findings and a proposed fix **
 
 ### Plans over chat
 
-When working in plan mode, always put details, before/after examples, and rationale into the plan file itself -- not into chat messages. The plan is the artifact the user reviews and approves.
+Always present code or file changes in a plan for the user to review and approve before applying. The user does not review architecture or diffs in chat messages -- the plan is the review artifact. When revising a plan, always update the todos to match -- stale todos are wrong todos.
 
 ### Single decision-maker
 
@@ -497,6 +497,8 @@ Before applying any migration to the live DB:
 Things to revisit periodically. The agent adds entries here when the user flags a mistake or suggests a different approach. Only the user removes entries.
 
 <!-- example: - 2026-03-14: user prefers X over Y for error handling -- revisit error style rules -->
+
+- 2026-03-24: JSON columns stored in the DB should come back as proper typed objects from the db layer, not raw strings that callers unmarshal. Currently blocked for `ToolSchemas` (`ActivationRow`) because `db` can't import `llm.ToolDef` -- revisit when a shared types package or layering change makes this possible.
 
 ## Fin
 

@@ -1,14 +1,16 @@
-INSERT INTO experiment_run (
+SELECT
   id,
   experiment_variant_id,
   tool_calls,
   model_output,
   reasoning_summaries,
   is_desired,
+  rationale,
   input_tokens,
   output_tokens,
   cached_tokens,
-  reasoning_tokens
-)
-VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
-
+  reasoning_tokens,
+  created_at
+FROM experiment_variant_run
+WHERE experiment_variant_id = ?1
+ORDER BY created_at ASC

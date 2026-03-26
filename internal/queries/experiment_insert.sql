@@ -3,7 +3,7 @@ INSERT INTO experiment (
   activation_round_id,
   status,
   desired_outcome,
-  notes
+  analysis
 )
 VALUES (?1, ?2, ?3, ?4, ?5)
 

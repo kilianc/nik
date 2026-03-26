@@ -29,13 +29,12 @@ func TestExperimentVariantInsertAndGet(t *testing.T) {
 	}
 
 	varID := id.V7()
-	patches := `[{"file":"prompts/nik-04-brain.md","old":"old text","new":"new text"}]`
+	patches := "--- a/instructions\n+++ b/instructions\n@@ -1,1 +1,1 @@\n-old text\n+new text\n"
 
 	err = ExperimentVariantInsert(ctx, conn, ExperimentVariantInsertParams{
 		ID:              varID,
 		ExperimentID:    expID,
 		Name:            "shorter-ack",
-		Status:          "proposed",
 		Hypothesis:      "adding a noop rule will reduce duplicates",
 		Patches:         patches,
 		ReasoningEffort: "medium",
@@ -58,9 +57,6 @@ func TestExperimentVariantInsertAndGet(t *testing.T) {
 	}
 	if got.Name != "shorter-ack" {
 		t.Fatalf("expected name %q, got %q", "shorter-ack", got.Name)
-	}
-	if got.Status != "proposed" {
-		t.Fatalf("expected status %q, got %q", "proposed", got.Status)
 	}
 	if got.Hypothesis != "adding a noop rule will reduce duplicates" {
 		t.Fatalf("expected hypothesis %q, got %q", "adding a noop rule will reduce duplicates", got.Hypothesis)
@@ -101,8 +97,7 @@ func TestExperimentVariantList(t *testing.T) {
 		ID:           id.V7(),
 		ExperimentID: expID,
 		Name:         "baseline",
-		Status:       "complete",
-		Patches:      "[]",
+		Patches:      "",
 	})
 	if err != nil {
 		t.Fatalf("insert baseline variant: %v", err)
@@ -112,9 +107,8 @@ func TestExperimentVariantList(t *testing.T) {
 		ID:           id.V7(),
 		ExperimentID: expID,
 		Name:         "variant-1",
-		Status:       "proposed",
 		Hypothesis:   "test hypothesis",
-		Patches:      `[{"file":"test.md","old":"a","new":"b"}]`,
+		Patches:      "--- a/instructions\n+++ b/instructions\n@@ -1,1 +1,1 @@\n-a\n+b\n",
 	})
 	if err != nil {
 		t.Fatalf("insert variant-1: %v", err)
@@ -164,20 +158,17 @@ func TestExperimentVariantUpdate(t *testing.T) {
 		ID:           varID,
 		ExperimentID: expID,
 		Name:         "baseline",
-		Status:       "proposed",
-		Patches:      "[]",
+		Patches:      "",
 	})
 	if err != nil {
 		t.Fatalf("insert variant: %v", err)
 	}
 
-	newStatus := "complete"
 	newRunCount := 10
 	newDesiredCount := 7
 
 	err = ExperimentVariantUpdate(ctx, conn, ExperimentVariantUpdateParams{
 		ID:           varID,
-		Status:       &newStatus,
 		RunCount:     &newRunCount,
 		DesiredCount: &newDesiredCount,
 	})
@@ -190,9 +181,6 @@ func TestExperimentVariantUpdate(t *testing.T) {
 		t.Fatalf("get variant after update: %v", err)
 	}
 
-	if got.Status != "complete" {
-		t.Fatalf("expected status %q, got %q", "complete", got.Status)
-	}
 	if got.RunCount != 10 {
 		t.Fatalf("expected run_count 10, got %d", got.RunCount)
 	}

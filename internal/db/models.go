@@ -194,16 +194,20 @@ type Experiment struct {
 	ActivationRoundID string
 	Status            string
 	DesiredOutcome    string
-	Notes             string
+	Analysis          string
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
+
+	Round      ActivationRound     `json:"-"`
+	Activation ActivationRow       `json:"-"`
+	ToolCalls  []ToolCallListRow   `json:"-"`
+	Variants   []ExperimentVariant `json:"-"`
 }
 
 type ExperimentVariant struct {
 	ID              string
 	ExperimentID    string
 	Name            string
-	Status          string
 	Hypothesis      string
 	Patches         string
 	ReasoningEffort string
@@ -212,20 +216,33 @@ type ExperimentVariant struct {
 	DesiredCount    int
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
+
+	Runs []ExperimentVariantRun `json:"-"`
 }
 
-type ExperimentRun struct {
-	ID                  string
-	ExperimentVariantID string
-	ToolCalls           string
-	ModelOutput         string
-	ReasoningSummaries  string
-	IsDesired           bool
-	InputTokens         int64
-	OutputTokens        int64
-	CachedTokens        int64
-	ReasoningTokens     int64
-	CreatedAt           time.Time
+type ExperimentVariantRun struct {
+	ID                  string    `json:"id"`
+	ExperimentVariantID string    `json:"experiment_variant_id"`
+	ToolCalls           string    `json:"tool_calls"`
+	ModelOutput         string    `json:"model_output"`
+	ReasoningSummaries  string    `json:"reasoning_summaries"`
+	IsDesired           *bool     `json:"is_desired"`
+	Rationale           string    `json:"rationale"`
+	InputTokens         int64     `json:"input_tokens"`
+	OutputTokens        int64     `json:"output_tokens"`
+	CachedTokens        int64     `json:"cached_tokens"`
+	ReasoningTokens     int64     `json:"reasoning_tokens"`
+	CreatedAt           time.Time `json:"created_at"`
+
+	Model           string            `json:"-"`
+	Instructions    string            `json:"-"`
+	ToolSchemas     string            `json:"-"`
+	UserInput       string            `json:"-"`
+	ReasoningEffort string            `json:"-"`
+	Verbosity       string            `json:"-"`
+	Patches         string            `json:"-"`
+	PriorRounds     []ActivationRound `json:"-"`
+	PriorToolCalls  []ToolCallListRow `json:"-"`
 }
 
 type ExperimentInsertParams struct {
@@ -233,21 +250,20 @@ type ExperimentInsertParams struct {
 	ActivationRoundID string
 	Status            string
 	DesiredOutcome    string
-	Notes             string
+	Analysis          string
 }
 
 type ExperimentUpdateParams struct {
 	ID             string
 	Status         *string
 	DesiredOutcome *string
-	Notes          *string
+	Analysis       *string
 }
 
 type ExperimentVariantInsertParams struct {
 	ID              string
 	ExperimentID    string
 	Name            string
-	Status          string
 	Hypothesis      string
 	Patches         string
 	ReasoningEffort string
@@ -256,20 +272,6 @@ type ExperimentVariantInsertParams struct {
 
 type ExperimentVariantUpdateParams struct {
 	ID           string
-	Status       *string
 	RunCount     *int
 	DesiredCount *int
-}
-
-type ExperimentRunInsertParams struct {
-	ID                  string
-	ExperimentVariantID string
-	ToolCalls           string
-	ModelOutput         string
-	ReasoningSummaries  string
-	IsDesired           bool
-	InputTokens         int64
-	OutputTokens        int64
-	CachedTokens        int64
-	ReasoningTokens     int64
 }
