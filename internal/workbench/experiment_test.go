@@ -15,7 +15,7 @@ func TestCreateExperiment(t *testing.T) {
 	conn := openTestDB(t)
 	roundID := seedRound(t, conn)
 
-	expID, err := CreateExperiment(ctx, conn, roundID, "model should noop")
+	expID, err := CreateExperiment(ctx, conn, roundID, "model should noop", "trace analysis")
 	if err != nil {
 		t.Fatalf("create experiment: %v", err)
 	}
@@ -46,23 +46,23 @@ func TestCreateExperiment(t *testing.T) {
 		t.Fatalf("expected baseline variant, got %q", variants[0].Name)
 	}
 
-	if variants[0].Patches != "[]" {
+	if variants[0].Patches != "" {
 		t.Fatalf("expected empty patches, got %q", variants[0].Patches)
 	}
 }
 
-func TestCreateVariant(t *testing.T) {
+func TestCreateExperimentVariant(t *testing.T) {
 	ctx := context.Background()
 	conn := openTestDB(t)
 	roundID := seedRound(t, conn)
 
-	expID, err := CreateExperiment(ctx, conn, roundID, "desired outcome")
+	expID, err := CreateExperiment(ctx, conn, roundID, "desired outcome", "analysis")
 	if err != nil {
 		t.Fatalf("create experiment: %v", err)
 	}
 
-	patches := []Patch{{File: "prompts/brain.md", Old: "old", New: "new"}}
-	varID, err := CreateVariant(ctx, conn, expID, "shorter-ack", "reduce duplicates", patches, "medium", "low")
+	patches := "--- a/instructions\n+++ b/instructions\n@@ -1,1 +1,1 @@\n-old\n+new\n"
+	varID, err := CreateExperimentVariant(ctx, conn, expID, "shorter-ack", "reduce duplicates", patches, "medium", "low")
 	if err != nil {
 		t.Fatalf("create variant: %v", err)
 	}
@@ -75,17 +75,14 @@ func TestCreateVariant(t *testing.T) {
 	if v.Name != "shorter-ack" {
 		t.Fatalf("expected name %q, got %q", "shorter-ack", v.Name)
 	}
-	if v.Status != "proposed" {
-		t.Fatalf("expected status %q, got %q", "proposed", v.Status)
-	}
 }
 
-func TestRecordRun(t *testing.T) {
+func TestUpdateExperimentVariantRun(t *testing.T) {
 	ctx := context.Background()
 	conn := openTestDB(t)
 	roundID := seedRound(t, conn)
 
-	expID, err := CreateExperiment(ctx, conn, roundID, "desired outcome")
+	expID, err := CreateExperiment(ctx, conn, roundID, "desired outcome", "analysis")
 	if err != nil {
 		t.Fatalf("create experiment: %v", err)
 	}
@@ -96,58 +93,40 @@ func TestRecordRun(t *testing.T) {
 	}
 
 	baselineID := variants[0].ID
-	result := ReplayResult{
-		ToolCalls:       []ToolCall{{Name: "message_noop"}},
-		ModelOutput:     "",
-		InputTokens:     4521,
-		OutputTokens:    89,
-		CachedTokens:    200,
-		ReasoningTokens: 50,
-	}
 
-	runID, err := RecordRun(ctx, conn, baselineID, result, true)
+	run, err := db.ExperimentVariantRunInsert(ctx, conn, baselineID)
 	if err != nil {
-		t.Fatalf("record run: %v", err)
+		t.Fatalf("insert run: %v", err)
 	}
 
-	if runID == "" {
-		t.Fatal("expected non-empty run ID")
-	}
+	run.ToolCalls = `[{"name":"message_send"}]`
+	run.InputTokens = 100
+	run.OutputTokens = 50
 
-	v, err := db.ExperimentVariantGet(ctx, conn, baselineID)
+	err = db.ExperimentVariantRunSaveResult(ctx, conn, run)
 	if err != nil {
-		t.Fatalf("get variant: %v", err)
+		t.Fatalf("save run result: %v", err)
 	}
 
-	if v.RunCount != 1 {
-		t.Fatalf("expected run_count 1, got %d", v.RunCount)
-	}
-	if v.DesiredCount != 1 {
-		t.Fatalf("expected desired_count 1, got %d", v.DesiredCount)
-	}
-}
-
-func TestGetStatus(t *testing.T) {
-	ctx := context.Background()
-	conn := openTestDB(t)
-	roundID := seedRound(t, conn)
-
-	expID, err := CreateExperiment(ctx, conn, roundID, "desired outcome")
+	gotExpID, err := UpdateExperimentVariantRun(ctx, conn, run.ID, true, "correct behavior")
 	if err != nil {
-		t.Fatalf("create experiment: %v", err)
+		t.Fatalf("update variant run: %v", err)
 	}
 
-	status, err := GetStatus(ctx, conn, expID)
+	if gotExpID != expID {
+		t.Fatalf("expected experiment ID %q, got %q", expID, gotExpID)
+	}
+
+	runs, err := db.ExperimentVariantRunList(ctx, conn, baselineID)
 	if err != nil {
-		t.Fatalf("get status: %v", err)
+		t.Fatalf("list runs: %v", err)
 	}
 
-	if status.Status != "analysis" {
-		t.Fatalf("expected status %q, got %q", "analysis", status.Status)
+	if runs[0].IsDesired == nil || !*runs[0].IsDesired {
+		t.Fatal("expected run to be marked desired")
 	}
-
-	if len(status.Variants) != 1 {
-		t.Fatalf("expected 1 variant, got %d", len(status.Variants))
+	if runs[0].Rationale != "correct behavior" {
+		t.Fatalf("expected rationale %q, got %q", "correct behavior", runs[0].Rationale)
 	}
 }
 

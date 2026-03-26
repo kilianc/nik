@@ -2,7 +2,6 @@ SELECT
   id,
   experiment_id,
   name,
-  status,
   hypothesis,
   patches,
   reasoning_effort,
@@ -13,4 +12,3 @@ SELECT
   updated_at
 FROM experiment_variant
 WHERE id LIKE '%' || ?1
-

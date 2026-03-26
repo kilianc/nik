@@ -8,27 +8,39 @@ description: >-
 
 # Prompt Workbench
 
-Diagnose a message handling issue, replay the activation round, test prompt
-changes as hypotheses, and iterate until the desired behavior rate improves.
-All state is stored in the database. Results are rendered to
-`workbench/<short_id>.md`.
+Diagnose a message handling issue, replay the activation round, test prompt changes as hypotheses, and iterate until the desired behavior rate improves. All state is stored in the database. Each experiment gets a folder at `workbench/<date>-<short_id>/` containing the report and working files (patch files, surface dumps).
+
+## CLI reference
+
+All commands go through `make workbench ARGS="..."`. Every mutation auto-renders the report to `workbench/<date>-<short_id>/report.md`.
+
+| Command | Usage |
+|---------|-------|
+| `create-experiment` | `-activation_round_id <id> -desired_outcome '<text>' -analysis '<text>'` |
+| `update-experiment` | `-experiment_id <id> [-status <s>] [-desired_outcome <d>] [-analysis <a>]` |
+| `create-experiment-variant` | `-experiment_id <id> -name '<name>' -hypothesis '<text>' [-patches <file>] [-reasoning_effort '<e>'] [-verbosity '<v>']` |
+| `create-experiment-variant-run` | `-experiment_variant_id <id> -n <count> [-max_rounds <int>] [-json]` |
+| `update-experiment-variant-run` | `-experiment_variant_run_id <id> -is_desired true\|false -rationale '<text>'` |
+
+---
 
 ## Input
 
-The user provides:
+The user needs to provide:
 - A message (quoted text, message ID, or description of the incident)
 - A description of what went wrong
+- The desired behavior
 
-## Workflow
+Ask questions until the user provides all of these.
 
-Two phases: **analysis** (always runs first, stops for user confirmation)
-and **experiment** (only after user approves).
+## Find the message the user is referring to
 
-### Analysis Phase
+- Find the message via the sqlite cli.
+- Fetch few messages before and after and the conversation they belong to.
+- Ask the user to confirm this is a match, if not ask for more info.
+- Do not make further progress until the user confirms the message has been found.
 
-#### 1. Diagnose (interactive)
-
-Find the message via the `db_query` tool:
+For example if the user provides some text, use the sqlite cli:
 
 ```sql
 SELECT m.id, m.body, m.sent_at, m.is_from_me, m.conversation_id, c.name
@@ -37,165 +49,94 @@ WHERE m.body LIKE '%<text>%'
 ORDER BY m.sent_at DESC LIMIT 10;
 ```
 
-Show the candidate message with surrounding context — messages before and
-after, the conversation name, and participants. **Confirm with the user**
-that this is the correct message before proceeding.
+## Find the activation round
 
-Then trace to the activation round that handled it:
+Now we need the activation round where nik first saw this message. Rounds store the formatted timeline in `user_input`. Search all rounds created after the message was received for the first one where it appears in the `### New` section:
 
 ```sql
-SELECT a.id, a.model, a.reasoning_effort, a.error, a.created_at,
-  ar.id AS round_id, ar.round, ar.model_output, ar.reasoning_summaries
-FROM activation a
-JOIN activation_round ar ON ar.activation_id = a.id
-WHERE a.conversation_id = '<conv_id>'
-  AND a.created_at >= '<sent_at minus 5 seconds>'
-ORDER BY a.created_at ASC, ar.round ASC
-LIMIT 20;
+SELECT
+  ar.id AS round_id,
+  ar.round,
+  a.id AS activation_id,
+  a.model,
+  a.created_at
+FROM activation_round ar
+JOIN activation a ON a.id = ar.activation_id
+WHERE ar.user_input LIKE '%<message text>%'
+  AND a.created_at >= '<message sent_at>'
+ORDER BY a.created_at ASC
+LIMIT 5;
 ```
 
-Identify the specific `activation_round.id` that should have handled the
-message.
+Read the `user_input` of the first result and confirm the message is under `### New`, not `### Already handled`. That's the round to replay.
 
-#### 2. Desired vs actual (interactive)
+## Create the experiment
 
-Read the `activation_round` data: `model_output`, `reasoning_summaries`,
-and the tool calls for that round. State what actually happened.
+Create the experiment with `create-experiment` as soon as you have the round. The report auto-renders — open the doc. From here, the user reviews the rendered report, not chat.
 
-**Always ask the user** to confirm or describe the desired behavior. Never
-assume what the correct behavior should be.
+## Analysis
 
-#### 3. Trace
+Read the round's `model_output`, `reasoning_summaries`, and tool calls. Compare what actually happened vs what the user wanted. Explain WHY — read the `user_input` (`### New` section) and the `reasoning_summaries`. Build the causal chain: "the model saw X, which led it to conclude Y, which caused action Z."
 
-Explain WHY the model behaved as it did. Read the round's `user_input`
-(search for `### New` in it) and the `reasoning_summaries`. Quote the
-specific content that misled or informed the model. Build the causal chain:
-"the model saw X, which led it to conclude Y, which caused action Z."
+Store the analysis via `update-experiment -experiment_id <id> -analysis '<text>'`. Ask and address any feedback — update via the CLI until the user is satisfied.
 
-#### 4. Baseline replay
+## Baseline replay
 
-Create the experiment and run 10 baseline replays:
+Once the user confirms, look up the baseline variant ID from the experiment output. Run 10 replays with `create-experiment-variant-run -experiment_variant_id <id> -n 10`. Review results, mark each run with `update-experiment-variant-run -experiment_variant_run_id <id> -is_desired true|false -rationale '<text>'`. The report auto-renders after each command.
 
-```bash
-make workbench ARGS="experiment create -round <round_id> -desired '<behavior>'"
+## Hypothesize
+
+Based on the trace and baseline results, propose one hypothesis — a specific prompt or skill change stored as a variant via `create-experiment-variant`.
+
+### Creating a patch
+
+Create a single `v<N>.patch` file in the experiment folder containing **unified diffs** for all surfaces you want to change. Use the surface names as file paths in the diff headers (e.g. `a/instructions`, `b/instructions`). Pass it to `create-experiment-variant -patches v<N>.patch`.
+
+Supported surfaces:
+
+- `instructions` — the system prompt (flat text)
+- `input` — the target round's user input / timeline (flat text)
+- `tools/<name>/<field>` — field in a tool definition (e.g. `tools/message_noop/Description`)
+- `tool-result/<round>/<name>` — entire output of a tool call (plain text)
+- `tool-result/<round>/<name>/<field>` — field within a JSON tool call output (e.g. `tool-result/0/load_skill/content`)
+
+For JSON surfaces (`tools/`, `tool-result/` with `/<field>`), the field value is extracted as real text with actual newlines — you never diff escaped JSON.
+
+Example `v1.patch`:
+
+```diff
+--- a/instructions
++++ b/instructions
+@@ -12,3 +12,4 @@
+ When you see only system events under ### New, call message_noop.
++Do NOT re-acknowledge a user request that appears under ### Already handled.
+ 
+--- a/tools/message_noop/Description
++++ b/tools/message_noop/Description
+@@ -1,2 +1,2 @@
+-Signal that no response is needed for this activation.
++Signal that no response is needed — use when ### New contains only system events or YOUR own messages.
 ```
 
-Note the experiment ID. Then run baseline:
+Create the variant (report auto-renders). Present the hypothesis to the user. Ask and address any feedback.
 
-```bash
-make workbench ARGS="replay -round <round_id> -n 10 -desired <key> -json"
-```
+## Iterate
 
-For each result, record it with the `db_query` tool or use the variant ID
-from the experiment's baseline variant. Parse the JSON output to determine
-hit/miss for each attempt.
+Run 10 replays with `create-experiment-variant-run`. Review the output, mark each run with `update-experiment-variant-run`. The report auto-renders after each command. Present results to the user and brainstorm what to try next.
 
-Generate the report:
+The highest-scoring variant is the **anchor** (baseline at the start). You're free to try new approaches, but if a variant scores lower, return to the anchor and try something different. When a variant beats the anchor, it becomes the new anchor. Repeat.
 
-```bash
-make workbench ARGS="experiment report -experiment <experiment_id>"
-```
+Each iteration requires user review unless the user explicitly asks you to work independently.
 
-#### 5. Stop and ask
+## Conclude
 
-Present the analysis summary to the user:
-- What happened and why (trace)
-- Baseline success rate (N/10 desired)
-- The report file location
+After each variant, ask the user: continue iterating or conclude?
 
-Ask: "Should we proceed with experiments to improve this?"
-
-**Do not continue to the experiment phase without explicit user approval.**
-
-### Experiment Phase
-
-Only after the user confirms.
-
-#### 1. Update experiment status
-
-```bash
-make workbench ARGS="experiment status -experiment <id>"
-```
-
-Update the experiment status to `experimenting` via `db_query`:
-
-```sql
-UPDATE experiment SET status = 'experimenting', updated_at = NOW_ISO8601_MS()
-WHERE id = '<experiment_id>';
-```
-
-#### 2. Hypothesize
-
-Propose specific prompt-file-level changes with justification. Each change
-is a hypothesis with an expected impact on the desired behavior rate.
-
-For each hypothesis:
-- Name the source prompt file (e.g. `prompts/nik-04-brain.md`)
-- Describe the specific text change
-- Explain how it addresses the root cause from the trace
-- State the expected improvement
-
-Write the patches JSON to a temp file:
-
-```json
-[{"file": "prompts/nik-04-brain.md", "old": "existing text", "new": "modified text"}]
-```
-
-Create the variant:
-
-```bash
-make workbench ARGS="experiment variant -experiment <id> -name '<name>' -hypothesis '<text>' -patches /path/to/patches.json"
-```
-
-Regenerate the report — it now shows the variant with hypothesis and diff,
-status `proposed`.
-
-```bash
-make workbench ARGS="experiment report -experiment <id>"
-```
-
-#### 3. User approves
-
-Present the hypothesis and diff to the user. **Wait for approval** before
-running replays.
-
-#### 4. Test variant
-
-```bash
-make workbench ARGS="replay -round <round_id> -n 10 -desired <key> -variant <variant_id> -json"
-```
-
-Record each result. Regenerate the report:
-
-```bash
-make workbench ARGS="experiment report -experiment <id>"
-```
-
-#### 5. Compare
-
-```bash
-make workbench ARGS="experiment status -experiment <id>"
-```
-
-Present the comparison: baseline vs variant success rates.
-
-#### 6. Loop or stop
-
-If improvement is sufficient, propose applying the patch to the source
-prompt file. Show the user the exact edit and ask for confirmation.
-
-If not sufficient, propose a new variant and repeat from step 2.
-
-When the user accepts a variant:
-1. Apply the patch to the actual prompt file using the edit tool
-2. Update experiment status to `complete`
-3. Regenerate the final report
+If they want to conclude, ask whether to apply the anchor's patches to the codebase. If yes, apply them to the actual source files. Update status with `update-experiment -experiment_id <id> -status complete`.
 
 ## Rules
 
-- Never make prompt file changes without explicit user approval
-- Never assume the desired behavior — always confirm with the user
-- Always regenerate the report after each major step
-- Present data, not opinions — let the success rates speak
-- Every hypothesis must trace back to the root cause analysis
-- The report in `workbench/<short_id>.md` is the primary artifact
+- The agent interprets each run's output against the desired behavior and sets `is_desired` with `update-experiment-variant-run`. When in doubt, ask the user.
+- Every `update-experiment-variant-run` must include a short `-rationale` describing what nik actually did in human terms — e.g. "nik sent a message and rescheduled the alarm" or "nik sent the message but forgot to reschedule". Never describe outcomes in tool-call names; the rationale is how you communicate the result to the user in the report.
+- Never apply patches to source files without explicit user approval.
+- The report is the primary artifact — re-render after every change.

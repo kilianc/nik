@@ -2,35 +2,45 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/kciuffolo/nik/internal/codex"
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/db"
+	"github.com/kciuffolo/nik/internal/llm"
 	"github.com/kciuffolo/nik/internal/workbench"
 )
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: workbench <replay|create|variant|status|report> [flags]")
+		fmt.Fprintln(os.Stderr, "usage: workbench <create-experiment|update-experiment|create-experiment-variant|create-experiment-variant-run|update-experiment-variant-run> [flags]")
 		os.Exit(1)
 	}
 
 	cmd := os.Args[1]
 	fs := flag.NewFlagSet("workbench", flag.ContinueOnError)
-	round := fs.String("round", "", "activation round ID")
-	experiment := fs.String("experiment", "", "experiment ID")
-	variant := fs.String("variant", "", "variant ID")
+
+	activationRoundID := fs.String("activation_round_id", "", "activation round ID")
+	experimentID := fs.String("experiment_id", "", "experiment ID")
+	experimentVariantID := fs.String("experiment_variant_id", "", "experiment variant ID")
+	experimentVariantRunID := fs.String("experiment_variant_run_id", "", "experiment variant run ID")
 	name := fs.String("name", "", "variant name")
-	desired := fs.String("desired", "", "desired outcome or tool pattern")
+	desiredOutcome := fs.String("desired_outcome", "", "desired outcome description")
+	analysis := fs.String("analysis", "", "trace analysis")
+	status := fs.String("status", "", "experiment status")
 	hypothesis := fs.String("hypothesis", "", "hypothesis text")
 	patches := fs.String("patches", "", "patches JSON file path")
-	effort := fs.String("effort", "", "reasoning effort override")
+	reasoningEffort := fs.String("reasoning_effort", "", "reasoning effort override")
 	verbosity := fs.String("verbosity", "", "verbosity override")
+	isDesired := fs.String("is_desired", "", "true or false")
+	rationale := fs.String("rationale", "", "rationale for assessment")
 	n := fs.Int("n", 1, "number of replay attempts")
+	maxRounds := fs.Int("max_rounds", 0, "max rounds per attempt (0 = default 5)")
 	jsonOut := fs.Bool("json", false, "structured JSON output")
 
 	err := fs.Parse(os.Args[2:])
@@ -51,92 +61,170 @@ func main() {
 	}
 	defer conn.Close()
 
-	oaiClient, err := codex.BuildOpenAIClient(cfg.OpenAIKey)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "openai client: %v\n", err)
-		os.Exit(1)
-	}
-
 	ctx := context.Background()
 	outputDir := filepath.Join(filepath.Dir(cfg.Home), "workbench")
 
 	var output string
+	var expID string
 
 	switch cmd {
-	case "replay":
-		if *round == "" {
-			fatal("usage: workbench replay -round <id> [-n 10] [-desired <key>] [-variant <id>] [-json]")
+	case "create-experiment":
+		if *activationRoundID == "" || *desiredOutcome == "" || *analysis == "" {
+			fatal("usage: workbench create-experiment -activation_round_id <id> -desired_outcome '<text>' -analysis '<text>'")
 		}
 
-		result, err := workbench.RunReplay(ctx, conn, oaiClient, workbench.RunReplayParams{
-			ActivationRoundID: *round,
-			VariantID:         *variant,
-			Desired:           *desired,
-			N:                 *n,
-			EffortOverride:    *effort,
-		})
+		expID, err = workbench.CreateExperiment(ctx, conn, *activationRoundID, *desiredOutcome, *analysis)
 		if err != nil {
-			fatal("replay: %v", err)
-		}
-
-		if *jsonOut {
-			output = result.JSON()
-		} else {
-			output = result.Text()
-		}
-
-	case "create":
-		if *round == "" || *desired == "" {
-			fatal("usage: workbench create -round <id> -desired <behavior>")
-		}
-
-		expID, err := workbench.CreateExperiment(ctx, conn, *round, *desired)
-		if err != nil {
-			fatal("create: %v", err)
+			fatal("create-experiment: %v", err)
 		}
 		output = fmt.Sprintf("experiment created: %s\n", expID)
 
-	case "variant":
-		if *experiment == "" || *name == "" {
-			fatal("usage: workbench variant -experiment <id> -name <name> [-hypothesis <text>] [-patches <file>]")
+	case "update-experiment":
+		if *experimentID == "" {
+			fatal("usage: workbench update-experiment -experiment_id <id> [-status <s>] [-desired_outcome <d>] [-analysis <a>]")
 		}
 
-		var p []workbench.Patch
-		if *patches != "" {
-			p, err = workbench.LoadPatchesFromFile(*patches)
-			if err != nil {
-				fatal("load patches: %v", err)
-			}
+		var sp, dp, ap *string
+		if *status != "" {
+			sp = status
+		}
+		if *desiredOutcome != "" {
+			dp = desiredOutcome
+		}
+		if *analysis != "" {
+			ap = analysis
 		}
 
-		varID, err := workbench.CreateVariant(ctx, conn, *experiment, *name, *hypothesis, p, *effort, *verbosity)
+		err = workbench.UpdateExperiment(ctx, conn, *experimentID, sp, dp, ap)
 		if err != nil {
-			fatal("variant: %v", err)
+			fatal("update-experiment: %v", err)
 		}
+		expID = *experimentID
+		output = fmt.Sprintf("experiment %s updated\n", *experimentID)
+
+	case "create-experiment-variant":
+		if *experimentID == "" || *name == "" || *hypothesis == "" {
+			fatal("usage: workbench create-experiment-variant -experiment_id <id> -name '<name>' -hypothesis '<text>' [-patches <file>] [-reasoning_effort '<effort>'] [-verbosity '<verbosity>']")
+		}
+
+		var patchText string
+		if *patches != "" {
+			data, err := os.ReadFile(*patches)
+			if err != nil {
+				fatal("read patches file: %v", err)
+			}
+			patchText = string(data)
+		}
+
+		varID, err := workbench.CreateExperimentVariant(ctx, conn, *experimentID, *name, *hypothesis, patchText, *reasoningEffort, *verbosity)
+		if err != nil {
+			fatal("create-experiment-variant: %v", err)
+		}
+		expID = *experimentID
 		output = fmt.Sprintf("variant created: %s\n", varID)
 
-	case "status":
-		output, err = workbench.FormatStatus(ctx, conn, *experiment)
-		if err != nil {
-			fatal("status: %v", err)
+	case "create-experiment-variant-run":
+		if *experimentVariantID == "" || *n < 1 {
+			fatal("usage: workbench create-experiment-variant-run -experiment_variant_id <id> -n <count> [-max_rounds <int>] [-json]")
 		}
 
-	case "report":
-		if *experiment == "" {
-			fatal("usage: workbench report -experiment <id>")
+		var clientOpts []llm.ClientOption
+		auth, err := codex.LoadOrLogin("")
+		if err == nil {
+			clientOpts = append(clientOpts, llm.WithCodex(auth))
+		} else if cfg.OpenAIKey != "" {
+			clientOpts = append(clientOpts, llm.WithAPIKey(cfg.OpenAIKey))
+		} else {
+			fatal("codex auth failed and no OpenAI key configured: %v", err)
 		}
 
-		path, err := workbench.WriteReport(ctx, conn, *experiment, outputDir)
+		runs, err := workbench.CreateExperimentVariantRun(ctx, conn, *experimentVariantID, *n, *maxRounds, clientOpts)
 		if err != nil {
-			fatal("report: %v", err)
+			fatal("create-experiment-variant-run: %v", err)
 		}
-		output = fmt.Sprintf("report written to %s\n", path)
+
+		v, err := db.ExperimentVariantGet(ctx, conn, *experimentVariantID)
+		if err == nil {
+			expID = v.ExperimentID
+		}
+
+		if *jsonOut {
+			data, _ := json.MarshalIndent(runs, "", "  ")
+			output = string(data)
+		} else {
+			output = formatRuns(runs)
+		}
+
+	case "update-experiment-variant-run":
+		if *experimentVariantRunID == "" || *isDesired == "" || *rationale == "" {
+			fatal("usage: workbench update-experiment-variant-run -experiment_variant_run_id <id> -is_desired true|false -rationale '<text>'")
+		}
+
+		desired := *isDesired == "true" || *isDesired == "yes" || *isDesired == "1"
+
+		expID, err = workbench.UpdateExperimentVariantRun(ctx, conn, *experimentVariantRunID, desired, *rationale)
+		if err != nil {
+			fatal("update-experiment-variant-run: %v", err)
+		}
+
+		tag := "not desired"
+		if desired {
+			tag = "desired"
+		}
+		output = fmt.Sprintf("run %s marked as %s\n", *experimentVariantRunID, tag)
 
 	default:
 		fatal("unknown command: %s", cmd)
 	}
 
+	if expID != "" {
+		path, err := workbench.WriteReport(ctx, conn, expID, outputDir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "auto-render report: %v\n", err)
+		} else {
+			fmt.Fprintf(os.Stderr, "report: %s\n", path)
+		}
+	}
+
 	fmt.Print(output)
+}
+
+func formatRuns(runs []db.ExperimentVariantRun) string {
+	var b strings.Builder
+
+	for i, r := range runs {
+		key := toolCallKey(r.ToolCalls)
+		fmt.Fprintf(&b, "  run %d: %s\n", i+1, key)
+	}
+
+	if len(runs) > 1 {
+		counts := map[string]int{}
+		for _, r := range runs {
+			counts[toolCallKey(r.ToolCalls)]++
+		}
+		total := len(runs)
+		fmt.Fprintf(&b, "\nDISTRIBUTION:\n")
+		for k, c := range counts {
+			fmt.Fprintf(&b, "  %s: %d/%d (%.0f%%)\n", k, c, total, float64(c)/float64(total)*100)
+		}
+	}
+
+	return b.String()
+}
+
+func toolCallKey(raw string) string {
+	var calls []struct{ Name string }
+
+	err := json.Unmarshal([]byte(raw), &calls)
+	if err != nil || len(calls) == 0 {
+		return "no_tools"
+	}
+
+	names := make([]string, len(calls))
+	for i, c := range calls {
+		names[i] = c.Name
+	}
+	return strings.Join(names, "+")
 }
 
 func fatal(format string, args ...any) {

@@ -3,34 +3,14 @@ package workbench
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
-	"os"
-	"strings"
 
 	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/id"
+	"github.com/kciuffolo/nik/internal/llm"
 )
 
-type ExperimentStatus struct {
-	ExperimentID string
-	Status       string
-	Variants     []VariantStatus
-}
-
-type VariantStatus struct {
-	ID           string
-	Name         string
-	Status       string
-	Hypothesis   string
-	Patches      []Patch
-	RunCount     int
-	DesiredCount int
-	MissCount    int
-	Rate         float64
-}
-
-func CreateExperiment(ctx context.Context, conn *sql.DB, activationRoundID, desiredOutcome string) (string, error) {
+func CreateExperiment(ctx context.Context, conn *sql.DB, activationRoundID, desiredOutcome, analysis string) (string, error) {
 	expID := id.V7()
 
 	err := db.ExperimentInsert(ctx, conn, db.ExperimentInsertParams{
@@ -38,6 +18,7 @@ func CreateExperiment(ctx context.Context, conn *sql.DB, activationRoundID, desi
 		ActivationRoundID: activationRoundID,
 		Status:            "analysis",
 		DesiredOutcome:    desiredOutcome,
+		Analysis:          analysis,
 	})
 	if err != nil {
 		return "", err
@@ -49,8 +30,7 @@ func CreateExperiment(ctx context.Context, conn *sql.DB, activationRoundID, desi
 		ID:           baselineID,
 		ExperimentID: expID,
 		Name:         "baseline",
-		Status:       "proposed",
-		Patches:      "[]",
+		Patches:      "",
 	})
 	if err != nil {
 		return "", fmt.Errorf("create baseline variant: %w", err)
@@ -59,21 +39,31 @@ func CreateExperiment(ctx context.Context, conn *sql.DB, activationRoundID, desi
 	return expID, nil
 }
 
-func CreateVariant(ctx context.Context, conn *sql.DB, experimentID, name, hypothesis string, patches []Patch, effort, verbosity string) (string, error) {
-	patchJSON, err := json.Marshal(patches)
-	if err != nil {
-		return "", fmt.Errorf("marshal patches: %w", err)
+func UpdateExperiment(ctx context.Context, conn *sql.DB, experimentID string, status, desired, analysis *string) error {
+	return db.ExperimentUpdate(ctx, conn, db.ExperimentUpdateParams{
+		ID:             experimentID,
+		Status:         status,
+		DesiredOutcome: desired,
+		Analysis:       analysis,
+	})
+}
+
+func CreateExperimentVariant(ctx context.Context, conn *sql.DB, experimentID, name, hypothesis, patches, effort, verbosity string) (string, error) {
+	if patches != "" {
+		_, err := ParseDiff(patches)
+		if err != nil {
+			return "", fmt.Errorf("invalid patch: %w", err)
+		}
 	}
 
 	variantID := id.V7()
 
-	err = db.ExperimentVariantInsert(ctx, conn, db.ExperimentVariantInsertParams{
+	err := db.ExperimentVariantInsert(ctx, conn, db.ExperimentVariantInsertParams{
 		ID:              variantID,
 		ExperimentID:    experimentID,
 		Name:            name,
-		Status:          "proposed",
 		Hypothesis:      hypothesis,
-		Patches:         string(patchJSON),
+		Patches:         patches,
 		ReasoningEffort: effort,
 		Verbosity:       verbosity,
 	})
@@ -84,141 +74,65 @@ func CreateVariant(ctx context.Context, conn *sql.DB, experimentID, name, hypoth
 	return variantID, nil
 }
 
-func RecordRun(ctx context.Context, conn *sql.DB, variantID string, result ReplayResult, isDesired bool) (string, error) {
-	toolCallsJSON, err := json.Marshal(result.ToolCalls)
-	if err != nil {
-		return "", fmt.Errorf("marshal tool calls: %w", err)
+func CreateExperimentVariantRun(ctx context.Context, conn *sql.DB, variantID string, n, maxRounds int, clientOpts []llm.ClientOption) ([]db.ExperimentVariantRun, error) {
+	if maxRounds < 1 {
+		maxRounds = 5
 	}
 
-	summariesJSON := db.MarshalStringSlice(result.ReasoningSummaries)
+	var runs []db.ExperimentVariantRun
 
-	runID, err := db.ExperimentRunInsert(ctx, conn, db.ExperimentRunInsertParams{
-		ExperimentVariantID: variantID,
-		ToolCalls:           string(toolCallsJSON),
-		ModelOutput:         result.ModelOutput,
-		ReasoningSummaries:  summariesJSON,
-		IsDesired:           isDesired,
-		InputTokens:         result.InputTokens,
-		OutputTokens:        result.OutputTokens,
-		CachedTokens:        result.CachedTokens,
-		ReasoningTokens:     result.ReasoningTokens,
-	})
+	for range n {
+		bare, err := db.ExperimentVariantRunInsert(ctx, conn, variantID)
+		if err != nil {
+			return nil, fmt.Errorf("insert run: %w", err)
+		}
+
+		run, err := db.ExperimentVariantRunGet(ctx, conn, bare.ID)
+		if err != nil {
+			return nil, fmt.Errorf("load run context: %w", err)
+		}
+
+		err = ApplyPatches(&run)
+		if err != nil {
+			return nil, fmt.Errorf("apply patches: %w", err)
+		}
+
+		run, err = Run(ctx, run, maxRounds, clientOpts)
+		if err != nil {
+			return nil, err
+		}
+
+		err = db.ExperimentVariantRunSaveResult(ctx, conn, run)
+		if err != nil {
+			return nil, fmt.Errorf("save run result: %w", err)
+		}
+
+		err = db.ExperimentVariantRefreshCounts(ctx, conn, variantID)
+		if err != nil {
+			return nil, fmt.Errorf("refresh variant counts: %w", err)
+		}
+
+		runs = append(runs, run)
+	}
+
+	return runs, nil
+}
+
+func UpdateExperimentVariantRun(ctx context.Context, conn *sql.DB, runID string, isDesired bool, rationale string) (string, error) {
+	variantID, err := db.ExperimentVariantRunUpdate(ctx, conn, runID, isDesired, rationale)
 	if err != nil {
 		return "", err
 	}
 
-	variant, err := db.ExperimentVariantGet(ctx, conn, variantID)
+	err = db.ExperimentVariantRefreshCounts(ctx, conn, variantID)
 	if err != nil {
-		return "", fmt.Errorf("get variant for count update: %w", err)
+		return "", fmt.Errorf("refresh variant counts: %w", err)
 	}
 
-	newRunCount := variant.RunCount + 1
-	newDesiredCount := variant.DesiredCount
-	if isDesired {
-		newDesiredCount++
-	}
-
-	err = db.ExperimentVariantUpdate(ctx, conn, db.ExperimentVariantUpdateParams{
-		ID:           variantID,
-		RunCount:     &newRunCount,
-		DesiredCount: &newDesiredCount,
-	})
-	if err != nil {
-		return "", fmt.Errorf("update variant counts: %w", err)
-	}
-
-	return runID, nil
-}
-
-func GetStatus(ctx context.Context, conn *sql.DB, experimentID string) (ExperimentStatus, error) {
-	exp, err := db.ExperimentGet(ctx, conn, experimentID)
-	if err != nil {
-		return ExperimentStatus{}, err
-	}
-
-	variants, err := db.ExperimentVariantList(ctx, conn, exp.ID)
-	if err != nil {
-		return ExperimentStatus{}, err
-	}
-
-	status := ExperimentStatus{
-		ExperimentID: exp.ID,
-		Status:       exp.Status,
-	}
-
-	for _, v := range variants {
-		var patches []Patch
-
-		err = json.Unmarshal([]byte(v.Patches), &patches)
-		if err != nil {
-			return ExperimentStatus{}, fmt.Errorf("unmarshal patches for variant %s: %w", v.ID, err)
-		}
-
-		missCount := v.RunCount - v.DesiredCount
-		var rate float64
-		if v.RunCount > 0 {
-			rate = float64(v.DesiredCount) / float64(v.RunCount) * 100
-		}
-
-		status.Variants = append(status.Variants, VariantStatus{
-			ID:           v.ID,
-			Name:         v.Name,
-			Status:       v.Status,
-			Hypothesis:   v.Hypothesis,
-			Patches:      patches,
-			RunCount:     v.RunCount,
-			DesiredCount: v.DesiredCount,
-			MissCount:    missCount,
-			Rate:         rate,
-		})
-	}
-
-	return status, nil
-}
-
-func VariantPatches(ctx context.Context, conn *sql.DB, variantID string) ([]Patch, error) {
 	v, err := db.ExperimentVariantGet(ctx, conn, variantID)
 	if err != nil {
-		return nil, err
+		return "", fmt.Errorf("get variant for experiment ID: %w", err)
 	}
 
-	return ParsePatches(v.Patches)
-}
-
-func FormatStatus(ctx context.Context, conn *sql.DB, experimentID string) (string, error) {
-	status, err := GetStatus(ctx, conn, experimentID)
-	if err != nil {
-		return "", err
-	}
-
-	var b strings.Builder
-
-	fmt.Fprintf(&b, "Experiment %s — %s\n\n", id.Shorten(status.ExperimentID), status.Status)
-
-	for _, v := range status.Variants {
-		if v.RunCount > 0 {
-			fmt.Fprintf(&b, "  %-20s %d runs, %d hit, %d miss (%.0f%%)\n",
-				v.Name, v.RunCount, v.DesiredCount, v.MissCount, v.Rate)
-		} else {
-			fmt.Fprintf(&b, "  %-20s pending\n", v.Name)
-		}
-	}
-
-	return b.String(), nil
-}
-
-func LoadPatchesFromFile(path string) ([]Patch, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read patches file: %w", err)
-	}
-
-	var patches []Patch
-
-	err = json.Unmarshal(data, &patches)
-	if err != nil {
-		return nil, fmt.Errorf("parse patches file: %w", err)
-	}
-
-	return patches, nil
+	return v.ExperimentID, nil
 }

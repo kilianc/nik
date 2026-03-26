@@ -13,18 +13,18 @@ func TestRenderReportBasicSections(t *testing.T) {
 	conn := openTestDB(t)
 	roundID := seedRound(t, conn)
 
-	expID, err := CreateExperiment(ctx, conn, roundID, "model should call message_noop")
+	expID, err := CreateExperiment(ctx, conn, roundID, "model should call message_noop", "initial notes")
 	if err != nil {
 		t.Fatalf("create experiment: %v", err)
 	}
 
-	notes := "The model re-acknowledged because ### New contained system events."
+	analysis := "The model re-acknowledged because ### New contained system events."
 	err = db.ExperimentUpdate(ctx, conn, db.ExperimentUpdateParams{
-		ID:    expID,
-		Notes: &notes,
+		ID:       expID,
+		Analysis: &analysis,
 	})
 	if err != nil {
-		t.Fatalf("update notes: %v", err)
+		t.Fatalf("update analysis: %v", err)
 	}
 
 	report, err := RenderReport(ctx, conn, expID)
@@ -32,26 +32,25 @@ func TestRenderReportBasicSections(t *testing.T) {
 		t.Fatalf("render report: %v", err)
 	}
 
-	if !strings.Contains(report, "# Experiment") {
-		t.Fatal("expected report to contain header")
+	checks := []struct {
+		label string
+		text  string
+	}{
+		{"header", "# Experiment"},
+		{"target section", "## Target"},
+		{"desired outcome section", "## Desired Outcome"},
+		{"desired outcome text", "model should call message_noop"},
+		{"analysis section", "## Analysis"},
+		{"analysis text", "### New contained system events"},
+		{"status", "**Status:** analysis"},
+		{"variants section", "## Variants"},
+		{"baseline detail", "v0 — baseline"},
 	}
-	if !strings.Contains(report, "## Target") {
-		t.Fatal("expected report to contain Target section")
-	}
-	if !strings.Contains(report, "## Desired Outcome") {
-		t.Fatal("expected report to contain Desired Outcome section")
-	}
-	if !strings.Contains(report, "model should call message_noop") {
-		t.Fatal("expected report to contain desired outcome text")
-	}
-	if !strings.Contains(report, "## Trace") {
-		t.Fatal("expected report to contain Trace section")
-	}
-	if !strings.Contains(report, "### New contained system events") {
-		t.Fatal("expected report to contain trace text")
-	}
-	if !strings.Contains(report, "Status: analysis") {
-		t.Fatal("expected report to show analysis status")
+
+	for _, c := range checks {
+		if !strings.Contains(report, c.text) {
+			t.Fatalf("expected report to contain %s (%q), got:\n%s", c.label, c.text, report)
+		}
 	}
 }
 
@@ -60,7 +59,7 @@ func TestRenderReportWithRuns(t *testing.T) {
 	conn := openTestDB(t)
 	roundID := seedRound(t, conn)
 
-	expID, err := CreateExperiment(ctx, conn, roundID, "desired")
+	expID, err := CreateExperiment(ctx, conn, roundID, "desired", "analysis")
 	if err != nil {
 		t.Fatalf("create experiment: %v", err)
 	}
@@ -72,23 +71,38 @@ func TestRenderReportWithRuns(t *testing.T) {
 
 	baselineID := variants[0].ID
 
-	_, err = RecordRun(ctx, conn, baselineID, ReplayResult{
-		ToolCalls:    []ToolCall{{Name: "message_noop"}},
-		InputTokens:  4521,
-		OutputTokens: 89,
-	}, true)
+	run1, err := db.ExperimentVariantRunInsert(ctx, conn, baselineID)
 	if err != nil {
-		t.Fatalf("record run: %v", err)
+		t.Fatalf("insert run 1: %v", err)
 	}
 
-	_, err = RecordRun(ctx, conn, baselineID, ReplayResult{
-		ToolCalls:    []ToolCall{{Name: "task_spawn"}},
-		ModelOutput:  "On it.",
-		InputTokens:  4521,
-		OutputTokens: 234,
-	}, false)
+	run1.ToolCalls = `[{"name":"message_noop"}]`
+	run1.InputTokens = 4521
+	run1.OutputTokens = 89
+
+	err = db.ExperimentVariantRunSaveResult(ctx, conn, run1)
 	if err != nil {
-		t.Fatalf("record run: %v", err)
+		t.Fatalf("save run 1: %v", err)
+	}
+
+	run2, err := db.ExperimentVariantRunInsert(ctx, conn, baselineID)
+	if err != nil {
+		t.Fatalf("insert run 2: %v", err)
+	}
+
+	run2.ToolCalls = `[{"name":"task_spawn"}]`
+	run2.ModelOutput = "On it."
+	run2.InputTokens = 4521
+	run2.OutputTokens = 234
+
+	err = db.ExperimentVariantRunSaveResult(ctx, conn, run2)
+	if err != nil {
+		t.Fatalf("save run 2: %v", err)
+	}
+
+	err = db.ExperimentVariantRefreshCounts(ctx, conn, baselineID)
+	if err != nil {
+		t.Fatalf("refresh counts: %v", err)
 	}
 
 	report, err := RenderReport(ctx, conn, expID)
@@ -96,27 +110,26 @@ func TestRenderReportWithRuns(t *testing.T) {
 		t.Fatalf("render report: %v", err)
 	}
 
-	if !strings.Contains(report, "## Baseline") {
-		t.Fatal("expected report to contain Baseline section")
+	if !strings.Contains(report, "v0 — baseline") {
+		t.Fatal("expected report to contain v0 baseline detail section")
 	}
-	if !strings.Contains(report, "1 hit, 1 miss") {
+	if !strings.Contains(report, "0 hit, 2 miss") {
 		t.Fatal("expected report to show hit/miss counts")
 	}
 	if !strings.Contains(report, "message_noop") {
 		t.Fatal("expected report to contain tool call name")
 	}
-
-	if strings.Contains(report, "## Comparison") {
-		t.Fatal("should not show Comparison with only 1 variant having runs")
+	if !strings.Contains(report, "Rationale") {
+		t.Fatal("expected run table to contain Rationale column")
 	}
 }
 
-func TestRenderReportComparison(t *testing.T) {
+func TestRenderReportVariantTable(t *testing.T) {
 	ctx := context.Background()
 	conn := openTestDB(t)
 	roundID := seedRound(t, conn)
 
-	expID, err := CreateExperiment(ctx, conn, roundID, "desired")
+	expID, err := CreateExperiment(ctx, conn, roundID, "desired", "analysis")
 	if err != nil {
 		t.Fatalf("create experiment: %v", err)
 	}
@@ -128,25 +141,47 @@ func TestRenderReportComparison(t *testing.T) {
 
 	baselineID := variants[0].ID
 
-	_, err = RecordRun(ctx, conn, baselineID, ReplayResult{
-		ToolCalls:   []ToolCall{{Name: "message_noop"}},
-		InputTokens: 4521, OutputTokens: 89,
-	}, true)
+	bRun, err := db.ExperimentVariantRunInsert(ctx, conn, baselineID)
 	if err != nil {
-		t.Fatalf("record baseline run: %v", err)
+		t.Fatalf("insert baseline run: %v", err)
 	}
 
-	varID, err := CreateVariant(ctx, conn, expID, "shorter-ack", "hypothesis", []Patch{{File: "brain.md", Old: "old", New: "new"}}, "", "")
+	bRun.ToolCalls = `[{"name":"message_noop"}]`
+	bRun.InputTokens = 4521
+	bRun.OutputTokens = 89
+
+	err = db.ExperimentVariantRunSaveResult(ctx, conn, bRun)
+	if err != nil {
+		t.Fatalf("save baseline run: %v", err)
+	}
+
+	err = db.ExperimentVariantRefreshCounts(ctx, conn, baselineID)
+	if err != nil {
+		t.Fatalf("refresh baseline counts: %v", err)
+	}
+
+	varID, err := CreateExperimentVariant(ctx, conn, expID, "shorter-ack", "hypothesis", "--- a/instructions\n+++ b/instructions\n@@ -1,1 +1,1 @@\n-old\n+new\n", "", "")
 	if err != nil {
 		t.Fatalf("create variant: %v", err)
 	}
 
-	_, err = RecordRun(ctx, conn, varID, ReplayResult{
-		ToolCalls:   []ToolCall{{Name: "message_noop"}},
-		InputTokens: 4600, OutputTokens: 91,
-	}, true)
+	vRun, err := db.ExperimentVariantRunInsert(ctx, conn, varID)
 	if err != nil {
-		t.Fatalf("record variant run: %v", err)
+		t.Fatalf("insert variant run: %v", err)
+	}
+
+	vRun.ToolCalls = `[{"name":"message_noop"}]`
+	vRun.InputTokens = 4600
+	vRun.OutputTokens = 91
+
+	err = db.ExperimentVariantRunSaveResult(ctx, conn, vRun)
+	if err != nil {
+		t.Fatalf("save variant run: %v", err)
+	}
+
+	err = db.ExperimentVariantRefreshCounts(ctx, conn, varID)
+	if err != nil {
+		t.Fatalf("refresh variant counts: %v", err)
 	}
 
 	report, err := RenderReport(ctx, conn, expID)
@@ -154,10 +189,16 @@ func TestRenderReportComparison(t *testing.T) {
 		t.Fatalf("render report: %v", err)
 	}
 
-	if !strings.Contains(report, "## Comparison") {
-		t.Fatal("expected report to contain Comparison section")
+	if !strings.Contains(report, "| v0 | 0% | baseline") {
+		t.Fatalf("expected variant table to contain v0 baseline, got:\n%s", report)
 	}
-	if !strings.Contains(report, "shorter-ack") {
-		t.Fatal("expected report to contain variant name in comparison")
+	if !strings.Contains(report, "| v1 | 0% | shorter-ack") {
+		t.Fatalf("expected variant table to contain v1 shorter-ack, got:\n%s", report)
+	}
+	if !strings.Contains(report, "v1 — shorter-ack") {
+		t.Fatalf("expected variant detail with v1 numbering, got:\n%s", report)
+	}
+	if !strings.Contains(report, "**Why:** hypothesis") {
+		t.Fatalf("expected variant detail to show hypothesis, got:\n%s", report)
 	}
 }

@@ -233,10 +233,22 @@ var ExperimentVariantList string
 //go:embed experiment_variant_update.sql
 var ExperimentVariantUpdate string
 
-// experiment run queries
+//go:embed experiment_variant_refresh_counts.sql
+var ExperimentVariantRefreshCounts string
 
-//go:embed experiment_run_insert.sql
-var ExperimentRunInsert string
+// experiment variant run queries
 
-//go:embed experiment_run_list.sql
-var ExperimentRunList string
+//go:embed experiment_variant_run_get.sql
+var ExperimentVariantRunGet string
+
+//go:embed experiment_variant_run_insert.sql
+var ExperimentVariantRunInsert string
+
+//go:embed experiment_variant_run_list.sql
+var ExperimentVariantRunList string
+
+//go:embed experiment_variant_run_save_result.sql
+var ExperimentVariantRunSaveResult string
+
+//go:embed experiment_variant_run_update.sql
+var ExperimentVariantRunUpdate string
