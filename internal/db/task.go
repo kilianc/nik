@@ -69,10 +69,11 @@ func TaskInsert(ctx context.Context, db DBTX, p TaskInsertParams) error {
 }
 
 type TaskUpdateParams struct {
-	ID           string
-	Status       *string
-	ActivationID *string
-	LastReportAt *time.Time
+	ID                 string
+	Status             *string
+	ActivationID       *string
+	LastReportAt       *time.Time
+	CancellationReason *string
 }
 
 func TaskUpdate(ctx context.Context, db DBTX, p TaskUpdateParams) error {
@@ -81,6 +82,7 @@ func TaskUpdate(ctx context.Context, db DBTX, p TaskUpdateParams) error {
 		p.Status,
 		p.ActivationID,
 		p.LastReportAt,
+		p.CancellationReason,
 	)
 	if err != nil {
 		return fmt.Errorf("update task %s: %w", p.ID, err)
@@ -188,7 +190,7 @@ func TaskActiveRetries(ctx context.Context, db *sql.DB, rootID string) ([]Active
 
 func scanTask(sc scanner) (Task, error) {
 	var t Task
-	var convID, contactID, activationID, retryForTaskID sql.NullString
+	var convID, contactID, activationID, retryForTaskID, cancellationReason sql.NullString
 
 	err := sc.Scan(
 		&t.ID,
@@ -201,6 +203,7 @@ func scanTask(sc scanner) (Task, error) {
 		&t.Plan,
 		&t.Thinking,
 		&t.Status,
+		&cancellationReason,
 		&t.CreatedAt,
 		&t.StartedAt,
 		&t.CompletedAt,
@@ -214,6 +217,7 @@ func scanTask(sc scanner) (Task, error) {
 	t.ContactID = contactID.String
 	t.ActivationID = activationID.String
 	t.RetryForTaskID = retryForTaskID.String
+	t.CancellationReason = cancellationReason.String
 	return t, nil
 }
 

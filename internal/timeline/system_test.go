@@ -156,9 +156,9 @@ func TestRenderSystemMessage(t *testing.T) {
 		{
 			name:     "task_cancelled",
 			kind:     "task_cancelled",
-			body:     db.Task{ID: "aaaa-bbbb-cccc-dddd", Goal: "do thing"},
+			body:     db.Task{ID: "aaaa-bbbb-cccc-dddd", Goal: "do thing", CancellationReason: "no longer needed"},
 			wantFrom: "system",
-			wantSub:  "[task cancelled]",
+			wantSub:  "reason: no longer needed",
 		},
 		{
 			name:     "alarm_fired",

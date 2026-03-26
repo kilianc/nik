@@ -101,6 +101,7 @@ func renderTaskCancelled(msg db.Message) entry {
 		"[task cancelled]",
 		"task_id: " + id.Shorten(t.ID),
 		"goal: " + t.Goal,
+		"reason: " + t.CancellationReason,
 	}
 
 	return entry{at: msg.SentAt, from: "system", text: padLines(lines)}
