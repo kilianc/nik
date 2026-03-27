@@ -6,7 +6,7 @@ summary: >
 tools: [db_query, shell, message_send, alarm]
 reflex:
   - name: breathing
-    every: "0 9,14,19 * * *"
+    every: every day at 9am, 2pm, and 7pm
 ---
 
 # Breathing

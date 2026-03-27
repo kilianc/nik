@@ -6,9 +6,9 @@ summary: >
 tools: [db_query, shell, read_file, write_file]
 reflex:
   - name: extract
-    every: "0 23 * * *"
+    every: every day at 11pm
   - name: compact
-    every: "30 0 * * *"
+    every: every day at 12:30am
 ---
 
 # Memory

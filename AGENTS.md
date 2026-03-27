@@ -386,11 +386,14 @@ Skills can declare a periodic check command in their YAML frontmatter:
 
 ```yaml
 reflex:
-  command: ./skills/google_workspace/check_gmail.sh
-  every: 2m
+  - name: check_gmail
+    command: ./skills/google_workspace/check_gmail.sh
+    every: every 15 minutes
 ```
 
-The system runs this command on the host, piping the previous opaque record via stdin. If the command outputs a non-empty string that differs from the last record, the system stores it in the `skill_reflex` table (time series) and inserts a `skill_reflex_fired` system message. The brain wakes up, sees the event, and loads the skill.
+The `every:` field is **natural language** (e.g. "every day at 11:30pm", "every 15 minutes"). On first encounter the system calls a lightweight LLM to convert it to a 5-field cron expression and caches the result in the `every_to_cron` DB table. Subsequent checks use the cached cron — no repeated LLM calls.
+
+For reflexes with a `command`, the system runs it on the host, piping the previous opaque record via stdin. If the command outputs a non-empty string that differs from the last record, the system stores it in the `skill_reflex` table (time series) and inserts a `skill_reflex_fired` system message. The brain wakes up, sees the event, and loads the skill. Reflexes without a `command` are schedule-only (fire on schedule, no subprocess).
 
 The skill's script owns all "what's new" logic. The system is just storage + trigger. Empty stdout = nothing new. Same stdout as last record = nothing new.
 

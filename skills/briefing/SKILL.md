@@ -6,7 +6,7 @@ summary: >
 tools: [shell, alarm, db_query, load_skill, read_file, write_file]
 reflex:
   - name: briefing
-    every: "0 7 * * *"
+    every: every day at 7am
 ---
 
 # Briefing
