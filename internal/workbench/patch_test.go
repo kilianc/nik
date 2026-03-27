@@ -234,6 +234,44 @@ func TestApplyPatches(t *testing.T) {
 		}
 	})
 
+	t.Run("multi-file no blank separator", func(t *testing.T) {
+		run := db.ExperimentVariantRun{
+			Messages: `[{"role":"tool_call","content":"old_args","name":"old_tool","call_id":"c1"},{"role":"tool_result","content":"old_result","call_id":"c1"}]`,
+			Patches: strings.Join([]string{
+				"--- a/messages/0/name",
+				"+++ b/messages/0/name",
+				"@@ -1 +1 @@",
+				"-old_tool",
+				"+new_tool",
+				"--- a/messages/0/content",
+				"+++ b/messages/0/content",
+				"@@ -1 +1 @@",
+				"-old_args",
+				"+new_args",
+				"--- a/messages/1/content",
+				"+++ b/messages/1/content",
+				"@@ -1 +1 @@",
+				"-old_result",
+				"+new_result",
+			}, "\n"),
+		}
+
+		err := ApplyPatches(&run)
+		if err != nil {
+			t.Fatalf("apply patches: %v", err)
+		}
+
+		if !strings.Contains(run.Messages, "new_tool") {
+			t.Fatalf("expected new_tool, got: %s", run.Messages)
+		}
+		if !strings.Contains(run.Messages, "new_args") {
+			t.Fatalf("expected new_args, got: %s", run.Messages)
+		}
+		if !strings.Contains(run.Messages, "new_result") {
+			t.Fatalf("expected new_result, got: %s", run.Messages)
+		}
+	})
+
 	t.Run("empty patches", func(t *testing.T) {
 		run := db.ExperimentVariantRun{
 			Instructions: "original",
