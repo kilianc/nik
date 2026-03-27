@@ -27,7 +27,7 @@ func TestRegisterToolPanicsOnEmptyName(t *testing.T) {
 }
 
 func TestToolsForContextFiltersPrivilegedTools(t *testing.T) {
-	b := New(&config.Config{PrivilegedConversationIDs: map[string]string{"owner": "owner-conv"}}, nil)
+	b := New(&config.Config{PrivilegedConversationIDs: config.ConversationList{{Label: "owner", ID: "owner-conv"}}}, nil)
 	handler := func(context.Context, llm.ToolCall) (string, error) { return `{"ok":true}`, nil }
 
 	b.RegisterTool(llm.Tool{
@@ -54,7 +54,7 @@ func TestToolsForContextFiltersPrivilegedTools(t *testing.T) {
 }
 
 func TestToolExecutorBlocksPrivilegedInUnprivilegedContext(t *testing.T) {
-	b := New(&config.Config{PrivilegedConversationIDs: map[string]string{"owner": "owner-conv"}}, nil)
+	b := New(&config.Config{PrivilegedConversationIDs: config.ConversationList{{Label: "owner", ID: "owner-conv"}}}, nil)
 
 	called := false
 	b.RegisterTool(llm.Tool{

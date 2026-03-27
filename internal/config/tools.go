@@ -110,8 +110,8 @@ func configGet(cfg *Config) (string, error) {
 		"max_history":                 cfg.MaxHistory,
 		"timezone":                    cfg.Timezone,
 		"location":                    cfg.Location,
-		"allow_conversation_ids":      cfg.AllowConversationIDs,
-		"privileged_conversation_ids": cfg.PrivilegedConversationIDs,
+		"allow_conversation_ids":      cfg.AllowConversationIDs.toMap(),
+		"privileged_conversation_ids": cfg.PrivilegedConversationIDs.toMap(),
 	}
 
 	data, err := json.Marshal(out)
@@ -252,20 +252,16 @@ func allowlistAdd(ctx context.Context, cfg *Config, conn *sql.DB, conversationID
 		return llm.ToolErrorf("conversation not found: %s", conversationID), nil
 	}
 
-	if mapContainsValue(cfg.AllowConversationIDs, conversationID) {
+	if cfg.AllowConversationIDs.ContainsID(conversationID) {
 		return `{"error":"already in allow list"}`, nil
 	}
 
 	label := deriveLabel(ctx, conn, conv)
-
-	if cfg.AllowConversationIDs == nil {
-		cfg.AllowConversationIDs = make(map[string]string)
-	}
-	cfg.AllowConversationIDs[label] = conversationID
+	cfg.AllowConversationIDs.Append(label, conversationID)
 
 	err = cfg.Save(cfg.ConfigPath())
 	if err != nil {
-		delete(cfg.AllowConversationIDs, label)
+		cfg.AllowConversationIDs.Remove(conversationID)
 		return llm.ToolError(err), nil
 	}
 
@@ -287,18 +283,12 @@ func allowlistRemove(cfg *Config, conversationID string) (string, error) {
 		return `{"error":"cannot remove privileged channel from allow list"}`, nil
 	}
 
-	var label string
-	for k, v := range cfg.AllowConversationIDs {
-		if v == conversationID {
-			label = k
-			break
-		}
-	}
+	label := cfg.AllowConversationIDs.LabelFor(conversationID)
 	if label == "" {
 		return `{"error":"conversation_id not in allow list"}`, nil
 	}
 
-	delete(cfg.AllowConversationIDs, label)
+	cfg.AllowConversationIDs.Remove(conversationID)
 
 	err := cfg.Save(cfg.ConfigPath())
 	if err != nil {
