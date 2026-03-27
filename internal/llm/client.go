@@ -260,23 +260,42 @@ func maxPairsForModel(model string) int {
 	return pairs
 }
 
+var transientNetworkSubstrings = []string{
+	"bad record MAC",
+	"connection reset by peer",
+	"broken pipe",
+	"unexpected EOF",
+	"i/o timeout",
+	"tls: protocol is shutdown",
+	"no such host",
+}
+
 func IsTransient(err error) bool {
+	if err == nil {
+		return false
+	}
+
 	var apiErr *openai.Error
-	if errors.As(err, &apiErr) && apiErr.StatusCode >= 500 {
-		return true
+	if errors.As(err, &apiErr) {
+		return apiErr.StatusCode >= 500
 	}
 
 	var streamErr *ssestream.StreamError
 	if errors.As(err, &streamErr) {
 		msg := streamErr.Message
-		if strings.Contains(msg, "server_error") || strings.Contains(msg, "INTERNAL_ERROR") {
-			return true
-		}
+		return strings.Contains(msg, "server_error") || strings.Contains(msg, "INTERNAL_ERROR")
 	}
 
 	var anthropicErr *anthropic.Error
-	if errors.As(err, &anthropicErr) && (anthropicErr.StatusCode >= 500 || anthropicErr.StatusCode == 429) {
-		return true
+	if errors.As(err, &anthropicErr) {
+		return anthropicErr.StatusCode >= 500 || anthropicErr.StatusCode == 429
+	}
+
+	msg := err.Error()
+	for _, s := range transientNetworkSubstrings {
+		if strings.Contains(msg, s) {
+			return true
+		}
 	}
 
 	return false

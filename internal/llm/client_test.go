@@ -160,6 +160,15 @@ func TestIsTransient(t *testing.T) {
 		{"anthropic 429", &anthropic.Error{StatusCode: 429}, true},
 		{"anthropic 400 not transient", &anthropic.Error{StatusCode: 400}, false},
 		{"wrapped anthropic 503", fmt.Errorf("complete: %w", &anthropic.Error{StatusCode: 503}), true},
+
+		{"tls bad record MAC", fmt.Errorf("round 6: remote error: tls: bad record MAC"), true},
+		{"connection reset", fmt.Errorf("read tcp [::1]:1234->[::1]:443: read: connection reset by peer"), true},
+		{"broken pipe", fmt.Errorf("write tcp [::1]:1234->[::1]:443: write: broken pipe"), true},
+		{"unexpected EOF", fmt.Errorf("unexpected EOF"), true},
+		{"i/o timeout", fmt.Errorf("read tcp [::1]:1234: i/o timeout"), true},
+		{"tls protocol shutdown", fmt.Errorf("tls: protocol is shutdown"), true},
+		{"dns no such host", fmt.Errorf(`Post "https://api.openai.com/v1/responses": dial tcp: lookup api.openai.com: no such host`), true},
+		{"wrapped tls error", fmt.Errorf("complete round 4: %w", fmt.Errorf("remote error: tls: bad record MAC")), true},
 	}
 
 	for _, tt := range tests {
