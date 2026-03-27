@@ -245,6 +245,13 @@ func (b *Brain) think(ctx context.Context, getInput func() string) (_ string, _ 
 		}
 
 		act.Prune()
-		act.SetInput(getInput())
+
+		// skip timeline read after done — getInput advances last_read_at,
+		// which would consume messages that arrived during this round.
+		// the trace round reuses the previous timeline; unconsumed
+		// messages trigger a fresh activation on the next tick.
+		if !done {
+			act.SetInput(getInput())
+		}
 	}
 }
