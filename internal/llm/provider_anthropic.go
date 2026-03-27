@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -85,6 +86,94 @@ func (p *anthropicProvider) addToolResult(call ToolCall, output string, isError 
 	}
 
 	p.pendingResults = append(p.pendingResults, anthropic.NewToolResultBlock(call.CallID, output, isError))
+}
+
+func (p *anthropicProvider) conversation() []Message {
+	var msgs []Message
+	for _, msg := range p.messages {
+		for _, block := range msg.Content {
+			switch {
+			case block.OfText != nil:
+				msgs = append(msgs, Message{Role: string(msg.Role), Content: block.OfText.Text})
+			case block.OfToolUse != nil:
+				args := "{}"
+				if block.OfToolUse.Input != nil {
+					if data, err := json.Marshal(block.OfToolUse.Input); err == nil {
+						args = string(data)
+					}
+				}
+				msgs = append(msgs, Message{
+					Role:    "tool_call",
+					Content: args,
+					Name:    block.OfToolUse.Name,
+					CallID:  block.OfToolUse.ID,
+				})
+			case block.OfToolResult != nil:
+				content := ""
+				for _, c := range block.OfToolResult.Content {
+					if c.OfText != nil {
+						content = c.OfText.Text
+					}
+				}
+				msgs = append(msgs, Message{
+					Role:    "tool_result",
+					Content: content,
+					CallID:  block.OfToolResult.ToolUseID,
+				})
+			}
+		}
+	}
+	return msgs
+}
+
+func (p *anthropicProvider) loadHistory(messages []Message) {
+	var msgs []anthropic.MessageParam
+	var toolUseBlocks []anthropic.ContentBlockParamUnion
+	var toolResultBlocks []anthropic.ContentBlockParamUnion
+
+	flush := func() {
+		if len(toolUseBlocks) > 0 {
+			msgs = append(msgs, anthropic.NewAssistantMessage(toolUseBlocks...))
+			toolUseBlocks = nil
+		}
+		if len(toolResultBlocks) > 0 {
+			msgs = append(msgs, anthropic.NewUserMessage(toolResultBlocks...))
+			toolResultBlocks = nil
+		}
+	}
+
+	for _, m := range messages {
+		switch m.Role {
+		case "user":
+			flush()
+			msgs = append(msgs, anthropic.NewUserMessage(anthropic.NewTextBlock(m.Content)))
+		case "assistant":
+			flush()
+			msgs = append(msgs, anthropic.NewAssistantMessage(anthropic.NewTextBlock(m.Content)))
+		case "tool_call":
+			if len(toolResultBlocks) > 0 {
+				flush()
+			}
+			toolUseBlocks = append(toolUseBlocks, anthropic.ContentBlockParamUnion{
+				OfToolUse: &anthropic.ToolUseBlockParam{
+					ID:    m.CallID,
+					Name:  m.Name,
+					Input: json.RawMessage(m.Content),
+				},
+			})
+		case "tool_result":
+			if len(toolUseBlocks) > 0 && len(toolResultBlocks) == 0 {
+				msgs = append(msgs, anthropic.NewAssistantMessage(toolUseBlocks...))
+				toolUseBlocks = nil
+			}
+			toolResultBlocks = append(toolResultBlocks, anthropic.NewToolResultBlock(m.CallID, m.Content, false))
+		}
+	}
+	flush()
+
+	p.messages = msgs
+	p.lastResponse = nil
+	p.pendingResults = nil
 }
 
 func (p *anthropicProvider) complete(ctx context.Context) (*providerResult, error) {

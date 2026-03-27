@@ -89,6 +89,56 @@ func (p *openaiProvider) addToolResult(call ToolCall, output string, _ bool) {
 	p.items = append(p.items, responses.ResponseInputItemParamOfFunctionCallOutput(call.CallID, output))
 }
 
+func (p *openaiProvider) conversation() []Message {
+	msgs := make([]Message, 0, len(p.items))
+	for _, item := range p.items {
+		switch {
+		case item.OfMessage != nil:
+			role := string(item.OfMessage.Role)
+			content := ""
+			if item.OfMessage.Content.OfString.Valid() {
+				content = item.OfMessage.Content.OfString.Value
+			}
+			msgs = append(msgs, Message{Role: role, Content: content})
+		case item.OfFunctionCall != nil:
+			msgs = append(msgs, Message{
+				Role:    "tool_call",
+				Content: item.OfFunctionCall.Arguments,
+				Name:    item.OfFunctionCall.Name,
+				CallID:  item.OfFunctionCall.CallID,
+			})
+		case item.OfFunctionCallOutput != nil:
+			output := ""
+			if item.OfFunctionCallOutput.Output.OfString.Valid() {
+				output = item.OfFunctionCallOutput.Output.OfString.Value
+			}
+			msgs = append(msgs, Message{
+				Role:    "tool_result",
+				Content: output,
+				CallID:  item.OfFunctionCallOutput.CallID,
+			})
+		}
+	}
+	return msgs
+}
+
+func (p *openaiProvider) loadHistory(messages []Message) {
+	items := make(responses.ResponseInputParam, 0, len(messages))
+	for _, m := range messages {
+		switch m.Role {
+		case "user":
+			items = append(items, responses.ResponseInputItemParamOfMessage(m.Content, responses.EasyInputMessageRoleUser))
+		case "assistant":
+			items = append(items, responses.ResponseInputItemParamOfMessage(m.Content, responses.EasyInputMessageRoleAssistant))
+		case "tool_call":
+			items = append(items, responses.ResponseInputItemParamOfFunctionCall(m.Content, m.CallID, m.Name))
+		case "tool_result":
+			items = append(items, responses.ResponseInputItemParamOfFunctionCallOutput(m.CallID, m.Content))
+		}
+	}
+	p.items = items
+}
+
 func (p *openaiProvider) complete(ctx context.Context) (*providerResult, error) {
 	p.params.Input = responses.ResponseNewParamsInputUnion{OfInputItemList: p.items}
 

@@ -95,12 +95,13 @@ Create a single `v<N>.patch` file in the experiment folder containing **unified 
 Supported surfaces:
 
 - `instructions` — the system prompt (flat text)
-- `input` — the target round's user input / timeline (flat text)
+- `messages/<index>/content` — content of a specific message in the conversation history (default field is `content` if omitted: `messages/<index>` is equivalent to `messages/<index>/content`)
+- `messages/<index>/name` — name field of a message (e.g. tool name)
 - `tools/<name>/<field>` — field in a tool definition (e.g. `tools/done/Description`)
-- `tool-result/<round>/<name>` — entire output of a tool call (plain text)
-- `tool-result/<round>/<name>/<field>` — field within a JSON tool call output (e.g. `tool-result/0/load_skill/content`)
 
-For JSON surfaces (`tools/`, `tool-result/` with `/<field>`), the field value is extracted as real text with actual newlines — you never diff escaped JSON.
+Messages are a flat array of all conversation entries (user inputs, assistant outputs, tool calls, tool results, nudges) recorded across all rounds up to the target round. Use `messages/0/content` for the timeline, or find the nudge/tool result by index.
+
+For JSON surfaces (`tools/`), the field value is extracted as real text with actual newlines — you never diff escaped JSON.
 
 Example `v1.patch`:
 
@@ -111,11 +112,11 @@ Example `v1.patch`:
  When you see only system events under ### New, call done.
 +Do NOT re-acknowledge a user request that appears under ### Already handled.
  
---- a/tools/done/Description
-+++ b/tools/done/Description
-@@ -1,2 +1,2 @@
--Signal that you are done with this activation.
-+Signal that you are done — use when ### New contains only system events or YOUR own messages.
+--- a/messages/2/content
++++ b/messages/2/content
+@@ -5,3 +5,3 @@
+-Call `message_send` now with this text. Do not rephrase or add to it. Then call `done`.
++If this text was meant as a message, call `message_send`. If internal reasoning, call `done` with a reason.
 ```
 
 Create the variant (report auto-renders). Present the hypothesis to the user. Ask and address any feedback.

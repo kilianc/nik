@@ -140,19 +140,11 @@ func applyFilePatch(run *db.ExperimentVariantRun, fp filePatch) error {
 		run.Instructions = patched
 		return nil
 
-	case fp.Path == "input":
-		patched, err := applyHunks(run.UserInput, fp.Hunks)
-		if err != nil {
-			return err
-		}
-		run.UserInput = patched
-		return nil
+	case strings.HasPrefix(fp.Path, "messages/"):
+		return applyMessagesPatch(run, fp)
 
 	case strings.HasPrefix(fp.Path, "tools/"):
 		return applyToolsPatch(run, fp)
-
-	case strings.HasPrefix(fp.Path, "tool-result/"):
-		return applyToolResultPatch(run, fp)
 
 	default:
 		return fmt.Errorf("unknown surface %q", fp.Path)
@@ -204,65 +196,47 @@ func applyToolsPatch(run *db.ExperimentVariantRun, fp filePatch) error {
 	return nil
 }
 
-func applyToolResultPatch(run *db.ExperimentVariantRun, fp filePatch) error {
-	rest := strings.TrimPrefix(fp.Path, "tool-result/")
-	parts := strings.SplitN(rest, "/", 3)
-	if len(parts) < 2 {
-		return fmt.Errorf("expected tool-result/<round>/<name>[/<field>], got %q", fp.Path)
-	}
+func applyMessagesPatch(run *db.ExperimentVariantRun, fp filePatch) error {
+	parts := strings.SplitN(strings.TrimPrefix(fp.Path, "messages/"), "/", 2)
 
-	round, err := strconv.Atoi(parts[0])
+	index, err := strconv.Atoi(parts[0])
 	if err != nil {
-		return fmt.Errorf("invalid round %q: %w", parts[0], err)
-	}
-	name := parts[1]
-
-	idx := -1
-	for i, tc := range run.PriorToolCalls {
-		if tc.Round == round && tc.Name == name {
-			idx = i
-			break
-		}
-	}
-	if idx == -1 {
-		return fmt.Errorf("tool call %s at round %d not found", name, round)
+		return fmt.Errorf("invalid message index %q: %w", parts[0], err)
 	}
 
-	if len(parts) == 2 {
-		patched, err := applyHunks(run.PriorToolCalls[idx].Output, fp.Hunks)
-		if err != nil {
-			return err
-		}
-		run.PriorToolCalls[idx].Output = patched
-		return nil
+	field := "content"
+	if len(parts) > 1 {
+		field = parts[1]
 	}
 
-	field := parts[2]
-
-	var obj map[string]any
-	err = json.Unmarshal([]byte(run.PriorToolCalls[idx].Output), &obj)
+	var msgs []map[string]string
+	err = json.Unmarshal([]byte(run.Messages), &msgs)
 	if err != nil {
-		return fmt.Errorf("parse tool result JSON: %w", err)
+		return fmt.Errorf("parse messages: %w", err)
 	}
 
-	raw, ok := obj[field]
+	if index < 0 || index >= len(msgs) {
+		return fmt.Errorf("message index %d out of range (have %d)", index, len(msgs))
+	}
+
+	text, ok := msgs[index][field]
 	if !ok {
-		return fmt.Errorf("field %q not found in tool result", field)
+		return fmt.Errorf("field %q not found in message %d", field, index)
 	}
 
-	text := anyToText(raw)
 	patched, err := applyHunks(text, fp.Hunks)
 	if err != nil {
 		return err
 	}
 
-	obj[field] = textToAny(raw, patched)
+	msgs[index][field] = patched
 
-	data, err := json.Marshal(obj)
+	data, err := json.Marshal(msgs)
 	if err != nil {
-		return fmt.Errorf("marshal tool result: %w", err)
+		return fmt.Errorf("marshal messages: %w", err)
 	}
-	run.PriorToolCalls[idx].Output = string(data)
+
+	run.Messages = string(data)
 	return nil
 }
 

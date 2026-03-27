@@ -4,6 +4,7 @@ SELECT
   round,
   user_input,
   model_output,
+  messages,
   reasoning_summaries,
   input_tokens,
   output_tokens,
