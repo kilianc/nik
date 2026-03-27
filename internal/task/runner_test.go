@@ -3,11 +3,17 @@ package task
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/llm"
 )
@@ -186,6 +192,171 @@ func assertSystemMessage(t *testing.T, conn *sql.DB, kind, taskID, jsonPath, wan
 	if got != want {
 		t.Fatalf("system message %s = %q, want %q", jsonPath, got, want)
 	}
+}
+
+func openaiResponse(toolCalls ...string) string {
+	var output []map[string]any
+	for i := 0; i < len(toolCalls); i += 2 {
+		output = append(output, map[string]any{
+			"type":      "function_call",
+			"id":        fmt.Sprintf("fc%d", i/2),
+			"call_id":   fmt.Sprintf("c%d", i/2),
+			"name":      toolCalls[i],
+			"arguments": toolCalls[i+1],
+			"status":    "completed",
+		})
+	}
+	if len(toolCalls) == 0 {
+		output = append(output, map[string]any{
+			"type":   "message",
+			"id":     "m1",
+			"role":   "assistant",
+			"status": "completed",
+			"content": []map[string]any{
+				{"type": "output_text", "text": "done", "annotations": []any{}},
+			},
+		})
+	}
+	b, _ := json.Marshal(map[string]any{
+		"id": "r1", "object": "response", "created_at": 0, "status": "completed",
+		"output": output,
+		"usage": map[string]any{
+			"input_tokens": 10, "output_tokens": 5, "total_tokens": 15,
+			"input_tokens_details":  map[string]any{"cached_tokens": 0},
+			"output_tokens_details": map[string]any{"reasoning_tokens": 0},
+		},
+	})
+	return string(b)
+}
+
+func setupRunnerTest(t *testing.T, responses []string) (*Runner, db.Task, *llm.Activation, llm.ToolExecutor) {
+	t.Helper()
+
+	svc, conn := testDB(t)
+	ctx := context.Background()
+
+	task := createStartedTask(t, svc, conn, "test task")
+
+	var reqCount atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := int(reqCount.Add(1))
+		w.Header().Set("Content-Type", "application/json")
+		idx := n - 1
+		if idx >= len(responses) {
+			idx = len(responses) - 1
+		}
+		fmt.Fprint(w, responses[idx])
+	}))
+	t.Cleanup(srv.Close)
+
+	tmpDir := t.TempDir()
+	promptsDir := filepath.Join(tmpDir, "prompts")
+	os.MkdirAll(promptsDir, 0o755)
+	os.WriteFile(filepath.Join(promptsDir, "task-01-nudge.md"), []byte("Send a task_report now."), 0o644)
+
+	model := "test-model"
+	client := llm.NewClient(&model, llm.WithAPIKey("test-key"), llm.WithBaseURL(srv.URL))
+
+	cfg := &config.Config{Home: tmpDir}
+	runner := &Runner{cfg: cfg, svc: svc}
+
+	reportTool := BuildReportTool(svc, task.ID)
+	allTools := []llm.Tool{reportTool}
+	defs, exec := llm.SplitTools(allTools)
+
+	act := llm.NewActivation(client, llm.NoopRecorder{}, "test", defs)
+	act.SetMaxRounds(20)
+	act.Start(ctx)
+	act.SetInput("")
+
+	return runner, task, act, exec
+}
+
+func TestRunLoopDoneFlag(t *testing.T) {
+	t.Run("exits after task_report completed", func(t *testing.T) {
+		args, _ := json.Marshal(reportArgs{Status: "completed", Note: "all done"})
+		responses := []string{
+			openaiResponse("task_report", string(args)),
+			openaiResponse(),
+		}
+
+		runner, task, act, exec := setupRunnerTest(t, responses)
+		defer act.Close(context.Background())
+
+		err := runner.runLoop(context.Background(), task, act, exec)
+		if err != nil {
+			t.Fatalf("runLoop returned error: %v", err)
+		}
+
+		status, err := runner.svc.LastReportStatus(context.Background(), task.ID)
+		if err != nil {
+			t.Fatalf("LastReportStatus: %v", err)
+		}
+		if status != "completed" {
+			t.Fatalf("last report status = %q, want completed", status)
+		}
+
+		if act.RoundNumber() != 2 {
+			t.Fatalf("expected 2 rounds, got %d", act.RoundNumber())
+		}
+	})
+
+	t.Run("exits after task_report failed", func(t *testing.T) {
+		args, _ := json.Marshal(reportArgs{Status: "failed", Note: "could not finish"})
+		responses := []string{
+			openaiResponse("task_report", string(args)),
+			openaiResponse(),
+		}
+
+		runner, task, act, exec := setupRunnerTest(t, responses)
+		defer act.Close(context.Background())
+
+		err := runner.runLoop(context.Background(), task, act, exec)
+		if err != nil {
+			t.Fatalf("runLoop returned error: %v", err)
+		}
+
+		status, err := runner.svc.LastReportStatus(context.Background(), task.ID)
+		if err != nil {
+			t.Fatalf("LastReportStatus: %v", err)
+		}
+		if status != "failed" {
+			t.Fatalf("last report status = %q, want failed", status)
+		}
+
+		if act.RoundNumber() != 2 {
+			t.Fatalf("expected 2 rounds, got %d", act.RoundNumber())
+		}
+	})
+
+	t.Run("continues after task_report running", func(t *testing.T) {
+		args, _ := json.Marshal(reportArgs{Status: "running", Note: "still working"})
+		responses := []string{
+			openaiResponse("task_report", string(args)),
+			openaiResponse(),
+			openaiResponse(),
+		}
+
+		runner, task, act, exec := setupRunnerTest(t, responses)
+		defer act.Close(context.Background())
+
+		err := runner.runLoop(context.Background(), task, act, exec)
+		if err != nil {
+			t.Fatalf("runLoop returned error: %v", err)
+		}
+
+		status, err := runner.svc.LastReportStatus(context.Background(), task.ID)
+		if err != nil {
+			t.Fatalf("LastReportStatus: %v", err)
+		}
+		if status != "running" {
+			t.Fatalf("last report status = %q, want running", status)
+		}
+
+		if act.RoundNumber() < 3 {
+			t.Fatalf("expected at least 3 rounds (nudge path), got %d", act.RoundNumber())
+		}
+	})
 }
 
 func TestRunFinalization(t *testing.T) {

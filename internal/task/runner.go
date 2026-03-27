@@ -139,7 +139,10 @@ func (r *Runner) Run(ctx context.Context, t db.Task) {
 }
 
 func (r *Runner) runLoop(ctx context.Context, t db.Task, act *llm.Activation, exec llm.ToolExecutor) error {
-	var nudged bool
+	var (
+		nudged bool
+		done   bool
+	)
 	lastReport := time.Now()
 
 	for {
@@ -163,20 +166,17 @@ func (r *Runner) runLoop(ctx context.Context, t db.Task, act *llm.Activation, ex
 		}
 
 		if len(result.ToolCalls) == 0 {
-			if !nudged {
-				nudged = true
-				nudgeText := r.loadNudge()
-				if nudgeText != "" {
-					reportStatus, reportErr := r.svc.LastReportStatus(ctx, t.ID)
-					if reportErr == nil && (reportStatus == "completed" || reportStatus == "failed") {
-						return nil
-					}
-					act.AppendAssistantText(result.Text)
-					act.AppendUserMessage(nudgeText)
-					continue
-				}
+			if done || nudged {
+				return nil
 			}
-			return nil
+			nudged = true
+			nudgeText := r.loadNudge()
+			if nudgeText == "" {
+				return nil
+			}
+			act.AppendAssistantText(result.Text)
+			act.AppendUserMessage(nudgeText)
+			continue
 		}
 
 		if act.Repeats() >= runnerLoopThreshold {
@@ -191,6 +191,17 @@ func (r *Runner) runLoop(ctx context.Context, t db.Task, act *llm.Activation, ex
 		}
 
 		act.ExecuteTools(ctx, result, exec)
+
+		done = false
+		for _, call := range result.ToolCalls {
+			if call.Name == "task_report" {
+				status, err := r.svc.LastReportStatus(ctx, t.ID)
+				if err == nil && (status == "completed" || status == "failed") {
+					done = true
+				}
+			}
+		}
+
 		act.Prune()
 	}
 }
