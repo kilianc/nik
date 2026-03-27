@@ -236,9 +236,9 @@ const (
 	defaultMaxRounds = 75
 
 	historyBudgetFraction = 0.50
-	estTokensPerPair      = 8000
+	estTokensPerPair      = 4000
 	minHistoryPairs       = 10
-	maxHistoryPairs       = 40
+	maxHistoryPairs       = 60
 )
 
 const jsonObjectInputHint = "Return a single json object only."

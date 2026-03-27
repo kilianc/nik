@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"text/template"
 
 	"github.com/kciuffolo/nik/internal/llm"
 )
@@ -140,6 +141,33 @@ func TestScanTokenTraps(t *testing.T) {
 	}
 	if strings.Contains(denseSection, "soul/") {
 		t.Fatalf("dated dir should not appear in dense section:\n%s", got)
+	}
+}
+
+func TestTaskPromptDataBudget(t *testing.T) {
+	tmpl := `{{ .Timeout }} {{ .MaxRounds }}`
+	parsed, err := template.New("test").Parse(tmpl)
+	if err != nil {
+		t.Fatalf("parse template: %v", err)
+	}
+
+	data := taskPromptData{
+		Timeout:   "1h0m0s",
+		MaxRounds: 200,
+	}
+
+	var buf strings.Builder
+	err = parsed.Execute(&buf, data)
+	if err != nil {
+		t.Fatalf("execute template: %v", err)
+	}
+
+	got := buf.String()
+	if !strings.Contains(got, "1h0m0s") {
+		t.Fatalf("expected timeout in output, got: %q", got)
+	}
+	if !strings.Contains(got, "200") {
+		t.Fatalf("expected max rounds in output, got: %q", got)
 	}
 }
 

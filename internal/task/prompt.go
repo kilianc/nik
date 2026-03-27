@@ -27,6 +27,8 @@ type taskPromptData struct {
 	ToolDocs   string
 	Skills     string
 	Plan       string
+	Timeout    string
+	MaxRounds  int
 }
 
 func (r *Runner) renderPrompt(t db.Task, tools []llm.ToolDef) string {
@@ -50,6 +52,9 @@ func (r *Runner) renderPrompt(t db.Task, tools []llm.ToolDef) string {
 		shellEnv = "Docker container (Debian bookworm)"
 	}
 
+	timeout := r.cfg.Task.TimeoutOrDefault()
+	maxRounds := r.cfg.Task.MaxRoundsOrDefault()
+
 	data := taskPromptData{
 		Now:        now,
 		ShellEnv:   shellEnv,
@@ -58,6 +63,8 @@ func (r *Runner) renderPrompt(t db.Task, tools []llm.ToolDef) string {
 		ToolDocs:   buildToolDocs(tools),
 		Skills:     buildSkillDocs(r.cfg, tools),
 		Plan:       t.Plan,
+		Timeout:    timeout.String(),
+		MaxRounds:  maxRounds,
 	}
 
 	var buf strings.Builder
