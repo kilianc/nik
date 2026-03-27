@@ -216,6 +216,10 @@ allow_conversation_ids:
 			t.Fatalf("expected 2 allow IDs after load, got %d", len(cfg.AllowConversationIDs))
 		}
 
+		if cfg.PrivilegedIDs()[0] != "priv1" {
+			t.Fatalf("expected first privileged ID to be priv1 (file order), got %q", cfg.PrivilegedIDs()[0])
+		}
+
 		time.Sleep(50 * time.Millisecond)
 		writeTestConfig(t, dir, `
 openai_key: sk-test
@@ -235,7 +239,7 @@ allow_conversation_ids:
 		}
 
 		if len(cfg.AllowConversationIDs) != 3 {
-			t.Fatalf("expected 3 allow IDs after reload (conv1 + priv1 + priv2), got %d: %v", len(cfg.AllowConversationIDs), cfg.AllowConversationIDs)
+			t.Fatalf("expected 3 allow IDs after reload (conv1 + priv1 + priv2), got %d", len(cfg.AllowConversationIDs))
 		}
 	})
 }
@@ -352,7 +356,10 @@ models:
 
 func TestIsAllowed(t *testing.T) {
 	cfg := Config{
-		AllowConversationIDs: map[string]string{"owner": "conv-1", "friend": "conv-2"},
+		AllowConversationIDs: ConversationList{
+			{Label: "owner", ID: "conv-1"},
+			{Label: "friend", ID: "conv-2"},
+		},
 	}
 
 	if !cfg.IsAllowed("conv-1") {

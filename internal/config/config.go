@@ -76,6 +76,87 @@ func (t TaskConfig) TimeoutOrDefault() time.Duration {
 	return 60 * time.Minute
 }
 
+type ConversationEntry struct {
+	Label string
+	ID    string
+}
+
+type ConversationList []ConversationEntry
+
+func (cl ConversationList) IDs() []string {
+	ids := make([]string, 0, len(cl))
+	for _, e := range cl {
+		ids = append(ids, e.ID)
+	}
+	return ids
+}
+
+func (cl ConversationList) ContainsID(id string) bool {
+	for _, e := range cl {
+		if e.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func (cl ConversationList) LabelFor(id string) string {
+	for _, e := range cl {
+		if e.ID == id {
+			return e.Label
+		}
+	}
+	return ""
+}
+
+func (cl *ConversationList) Append(label, id string) {
+	*cl = append(*cl, ConversationEntry{Label: label, ID: id})
+}
+
+func (cl *ConversationList) Remove(id string) bool {
+	for i, e := range *cl {
+		if e.ID == id {
+			*cl = slices.Delete(*cl, i, i+1)
+			return true
+		}
+	}
+	return false
+}
+
+func (cl ConversationList) toMap() map[string]string {
+	m := make(map[string]string, len(cl))
+	for _, e := range cl {
+		m[e.Label] = e.ID
+	}
+	return m
+}
+
+func (cl *ConversationList) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind != yaml.MappingNode {
+		return fmt.Errorf("expected mapping, got %d", node.Kind)
+	}
+
+	*cl = make(ConversationList, 0, len(node.Content)/2)
+	for i := 0; i < len(node.Content); i += 2 {
+		*cl = append(*cl, ConversationEntry{
+			Label: node.Content[i].Value,
+			ID:    node.Content[i+1].Value,
+		})
+	}
+	return nil
+}
+
+func (cl ConversationList) MarshalYAML() (interface{}, error) {
+	node := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	for _, e := range cl {
+		node.Content = append(node.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Value: e.Label},
+			&yaml.Node{Kind: yaml.ScalarNode, Value: e.ID},
+		)
+	}
+	return node, nil
+}
+
 type Config struct {
 	Home        string    `yaml:"-"`
 	lastModTime time.Time `yaml:"-"`
@@ -88,8 +169,8 @@ type Config struct {
 	PromptsDirValue string       `yaml:"prompts_dir"`
 	SkillsDirValue  string       `yaml:"skills_dir"`
 
-	AllowConversationIDs      map[string]string `yaml:"allow_conversation_ids"`
-	PrivilegedConversationIDs map[string]string `yaml:"privileged_conversation_ids"`
+	AllowConversationIDs      ConversationList `yaml:"allow_conversation_ids"`
+	PrivilegedConversationIDs ConversationList `yaml:"privileged_conversation_ids"`
 
 	MaxHistory     int    `yaml:"max_history"`
 	Timezone       string `yaml:"timezone"`
@@ -219,53 +300,26 @@ func (c Config) MemoriesPath() string {
 }
 
 func (c Config) AllowedIDs() []string {
-	ids := make([]string, 0, len(c.AllowConversationIDs))
-	for _, id := range c.AllowConversationIDs {
-		ids = append(ids, id)
-	}
-	slices.Sort(ids)
-	return ids
+	return c.AllowConversationIDs.IDs()
 }
 
 func (c Config) PrivilegedIDs() []string {
-	ids := make([]string, 0, len(c.PrivilegedConversationIDs))
-	for _, id := range c.PrivilegedConversationIDs {
-		ids = append(ids, id)
-	}
-	slices.Sort(ids)
-	return ids
+	return c.PrivilegedConversationIDs.IDs()
 }
 
 func (c Config) IsAllowed(id string) bool {
-	for _, v := range c.AllowConversationIDs {
-		if v == id {
-			return true
-		}
-	}
-	return false
+	return c.AllowConversationIDs.ContainsID(id)
 }
 
 func (c Config) IsPrivileged(id string) bool {
-	for _, v := range c.PrivilegedConversationIDs {
-		if v == id {
-			return true
-		}
-	}
-	return false
+	return c.PrivilegedConversationIDs.ContainsID(id)
 }
 
 func (c Config) ConversationLabel(id string) string {
-	for label, v := range c.AllowConversationIDs {
-		if v == id {
-			return label
-		}
+	if label := c.AllowConversationIDs.LabelFor(id); label != "" {
+		return label
 	}
-	for label, v := range c.PrivilegedConversationIDs {
-		if v == id {
-			return label
-		}
-	}
-	return ""
+	return c.PrivilegedConversationIDs.LabelFor(id)
 }
 
 func (c *Config) Save(path string) error {
@@ -375,12 +429,9 @@ func (c *Config) reload() error {
 }
 
 func normalizeConfig(cfg *Config) {
-	if cfg.AllowConversationIDs == nil {
-		cfg.AllowConversationIDs = make(map[string]string)
-	}
-	for label, pid := range cfg.PrivilegedConversationIDs {
-		if !mapContainsValue(cfg.AllowConversationIDs, pid) {
-			cfg.AllowConversationIDs[label] = pid
+	for _, e := range cfg.PrivilegedConversationIDs {
+		if !cfg.AllowConversationIDs.ContainsID(e.ID) {
+			cfg.AllowConversationIDs.Append(e.Label, e.ID)
 		}
 	}
 }
@@ -468,13 +519,4 @@ func isValidVerbosity(value string) bool {
 	default:
 		return false
 	}
-}
-
-func mapContainsValue(m map[string]string, val string) bool {
-	for _, v := range m {
-		if v == val {
-			return true
-		}
-	}
-	return false
 }

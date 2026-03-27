@@ -168,7 +168,7 @@ func TestSendHandlerVoiceWithoutSpeechFnReturnsError(t *testing.T) {
 
 func TestSendHandlerBannedWordPrevalidation(t *testing.T) {
 	cfg := &config.Config{
-		AllowConversationIDs: map[string]string{"test": "conv-123"},
+		AllowConversationIDs: config.ConversationList{{Label: "test", ID: "conv-123"}},
 		BannedWords:          []string{"goblin"},
 	}
 	svc := &Service{cfg: cfg}
@@ -207,7 +207,7 @@ func TestSendHandlerPathSecurity(t *testing.T) {
 		home := t.TempDir()
 		cfg := &config.Config{
 			Home:                 home,
-			AllowConversationIDs: map[string]string{"owner": "conv-123"},
+			AllowConversationIDs: config.ConversationList{{Label: "owner", ID: "conv-123"}},
 		}
 		handler := sendHandler(&Service{cfg: cfg})
 
@@ -226,7 +226,7 @@ func TestSendHandlerPathSecurity(t *testing.T) {
 		home := t.TempDir()
 		cfg := &config.Config{
 			Home:                 home,
-			AllowConversationIDs: map[string]string{"owner": "conv-123"},
+			AllowConversationIDs: config.ConversationList{{Label: "owner", ID: "conv-123"}},
 		}
 		handler := sendHandler(&Service{cfg: cfg})
 
@@ -249,7 +249,7 @@ func TestSendHandlerPathSecurity(t *testing.T) {
 
 		cfg := &config.Config{
 			Home:                 home,
-			AllowConversationIDs: map[string]string{"owner": "conv-123"},
+			AllowConversationIDs: config.ConversationList{{Label: "owner", ID: "conv-123"}},
 		}
 		handler := sendHandler(&Service{cfg: cfg})
 
@@ -267,7 +267,7 @@ func TestSendHandlerPathSecurity(t *testing.T) {
 
 func TestSendHandlerAllowList(t *testing.T) {
 	cfg := &config.Config{
-		AllowConversationIDs: map[string]string{"owner": "allowed-conv"},
+		AllowConversationIDs: config.ConversationList{{Label: "owner", ID: "allowed-conv"}},
 	}
 	svc := &Service{cfg: cfg}
 	handler := sendHandler(svc)

@@ -69,8 +69,8 @@ func setupReflexTest(t *testing.T) (*reflexHarness, func(context.Context)) {
 
 	cfg := &config.Config{
 		Home: dir,
-		PrivilegedConversationIDs: map[string]string{
-			"owner": privilegedConvID,
+		PrivilegedConversationIDs: config.ConversationList{
+			{Label: "owner", ID: privilegedConvID},
 		},
 	}
 
@@ -316,9 +316,9 @@ func TestSkillChangeReflexOnlyFirstPrivilegedConv(t *testing.T) {
 
 	cfg := &config.Config{
 		Home: dir,
-		PrivilegedConversationIDs: map[string]string{
-			"owner":  convA,
-			"backup": convB,
+		PrivilegedConversationIDs: config.ConversationList{
+			{Label: "owner", ID: convA},
+			{Label: "backup", ID: convB},
 		},
 	}
 
