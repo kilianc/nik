@@ -87,6 +87,7 @@ Entry points: `cmd/nik/main.go`, `cmd/workbench/main.go`
 | `internal/timeline/` | unified Sense implementation — reads messages, task reports, alarm occurrences and maps them to Stimulus |
 | `internal/skills/` | skill loader — reads SKILL.md files and registers tools dynamically |
 | `tools/` | codegen/build/debug tools invoked by `make` — no runtime code; each tool has its own README |
+| `tools/sqlite/` | custom SQLite CLI with `sqlite3_nik` driver — exposes all custom functions |
 | `prompts/` | system prompt templates loaded at runtime |
 | `skills/` | built-in skill definitions (SKILL.md files), git-tracked |
 | `workspace/` | user-facing workspace — runtime artifacts (db, logs, media, config) |
@@ -102,6 +103,7 @@ Entry points: `cmd/nik/main.go`, `cmd/workbench/main.go`
 - never run `make run` on your own, ask me to do it if you need me to
 - never send signals to nik's process (kill, SIGQUIT, SIGTERM, etc.) -- if nik needs a restart, ask me
 - do not override GOPROXY, I need a VPN when it fails, tell me to connect to it and wait
+- run SQL against the live DB with `make sqlite ARGS="-db workspace/nik.db"` — never use the system `sqlite3` CLI (it lacks custom functions and defaults foreign keys off)
 
 ### After completing changes
 
@@ -459,7 +461,7 @@ Good — `ContactGet` already does this (`contact_get.sql` uses `WHERE id = ?1 O
 
 SQLite, single file at `$NIK_HOME/nik.db`. Schema applied on startup via `db.Open()`. Foreign keys are enabled via `_foreign_keys=1` pragma. WAL mode is on for concurrent reads.
 
-**Never use the `sqlite3` CLI to mutate nik.db.** The CLI defaults to `PRAGMA foreign_keys = OFF`, which silently bypasses FK constraints and creates orphaned rows. All writes must go through `db.Open()` (which enforces FKs) or, if the CLI is unavoidable, start every session with `PRAGMA foreign_keys = ON;` before any mutation.
+**Use `make sqlite` instead of the system `sqlite3` CLI.** The system CLI lacks nik's custom functions (`jaro_winkler_similarity`, `IS_ISO8601_MS`, etc.) and defaults to `PRAGMA foreign_keys = OFF`, which silently bypasses FK constraints. `make sqlite` uses `tools/sqlite/` with the `sqlite3_nik` driver and all custom functions registered. For ad-hoc queries: `make sqlite ARGS="-db workspace/nik.db"`.
 
 - always use `TEXT`, never `VARCHAR`
 - SQL uses two-space indentation
