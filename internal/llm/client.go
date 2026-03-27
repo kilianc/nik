@@ -42,6 +42,7 @@ type clientConfig struct {
 	apiKey          string
 	anthropicKey    string
 	codexAuth       *codex.Auth
+	baseURL         string
 	reasoningEffort *string
 	verbosity       *string
 	jsonOutput      bool
@@ -81,6 +82,12 @@ func WithVerbosity(v *string) ClientOption {
 	}
 }
 
+func WithBaseURL(url string) ClientOption {
+	return func(c *clientConfig) {
+		c.baseURL = url
+	}
+}
+
 func WithJSONOutput() ClientOption {
 	return func(c *clientConfig) {
 		c.jsonOutput = true
@@ -102,7 +109,11 @@ func NewClient(model *string, opts ...ClientOption) *Client {
 	}
 
 	if cfg.apiKey != "" {
-		apiClient := openai.NewClient(option.WithAPIKey(cfg.apiKey))
+		opts := []option.RequestOption{option.WithAPIKey(cfg.apiKey)}
+		if cfg.baseURL != "" {
+			opts = append(opts, option.WithBaseURL(cfg.baseURL))
+		}
+		apiClient := openai.NewClient(opts...)
 		c.apiClient = &apiClient
 	}
 
