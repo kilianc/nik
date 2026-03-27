@@ -99,6 +99,10 @@ func parseHunk(lines []string, start int) (hunk, int, error) {
 			continue
 		}
 
+		if strings.HasPrefix(line, "--- a/") {
+			break
+		}
+
 		kind := line[0]
 		if kind != ' ' && kind != '-' && kind != '+' {
 			break
