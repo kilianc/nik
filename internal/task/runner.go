@@ -79,6 +79,9 @@ func (r *Runner) Run(ctx context.Context, t db.Task) {
 
 	act := llm.NewActivation(r.llm, r.recorder, instructions, defs)
 	act.SetMaxRounds(r.cfg.Task.MaxRoundsOrDefault())
+	if t.Thinking != "" {
+		act.SetReasoningEffort(t.Thinking)
+	}
 	act.Start(ctx)
 	defer act.Close(ctx)
 

@@ -222,6 +222,27 @@ func TestPruneItems(t *testing.T) {
 	})
 }
 
+func TestOpenAIProviderSetReasoningEffort(t *testing.T) {
+	model := "gpt-5.4"
+	client := &Client{model: &model}
+	p := newOpenAIProvider(client, "instructions", nil)
+
+	p.setReasoningEffort("high")
+	if got := string(p.params.Reasoning.Effort); got != "high" {
+		t.Fatalf("expected reasoning effort 'high', got %q", got)
+	}
+
+	p.setReasoningEffort("low")
+	if got := string(p.params.Reasoning.Effort); got != "low" {
+		t.Fatalf("expected reasoning effort 'low', got %q", got)
+	}
+
+	p.setReasoningEffort("")
+	if got := string(p.params.Reasoning.Effort); got != "low" {
+		t.Fatalf("expected reasoning effort unchanged after empty, got %q", got)
+	}
+}
+
 func TestBuildToolParamsIncludesDefinitions(t *testing.T) {
 	params := buildToolParams([]ToolDef{
 		{

@@ -138,6 +138,10 @@ func (s *Activation) Attempt() int { return s.attempt }
 
 func (s *Activation) SetMaxRounds(n int) { s.maxRounds = n }
 
+func (s *Activation) SetReasoningEffort(effort string) {
+	s.prov.setReasoningEffort(effort)
+}
+
 func (s *Activation) Round(ctx context.Context) (*RoundResult, error) {
 	limit := s.maxRounds
 	if limit <= 0 {

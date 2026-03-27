@@ -159,16 +159,22 @@ var retryToolDef = llm.ToolDef{
 				"type":        "string",
 				"description": "New plan -- what to do differently.",
 			},
+			"thinking": map[string]any{
+				"type":        "string",
+				"enum":        []string{"low", "medium", "high"},
+				"description": "Reasoning effort for the retry. Consider bumping if the previous attempt failed on a reasoning-heavy step. Empty keeps the original.",
+			},
 		},
-		"required":             []string{"task_id", "goal", "plan"},
+		"required":             []string{"task_id", "goal", "plan", "thinking"},
 		"additionalProperties": false,
 	},
 }
 
 type retryArgs struct {
-	TaskID string `json:"task_id"`
-	Goal   string `json:"goal"`
-	Plan   string `json:"plan"`
+	TaskID   string `json:"task_id"`
+	Goal     string `json:"goal"`
+	Plan     string `json:"plan"`
+	Thinking string `json:"thinking"`
 }
 
 func BuildTools(svc *Service, runner *Runner) []llm.Tool {
@@ -450,6 +456,11 @@ func retryHandler(svc *Service, runner *Runner) llm.ToolExecutor {
 			goal = original.Goal
 		}
 
+		thinking := args.Thinking
+		if thinking == "" {
+			thinking = original.Thinking
+		}
+
 		t, err := svc.Create(ctx, createParams{
 			ConversationID: original.ConversationID,
 			ContactID:      original.ContactID,
@@ -457,7 +468,7 @@ func retryHandler(svc *Service, runner *Runner) llm.ToolExecutor {
 			RetryNumber:    retryNumber,
 			Goal:           goal,
 			Plan:           args.Plan,
-			Thinking:       original.Thinking,
+			Thinking:       thinking,
 		})
 		if err != nil {
 			return llm.ToolError(err), nil

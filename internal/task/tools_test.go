@@ -94,6 +94,52 @@ func TestCancelHandlerNoRunner(t *testing.T) {
 	}
 }
 
+func TestRetryThinkingOverride(t *testing.T) {
+	svc, _ := testDB(t)
+	ctx := context.Background()
+
+	original, err := svc.Create(ctx, createParams{
+		Goal: "original goal", Thinking: "low", ConversationID: testConvID,
+	})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+
+	t.Run("explicit override", func(t *testing.T) {
+		retry, err := svc.Create(ctx, createParams{
+			ConversationID: original.ConversationID,
+			RetryForTaskID: original.ID,
+			RetryNumber:    1,
+			Goal:           original.Goal,
+			Plan:           "try harder",
+			Thinking:       "high",
+		})
+		if err != nil {
+			t.Fatalf("create retry: %v", err)
+		}
+		if retry.Thinking != "high" {
+			t.Fatalf("expected thinking 'high', got %q", retry.Thinking)
+		}
+	})
+
+	t.Run("fallback to original", func(t *testing.T) {
+		retry, err := svc.Create(ctx, createParams{
+			ConversationID: original.ConversationID,
+			RetryForTaskID: original.ID,
+			RetryNumber:    2,
+			Goal:           original.Goal,
+			Plan:           "try again",
+			Thinking:       original.Thinking,
+		})
+		if err != nil {
+			t.Fatalf("create retry: %v", err)
+		}
+		if retry.Thinking != "low" {
+			t.Fatalf("expected thinking 'low' (inherited), got %q", retry.Thinking)
+		}
+	})
+}
+
 func TestCancelHandlerRequiresReason(t *testing.T) {
 	svc, _ := testDB(t)
 	ctx := context.Background()
