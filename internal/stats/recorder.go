@@ -87,6 +87,33 @@ func (r *Recorder) ToolCall(ctx context.Context, roundID string, call llm.ToolCa
 	}
 }
 
+func (r *Recorder) Sync(ctx context.Context, stats llm.ActivationStats) {
+	meta := metaFromCtx(ctx)
+	actID := meta["activation_id"]
+	if actID == "" {
+		return
+	}
+
+	err := db.ActivationUpdate(ctx, r.conn, actID, db.ActivationUpdateParams{
+		ReasoningEffort: stats.ReasoningEffort,
+		Verbosity:       stats.Verbosity,
+		InputTokens:     stats.Usage.InputTokens,
+		OutputTokens:    stats.Usage.OutputTokens,
+		TotalTokens:     stats.Usage.TotalTokens,
+		CachedTokens:    stats.Usage.CachedTokens,
+		ReasoningTokens: stats.Usage.ReasoningTokens,
+		CostUSD:         llm.ComputeCost(stats.Model, stats.Usage.InputTokens, stats.Usage.OutputTokens, stats.Usage.CachedTokens),
+		RoundCount:      stats.Rounds.RoundCount,
+		MaxInputTokens:  stats.Rounds.MaxInputTokensPerRound,
+		MaxTotalTokens:  stats.Rounds.MaxTotalTokensPerRound,
+		ToolCallCount:   stats.ToolCallCount,
+		DurationMS:      stats.DurationMS,
+	})
+	if err != nil {
+		slog.Warn("sync activation", "pkg", "stats", "activation_id", actID, "error", err)
+	}
+}
+
 func (r *Recorder) Finish(ctx context.Context, stats llm.ActivationStats) {
 	meta := metaFromCtx(ctx)
 	actID := meta["activation_id"]
