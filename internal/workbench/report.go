@@ -29,6 +29,7 @@ var funcMap = template.FuncMap{
 	"anchor":        variantAnchor,
 	"tcNames":       tcNames,
 	"hasRuns":       hasRuns,
+	"reverse":       reverse[db.ExperimentVariant],
 }
 
 //go:embed report.md.tpl
@@ -130,6 +131,14 @@ func hasRuns(variants []db.ExperimentVariant) bool {
 		}
 	}
 	return false
+}
+
+func reverse[T any](s []T) []T {
+	r := make([]T, len(s))
+	for i, v := range s {
+		r[len(s)-1-i] = v
+	}
+	return r
 }
 
 func desiredStr(b *bool) string {

@@ -18,8 +18,8 @@ func TestParseDiff(t *testing.T) {
 		"+line3b",
 		" line4",
 		"",
-		"--- a/input",
-		"+++ b/input",
+		"--- a/messages/0/content",
+		"+++ b/messages/0/content",
 		"@@ -1,1 +1,1 @@",
 		"-old input",
 		"+new input",
@@ -37,8 +37,8 @@ func TestParseDiff(t *testing.T) {
 	if patches[0].Path != "instructions" {
 		t.Fatalf("expected path %q, got %q", "instructions", patches[0].Path)
 	}
-	if patches[1].Path != "input" {
-		t.Fatalf("expected path %q, got %q", "input", patches[1].Path)
+	if patches[1].Path != "messages/0/content" {
+		t.Fatalf("expected path %q, got %q", "messages/0/content", patches[1].Path)
 	}
 
 	if len(patches[0].Hunks) != 1 {
@@ -76,49 +76,12 @@ func TestApplyPatches(t *testing.T) {
 		}
 	})
 
-	t.Run("patch tool-result with field", func(t *testing.T) {
+	t.Run("patch messages content", func(t *testing.T) {
 		run := db.ExperimentVariantRun{
-			PriorToolCalls: []db.ToolCallListRow{
-				{
-					Round:  0,
-					Name:   "load_skill",
-					Output: `{"content":"# Alarm\n\nMUST end with update_alarm.\nDone."}`,
-				},
-			},
+			Messages: `[{"role":"user","content":"line1\nline2\nline3"},{"role":"assistant","content":"reply"}]`,
 			Patches: strings.Join([]string{
-				"--- a/tool-result/0/load_skill/content",
-				"+++ b/tool-result/0/load_skill/content",
-				"@@ -3,1 +3,1 @@",
-				"-MUST end with update_alarm.",
-				"+MUST include update_alarm.",
-			}, "\n"),
-		}
-
-		err := ApplyPatches(&run)
-		if err != nil {
-			t.Fatalf("apply patches: %v", err)
-		}
-
-		if !strings.Contains(run.PriorToolCalls[0].Output, "MUST include update_alarm.") {
-			t.Fatalf("expected patched output, got: %s", run.PriorToolCalls[0].Output)
-		}
-		if strings.Contains(run.PriorToolCalls[0].Output, "MUST end with") {
-			t.Fatalf("old text still present: %s", run.PriorToolCalls[0].Output)
-		}
-	})
-
-	t.Run("patch tool-result plain text", func(t *testing.T) {
-		run := db.ExperimentVariantRun{
-			PriorToolCalls: []db.ToolCallListRow{
-				{
-					Round:  1,
-					Name:   "shell_exec",
-					Output: "line1\nline2\nline3",
-				},
-			},
-			Patches: strings.Join([]string{
-				"--- a/tool-result/1/shell_exec",
-				"+++ b/tool-result/1/shell_exec",
+				"--- a/messages/0/content",
+				"+++ b/messages/0/content",
 				"@@ -2,1 +2,1 @@",
 				"-line2",
 				"+replaced",
@@ -130,9 +93,33 @@ func TestApplyPatches(t *testing.T) {
 			t.Fatalf("apply patches: %v", err)
 		}
 
-		want := "line1\nreplaced\nline3"
-		if run.PriorToolCalls[0].Output != want {
-			t.Fatalf("expected %q, got %q", want, run.PriorToolCalls[0].Output)
+		if !strings.Contains(run.Messages, "replaced") {
+			t.Fatalf("expected patched content, got: %s", run.Messages)
+		}
+		if strings.Contains(run.Messages, `"line2"`) {
+			t.Fatalf("old text still present: %s", run.Messages)
+		}
+	})
+
+	t.Run("patch messages name field", func(t *testing.T) {
+		run := db.ExperimentVariantRun{
+			Messages: `[{"role":"tool_call","content":"{}","name":"old_tool","call_id":"c1"}]`,
+			Patches: strings.Join([]string{
+				"--- a/messages/0/name",
+				"+++ b/messages/0/name",
+				"@@ -1,1 +1,1 @@",
+				"-old_tool",
+				"+new_tool",
+			}, "\n"),
+		}
+
+		err := ApplyPatches(&run)
+		if err != nil {
+			t.Fatalf("apply patches: %v", err)
+		}
+
+		if !strings.Contains(run.Messages, "new_tool") {
+			t.Fatalf("expected patched name, got: %s", run.Messages)
 		}
 	})
 
@@ -161,10 +148,10 @@ func TestApplyPatches(t *testing.T) {
 		}
 	})
 
-	t.Run("multi-file patch", func(t *testing.T) {
+	t.Run("multi-surface patch", func(t *testing.T) {
 		run := db.ExperimentVariantRun{
 			Instructions: "line1\nline2",
-			UserInput:    "input1\ninput2",
+			Messages:     `[{"role":"user","content":"input1\ninput2"}]`,
 			Patches: strings.Join([]string{
 				"--- a/instructions",
 				"+++ b/instructions",
@@ -172,8 +159,8 @@ func TestApplyPatches(t *testing.T) {
 				"-line1",
 				"+modified1",
 				"",
-				"--- a/input",
-				"+++ b/input",
+				"--- a/messages/0/content",
+				"+++ b/messages/0/content",
 				"@@ -2,1 +2,1 @@",
 				"-input2",
 				"+modified2",
@@ -188,8 +175,8 @@ func TestApplyPatches(t *testing.T) {
 		if run.Instructions != "modified1\nline2" {
 			t.Fatalf("instructions: %q", run.Instructions)
 		}
-		if run.UserInput != "input1\nmodified2" {
-			t.Fatalf("input: %q", run.UserInput)
+		if !strings.Contains(run.Messages, "modified2") {
+			t.Fatalf("messages: %s", run.Messages)
 		}
 	})
 
@@ -229,11 +216,12 @@ func TestApplyPatches(t *testing.T) {
 		}
 	})
 
-	t.Run("bad tool-result round", func(t *testing.T) {
+	t.Run("messages index out of range", func(t *testing.T) {
 		run := db.ExperimentVariantRun{
+			Messages: `[{"role":"user","content":"only one"}]`,
 			Patches: strings.Join([]string{
-				"--- a/tool-result/99/missing_tool",
-				"+++ b/tool-result/99/missing_tool",
+				"--- a/messages/5/content",
+				"+++ b/messages/5/content",
 				"@@ -1,1 +1,1 @@",
 				"-old",
 				"+new",
@@ -242,7 +230,7 @@ func TestApplyPatches(t *testing.T) {
 
 		err := ApplyPatches(&run)
 		if err == nil {
-			t.Fatal("expected error for missing tool call")
+			t.Fatal("expected error for out of range message index")
 		}
 	})
 

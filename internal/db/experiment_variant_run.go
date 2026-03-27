@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -31,8 +32,6 @@ func ExperimentVariantRunGet(ctx context.Context, conn *sql.DB, runID string) (E
 	var r ExperimentVariantRun
 	var isDesired sql.NullInt64
 	var effort, verbosity sql.NullString
-	var activationID string
-	var targetRound int
 
 	err := conn.QueryRowContext(ctx, queries.ExperimentVariantRunGet, runID).Scan(
 		&r.ID,
@@ -51,11 +50,10 @@ func ExperimentVariantRunGet(ctx context.Context, conn *sql.DB, runID string) (E
 		&r.Instructions,
 		&r.ToolSchemas,
 		&r.UserInput,
+		&r.Messages,
 		&effort,
 		&verbosity,
 		&r.Patches,
-		&activationID,
-		&targetRound,
 	)
 	if err != nil {
 		return ExperimentVariantRun{}, fmt.Errorf("get experiment_variant_run %s: %w", runID, err)
@@ -69,25 +67,9 @@ func ExperimentVariantRunGet(ctx context.Context, conn *sql.DB, runID string) (E
 	r.ReasoningEffort = effort.String
 	r.Verbosity = verbosity.String
 
-	r.PriorRounds, err = ActivationRoundList(ctx, conn, activationID, &targetRound)
-	if err != nil {
-		return ExperimentVariantRun{}, fmt.Errorf("list prior rounds for run %s: %w", runID, err)
-	}
-
-	allToolCalls, err := ToolCallList(ctx, conn, activationID, nil)
-	if err != nil {
-		return ExperimentVariantRun{}, fmt.Errorf("list tool calls for run %s: %w", runID, err)
-	}
-
-	var maxPriorRound int
-	if len(r.PriorRounds) > 0 {
-		maxPriorRound = r.PriorRounds[len(r.PriorRounds)-1].Round
-	}
-
-	for _, tc := range allToolCalls {
-		if tc.Round <= maxPriorRound {
-			r.PriorToolCalls = append(r.PriorToolCalls, tc)
-		}
+	if r.Messages == "" || r.Messages == "[]" {
+		content, _ := json.Marshal(r.UserInput)
+		r.Messages = `[{"role":"user","content":` + string(content) + `}]`
 	}
 
 	return r, nil

@@ -15,11 +15,10 @@ SELECT
   a.instructions,
   a.tool_schemas,
   ar.user_input,
+  ar.messages,
   COALESCE(NULLIF(ev.reasoning_effort, ''), a.reasoning_effort),
   COALESCE(NULLIF(ev.verbosity, ''), a.verbosity),
-  ev.patches,
-  a.id,
-  ar.round
+  ev.patches
 FROM experiment_variant_run r
 JOIN experiment_variant ev ON ev.id = r.experiment_variant_id
 JOIN experiment e ON e.id = ev.experiment_id

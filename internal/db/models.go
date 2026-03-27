@@ -235,15 +235,14 @@ type ExperimentVariantRun struct {
 	ReasoningTokens     int64     `json:"reasoning_tokens"`
 	CreatedAt           time.Time `json:"created_at"`
 
-	Model           string            `json:"-"`
-	Instructions    string            `json:"-"`
-	ToolSchemas     string            `json:"-"`
-	UserInput       string            `json:"-"`
-	ReasoningEffort string            `json:"-"`
-	Verbosity       string            `json:"-"`
-	Patches         string            `json:"-"`
-	PriorRounds     []ActivationRound `json:"-"`
-	PriorToolCalls  []ToolCallListRow `json:"-"`
+	Model           string `json:"-"`
+	Instructions    string `json:"-"`
+	ToolSchemas     string `json:"-"`
+	UserInput       string `json:"-"`
+	ReasoningEffort string `json:"-"`
+	Verbosity       string `json:"-"`
+	Patches         string `json:"-"`
+	Messages        string `json:"-"`
 }
 
 type ExperimentInsertParams struct {

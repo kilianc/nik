@@ -30,11 +30,13 @@ func TestActivationRoundInsert(t *testing.T) {
 		t.Fatalf("insert activation: %v", err)
 	}
 
+	msgs := `[{"role":"user","content":"hello world"}]`
 	roundID, err := ActivationRoundInsert(ctx, conn, ActivationRoundInsertParams{
 		ActivationID:       actID,
 		Round:              0,
 		UserInput:          "hello world",
 		ModelOutput:        "thinking...",
+		Messages:           msgs,
 		ReasoningSummaries: []string{"considered greeting"},
 		InputTokens:        500,
 		OutputTokens:       120,
@@ -53,6 +55,7 @@ func TestActivationRoundInsert(t *testing.T) {
 		round              int
 		userInput          string
 		modelOutput        string
+		messages           string
 		reasoningSummaries string
 		inputTokens        int64
 		outputTokens       int64
@@ -61,7 +64,7 @@ func TestActivationRoundInsert(t *testing.T) {
 	}
 
 	err = conn.QueryRowContext(ctx,
-		`SELECT round, user_input, model_output, reasoning_summaries,
+		`SELECT round, user_input, model_output, messages, reasoning_summaries,
 		  input_tokens, output_tokens, cached_tokens, reasoning_tokens
 		FROM activation_round WHERE id = ?1`,
 		roundID,
@@ -69,6 +72,7 @@ func TestActivationRoundInsert(t *testing.T) {
 		&got.round,
 		&got.userInput,
 		&got.modelOutput,
+		&got.messages,
 		&got.reasoningSummaries,
 		&got.inputTokens,
 		&got.outputTokens,
@@ -87,6 +91,9 @@ func TestActivationRoundInsert(t *testing.T) {
 	}
 	if got.modelOutput != "thinking..." {
 		t.Fatalf("expected model_output %q, got %q", "thinking...", got.modelOutput)
+	}
+	if got.messages != msgs {
+		t.Fatalf("expected messages %q, got %q", msgs, got.messages)
 	}
 	if got.reasoningSummaries != `["considered greeting"]` {
 		t.Fatalf("expected reasoning_summaries %q, got %q", `["considered greeting"]`, got.reasoningSummaries)

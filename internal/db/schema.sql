@@ -188,6 +188,7 @@ CREATE TABLE IF NOT EXISTS activation_round (
   round               INTEGER NOT NULL,
   user_input          TEXT NOT NULL DEFAULT '',
   model_output        TEXT NOT NULL DEFAULT '',
+  messages            TEXT NOT NULL DEFAULT '[]',
   reasoning_summaries TEXT NOT NULL DEFAULT '[]',
   input_tokens        INTEGER NOT NULL DEFAULT 0,
   output_tokens       INTEGER NOT NULL DEFAULT 0,

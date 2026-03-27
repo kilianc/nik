@@ -10,7 +10,7 @@ import (
 
 type ActivationRecorder interface {
 	Start(ctx context.Context, model string)
-	Round(ctx context.Context, round, attempt int, input, output string, summaries []string, usage Usage) string
+	Round(ctx context.Context, round, attempt int, input, output, messages string, summaries []string, usage Usage) string
 	ToolCall(ctx context.Context, roundID string, call ToolCall, result ExecResult)
 	Finish(ctx context.Context, stats ActivationStats)
 }
@@ -32,7 +32,7 @@ type ActivationStats struct {
 type NoopRecorder struct{}
 
 func (NoopRecorder) Start(context.Context, string) {}
-func (NoopRecorder) Round(context.Context, int, int, string, string, []string, Usage) string {
+func (NoopRecorder) Round(context.Context, int, int, string, string, string, []string, Usage) string {
 	return ""
 }
 func (NoopRecorder) ToolCall(context.Context, string, ToolCall, ExecResult) {}
@@ -128,6 +128,10 @@ func (s *Activation) SetInput(content string) {
 	s.prov.setInput(content)
 }
 
+func (s *Activation) LoadHistory(messages []Message) {
+	s.prov.loadHistory(messages)
+}
+
 func (s *Activation) Attempt() int { return s.attempt }
 
 func (s *Activation) SetMaxRounds(n int) { s.maxRounds = n }
@@ -192,7 +196,9 @@ func (s *Activation) Round(ctx context.Context) (*RoundResult, error) {
 		s.prevSig = sig
 	}
 
-	s.lastRoundID = s.recorder.Round(ctx, s.round, s.attempt, s.UserInput(), result.Text, pr.reasoningSummaries, pr.usage)
+	msgs := MarshalMessages(s.prov.conversation())
+
+	s.lastRoundID = s.recorder.Round(ctx, s.round, s.attempt, s.UserInput(), result.Text, msgs, pr.reasoningSummaries, pr.usage)
 	s.attempt = 0
 	s.round++
 	return result, nil

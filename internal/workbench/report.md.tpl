@@ -35,15 +35,15 @@
 
 | # | Rate | Variant | Runs | Hit | Miss | Link |
 |---|------|---------|------|-----|------|------|
-{{- range $i, $v := .Variants}}{{if $v.Runs}}
-| v{{$i}} | {{printf "%.0f" (rate $v.DesiredCount $v.RunCount)}}% | {{$v.Name}} | {{$v.RunCount}} | {{$v.DesiredCount}} | {{sub $v.RunCount $v.DesiredCount}} | [details](#{{anchor $i $v.Name}}) |
+{{- range $i, $v := reverse .Variants}}{{if $v.Runs}}
+| v{{sub (sub (len $.Variants) 1) $i}} | {{printf "%.0f" (rate $v.DesiredCount $v.RunCount)}}% | {{$v.Name}} | {{$v.RunCount}} | {{$v.DesiredCount}} | {{sub $v.RunCount $v.DesiredCount}} | [details](#{{anchor (sub (sub (len $.Variants) 1) $i) $v.Name}}) |
 {{- end}}{{end}}
 {{end}}
-{{range $i, $v := .Variants}}
+{{range $i, $v := reverse .Variants}}
 {{- if $v.Runs}}
-### v{{$i}} — {{$v.Name}} — {{$v.DesiredCount}} hit, {{sub $v.RunCount $v.DesiredCount}} miss ({{printf "%.0f" (rate $v.DesiredCount $v.RunCount)}}%)
+### v{{sub (sub (len $.Variants) 1) $i}} — {{$v.Name}} — {{$v.DesiredCount}} hit, {{sub $v.RunCount $v.DesiredCount}} miss ({{printf "%.0f" (rate $v.DesiredCount $v.RunCount)}}%)
 {{- else}}
-### v{{$i}} — {{$v.Name}} — pending
+### v{{sub (sub (len $.Variants) 1) $i}} — {{$v.Name}} — pending
 {{- end}}
 {{- if $v.Hypothesis}}
 

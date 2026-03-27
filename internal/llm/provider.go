@@ -7,6 +7,8 @@ type provider interface {
 	appendAssistant(text string)
 	appendUser(text string)
 	addToolResult(call ToolCall, output string, isError bool)
+	loadHistory(messages []Message)
+	conversation() []Message
 	complete(ctx context.Context) (*providerResult, error)
 	prune(maxPairs int) int
 	userInput() string

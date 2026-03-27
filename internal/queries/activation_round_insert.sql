@@ -4,6 +4,7 @@ INSERT INTO activation_round (
   round,
   user_input,
   model_output,
+  messages,
   reasoning_summaries,
   input_tokens,
   output_tokens,
@@ -11,5 +12,4 @@ INSERT INTO activation_round (
   reasoning_tokens,
   created_at
 )
-VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, NOW_ISO8601_MS())
-
+VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, NOW_ISO8601_MS())

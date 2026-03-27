@@ -32,9 +32,13 @@ func Run(ctx context.Context, run db.ExperimentVariantRun, maxRounds int, client
 		return `"ok"`, nil
 	}
 
+	messages, err := llm.UnmarshalMessages(run.Messages)
+	if err != nil {
+		return run, fmt.Errorf("parse messages: %w", err)
+	}
+
 	activation := llm.NewActivation(client, llm.NoopRecorder{}, run.Instructions, tools)
-	activation.SetInput(run.UserInput)
-	feedHistory(activation, run.PriorRounds, run.PriorToolCalls)
+	activation.LoadHistory(messages)
 
 	var rounds []llm.RoundResult
 
@@ -66,28 +70,6 @@ func Run(ctx context.Context, run db.ExperimentVariantRun, maxRounds int, client
 	run.ReasoningSummaries = marshalSummaries(rounds)
 
 	return run, nil
-}
-
-func feedHistory(act *llm.Activation, rounds []db.ActivationRound, toolCalls []db.ToolCallListRow) {
-	seq := 0
-	for _, r := range rounds {
-		if r.ModelOutput != "" {
-			act.AppendAssistantText(r.ModelOutput)
-		}
-
-		for _, tc := range toolCalls {
-			if tc.Round != r.Round {
-				continue
-			}
-
-			act.AddToolResult(llm.ToolCall{
-				CallID:    fmt.Sprintf("call_replay_%d", seq),
-				Name:      tc.Name,
-				Arguments: tc.Input,
-			}, tc.Output, false)
-			seq++
-		}
-	}
 }
 
 func marshalToolCalls(rounds []llm.RoundResult) string {

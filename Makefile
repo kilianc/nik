@@ -67,6 +67,10 @@ trigger:
 call:
 	@cd $(NIK_HOME) && go run ../tools/call $(ARGS)
 
+.PHONY: sqlite
+sqlite:
+	@cd $(NIK_HOME) && CGO_ENABLED=1 go run ../tools/sqlite $(ARGS)
+
 .PHONY: workbench
 workbench:
 	@cd $(NIK_HOME) && CGO_ENABLED=1 go run ../cmd/workbench $(ARGS)
