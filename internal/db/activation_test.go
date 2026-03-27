@@ -177,8 +177,8 @@ func TestActivationUpdate(t *testing.T) {
 		if gotInstructions != "test instructions" {
 			t.Fatalf("expected instructions preserved, got %q", gotInstructions)
 		}
-		if gotInput != 1500 {
-			t.Fatalf("expected cumulative input_tokens 1500, got %d", gotInput)
+		if gotInput != 500 {
+			t.Fatalf("expected input_tokens 500, got %d", gotInput)
 		}
 	})
 }

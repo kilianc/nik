@@ -12,6 +12,7 @@ type ActivationRecorder interface {
 	Start(ctx context.Context, model string)
 	Round(ctx context.Context, round, attempt int, input, output, messages string, summaries []string, usage Usage) string
 	ToolCall(ctx context.Context, roundID string, call ToolCall, result ExecResult)
+	Sync(ctx context.Context, stats ActivationStats)
 	Finish(ctx context.Context, stats ActivationStats)
 }
 
@@ -36,6 +37,7 @@ func (NoopRecorder) Round(context.Context, int, int, string, string, string, []s
 	return ""
 }
 func (NoopRecorder) ToolCall(context.Context, string, ToolCall, ExecResult) {}
+func (NoopRecorder) Sync(context.Context, ActivationStats)                  {}
 func (NoopRecorder) Finish(context.Context, ActivationStats)                {}
 
 type RoundResult struct {
@@ -201,6 +203,15 @@ func (s *Activation) Round(ctx context.Context) (*RoundResult, error) {
 	s.lastRoundID = s.recorder.Round(ctx, s.round, s.attempt, s.UserInput(), result.Text, msgs, pr.reasoningSummaries, pr.usage)
 	s.attempt = 0
 	s.round++
+
+	s.recorder.Sync(ctx, ActivationStats{
+		Model:         *s.client.model,
+		Usage:         s.total,
+		Rounds:        s.rounds,
+		ToolCallCount: len(s.history),
+		DurationMS:    time.Since(s.startTime).Milliseconds(),
+	})
+
 	return result, nil
 }
 

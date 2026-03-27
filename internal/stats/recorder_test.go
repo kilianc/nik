@@ -38,94 +38,95 @@ func TestMetaFromCtx(t *testing.T) {
 	}
 }
 
-func TestRecorderStart(t *testing.T) {
-	t.Run("no meta noops", func(t *testing.T) {
-		r := NewRecorder(nil)
-		r.Start(context.Background(), "gpt-4o")
-	})
+func TestRecorderNoMeta(t *testing.T) {
+	r := NewRecorder(nil)
+	ctx := context.Background()
 
-	t.Run("writes activation", func(t *testing.T) {
-		conn, err := db.OpenInMemory()
-		if err != nil {
-			t.Fatalf("open: %v", err)
-		}
-		defer conn.Close()
-
-		ctx := context.Background()
-		convID := seedStatsConversation(t, ctx, conn)
-		actID := id.V7()
-
-		meta := map[string]string{
-			"activation_id":   actID,
-			"conversation_id": convID,
-		}
-		ctx = context.WithValue(ctx, "meta", meta)
-
-		r := NewRecorder(conn)
+	t.Run("start", func(t *testing.T) {
 		r.Start(ctx, "gpt-4o")
-
-		var model string
-		err = conn.QueryRowContext(ctx, `SELECT model FROM activation WHERE id = ?1`, actID).Scan(&model)
-		if err != nil {
-			t.Fatalf("query activation: %v", err)
-		}
-		if model != "gpt-4o" {
-			t.Errorf("expected model 'gpt-4o', got %q", model)
-		}
 	})
-}
-
-func TestRecorderRound(t *testing.T) {
-	t.Run("no meta noops", func(t *testing.T) {
-		r := NewRecorder(nil)
-		got := r.Round(context.Background(), 0, 0, "input", "output", "[]", nil, llm.Usage{})
+	t.Run("round", func(t *testing.T) {
+		got := r.Round(ctx, 0, 0, "input", "output", "[]", nil, llm.Usage{})
 		if got != "" {
 			t.Fatalf("expected empty string, got %q", got)
 		}
 	})
-
-	t.Run("writes round", func(t *testing.T) {
-		conn, err := db.OpenInMemory()
-		if err != nil {
-			t.Fatalf("open: %v", err)
-		}
-		defer conn.Close()
-
-		ctx := context.Background()
-		convID := seedStatsConversation(t, ctx, conn)
-		actID := id.V7()
-
-		meta := map[string]string{
-			"activation_id":   actID,
-			"conversation_id": convID,
-		}
-		ctx = context.WithValue(ctx, "meta", meta)
-
-		r := NewRecorder(conn)
-		r.Start(ctx, "gpt-4o")
-
-		roundID := r.Round(ctx, 0, 0, "hello", "thinking", `[{"role":"user","content":"hello"}]`, []string{"considered"}, llm.Usage{
-			InputTokens:  300,
-			OutputTokens: 75,
-			CachedTokens: 50,
-		})
-		if roundID == "" {
-			t.Fatal("expected non-empty round ID")
-		}
-
-		var userInput string
-		var inputTokens int64
-		err = conn.QueryRowContext(ctx, `SELECT user_input, input_tokens FROM activation_round WHERE id = ?1`, roundID).Scan(&userInput, &inputTokens)
-		if err != nil {
-			t.Fatalf("query round: %v", err)
-		}
-		if userInput != "hello" {
-			t.Errorf("expected user_input 'hello', got %q", userInput)
-		}
-		if inputTokens != 300 {
-			t.Errorf("expected input_tokens 300, got %d", inputTokens)
-		}
+	t.Run("sync", func(t *testing.T) {
+		r.Sync(ctx, llm.ActivationStats{})
 	})
+}
+
+func TestRecorderStart(t *testing.T) {
+	conn, err := db.OpenInMemory()
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer conn.Close()
+
+	ctx := context.Background()
+	convID := seedStatsConversation(t, ctx, conn)
+	actID := id.V7()
+
+	meta := map[string]string{
+		"activation_id":   actID,
+		"conversation_id": convID,
+	}
+	ctx = context.WithValue(ctx, "meta", meta)
+
+	r := NewRecorder(conn)
+	r.Start(ctx, "gpt-4o")
+
+	var model string
+	err = conn.QueryRowContext(ctx, `SELECT model FROM activation WHERE id = ?1`, actID).Scan(&model)
+	if err != nil {
+		t.Fatalf("query activation: %v", err)
+	}
+	if model != "gpt-4o" {
+		t.Errorf("expected model 'gpt-4o', got %q", model)
+	}
+}
+
+func TestRecorderRound(t *testing.T) {
+	conn, err := db.OpenInMemory()
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer conn.Close()
+
+	ctx := context.Background()
+	convID := seedStatsConversation(t, ctx, conn)
+	actID := id.V7()
+
+	meta := map[string]string{
+		"activation_id":   actID,
+		"conversation_id": convID,
+	}
+	ctx = context.WithValue(ctx, "meta", meta)
+
+	r := NewRecorder(conn)
+	r.Start(ctx, "gpt-4o")
+
+	roundID := r.Round(ctx, 0, 0, "hello", "thinking", `[{"role":"user","content":"hello"}]`, []string{"considered"}, llm.Usage{
+		InputTokens:  300,
+		OutputTokens: 75,
+		CachedTokens: 50,
+	})
+	if roundID == "" {
+		t.Fatal("expected non-empty round ID")
+	}
+
+	var userInput string
+	var inputTokens int64
+	err = conn.QueryRowContext(ctx, `SELECT user_input, input_tokens FROM activation_round WHERE id = ?1`, roundID).Scan(&userInput, &inputTokens)
+	if err != nil {
+		t.Fatalf("query round: %v", err)
+	}
+	if userInput != "hello" {
+		t.Errorf("expected user_input 'hello', got %q", userInput)
+	}
+	if inputTokens != 300 {
+		t.Errorf("expected input_tokens 300, got %d", inputTokens)
+	}
 }
 
 func TestRecorderToolCall(t *testing.T) {
@@ -160,6 +161,69 @@ func TestRecorderToolCall(t *testing.T) {
 	}
 	if name != "db_query" {
 		t.Errorf("expected tool name 'db_query', got %q", name)
+	}
+}
+
+func TestRecorderSync(t *testing.T) {
+	conn, err := db.OpenInMemory()
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer conn.Close()
+
+	ctx := context.Background()
+	convID := seedStatsConversation(t, ctx, conn)
+	actID := id.V7()
+
+	meta := map[string]string{
+		"activation_id":   actID,
+		"conversation_id": convID,
+	}
+	ctx = context.WithValue(ctx, "meta", meta)
+
+	r := NewRecorder(conn)
+	r.Start(ctx, "gpt-5.4")
+	r.Round(ctx, 0, 0, "hello", "thinking", "[]", nil, llm.Usage{InputTokens: 200, OutputTokens: 50})
+
+	r.Sync(ctx, llm.ActivationStats{
+		Model:         "gpt-5.4",
+		Usage:         llm.Usage{InputTokens: 200, OutputTokens: 50, TotalTokens: 250},
+		Rounds:        llm.RoundStats{RoundCount: 1, MaxInputTokensPerRound: 200, MaxTotalTokensPerRound: 250},
+		ToolCallCount: 2,
+		DurationMS:    800,
+	})
+
+	var gotInput, gotDuration int64
+	var gotRounds, gotTools int
+	err = conn.QueryRowContext(ctx,
+		`SELECT input_tokens, duration_ms, round_count, tool_call_count FROM activation WHERE id = ?1`, actID,
+	).Scan(&gotInput, &gotDuration, &gotRounds, &gotTools)
+	if err != nil {
+		t.Fatalf("query activation: %v", err)
+	}
+
+	if gotInput != 200 {
+		t.Errorf("expected input_tokens 200, got %d", gotInput)
+	}
+	if gotDuration != 800 {
+		t.Errorf("expected duration_ms 800, got %d", gotDuration)
+	}
+	if gotRounds != 1 {
+		t.Errorf("expected round_count 1, got %d", gotRounds)
+	}
+	if gotTools != 2 {
+		t.Errorf("expected tool_call_count 2, got %d", gotTools)
+	}
+
+	var gotInstructions string
+	err = conn.QueryRowContext(ctx,
+		`SELECT instructions FROM activation WHERE id = ?1`, actID,
+	).Scan(&gotInstructions)
+	if err != nil {
+		t.Fatalf("query instructions: %v", err)
+	}
+	if gotInstructions != "" {
+		t.Errorf("expected empty instructions (not set by sync), got %q", gotInstructions)
 	}
 }
 
