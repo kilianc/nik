@@ -96,12 +96,20 @@ func (r *Runner) Run(ctx context.Context, t db.Task) {
 
 	if ctx.Err() != nil {
 		act.SetError(ctx.Err())
-		r.svc.UpdateStatus(context.Background(), t.ID, "cancelled")
+		if ctx.Err() == context.DeadlineExceeded {
+			err := r.svc.Cancel(context.Background(), t.ID, "timed out")
+			if err != nil {
+				slog.Warn("cancel timed-out task", "pkg", "task", "task_id", t.ID, "error", err)
+			}
+		} else {
+			r.svc.UpdateStatus(context.Background(), t.ID, "cancelled")
+		}
 		slog.Info("task cancelled", "pkg", "task", "task_id", t.ID, "reason", ctx.Err())
 		return
 	}
 
 	if runErr != nil {
+		r.svc.InsertReport(ctx, t.ID, "failed", fmt.Sprintf("Task terminated: %s", runErr))
 		r.svc.UpdateStatus(ctx, t.ID, "failed")
 		slog.Info("task failed", "pkg", "task", "task_id", t.ID, "error", runErr)
 	} else {
@@ -110,6 +118,11 @@ func (r *Runner) Run(ctx context.Context, t db.Task) {
 		if reportErr == nil && (reportStatus == "completed" || reportStatus == "failed") {
 			finalStatus = reportStatus
 		}
+
+		if finalStatus == "failed" {
+			r.svc.InsertReport(ctx, t.ID, "failed", "Task ended without a completion report.")
+		}
+
 		r.svc.UpdateStatus(ctx, t.ID, finalStatus)
 		slog.Info("task "+finalStatus, "pkg", "task", "task_id", t.ID, "goal", t.Goal)
 	}
