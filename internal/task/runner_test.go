@@ -2,10 +2,13 @@ package task
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/llm"
 )
 
@@ -129,4 +132,129 @@ func TestFilterUnprivileged(t *testing.T) {
 			}
 		})
 	}
+}
+
+func createStartedTask(t *testing.T, svc *Service, conn *sql.DB, goal string) db.Task {
+	t.Helper()
+	ctx := context.Background()
+
+	task, err := svc.Create(ctx, createParams{
+		Goal: goal, Thinking: "low", ConversationID: testConvID,
+	})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+
+	actID := "act-" + task.ID[:8]
+	_, err = conn.ExecContext(ctx,
+		"INSERT INTO activation (id, conversation_id, sources, model, created_at) VALUES (?, ?, '[]', 'test', NOW_ISO8601_MS())",
+		actID, testConvID)
+	if err != nil {
+		t.Fatalf("insert activation: %v", err)
+	}
+
+	err = svc.Start(ctx, task.ID, actID)
+	if err != nil {
+		t.Fatalf("start task: %v", err)
+	}
+
+	return task
+}
+
+func assertSystemMessage(t *testing.T, conn *sql.DB, kind, taskID, jsonPath, want string) {
+	t.Helper()
+
+	idPath := "$.task_id"
+	if kind == "task_cancelled" || kind == "task_spawned" || kind == "task_retry" {
+		idPath = "$.id"
+	}
+
+	var got string
+	err := conn.QueryRowContext(context.Background(),
+		fmt.Sprintf(
+			`SELECT json_extract(body, '%s')
+			 FROM message
+			 WHERE platform = 'system'
+			   AND kind = ?1
+			   AND json_extract(body, '%s') = ?2
+			 ORDER BY sent_at DESC LIMIT 1`, jsonPath, idPath),
+		kind, taskID,
+	).Scan(&got)
+	if err != nil {
+		t.Fatalf("query system message (kind=%s): %v", kind, err)
+	}
+	if got != want {
+		t.Fatalf("system message %s = %q, want %q", jsonPath, got, want)
+	}
+}
+
+func TestRunFinalization(t *testing.T) {
+	t.Run("timeout", func(t *testing.T) {
+		svc, conn := testDB(t)
+		ctx := context.Background()
+		task := createStartedTask(t, svc, conn, "slow task")
+
+		err := svc.Cancel(ctx, task.ID, "timed out")
+		if err != nil {
+			t.Fatalf("cancel: %v", err)
+		}
+
+		got, err := svc.Get(ctx, task.ID)
+		if err != nil {
+			t.Fatalf("get: %v", err)
+		}
+		if got.Status != "cancelled" {
+			t.Fatalf("status = %q, want cancelled", got.Status)
+		}
+
+		assertSystemMessage(t, conn, "task_cancelled", task.ID, "$.cancellation_reason", "timed out")
+	})
+
+	t.Run("error", func(t *testing.T) {
+		svc, conn := testDB(t)
+		ctx := context.Background()
+		task := createStartedTask(t, svc, conn, "broken task")
+
+		errMsg := "Task terminated: max rounds (200) reached without completion"
+		svc.InsertReport(ctx, task.ID, "failed", errMsg)
+		svc.UpdateStatus(ctx, task.ID, "failed")
+
+		got, err := svc.Get(ctx, task.ID)
+		if err != nil {
+			t.Fatalf("get: %v", err)
+		}
+		if got.Status != "failed" {
+			t.Fatalf("status = %q, want failed", got.Status)
+		}
+
+		assertSystemMessage(t, conn, "task_report", task.ID, "$.status", "failed")
+		assertSystemMessage(t, conn, "task_report", task.ID, "$.content", errMsg)
+	})
+
+	t.Run("clean exit without report", func(t *testing.T) {
+		svc, conn := testDB(t)
+		ctx := context.Background()
+		task := createStartedTask(t, svc, conn, "quiet task")
+
+		reportStatus, _ := svc.LastReportStatus(ctx, task.ID)
+		finalStatus := "failed"
+		if reportStatus == "completed" || reportStatus == "failed" {
+			finalStatus = reportStatus
+		}
+
+		if finalStatus == "failed" {
+			svc.InsertReport(ctx, task.ID, "failed", "Task ended without a completion report.")
+		}
+		svc.UpdateStatus(ctx, task.ID, finalStatus)
+
+		got, err := svc.Get(ctx, task.ID)
+		if err != nil {
+			t.Fatalf("get: %v", err)
+		}
+		if got.Status != "failed" {
+			t.Fatalf("status = %q, want failed", got.Status)
+		}
+
+		assertSystemMessage(t, conn, "task_report", task.ID, "$.content", "Task ended without a completion report.")
+	})
 }
