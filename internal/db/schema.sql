@@ -288,6 +288,14 @@ CREATE TABLE IF NOT EXISTS skill (
   CHECK (IS_ISO8601_MS(updated_at))
 );
 
+-- LLM-resolved cron expressions from natural language schedule strings
+CREATE TABLE IF NOT EXISTS every_to_cron (
+  natural_text  TEXT PRIMARY KEY,
+  cron_expr     TEXT NOT NULL,
+  created_at    TIMESTAMP NOT NULL DEFAULT (NOW_ISO8601_MS()),
+  CHECK (IS_ISO8601_MS(created_at))
+);
+
 -- skill reflex records (time series of opaque records from skill check commands)
 CREATE TABLE IF NOT EXISTS skill_reflex (
   id          TEXT PRIMARY KEY,

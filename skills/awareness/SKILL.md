@@ -7,7 +7,7 @@ summary: >
 tools: [db_query, shell, alarm, write_file]
 reflex:
   - name: awareness
-    every: "0 8,19 * * *"
+    every: every day at 8am and 7pm
 ---
 
 # Awareness

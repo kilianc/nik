@@ -397,20 +397,20 @@ func TestStripInstallSection(t *testing.T) {
 
 func TestParseFrontmatterReflex(t *testing.T) {
 	tests := []struct {
-		name         string
-		content      string
-		wantCount    int
-		wantName     string
-		wantCommand  string
-		wantSchedule bool
+		name        string
+		content     string
+		wantCount   int
+		wantName    string
+		wantCommand string
+		wantEvery   string
 	}{
 		{
-			name:         "check reflex with cron",
-			content:      "---\nname: gmail\nsummary: check gmail\ntools: [shell]\nreflex:\n  - name: check_gmail\n    command: gws gmail +triage --format json\n    every: \"*/15 * * * *\"\n---\n",
-			wantCount:    1,
-			wantName:     "check_gmail",
-			wantCommand:  "gws gmail +triage --format json",
-			wantSchedule: true,
+			name:        "check reflex with schedule",
+			content:     "---\nname: gmail\nsummary: check gmail\ntools: [shell]\nreflex:\n  - name: check_gmail\n    command: gws gmail +triage --format json\n    every: \"every 15 minutes\"\n---\n",
+			wantCount:   1,
+			wantName:    "check_gmail",
+			wantCommand: "gws gmail +triage --format json",
+			wantEvery:   "every 15 minutes",
 		},
 		{
 			name:      "no reflex",
@@ -423,37 +423,32 @@ func TestParseFrontmatterReflex(t *testing.T) {
 			wantCount: 0,
 		},
 		{
-			name:         "schedule-only reflex",
-			content:      "---\nname: journal\nsummary: daily journal\ntools: [shell]\nreflex:\n  - name: journal\n    every: \"0 6 * * *\"\n---\n",
-			wantCount:    1,
-			wantName:     "journal",
-			wantCommand:  "",
-			wantSchedule: true,
+			name:      "schedule-only reflex",
+			content:   "---\nname: journal\nsummary: daily journal\ntools: [shell]\nreflex:\n  - name: journal\n    every: \"every day at 6am\"\n---\n",
+			wantCount: 1,
+			wantName:  "journal",
+			wantEvery: "every day at 6am",
 		},
 		{
-			name:      "invalid cron expression",
-			content:   "---\nname: bad\nsummary: bad cron\ntools: [shell]\nreflex:\n  - name: check\n    command: check\n    every: nope\n---\n",
-			wantCount: 0,
+			name:        "natural language schedule stored as-is",
+			content:     "---\nname: bad\nsummary: nl schedule\ntools: [shell]\nreflex:\n  - name: check\n    command: check\n    every: every full moon\n---\n",
+			wantCount:   1,
+			wantName:    "check",
+			wantCommand: "check",
+			wantEvery:   "every full moon",
 		},
 		{
-			name:         "reflex before tools",
-			content:      "---\nname: ordered\nsummary: test ordering\nreflex:\n  - name: check\n    command: check-stuff\n    every: \"*/5 * * * *\"\ntools: [shell]\n---\n",
-			wantCount:    1,
-			wantName:     "check",
-			wantCommand:  "check-stuff",
-			wantSchedule: true,
+			name:        "reflex before tools",
+			content:     "---\nname: ordered\nsummary: test ordering\nreflex:\n  - name: check\n    command: check-stuff\n    every: \"every 5 minutes\"\ntools: [shell]\n---\n",
+			wantCount:   1,
+			wantName:    "check",
+			wantCommand: "check-stuff",
+			wantEvery:   "every 5 minutes",
 		},
 		{
 			name:      "multiple reflexes",
-			content:   "---\nname: memory\nsummary: memory management\ntools: [shell]\nreflex:\n  - name: extract\n    every: \"0 6 * * *\"\n  - name: compact\n    every: \"30 7 * * *\"\n---\n",
+			content:   "---\nname: memory\nsummary: memory management\ntools: [shell]\nreflex:\n  - name: extract\n    every: \"every day at 6am\"\n  - name: compact\n    every: \"every day at 7:30am\"\n---\n",
 			wantCount: 2,
-		},
-		{
-			name:         "shorthand cron",
-			content:      "---\nname: daily\nsummary: daily task\ntools: [shell]\nreflex:\n  - name: run\n    every: \"@daily\"\n---\n",
-			wantCount:    1,
-			wantName:     "run",
-			wantSchedule: true,
 		},
 	}
 
@@ -479,8 +474,8 @@ func TestParseFrontmatterReflex(t *testing.T) {
 			if r.Command != tt.wantCommand {
 				t.Errorf("command = %q, want %q", r.Command, tt.wantCommand)
 			}
-			if tt.wantSchedule && r.Schedule == nil {
-				t.Error("expected non-nil schedule")
+			if tt.wantEvery != "" && r.Every != tt.wantEvery {
+				t.Errorf("every = %q, want %q", r.Every, tt.wantEvery)
 			}
 		})
 	}
@@ -491,7 +486,7 @@ func TestListReflexes(t *testing.T) {
 
 	skillDir := filepath.Join(dir, "gmail")
 	os.MkdirAll(skillDir, 0o755)
-	os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\nname: gmail\nsummary: check\ntools: [shell]\nreflex:\n  - name: check_mail\n    command: check-mail\n    every: \"* * * * *\"\n---\n"), 0o644)
+	os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\nname: gmail\nsummary: check\ntools: [shell]\nreflex:\n  - name: check_mail\n    command: check-mail\n    every: \"every minute\"\n---\n"), 0o644)
 
 	normalDir := filepath.Join(dir, "journal")
 	os.MkdirAll(normalDir, 0o755)
@@ -513,8 +508,8 @@ func TestListReflexes(t *testing.T) {
 	if r.Command != "check-mail" {
 		t.Errorf("command = %q, want check-mail", r.Command)
 	}
-	if r.Schedule == nil {
-		t.Error("expected non-nil schedule")
+	if r.Every != "every minute" {
+		t.Errorf("every = %q, want every minute", r.Every)
 	}
 }
 

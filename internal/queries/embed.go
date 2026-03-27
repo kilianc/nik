@@ -106,6 +106,14 @@ var SkillList string
 //go:embed skill_upsert.sql
 var SkillUpsert string
 
+// every_to_cron queries
+
+//go:embed every_to_cron_get.sql
+var EveryToCronGet string
+
+//go:embed every_to_cron_insert.sql
+var EveryToCronInsert string
+
 // skill reflex queries
 
 //go:embed skill_reflex_get.sql

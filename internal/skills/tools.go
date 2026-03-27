@@ -10,10 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/kciuffolo/nik/internal/config"
-	"github.com/kciuffolo/nik/internal/cron"
 	"github.com/kciuffolo/nik/internal/llm"
 )
 
@@ -43,17 +41,9 @@ var loadSkillDef = llm.ToolDef{
 }
 
 type SkillReflexDef struct {
-	Name     string
-	Command  string // empty for schedule-only reflexes
-	Schedule *cron.Schedule
-}
-
-func (d SkillReflexDef) IsDue(lastRun, now time.Time) bool {
-	if d.Schedule == nil {
-		return false
-	}
-	next, err := d.Schedule.NextAfter(lastRun)
-	return err == nil && !next.After(now)
+	Name    string
+	Command string // empty for schedule-only reflexes
+	Every   string // natural language schedule (e.g. "every day at 11:30pm")
 }
 
 type SkillSummary struct {
@@ -246,14 +236,11 @@ func parseFrontmatter(data []byte) (SkillSummary, error) {
 			curReflexName, curReflexCmd, curReflexEvery = "", "", ""
 			return
 		}
-		sched, err := cron.Parse(curReflexEvery)
-		if err == nil {
-			s.Reflexes = append(s.Reflexes, SkillReflexDef{
-				Name:     curReflexName,
-				Command:  curReflexCmd,
-				Schedule: sched,
-			})
-		}
+		s.Reflexes = append(s.Reflexes, SkillReflexDef{
+			Name:    curReflexName,
+			Command: curReflexCmd,
+			Every:   curReflexEvery,
+		})
 		curReflexName, curReflexCmd, curReflexEvery = "", "", ""
 	}
 

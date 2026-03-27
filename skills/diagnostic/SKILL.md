@@ -8,7 +8,7 @@ tools: [db_query, shell, alarm, load_skill]
 diagnostic_skip: true
 reflex:
   - name: diagnostic
-    every: "0 6 * * *"
+    every: every day at 6am
 ---
 
 # Diagnostic

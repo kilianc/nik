@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/kciuffolo/nik/internal/config"
-	"github.com/kciuffolo/nik/internal/cron"
 	"github.com/kciuffolo/nik/internal/db"
 )
 
@@ -347,13 +346,10 @@ func TestSkillChangeReflexOnlyFirstPrivilegedConv(t *testing.T) {
 	}
 }
 
-func mustParseCron(t *testing.T, expr string) *cron.Schedule {
-	t.Helper()
-	s, err := cron.Parse(expr)
-	if err != nil {
-		t.Fatalf("parse cron %q: %v", expr, err)
+func mockCompleter(cronExpr string) Completer {
+	return func(_ context.Context, _, _ string) (string, error) {
+		return cronExpr, nil
 	}
-	return s
 }
 
 func TestSkillCheckReflex(t *testing.T) {
@@ -361,9 +357,9 @@ func TestSkillCheckReflex(t *testing.T) {
 		h, _ := setupReflexTest(t)
 
 		def := SkillReflexDef{
-			Name:     "check",
-			Command:  `echo '{"new":"data"}'`,
-			Schedule: mustParseCron(t, "* * * * *"),
+			Name:    "check",
+			Command: `echo '{"new":"data"}'`,
+			Every:   "every minute",
 		}
 
 		runSkillCheck(h.ctx, h.cfg, h.conn, "test_skill/check", def, "")
@@ -381,9 +377,9 @@ func TestSkillCheckReflex(t *testing.T) {
 		h, _ := setupReflexTest(t)
 
 		def := SkillReflexDef{
-			Name:     "check",
-			Command:  "true",
-			Schedule: mustParseCron(t, "* * * * *"),
+			Name:    "check",
+			Command: "true",
+			Every:   "every minute",
 		}
 
 		runSkillCheck(h.ctx, h.cfg, h.conn, "silent_skill/check", def, "")
@@ -406,9 +402,9 @@ func TestSkillCheckReflex(t *testing.T) {
 		}
 
 		def := SkillReflexDef{
-			Name:     "check",
-			Command:  "echo 'same-meta'",
-			Schedule: mustParseCron(t, "* * * * *"),
+			Name:    "check",
+			Command: "echo 'same-meta'",
+			Every:   "every minute",
 		}
 
 		runSkillCheck(h.ctx, h.cfg, h.conn, "stable_skill/check", def, "same-meta")
@@ -427,8 +423,8 @@ func TestSkillCheckReflex(t *testing.T) {
 		h, _ := setupReflexTest(t)
 
 		def := SkillReflexDef{
-			Name:     "journal",
-			Schedule: mustParseCron(t, "0 6 * * *"),
+			Name:  "journal",
+			Every: "every day at 6am",
 		}
 
 		runSkillCheck(h.ctx, h.cfg, h.conn, "journal/journal", def, "")
@@ -449,14 +445,14 @@ func TestSkillCheckReflex(t *testing.T) {
 	t.Run("skips not-due reflexes on restart", func(t *testing.T) {
 		h, _ := setupReflexTest(t)
 
-		writeSkillFile(t, h.skillsDir, "journal", "---\nname: journal\nsummary: daily journal\nreflex:\n  - name: journal\n    every: \"0 23 * * *\"\n---\n# Journal\n")
+		writeSkillFile(t, h.skillsDir, "journal", "---\nname: journal\nsummary: daily journal\nreflex:\n  - name: journal\n    every: \"every day at 11pm\"\n---\n# Journal\n")
 
 		err := db.SkillReflexInsert(h.ctx, h.conn, "journal/journal", "2026-03-25T23:00:00Z")
 		if err != nil {
 			t.Fatalf("seed reflex: %v", err)
 		}
 
-		checkReflex := SkillCheckReflex(h.cfg, h.conn)
+		checkReflex := SkillCheckReflex(h.cfg, h.conn, mockCompleter("0 23 * * *"))
 		checkReflex(h.ctx)
 
 		var count int
@@ -478,9 +474,9 @@ func TestSkillCheckReflex(t *testing.T) {
 	t.Run("skips new reflex not yet due today", func(t *testing.T) {
 		h, _ := setupReflexTest(t)
 
-		writeSkillFile(t, h.skillsDir, "journal", "---\nname: journal\nsummary: daily journal\nreflex:\n  - name: journal\n    every: \"0 23 * * *\"\n---\n# Journal\n")
+		writeSkillFile(t, h.skillsDir, "journal", "---\nname: journal\nsummary: daily journal\nreflex:\n  - name: journal\n    every: \"every day at 11pm\"\n---\n# Journal\n")
 
-		checkReflex := SkillCheckReflex(h.cfg, h.conn)
+		checkReflex := SkillCheckReflex(h.cfg, h.conn, mockCompleter("0 23 * * *"))
 		checkReflex(h.ctx)
 
 		var count int

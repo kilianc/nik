@@ -6,7 +6,7 @@ summary: >
 tools: [shell, alarm, db_query, read_file, write_file]
 reflex:
   - name: dream
-    every: "0 4 * * *"
+    every: every day at 4am
 ---
 
 # Dream

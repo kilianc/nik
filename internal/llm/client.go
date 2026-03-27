@@ -371,6 +371,32 @@ func (c *Client) Transcribe(ctx context.Context, f *os.File) (string, error) {
 	return resp.Text, nil
 }
 
+func (c *Client) Generate(ctx context.Context, system, user string) (string, error) {
+	if c.apiClient == nil {
+		return "", fmt.Errorf("generate: requires api key")
+	}
+
+	items := responses.ResponseInputParam{
+		responses.ResponseInputItemParamOfMessage(
+			responses.ResponseInputMessageContentListParam{
+				{OfInputText: &responses.ResponseInputTextParam{Text: user}},
+			},
+			responses.EasyInputMessageRoleUser,
+		),
+	}
+
+	resp, err := c.apiClient.Responses.New(ctx, responses.ResponseNewParams{
+		Model:        shared.ChatModelGPT4oMini,
+		Instructions: openai.String(system),
+		Input:        responses.ResponseNewParamsInputUnion{OfInputItemList: items},
+	})
+	if err != nil {
+		return "", fmt.Errorf("generate: %w", err)
+	}
+
+	return strings.TrimSpace(resp.OutputText()), nil
+}
+
 func (c *Client) Describe(ctx context.Context, data []byte, filename, mimeType, question string) (string, error) {
 	if c.apiClient == nil {
 		return "", fmt.Errorf("describe %s: requires api key", filename)

@@ -198,7 +198,7 @@ func ExtractInstallSection(content string) string {
 
 const maxCheckTimeout = 30 * time.Second
 
-func SkillCheckReflex(cfg *config.Config, conn *sql.DB) func(ctx context.Context) {
+func SkillCheckReflex(cfg *config.Config, conn *sql.DB, complete Completer) func(ctx context.Context) {
 	return func(ctx context.Context) {
 		dirs := []string{cfg.SkillsPath(), cfg.WorkspaceSkillsPath()}
 
@@ -211,20 +211,25 @@ func SkillCheckReflex(cfg *config.Config, conn *sql.DB) func(ctx context.Context
 		now := time.Now().In(cfg.TZ())
 
 		for key, def := range reflexes {
+			sched, err := resolveCron(ctx, conn, def.Every, complete)
+			if err != nil {
+				slog.Warn("skill check reflex: resolve cron", "key", key, "every", def.Every, "error", err)
+				continue
+			}
+
 			lastMeta, firedAt, err := db.SkillReflexLatest(ctx, conn, key)
 			if err != nil {
 				slog.Warn("skill check reflex: get latest", "key", key, "error", err)
 				continue
 			}
 
-			// no prior record: use start-of-today so new reflexes wait for
-			// their first scheduled time instead of firing immediately.
 			baseline := firedAt
 			if baseline.IsZero() {
 				baseline = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 			}
 
-			if !def.IsDue(baseline, now) {
+			next, err := sched.NextAfter(baseline)
+			if err != nil || next.After(now) {
 				continue
 			}
 

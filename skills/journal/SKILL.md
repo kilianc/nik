@@ -6,7 +6,7 @@ summary: >
 tools: [db_query, shell, alarm, read_file, write_file]
 reflex:
   - name: journal
-    every: "30 23 * * *"
+    every: every day at 11:30pm
 ---
 
 # Journal
