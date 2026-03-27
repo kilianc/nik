@@ -1,7 +1,7 @@
 ---
 name: skill_builder
 summary: How to create, scaffold, or extend workspace skills.
-tools: [shell, store_memory]
+tools: [shell]
 ---
 
 # Skill Builder
