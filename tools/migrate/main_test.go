@@ -14,30 +14,27 @@ func TestExtractDDL(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ddl, err := extractDDL(string(schema), "message")
-	if err != nil {
-		t.Fatal(err)
-	}
+	t.Run("known table", func(t *testing.T) {
+		ddl, err := extractDDL(string(schema), "message")
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	if ddl == "" {
-		t.Fatal("expected non-empty DDL")
-	}
+		if ddl == "" {
+			t.Fatal("expected non-empty DDL")
+		}
 
-	if !contains(ddl, "media_processed") {
-		t.Errorf("expected DDL to contain media_processed, got:\n%s", ddl)
-	}
-}
+		if !contains(ddl, "media_processed") {
+			t.Errorf("expected DDL to contain media_processed, got:\n%s", ddl)
+		}
+	})
 
-func TestExtractDDL_unknownTable(t *testing.T) {
-	schema, err := os.ReadFile("../../internal/db/schema.sql")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = extractDDL(string(schema), "nonexistent")
-	if err == nil {
-		t.Fatal("expected error for unknown table")
-	}
+	t.Run("unknown table", func(t *testing.T) {
+		_, err := extractDDL(string(schema), "nonexistent")
+		if err == nil {
+			t.Fatal("expected error for unknown table")
+		}
+	})
 }
 
 func TestRecreateTable(t *testing.T) {

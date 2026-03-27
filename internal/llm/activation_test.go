@@ -61,17 +61,6 @@ func TestActivationPrune(t *testing.T) {
 	}
 }
 
-func TestActivationUsage(t *testing.T) {
-	model := "gpt-5.4"
-	client := &Client{model: &model}
-	s := NewActivation(client, NoopRecorder{}, "instructions", nil)
-
-	u := s.Usage()
-	if u.TotalTokens != 0 {
-		t.Fatalf("expected zero usage on new activation, got %d", u.TotalTokens)
-	}
-}
-
 func TestActivationAppendMessages(t *testing.T) {
 	model := "gpt-5.4"
 	client := &Client{model: &model}
@@ -145,37 +134,45 @@ func TestActivationLoadHistory(t *testing.T) {
 	}
 }
 
-func TestActivationSetMaxRounds(t *testing.T) {
+func TestActivationState(t *testing.T) {
 	model := "gpt-5.4"
 	client := &Client{model: &model}
 
-	s := NewActivation(client, NoopRecorder{}, "instructions", nil)
-	if s.maxRounds != 0 {
-		t.Fatalf("expected 0 (use default), got %d", s.maxRounds)
-	}
+	t.Run("usage zero on new", func(t *testing.T) {
+		s := NewActivation(client, NoopRecorder{}, "instructions", nil)
+		u := s.Usage()
+		if u.TotalTokens != 0 {
+			t.Fatalf("expected zero usage on new activation, got %d", u.TotalTokens)
+		}
+	})
 
-	s.SetMaxRounds(200)
-	if s.maxRounds != 200 {
-		t.Fatalf("expected 200, got %d", s.maxRounds)
-	}
-}
+	t.Run("set max rounds", func(t *testing.T) {
+		s := NewActivation(client, NoopRecorder{}, "instructions", nil)
+		if s.maxRounds != 0 {
+			t.Fatalf("expected 0 (use default), got %d", s.maxRounds)
+		}
 
-func TestActivationRepeats(t *testing.T) {
-	model := "gpt-5.4"
-	client := &Client{model: &model}
-	s := NewActivation(client, NoopRecorder{}, "instructions", nil)
+		s.SetMaxRounds(200)
+		if s.maxRounds != 200 {
+			t.Fatalf("expected 200, got %d", s.maxRounds)
+		}
+	})
 
-	if s.Repeats() != 0 {
-		t.Fatalf("expected 0 repeats on new activation, got %d", s.Repeats())
-	}
+	t.Run("repeats", func(t *testing.T) {
+		s := NewActivation(client, NoopRecorder{}, "instructions", nil)
 
-	calls := []ToolCall{{CallID: "c1", Name: "db_query", Arguments: `{"q":"1"}`}}
-	sig := roundSignature(calls)
+		if s.Repeats() != 0 {
+			t.Fatalf("expected 0 repeats on new activation, got %d", s.Repeats())
+		}
 
-	s.prevSig = sig
-	s.repeats = 3
+		calls := []ToolCall{{CallID: "c1", Name: "db_query", Arguments: `{"q":"1"}`}}
+		sig := roundSignature(calls)
 
-	if s.Repeats() != 3 {
-		t.Fatalf("expected 3 repeats, got %d", s.Repeats())
-	}
+		s.prevSig = sig
+		s.repeats = 3
+
+		if s.Repeats() != 3 {
+			t.Fatalf("expected 3 repeats, got %d", s.Repeats())
+		}
+	})
 }

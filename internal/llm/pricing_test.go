@@ -101,7 +101,7 @@ func TestModelRates(t *testing.T) {
 	})
 }
 
-func TestModelContextWindowAnthropic(t *testing.T) {
+func TestModelContextWindow(t *testing.T) {
 	ctx, ok := ModelContextWindow("claude-opus-4-6")
 	if !ok {
 		t.Fatal("expected claude-opus-4-6 to have a context window")

@@ -6,7 +6,8 @@ import (
 )
 
 func TestExtractConstraints(t *testing.T) {
-	ddl := `CREATE TABLE message (
+	t.Run("basic extraction", func(t *testing.T) {
+		ddl := `CREATE TABLE message (
 		id TEXT PRIMARY KEY,
 		kind TEXT NOT NULL DEFAULT 'text' CHECK(kind IN ('text', 'audio', 'media_processed')),
 		platform TEXT NOT NULL CHECK(platform IN ('whatsapp', 'system')),
@@ -15,32 +16,30 @@ func TestExtractConstraints(t *testing.T) {
 		UNIQUE(platform, external_message_id)
 	)`
 
-	got := extractConstraints(ddl)
-	sort.Strings(got)
+		got := extractConstraints(ddl)
+		sort.Strings(got)
 
-	expected := []string{
-		"CHECK (IS_ISO8601_MS(sent_at))",
-		"CHECK(kind IN ('text', 'audio', 'media_processed'))",
-		"CHECK(platform IN ('whatsapp', 'system'))",
-		"UNIQUE(platform, external_message_id)",
-	}
-	sort.Strings(expected)
-
-	if len(got) != len(expected) {
-		t.Fatalf("expected %d constraints, got %d: %v", len(expected), len(got), got)
-	}
-
-	for i := range expected {
-		if got[i] != expected[i] {
-			t.Errorf("constraint %d:\n  expected: %s\n  got:      %s", i, expected[i], got[i])
+		expected := []string{
+			"CHECK (IS_ISO8601_MS(sent_at))",
+			"CHECK(kind IN ('text', 'audio', 'media_processed'))",
+			"CHECK(platform IN ('whatsapp', 'system'))",
+			"UNIQUE(platform, external_message_id)",
 		}
-	}
-}
+		sort.Strings(expected)
 
-func TestExtractConstraints_alterTableReorder(t *testing.T) {
-	// ALTER TABLE adds columns at end; sqlite_master concatenates them
-	// on one line. Constraints should still match.
-	desired := `CREATE TABLE t (
+		if len(got) != len(expected) {
+			t.Fatalf("expected %d constraints, got %d: %v", len(expected), len(got), got)
+		}
+
+		for i := range expected {
+			if got[i] != expected[i] {
+				t.Errorf("constraint %d:\n  expected: %s\n  got:      %s", i, expected[i], got[i])
+			}
+		}
+	})
+
+	t.Run("alter table reorder", func(t *testing.T) {
+		desired := `CREATE TABLE t (
 		id TEXT PRIMARY KEY,
 		score INTEGER NOT NULL CHECK(score BETWEEN 1 AND 5),
 		extra TEXT NOT NULL DEFAULT '',
@@ -48,74 +47,75 @@ func TestExtractConstraints_alterTableReorder(t *testing.T) {
 		CHECK (IS_ISO8601_MS(created_at))
 	)`
 
-	live := `CREATE TABLE t (
+		live := `CREATE TABLE t (
 		id TEXT PRIMARY KEY,
 		score INTEGER NOT NULL CHECK(score BETWEEN 1 AND 5),
 		created_at TIMESTAMP NOT NULL, extra TEXT NOT NULL DEFAULT '',
 		CHECK (IS_ISO8601_MS(created_at))
 	)`
 
-	dc := extractConstraints(desired)
-	lc := extractConstraints(live)
-	sort.Strings(dc)
-	sort.Strings(lc)
+		dc := extractConstraints(desired)
+		lc := extractConstraints(live)
+		sort.Strings(dc)
+		sort.Strings(lc)
 
-	if len(dc) != len(lc) {
-		t.Fatalf("constraint count differs: desired=%d live=%d", len(dc), len(lc))
-	}
-
-	for i := range dc {
-		if dc[i] != lc[i] {
-			t.Errorf("constraint %d differs:\n  desired: %s\n  live:    %s", i, dc[i], lc[i])
+		if len(dc) != len(lc) {
+			t.Fatalf("constraint count differs: desired=%d live=%d", len(dc), len(lc))
 		}
-	}
-}
 
-func TestExtractConstraints_checkDrift(t *testing.T) {
-	desired := `CREATE TABLE message (
+		for i := range dc {
+			if dc[i] != lc[i] {
+				t.Errorf("constraint %d differs:\n  desired: %s\n  live:    %s", i, dc[i], lc[i])
+			}
+		}
+	})
+
+	t.Run("check drift", func(t *testing.T) {
+		desired := `CREATE TABLE message (
 		kind TEXT NOT NULL DEFAULT 'text' CHECK(kind IN ('text', 'audio', 'media_processed')),
 		CHECK (IS_ISO8601_MS(sent_at))
 	)`
 
-	live := `CREATE TABLE message (
+		live := `CREATE TABLE message (
 		kind TEXT NOT NULL DEFAULT 'text' CHECK(kind IN ('text', 'audio')),
 		CHECK (IS_ISO8601_MS(sent_at))
 	)`
 
-	dc := extractConstraints(desired)
-	lc := extractConstraints(live)
+		dc := extractConstraints(desired)
+		lc := extractConstraints(live)
 
-	desiredSet := make(map[string]bool, len(dc))
-	for _, c := range dc {
-		desiredSet[c] = true
-	}
-
-	liveSet := make(map[string]bool, len(lc))
-	for _, c := range lc {
-		liveSet[c] = true
-	}
-
-	var missing []string
-	for _, c := range dc {
-		if !liveSet[c] {
-			missing = append(missing, c)
+		desiredSet := make(map[string]bool, len(dc))
+		for _, c := range dc {
+			desiredSet[c] = true
 		}
-	}
 
-	if len(missing) == 0 {
-		t.Fatal("expected to detect missing media_processed constraint")
-	}
-
-	found := false
-	for _, m := range missing {
-		if contains(m, "media_processed") {
-			found = true
-			break
+		liveSet := make(map[string]bool, len(lc))
+		for _, c := range lc {
+			liveSet[c] = true
 		}
-	}
-	if !found {
-		t.Errorf("expected missing constraint to mention media_processed, got: %v", missing)
-	}
+
+		var missing []string
+		for _, c := range dc {
+			if !liveSet[c] {
+				missing = append(missing, c)
+			}
+		}
+
+		if len(missing) == 0 {
+			t.Fatal("expected to detect missing media_processed constraint")
+		}
+
+		found := false
+		for _, m := range missing {
+			if contains(m, "media_processed") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected missing constraint to mention media_processed, got: %v", missing)
+		}
+	})
 }
 
 func TestExtractBody(t *testing.T) {
