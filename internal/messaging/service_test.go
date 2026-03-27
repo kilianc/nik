@@ -1107,101 +1107,103 @@ func TestSendImageRejectsBannedWordsInCaption(t *testing.T) {
 }
 
 func TestResolveConversation(t *testing.T) {
-	ctx := context.Background()
+	t.Run("creates dm conversation", func(t *testing.T) {
+		ctx := context.Background()
 
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
+		conn, err := db.OpenInMemory()
+		if err != nil {
+			t.Fatalf("open in-memory db: %v", err)
+		}
+		defer conn.Close()
 
-	_, err = db.ContactUpsert(ctx, conn, db.ContactUpsertParams{
-		Platform:      "whatsapp",
-		ExternalID:    "55555@s.whatsapp.net",
-		Name:          "Charlie",
-		Phone:         "55555",
-		LastMessageAt: time.Now(),
+		_, err = db.ContactUpsert(ctx, conn, db.ContactUpsertParams{
+			Platform:      "whatsapp",
+			ExternalID:    "55555@s.whatsapp.net",
+			Name:          "Charlie",
+			Phone:         "55555",
+			LastMessageAt: time.Now(),
+		})
+		if err != nil {
+			t.Fatalf("seed contact: %v", err)
+		}
+
+		contact, err := db.ContactGet(ctx, conn, "55555@s.whatsapp.net")
+		if err != nil {
+			t.Fatalf("get contact: %v", err)
+		}
+
+		contactsSvc := contacts.NewService(conn)
+		svc := NewService(&config.Config{}, conn, contactsSvc)
+
+		convID, err := svc.ResolveConversation(ctx, contact.ID)
+		if err != nil {
+			t.Fatalf("resolve conversation: %v", err)
+		}
+		if convID == "" {
+			t.Fatalf("expected non-empty conversation id")
+		}
+
+		conv, err := db.ConversationGet(ctx, conn, db.ConversationGetParams{ID: convID})
+		if err != nil {
+			t.Fatalf("get conversation: %v", err)
+		}
+		if conv.Platform != "whatsapp" {
+			t.Fatalf("expected platform whatsapp, got %q", conv.Platform)
+		}
+		if conv.ExternalConversationID != "55555@s.whatsapp.net" {
+			t.Fatalf("expected external_conversation_id 55555@s.whatsapp.net, got %q", conv.ExternalConversationID)
+		}
+		if conv.Kind != "dm" {
+			t.Fatalf("expected kind dm, got %q", conv.Kind)
+		}
+
+		participants, err := db.ConversationParticipantList(ctx, conn, convID)
+		if err != nil {
+			t.Fatalf("get participants: %v", err)
+		}
+		if len(participants) != 1 {
+			t.Fatalf("expected 1 participant, got %d", len(participants))
+		}
+		if participants[0].ContactID != contact.ID {
+			t.Fatalf("expected participant %s, got %s", contact.ID, participants[0].ContactID)
+		}
+
+		convID2, err := svc.ResolveConversation(ctx, contact.ID)
+		if err != nil {
+			t.Fatalf("idempotent resolve: %v", err)
+		}
+		if convID != convID2 {
+			t.Fatalf("expected same conversation id, got %q and %q", convID, convID2)
+		}
 	})
-	if err != nil {
-		t.Fatalf("seed contact: %v", err)
-	}
 
-	contact, err := db.ContactGet(ctx, conn, "55555@s.whatsapp.net")
-	if err != nil {
-		t.Fatalf("get contact: %v", err)
-	}
+	t.Run("no whatsapp id", func(t *testing.T) {
+		ctx := context.Background()
 
-	contactsSvc := contacts.NewService(conn)
-	svc := NewService(&config.Config{}, conn, contactsSvc)
+		conn, err := db.OpenInMemory()
+		if err != nil {
+			t.Fatalf("open in-memory db: %v", err)
+		}
+		defer conn.Close()
 
-	convID, err := svc.ResolveConversation(ctx, contact.ID)
-	if err != nil {
-		t.Fatalf("resolve conversation: %v", err)
-	}
-	if convID == "" {
-		t.Fatalf("expected non-empty conversation id")
-	}
+		_, err = conn.ExecContext(ctx,
+			`INSERT INTO contact (id, name) VALUES ('no-wa-contact', 'NoWA')`,
+		)
+		if err != nil {
+			t.Fatalf("seed contact: %v", err)
+		}
 
-	conv, err := db.ConversationGet(ctx, conn, db.ConversationGetParams{ID: convID})
-	if err != nil {
-		t.Fatalf("get conversation: %v", err)
-	}
-	if conv.Platform != "whatsapp" {
-		t.Fatalf("expected platform whatsapp, got %q", conv.Platform)
-	}
-	if conv.ExternalConversationID != "55555@s.whatsapp.net" {
-		t.Fatalf("expected external_conversation_id 55555@s.whatsapp.net, got %q", conv.ExternalConversationID)
-	}
-	if conv.Kind != "dm" {
-		t.Fatalf("expected kind dm, got %q", conv.Kind)
-	}
+		contactsSvc := contacts.NewService(conn)
+		svc := NewService(&config.Config{}, conn, contactsSvc)
 
-	participants, err := db.ConversationParticipantList(ctx, conn, convID)
-	if err != nil {
-		t.Fatalf("get participants: %v", err)
-	}
-	if len(participants) != 1 {
-		t.Fatalf("expected 1 participant, got %d", len(participants))
-	}
-	if participants[0].ContactID != contact.ID {
-		t.Fatalf("expected participant %s, got %s", contact.ID, participants[0].ContactID)
-	}
-
-	convID2, err := svc.ResolveConversation(ctx, contact.ID)
-	if err != nil {
-		t.Fatalf("idempotent resolve: %v", err)
-	}
-	if convID != convID2 {
-		t.Fatalf("expected same conversation id, got %q and %q", convID, convID2)
-	}
-}
-
-func TestResolveConversationNoWhatsappID(t *testing.T) {
-	ctx := context.Background()
-
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
-
-	_, err = conn.ExecContext(ctx,
-		`INSERT INTO contact (id, name) VALUES ('no-wa-contact', 'NoWA')`,
-	)
-	if err != nil {
-		t.Fatalf("seed contact: %v", err)
-	}
-
-	contactsSvc := contacts.NewService(conn)
-	svc := NewService(&config.Config{}, conn, contactsSvc)
-
-	_, err = svc.ResolveConversation(ctx, "no-wa-contact")
-	if err == nil {
-		t.Fatalf("expected error for contact with no whatsapp id")
-	}
-	if !strings.Contains(err.Error(), "no whatsapp id") {
-		t.Fatalf("expected 'no whatsapp id' error, got %v", err)
-	}
+		_, err = svc.ResolveConversation(ctx, "no-wa-contact")
+		if err == nil {
+			t.Fatalf("expected error for contact with no whatsapp id")
+		}
+		if !strings.Contains(err.Error(), "no whatsapp id") {
+			t.Fatalf("expected 'no whatsapp id' error, got %v", err)
+		}
+	})
 }
 
 func seedConversation(t *testing.T, ctx context.Context, svc *Service, platform, externalConvID, kind string) string {

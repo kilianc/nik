@@ -111,34 +111,39 @@ func TestSendToolDefHasQuoteFields(t *testing.T) {
 	}
 }
 
-func TestSendHandlerRejectsInvalidJSON(t *testing.T) {
+func TestSendHandlerInputValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    string
+		ctx     context.Context
+		wantSub string
+	}{
+		{
+			"invalid JSON",
+			"{",
+			context.Background(),
+			`"error"`,
+		},
+		{
+			"empty messages",
+			`{"conversation_id":"","contact_id":"","messages":[]}`,
+			context.WithValue(context.Background(), "meta", map[string]string{"conversation_id": "conv-123"}),
+			"empty",
+		},
+	}
+
 	handler := sendHandler(&Service{})
 
-	out, err := handler(context.Background(), llm.ToolCall{Arguments: "{"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.Contains(out, `"error"`) {
-		t.Fatalf("expected JSON error response, got %q", out)
-	}
-}
-
-func TestSendHandlerRejectsEmptyMessages(t *testing.T) {
-	handler := sendHandler(&Service{})
-
-	ctx := context.WithValue(
-		context.Background(),
-		"meta",
-		map[string]string{"conversation_id": "conv-123"},
-	)
-	out, err := handler(ctx, llm.ToolCall{
-		Arguments: `{"conversation_id":"","contact_id":"","messages":[]}`,
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.Contains(out, "empty") {
-		t.Fatalf("expected empty messages error, got %q", out)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out, err := handler(tt.ctx, llm.ToolCall{Arguments: tt.args})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !strings.Contains(out, tt.wantSub) {
+				t.Fatalf("expected %q in output, got %q", tt.wantSub, out)
+			}
+		})
 	}
 }
 
@@ -260,7 +265,7 @@ func TestSendHandlerPathSecurity(t *testing.T) {
 	})
 }
 
-func TestSendHandlerBlocksDisallowedConversation(t *testing.T) {
+func TestSendHandlerAllowList(t *testing.T) {
 	cfg := &config.Config{
 		AllowConversationIDs: map[string]string{"owner": "allowed-conv"},
 	}
@@ -273,44 +278,32 @@ func TestSendHandlerBlocksDisallowedConversation(t *testing.T) {
 		map[string]string{"conversation_id": "allowed-conv"},
 	)
 
-	out, err := handler(ctx, llm.ToolCall{
-		Arguments: `{"conversation_id":"not-allowed-conv","contact_id":"","messages":[{"text":"hi","image_path":"","voice":false}]}`,
+	t.Run("blocks disallowed conversation", func(t *testing.T) {
+		out, err := handler(ctx, llm.ToolCall{
+			Arguments: `{"conversation_id":"not-allowed-conv","contact_id":"","messages":[{"text":"hi","image_path":"","voice":false}]}`,
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(out, "allow list") {
+			t.Fatalf("expected allow list error, got %q", out)
+		}
 	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.Contains(out, "allow list") {
-		t.Fatalf("expected allow list error, got %q", out)
-	}
-}
 
-func TestSendHandlerAllowsContextConversation(t *testing.T) {
-	cfg := &config.Config{
-		AllowConversationIDs: map[string]string{"owner": "allowed-conv"},
-	}
-	svc := &Service{cfg: cfg}
-	handler := sendHandler(svc)
-
-	ctx := context.WithValue(
-		context.Background(),
-		"meta",
-		map[string]string{"conversation_id": "allowed-conv"},
-	)
-
-	// use voice=true with no speechFn: this triggers "not configured" before
-	// touching the DB, confirming the allow check passed
-	out, err := handler(ctx, llm.ToolCall{
-		Arguments: `{"conversation_id":"","contact_id":"","messages":[{"text":"hi","image_path":"","voice":true}]}`,
+	t.Run("allows context conversation", func(t *testing.T) {
+		out, err := handler(ctx, llm.ToolCall{
+			Arguments: `{"conversation_id":"","contact_id":"","messages":[{"text":"hi","image_path":"","voice":true}]}`,
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if strings.Contains(out, "allow list") {
+			t.Fatalf("expected to pass allow check, got %q", out)
+		}
+		if !strings.Contains(out, "not configured") {
+			t.Fatalf("expected 'not configured' (past allow check), got %q", out)
+		}
 	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if strings.Contains(out, "allow list") {
-		t.Fatalf("expected to pass allow check, got %q", out)
-	}
-	if !strings.Contains(out, "not configured") {
-		t.Fatalf("expected 'not configured' (past allow check), got %q", out)
-	}
 }
 
 func TestReactHandlerValidation(t *testing.T) {

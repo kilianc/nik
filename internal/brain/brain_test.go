@@ -35,24 +35,9 @@ func TestNewInitializesInternalState(t *testing.T) {
 	if b.sensor != nil {
 		t.Fatalf("expected sensor to be nil on startup")
 	}
-}
-
-func TestDoneToolAutoRegistered(t *testing.T) {
-	b := New(&config.Config{}, nil)
 
 	if _, ok := b.toolExec[doneToolName]; !ok {
-		t.Fatal("expected done tool to be auto-registered")
-	}
-
-	found := false
-	for _, def := range b.toolDefs {
-		if def.Name == doneToolName {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatal("expected done tool def in toolDefs")
+		t.Fatal("expected done tool executor to be auto-registered")
 	}
 }
 

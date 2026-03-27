@@ -165,8 +165,6 @@ func TestResultIncludesBytes(t *testing.T) {
 	}
 }
 
-// read_file tests
-
 func TestReadFile(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "hello.txt"), []byte("line1\nline2\nline3\n"), 0o644)

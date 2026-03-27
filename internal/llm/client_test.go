@@ -172,32 +172,34 @@ func TestIsTransient(t *testing.T) {
 	}
 }
 
-func TestNewClientWithAnthropicKey(t *testing.T) {
-	model := "claude-opus-4-6"
-	c := NewClient(&model, WithAnthropicKey("sk-ant-test"))
+func TestNewClient(t *testing.T) {
+	t.Run("anthropic key only", func(t *testing.T) {
+		model := "claude-opus-4-6"
+		c := NewClient(&model, WithAnthropicKey("sk-ant-test"))
 
-	if c.anthropicClient == nil {
-		t.Fatalf("expected anthropic client to be initialized")
-	}
-	if c.apiClient != nil {
-		t.Fatalf("expected openai api client to be nil")
-	}
-	if !c.isAnthropic() {
-		t.Fatalf("expected isAnthropic() to be true for claude model")
-	}
-}
+		if c.anthropicClient == nil {
+			t.Fatalf("expected anthropic client to be initialized")
+		}
+		if c.apiClient != nil {
+			t.Fatalf("expected openai api client to be nil")
+		}
+		if !c.isAnthropic() {
+			t.Fatalf("expected isAnthropic() to be true for claude model")
+		}
+	})
 
-func TestNewClientWithBothKeys(t *testing.T) {
-	model := "gpt-5.4"
-	c := NewClient(&model, WithAPIKey("sk-test"), WithAnthropicKey("sk-ant-test"))
+	t.Run("both keys", func(t *testing.T) {
+		model := "gpt-5.4"
+		c := NewClient(&model, WithAPIKey("sk-test"), WithAnthropicKey("sk-ant-test"))
 
-	if c.apiClient == nil {
-		t.Fatalf("expected openai client to be initialized")
-	}
-	if c.anthropicClient == nil {
-		t.Fatalf("expected anthropic client to be initialized")
-	}
-	if c.isAnthropic() {
-		t.Fatalf("expected isAnthropic() to be false for gpt model")
-	}
+		if c.apiClient == nil {
+			t.Fatalf("expected openai client to be initialized")
+		}
+		if c.anthropicClient == nil {
+			t.Fatalf("expected anthropic client to be initialized")
+		}
+		if c.isAnthropic() {
+			t.Fatalf("expected isAnthropic() to be false for gpt model")
+		}
+	})
 }
