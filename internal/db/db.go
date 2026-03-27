@@ -111,6 +111,20 @@ func Open(dbPath string, loc *time.Location) (*sql.DB, error) {
 		return nil, fmt.Errorf("apply schema: %w", err)
 	}
 
+	if dbPath != ":memory:" {
+		var result string
+		err = db.QueryRow("PRAGMA quick_check").Scan(&result)
+		if err != nil {
+			db.Close()
+			return nil, fmt.Errorf("integrity check: %w", err)
+		}
+
+		if result != "ok" {
+			db.Close()
+			return nil, fmt.Errorf("integrity check failed: %s", result)
+		}
+	}
+
 	return db, nil
 }
 
