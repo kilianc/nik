@@ -286,6 +286,19 @@ func (p *anthropicProvider) fullInput() string {
 	return strings.Join(parts, "\n\n")
 }
 
+func (p *anthropicProvider) setReasoningEffort(effort string) {
+	if effort == "" {
+		return
+	}
+	budget := thinkingBudget(effort)
+	if budget > 0 {
+		p.params.Thinking = anthropic.ThinkingConfigParamOfEnabled(budget)
+		if budget+1024 > p.params.MaxTokens {
+			p.params.MaxTokens = budget + 8192
+		}
+	}
+}
+
 func extractAnthropicText(msg anthropic.MessageParam) string {
 	var parts []string
 	for _, block := range msg.Content {

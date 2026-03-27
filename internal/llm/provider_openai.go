@@ -228,6 +228,13 @@ func (p *openaiProvider) fullInput() string {
 	return extractInput(p.items)
 }
 
+func (p *openaiProvider) setReasoningEffort(effort string) {
+	if effort == "" {
+		return
+	}
+	p.params.Reasoning.Effort = shared.ReasoningEffort(effort)
+}
+
 func buildToolParams(tools []ToolDef) []responses.ToolUnionParam {
 	params := make([]responses.ToolUnionParam, len(tools))
 

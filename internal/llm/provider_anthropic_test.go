@@ -103,6 +103,42 @@ func TestAnthropicProviderFullInput(t *testing.T) {
 	}
 }
 
+func TestAnthropicProviderSetReasoningEffort(t *testing.T) {
+	model := "claude-opus-4-6"
+	client := &Client{model: &model}
+	p := newAnthropicProvider(client, "instructions", nil)
+
+	if p.params.Thinking.OfEnabled != nil {
+		t.Fatalf("expected no thinking before setReasoningEffort")
+	}
+
+	p.setReasoningEffort("high")
+	if p.params.Thinking.OfEnabled == nil {
+		t.Fatalf("expected thinking to be enabled after setting high")
+	}
+	if got := p.params.Thinking.OfEnabled.BudgetTokens; got != 16384 {
+		t.Fatalf("expected budget 16384 for high, got %d", got)
+	}
+
+	p.setReasoningEffort("low")
+	if got := p.params.Thinking.OfEnabled.BudgetTokens; got != 4096 {
+		t.Fatalf("expected budget 4096 for low, got %d", got)
+	}
+
+	p.setReasoningEffort("")
+	if got := p.params.Thinking.OfEnabled.BudgetTokens; got != 4096 {
+		t.Fatalf("expected budget unchanged after empty, got %d", got)
+	}
+
+	p.setReasoningEffort("medium")
+	if got := p.params.Thinking.OfEnabled.BudgetTokens; got != 8192 {
+		t.Fatalf("expected budget 8192 for medium, got %d", got)
+	}
+	if p.params.MaxTokens < 8192+1024 {
+		t.Fatalf("expected max tokens to be bumped for medium budget, got %d", p.params.MaxTokens)
+	}
+}
+
 func TestBuildAnthropicTools(t *testing.T) {
 	t.Run("string required", func(t *testing.T) {
 		tools := buildAnthropicTools([]ToolDef{

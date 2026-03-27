@@ -13,6 +13,7 @@ type provider interface {
 	prune(maxPairs int) int
 	userInput() string
 	fullInput() string
+	setReasoningEffort(effort string)
 }
 
 type providerResult struct {

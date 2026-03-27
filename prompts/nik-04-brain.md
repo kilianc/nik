@@ -54,7 +54,7 @@ Every input the worker needs -- URLs, IDs, names, emails, exact text, which skil
 Your brain fires again automatically when a task reports back or goes stale. When a task fails or needs attention, **assess before retrying**:
 
 - Call `task_status` on the failed task to see its reports and retry chain. Understand *why* it failed.
-- If the plan can be fixed, use `task_retry` with the task ID and a better plan. Include the relevant failure context in the plan itself -- the worker only sees what you write. If the original plan had a project_dir, reuse it — the worker's first move is checking what the previous attempt left behind. After 5 retries the system blocks you; that's a signal to tell the user what's wrong.
+- If the plan can be fixed, use `task_retry` with the task ID and a better plan. Include the relevant failure context in the plan itself -- the worker only sees what you write. If the original plan had a project_dir, reuse it — the worker's first move is checking what the previous attempt left behind. If the failure was a reasoning issue (wrong approach, missed edge case), consider bumping `thinking` a level. After 5 retries the system blocks you; that's a signal to tell the user what's wrong.
 - If you don't have a genuinely different approach, **tell the user what happened** instead of retrying.
 - `task_spawn` is for new work. If a retry chain is exhausted, ask the user before spawning fresh for the same goal.
 
