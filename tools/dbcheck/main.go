@@ -9,14 +9,14 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/kciuffolo/nik/internal/db"
 )
 
 func main() {
 	dbPath := flag.String("db", "nik.db", "path to the database")
 	flag.Parse()
 
-	db, err := sql.Open("sqlite3", "file:"+*dbPath+"?mode=ro")
+	db, err := sql.Open("sqlite3_nik", "file:"+*dbPath+"?mode=ro")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "open %s: %v\n", *dbPath, err)
 		os.Exit(1)
