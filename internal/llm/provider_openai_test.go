@@ -266,14 +266,14 @@ func TestMaxPairsForModel(t *testing.T) {
 	}{
 		{"gpt-5.4", maxHistoryPairs},
 		{"gpt-4.1", maxHistoryPairs},
-		{"gpt-5.4-mini", 25},
-		{"gpt-5.3-codex", 25},
-		{"gpt-4o", minHistoryPairs},
-		{"o1-mini", minHistoryPairs},
-		{"o3", 12},
+		{"gpt-5.4-mini", 50},
+		{"gpt-5.3-codex", 50},
+		{"gpt-4o", 16},
+		{"o1-mini", 16},
+		{"o3", 25},
 		{"unknown-model", maxHistoryPairs},
-		{"claude-opus-4-6", 12},
-		{"claude-sonnet-4-6", 12},
+		{"claude-opus-4-6", 25},
+		{"claude-sonnet-4-6", 25},
 	}
 
 	for _, tt := range tests {
