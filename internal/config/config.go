@@ -176,10 +176,6 @@ type Config struct {
 	SystemMessageMaxAge time.Duration `yaml:"system_message_max_age"`
 	Timezone            string        `yaml:"timezone"`
 	Location            string        `yaml:"location"`
-	JournalTime         string        `yaml:"journal_time"`
-	DreamTime           string        `yaml:"dream_time"`
-	BriefingTime        string        `yaml:"briefing_time"`
-	DiagnosticTime      string        `yaml:"diagnostic_time"`
 
 	BannedWords []string `yaml:"banned_words"`
 }
@@ -303,10 +299,6 @@ func (c Config) SystemMessageMaxAgeOrDefault() time.Duration {
 	return 2 * time.Hour
 }
 
-func (c Config) MemoriesPath() string {
-	return filepath.Join(c.Home, "memories", "latest.md")
-}
-
 func (c Config) AllowedIDs() []string {
 	return c.AllowConversationIDs.IDs()
 }
@@ -321,13 +313,6 @@ func (c Config) IsAllowed(id string) bool {
 
 func (c Config) IsPrivileged(id string) bool {
 	return c.PrivilegedConversationIDs.ContainsID(id)
-}
-
-func (c Config) ConversationLabel(id string) string {
-	if label := c.AllowConversationIDs.LabelFor(id); label != "" {
-		return label
-	}
-	return c.PrivilegedConversationIDs.LabelFor(id)
 }
 
 func (c *Config) Save(path string) error {
