@@ -38,7 +38,7 @@ Deletes all ephemeral data older than the configured `retention` period
 - `activation` and all children: `activation_round`, `tool_call`,
   `shell_session`, `experiment`, `experiment_variant`,
   `experiment_variant_run`
-- `task` and all children: `task_report`, `task_assessment`
+- `task` and all children: `task_report`
 - Cross-references (`task.activation_id`, `activation.task_id`,
   `task.retry_for_task_id`) are detached before deletion
 - `message` rows with `platform = 'system'` (task reports, alarm events,
@@ -109,7 +109,7 @@ if command -v agent-browser >/dev/null; then
 else echo "SKIP no-cli"; fi
 
 echo "=== OUTPUTS ==="
-for d in awareness backups breathing briefings diagnostics dreams journal memories soul; do
+for d in assessments awareness backups breathing briefings diagnostics dreams journal memories soul; do
   if [ -d "$d" ]; then
     latest=$(ls -1 "$d" | grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}\.md$' | sort | tail -1)
     if [ -n "$latest" ]; then
@@ -145,6 +145,11 @@ if [ "$seed_count" -gt 0 ] 2>/dev/null; then
 else
   echo "active=0 cursor=$seed_cursor"
 fi
+
+echo "=== ASSESSMENTS ==="
+assess_count=$(ls -1 assessments/*.md 2>/dev/null | grep -cv '^$' || echo 0)
+assess_latest=$(ls -1 assessments/ 2>/dev/null | grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}' | sort | tail -1)
+echo "count=$assess_count latest=$assess_latest"
 
 echo "=== BRIEFING ==="
 topics_count=$(grep -c '^\- ' briefings/topics.md 2>/dev/null || echo 0)
@@ -226,7 +231,25 @@ FROM activation
 WHERE created_at >= DATETIME('now', '-30 days')
 ```
 
-### 2d — Memory cursor lag
+### 2d — Task effectiveness (7-day)
+
+```sql
+SELECT
+  COUNT(*) AS total,
+  SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed,
+  SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
+  SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) AS cancelled
+FROM task
+WHERE created_at >= DATETIME('now', '-7 days')
+  AND status IN ('completed', 'failed', 'cancelled')
+```
+
+Cross-reference with assessment files: `read_file` the most recent
+2-3 assessments from `assessments/` (if any exist). Note the
+effectiveness scores and any recurring recommendations across tasks.
+If no assessments exist, WARN that the critic skill may not be running.
+
+### 2e — Memory cursor lag
 
 ```sql
 SELECT MAX(sent_at) AS latest_msg
@@ -238,7 +261,7 @@ WHERE kind = 'text'
 Compare `latest_msg` to the cursor value from the shell output. If
 the cursor is more than 24h behind, extraction is falling behind — WARN.
 
-### 2e — Data health
+### 2f — Data health
 
 ```sql
 SELECT
@@ -284,6 +307,12 @@ per-directory: latest file, gap analysis
 missing 1 day = WARN, missing 2+ days = FAIL
 cross-reference: if alarm dead, that's the root cause
 
+## Task Effectiveness
+7-day completed/failed/cancelled counts
+recent assessment scores and recurring themes
+WARN if no assessment files exist (critic skill not running)
+WARN if fail rate > 30%
+
 ## Data Quality
 PRAGMA results, stale tasks
 
@@ -324,6 +353,7 @@ via `message_send`. One message, no fluff. Example:
 Maintenance 2026-03-28
 Pruned 1,204 rows (213MB → 189MB)
 Auth 7/7 PASS · Alarms 20 ok
+Tasks 7d: 12 completed, 2 failed · Avg score 3.8/5
 Memories 342 rows, cursor current
 Soul evolved 03-27 · Seeds 3 active
 Spend $12.40 24h / $15.20 7d avg
@@ -347,6 +377,9 @@ Lead with FAILs if any. Keep it under 10 lines.
 - Soul not updated in 2+ days → check dream cycle alarm and recent dream files
 - Seed cursor >8h stale → check seed extract alarm
 - Briefing topics stale 7+ days → topics may need refresh
+- No assessment files → check critic skill alarm health
+- Task fail rate > 30% → review recent assessments for recurring root causes
+- Recurring tool/skill issues across assessments → flag for owner
 
 ### Escalation
 

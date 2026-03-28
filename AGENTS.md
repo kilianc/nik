@@ -202,7 +202,6 @@ Each prompt file has one job. Don't duplicate rules across files.
 | `nik-04-brain.md` | HOW nik thinks (5 waves): perceive, understand, plan, check, respond. Task planning (Wave 3), accountability (Wave 4), voice (Wave 5) | personality traits, identity, execution guidance |
 | `nik-05-retry.md` | retry nudge when zero tool calls produced | everything else |
 | `task-00.md` | worker prompt: role, execution guidance, tool docs, skills, plan | personality, messaging, management |
-| `critic-00.md` | critic prompt: task evaluation, tool/skill feedback, suggestions | personality, messaging, management |
 
 **Rule of thumb**: if a rule is about *who nik is*, it goes in `nik-01-identity.md`. If it's about *how nik thinks or acts*, it goes in `nik-04-brain.md`. If it's a hard constraint, `nik-00-base.md`. If it's about *how workers execute*, `task-00.md`. Never say the same thing in two files.
 

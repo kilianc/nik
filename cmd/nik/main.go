@@ -246,19 +246,6 @@ func main() {
 	taskRunner := task.NewRunner(cfg, taskLLMClient, taskSvc, taskTools)
 	taskRunner.SetRecorder(recorder)
 
-	if cfg.Models.Critic.Enabled {
-		criticOpts := append([]llm.ClientOption{}, keyOpts...)
-		if cfg.Models.Critic.IsSubscription() {
-			criticOpts = append(criticOpts, llm.WithCodex(codexAuth))
-		}
-		criticOpts = append(criticOpts, llm.WithReasoningEffort(&cfg.Models.Critic.ReasoningEffort))
-		criticOpts = append(criticOpts, llm.WithVerbosity(&cfg.Models.Critic.Verbosity))
-		criticOpts = append(criticOpts, llm.WithJSONOutput())
-		criticClient := llm.NewClient(&cfg.Models.Critic.Model, criticOpts...)
-		taskRunner.SetCriticLLM(criticClient)
-		slog.Info("critic client ready", "model", cfg.Models.Critic.Model, "enabled", cfg.Models.Critic.Enabled)
-	}
-
 	b := brain.New(cfg, llmClient)
 	b.SetDB(conn)
 	b.SetRecorder(recorder)

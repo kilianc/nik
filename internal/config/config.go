@@ -23,28 +23,15 @@ func (m ModelConfig) IsSubscription() bool {
 	return m.Backend == "subscription"
 }
 
-type CriticConfig struct {
-	Enabled         bool   `yaml:"enabled"`
-	Model           string `yaml:"model"`
-	ReasoningEffort string `yaml:"reasoning_effort"`
-	Verbosity       string `yaml:"verbosity"`
-	Backend         string `yaml:"backend"`
-}
-
-func (c CriticConfig) IsSubscription() bool {
-	return c.Backend == "subscription"
-}
-
 type ModelsConfig struct {
-	Main   ModelConfig  `yaml:"main"`
-	Task   ModelConfig  `yaml:"task"`
-	Recall ModelConfig  `yaml:"recall"`
-	Critic CriticConfig `yaml:"critic"`
-	TTS    TTSConfig    `yaml:"tts"`
+	Main   ModelConfig `yaml:"main"`
+	Task   ModelConfig `yaml:"task"`
+	Recall ModelConfig `yaml:"recall"`
+	TTS    TTSConfig   `yaml:"tts"`
 }
 
 func (m ModelsConfig) AnySubscription() bool {
-	return m.Main.IsSubscription() || m.Task.IsSubscription() || m.Recall.IsSubscription() || m.Critic.IsSubscription()
+	return m.Main.IsSubscription() || m.Task.IsSubscription() || m.Recall.IsSubscription()
 }
 
 type TTSConfig struct {
@@ -460,21 +447,6 @@ func validateConfig(cfg Config) error {
 	err = validatePurposeModel("recall", cfg.Models.Recall)
 	if err != nil {
 		return err
-	}
-
-	criticModel := ModelConfig{
-		Model:           cfg.Models.Critic.Model,
-		ReasoningEffort: cfg.Models.Critic.ReasoningEffort,
-		Verbosity:       cfg.Models.Critic.Verbosity,
-		Backend:         cfg.Models.Critic.Backend,
-	}
-	err = validatePurposeModel("critic", criticModel)
-	if err != nil {
-		return err
-	}
-
-	if cfg.Models.Critic.Enabled && strings.TrimSpace(cfg.Models.Critic.Model) == "" {
-		return fmt.Errorf("missing required config key models.critic.model when models.critic.enabled is true")
 	}
 
 	return nil

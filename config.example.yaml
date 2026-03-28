@@ -18,12 +18,6 @@ models:
     model: ""                 # model for recall pre-filtering (empty = skip recall)
     reasoning_effort: ""      # none, minimal, low, medium, high, xhigh (empty = model default)
     verbosity: ""             # low, medium, high (empty = model default)
-  critic:
-    enabled: false            # enable post-task critic assessment
-    model: ""                 # required when critic is enabled
-    reasoning_effort: ""      # none, minimal, low, medium, high, xhigh (empty = model default)
-    verbosity: ""             # low, medium, high (empty = model default)
-    backend: api              # api | subscription
   tts:
     model: gpt-4o-mini-tts    # TTS model
     voice: ash                # alloy, ash, ballad, coral, echo, fable, onyx, nova, sage, shimmer

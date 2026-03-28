@@ -61,11 +61,6 @@ WHERE task_id IN (
 
 -- phase 3: task dependents + tasks
 
-DELETE FROM task_assessment
-WHERE task_id IN (
-  SELECT id FROM task WHERE created_at < ?1
-);
-
 DELETE FROM task_report
 WHERE task_id IN (
   SELECT id FROM task WHERE created_at < ?1

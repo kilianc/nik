@@ -11,7 +11,6 @@ contact ──┬── conversation_participant ──┬── conversation
           │     └── message_media ── media
           │
           ├── task ──┬── task_report
-          │          ├── task_assessment
           │          └── retry chain (retry_for_task_id → task)
           │
           └── alarm ─── alarm_occurrence

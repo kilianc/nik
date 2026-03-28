@@ -259,14 +259,6 @@ func (s *Service) CheckStale(ctx context.Context) {
 	}
 }
 
-func (s *Service) AllToolCalls(ctx context.Context, activationID string) ([]db.ToolCallInfo, error) {
-	return db.TaskAssessmentToolCallList(ctx, s.conn, activationID)
-}
-
 func (s *Service) ReportsByTask(ctx context.Context, taskID string) ([]db.TaskReportRow, error) {
 	return db.TaskReportList(ctx, s.conn, taskID)
-}
-
-func (s *Service) InsertAssessment(ctx context.Context, p db.TaskAssessmentInsertParams) error {
-	return db.TaskAssessmentInsert(ctx, s.conn, p)
 }
