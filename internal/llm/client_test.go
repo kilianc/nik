@@ -24,6 +24,8 @@ func TestIsImageMime(t *testing.T) {
 func Test_roundSignature(t *testing.T) {
 	a := ToolCall{Name: "load_skill", Arguments: `{"action":"load","name":"search"}`}
 	b := ToolCall{Name: "db_query", Arguments: `{"query":"SELECT 1"}`}
+	withReasonA := ToolCall{Name: "load_skill", Arguments: `{"action":"load","name":"search","reason":"first explanation"}`}
+	withReasonB := ToolCall{Name: "load_skill", Arguments: `{"action":"load","name":"search","reason":"different explanation"}`}
 
 	sig1 := roundSignature([]ToolCall{a})
 	sig2 := roundSignature([]ToolCall{a})
@@ -41,6 +43,12 @@ func Test_roundSignature(t *testing.T) {
 	sig5 := roundSignature([]ToolCall{different})
 	if sig1 == sig5 {
 		t.Fatalf("different args should produce different signatures")
+	}
+
+	sig6 := roundSignature([]ToolCall{withReasonA})
+	sig7 := roundSignature([]ToolCall{withReasonB})
+	if sig6 != sig7 {
+		t.Fatalf("reason-only argument differences should not affect signature")
 	}
 }
 

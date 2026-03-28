@@ -3,6 +3,8 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -224,6 +226,82 @@ func TestToolCallInsert(t *testing.T) {
 
 		if gotRoundID.Valid {
 			t.Fatalf("expected NULL activation_round_id, got %q", gotRoundID.String)
+		}
+	})
+
+	t.Run("oversize input rejected", func(t *testing.T) {
+		ctx := context.Background()
+
+		conn, err := OpenInMemory()
+		if err != nil {
+			t.Fatalf("open in-memory db: %v", err)
+		}
+		defer conn.Close()
+
+		convID := seedConversation(t, ctx, conn, "whatsapp", "ext-tc-oversize-input", "")
+		actID := "act-tc-oversize-input"
+		_, err = conn.ExecContext(ctx,
+			"INSERT INTO activation (id, conversation_id, sources, model, created_at) VALUES (?, ?, '[\"task\"]', 'gpt-4', NOW_ISO8601_MS())",
+			actID, convID)
+		if err != nil {
+			t.Fatalf("insert activation: %v", err)
+		}
+
+		err = ToolCallInsert(ctx, conn, ToolCallInsertParams{
+			ActivationID: actID,
+			Name:         "shell",
+			Input:        strings.Repeat("a", maxToolCallInputBytes+1),
+			Output:       "ok",
+			Duration:     10 * time.Millisecond,
+		})
+		if err == nil {
+			t.Fatal("expected oversize input error")
+		}
+
+		var sizeErr ToolCallTooLargeError
+		if !errors.As(err, &sizeErr) {
+			t.Fatalf("expected ToolCallTooLargeError, got %v", err)
+		}
+		if sizeErr.Field != "input" {
+			t.Fatalf("expected field input, got %q", sizeErr.Field)
+		}
+	})
+
+	t.Run("oversize output rejected", func(t *testing.T) {
+		ctx := context.Background()
+
+		conn, err := OpenInMemory()
+		if err != nil {
+			t.Fatalf("open in-memory db: %v", err)
+		}
+		defer conn.Close()
+
+		convID := seedConversation(t, ctx, conn, "whatsapp", "ext-tc-oversize-output", "")
+		actID := "act-tc-oversize-output"
+		_, err = conn.ExecContext(ctx,
+			"INSERT INTO activation (id, conversation_id, sources, model, created_at) VALUES (?, ?, '[\"task\"]', 'gpt-4', NOW_ISO8601_MS())",
+			actID, convID)
+		if err != nil {
+			t.Fatalf("insert activation: %v", err)
+		}
+
+		err = ToolCallInsert(ctx, conn, ToolCallInsertParams{
+			ActivationID: actID,
+			Name:         "shell",
+			Input:        "{}",
+			Output:       strings.Repeat("b", maxToolCallOutputBytes+1),
+			Duration:     10 * time.Millisecond,
+		})
+		if err == nil {
+			t.Fatal("expected oversize output error")
+		}
+
+		var sizeErr ToolCallTooLargeError
+		if !errors.As(err, &sizeErr) {
+			t.Fatalf("expected ToolCallTooLargeError, got %v", err)
+		}
+		if sizeErr.Field != "output" {
+			t.Fatalf("expected field output, got %q", sizeErr.Field)
 		}
 	})
 }

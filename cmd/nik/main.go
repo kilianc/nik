@@ -61,7 +61,7 @@ func main() {
 	logOpts := &slog.HandlerOptions{Level: slog.LevelInfo}
 	fileHandler := slog.NewTextHandler(logFile, logOpts)
 	stderrHandler := &niklog.TruncHandler{Inner: slog.NewTextHandler(os.Stderr, logOpts)}
-	errHandler := slog.NewTextHandler(errLogFile, &slog.HandlerOptions{Level: slog.LevelError})
+	errHandler := slog.NewTextHandler(errLogFile, &slog.HandlerOptions{Level: slog.LevelWarn})
 	logger := slog.New(&niklog.MultiHandler{Handlers: []slog.Handler{fileHandler, stderrHandler, errHandler}})
 	slog.SetDefault(logger)
 

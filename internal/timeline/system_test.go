@@ -129,14 +129,14 @@ func TestRenderSkillEvent(t *testing.T) {
 	}
 }
 
-func TestRenderToolCallTruncatesLongFields(t *testing.T) {
+func TestRenderToolCallPreservesLongFields(t *testing.T) {
 	longInput := strings.Repeat("x", 300)
 	body, _ := json.Marshal(map[string]string{"name": "db_query", "input": longInput, "output": "ok"})
 	msg := db.Message{Kind: "tool_call", Body: string(body), SentAt: time.Now()}
 	e := renderToolCall(msg)
 
-	if !strings.Contains(e.text, "[truncated]") {
-		t.Fatalf("expected truncation marker in text, got %q", e.text)
+	if !strings.Contains(e.text, "input: "+longInput) {
+		t.Fatalf("expected full input in text, got %q", e.text)
 	}
 	if e.from != "YOU" {
 		t.Fatalf("expected from=YOU, got %q", e.from)

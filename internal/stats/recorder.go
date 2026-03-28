@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"time"
 
@@ -83,6 +84,21 @@ func (r *Recorder) ToolCall(ctx context.Context, roundID string, call llm.ToolCa
 		IsError:           result.IsErr,
 	})
 	if err != nil {
+		var sizeErr db.ToolCallTooLargeError
+		if errors.As(err, &sizeErr) {
+			slog.Warn("tool call payload exceeds db guardrail",
+				"pkg", "stats",
+				"activation_id", actID,
+				"round_id", roundID,
+				"tool", call.Name,
+				"field", sizeErr.Field,
+				"bytes", sizeErr.Bytes,
+				"max_bytes", sizeErr.MaxBytes,
+				"error", err,
+			)
+			return
+		}
+
 		slog.Warn("record tool call", "pkg", "stats", "activation_id", actID, "error", err)
 	}
 }

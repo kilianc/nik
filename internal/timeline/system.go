@@ -270,20 +270,10 @@ func renderToolCall(msg db.Message) entry {
 	}
 	_ = json.Unmarshal([]byte(msg.Body), &tc)
 
-	input := tc.Input
-	if len(input) > reportTruncateLen {
-		input = input[:reportTruncateLen] + " [truncated]"
-	}
-
-	output := tc.Output
-	if len(output) > reportTruncateLen {
-		output = output[:reportTruncateLen] + " [truncated]"
-	}
-
 	lines := []string{
 		"called " + tc.Name,
-		"input: " + input,
-		"output: " + output,
+		"input: " + tc.Input,
+		"output: " + tc.Output,
 	}
 
 	return entry{at: msg.SentAt, from: "YOU", text: padLines(lines)}
