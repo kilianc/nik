@@ -177,7 +177,16 @@ type Config struct {
 	Timezone            string        `yaml:"timezone"`
 	Location            string        `yaml:"location"`
 
+	Retention time.Duration `yaml:"retention"`
+
 	BannedWords []string `yaml:"banned_words"`
+}
+
+func (c Config) RetentionOrDefault() time.Duration {
+	if c.Retention > 0 {
+		return c.Retention
+	}
+	return 30 * 24 * time.Hour
 }
 
 func (c Config) ShellHome() string {
