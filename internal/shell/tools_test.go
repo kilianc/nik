@@ -19,6 +19,20 @@ func TestHandleRunValidatesRequiredFields(t *testing.T) {
 	}
 }
 
+func TestEnsureReadyNoDocker(t *testing.T) {
+	requireTmux(t)
+	svc := testService(t)
+
+	err := svc.EnsureReady()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if svc.container != "" {
+		t.Fatalf("expected empty container, got %q", svc.container)
+	}
+}
+
 func TestHandleReadMissingSession(t *testing.T) {
 	requireTmux(t)
 	svc := testService(t)
