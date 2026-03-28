@@ -156,7 +156,7 @@ func TestSendHandlerVoiceWithoutSpeechFnReturnsError(t *testing.T) {
 		map[string]string{"conversation_id": "conv-123"},
 	)
 	out, err := handler(ctx, llm.ToolCall{
-		Arguments: `{"conversation_id":"conv-123","contact_id":"","messages":[{"text":"hello","image_path":"","voice":true}]}`,
+		Arguments: `{"conversation_id":"conv-123","contact_id":"","messages":[{"text":"hello","file_path":"","voice":true}]}`,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -182,8 +182,8 @@ func TestSendHandlerBannedWordPrevalidation(t *testing.T) {
 
 	out, err := handler(ctx, llm.ToolCall{
 		Arguments: `{"conversation_id":"conv-123","contact_id":"","messages":[` +
-			`{"text":"first message is fine","image_path":"","voice":false},` +
-			`{"text":"second has goblin in it","image_path":"","voice":false}]}`,
+			`{"text":"first message is fine","file_path":"","voice":false},` +
+			`{"text":"second has goblin in it","file_path":"","voice":false}]}`,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -212,7 +212,7 @@ func TestSendHandlerPathSecurity(t *testing.T) {
 		handler := sendHandler(&Service{cfg: cfg})
 
 		out, err := handler(makeCtx(), llm.ToolCall{
-			Arguments: `{"conversation_id":"conv-123","contact_id":"","messages":[{"text":"look","image_path":"/etc/passwd","voice":false}]}`,
+			Arguments: `{"conversation_id":"conv-123","contact_id":"","messages":[{"text":"look","file_path":"/etc/passwd","voice":false}]}`,
 		})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -231,7 +231,7 @@ func TestSendHandlerPathSecurity(t *testing.T) {
 		handler := sendHandler(&Service{cfg: cfg})
 
 		out, err := handler(makeCtx(), llm.ToolCall{
-			Arguments: `{"conversation_id":"conv-123","contact_id":"","messages":[{"text":"look","image_path":"../../../etc/passwd","voice":false}]}`,
+			Arguments: `{"conversation_id":"conv-123","contact_id":"","messages":[{"text":"look","file_path":"../../../etc/passwd","voice":false}]}`,
 		})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -254,7 +254,7 @@ func TestSendHandlerPathSecurity(t *testing.T) {
 		handler := sendHandler(&Service{cfg: cfg})
 
 		out, err := handler(makeCtx(), llm.ToolCall{
-			Arguments: `{"conversation_id":"conv-123","contact_id":"","messages":[{"text":"look","image_path":"escape/secret.png","voice":false}]}`,
+			Arguments: `{"conversation_id":"conv-123","contact_id":"","messages":[{"text":"look","file_path":"escape/secret.png","voice":false}]}`,
 		})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -280,7 +280,7 @@ func TestSendHandlerAllowList(t *testing.T) {
 
 	t.Run("blocks disallowed conversation", func(t *testing.T) {
 		out, err := handler(ctx, llm.ToolCall{
-			Arguments: `{"conversation_id":"not-allowed-conv","contact_id":"","messages":[{"text":"hi","image_path":"","voice":false}]}`,
+			Arguments: `{"conversation_id":"not-allowed-conv","contact_id":"","messages":[{"text":"hi","file_path":"","voice":false}]}`,
 		})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -292,7 +292,7 @@ func TestSendHandlerAllowList(t *testing.T) {
 
 	t.Run("allows context conversation", func(t *testing.T) {
 		out, err := handler(ctx, llm.ToolCall{
-			Arguments: `{"conversation_id":"","contact_id":"","messages":[{"text":"hi","image_path":"","voice":true}]}`,
+			Arguments: `{"conversation_id":"","contact_id":"","messages":[{"text":"hi","file_path":"","voice":true}]}`,
 		})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
