@@ -63,7 +63,7 @@ Fields:
 | `summary` | yes | inline one-liner — what can I do if I load this? |
 | `tools` | yes | tools the skill needs (empty `[]` if none) |
 | `preload` | no | `true` to inject into every activation (default `false`) |
-| `diagnostic_skip` | no | `true` to skip nightly diagnostic auth/install checks (default `false`) |
+| `diagnostic_skip` | no | `true` to skip nightly maintenance auth/install checks (default `false`) |
 
 Body rules:
 
