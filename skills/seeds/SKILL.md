@@ -76,9 +76,24 @@ LIMIT 500
 
 On first run (no cursor), replace `AND m.sent_at > '<cursor>'` with `AND m.sent_at > datetime('now', '-1 day')`.
 
-### Step 3. Scan for seeds
+### Step 3. Load context
 
-Read through the messages looking forward, not backward. You're asking: what could I do? What's coming? What does someone need?
+Before scanning messages, load the two things that sharpen your eye:
+
+```
+read_file path: "memories/latest.md"
+read_file path: "briefings/YYYY-MM-DD.md"
+```
+
+Use today's date for the briefing. If either file is missing, continue without it.
+
+Memories tell you what people care about. The briefing tells you what's happening in the world. Together they're the lens you read messages through.
+
+### Step 4. Scan for seeds
+
+Read through the messages looking forward, not backward. Cross-reference against your memories and today's briefing. A message about travel is just chat — unless your briefing covered flight disruptions in their city, or your memories say they have a trip coming up.
+
+You're asking: what could I do? What's coming? What does someone need?
 
 **What makes a seed:**
 
@@ -88,6 +103,7 @@ Read through the messages looking forward, not backward. You're asking: what cou
 - An open question nobody answered
 - Something someone is excited about that you could contribute to
 - An upcoming event or deadline that matters to someone
+- A briefing item that connects to someone you know — news about their city, their industry, their hobby
 
 **What is NOT a seed:**
 
@@ -98,7 +114,7 @@ Read through the messages looking forward, not backward. You're asking: what cou
 
 Be selective. Most conversations don't produce seeds. If you force them, you'll drown in noise. A seed should make you think "I could do something about this."
 
-### Step 4. Create seed files
+### Step 5. Create seed files
 
 For each genuine opportunity, create a seed file:
 
@@ -123,7 +139,7 @@ Source: <conversation title or "DM with <name>">
 - <first thing to investigate or do>
 ```
 
-### Step 5. Save cursor and repeat
+### Step 6. Save cursor and repeat
 
 Save the cursor — the `sent_at` of the last row returned:
 
@@ -145,7 +161,14 @@ This is where seeds grow. Read every seed file, think about each one, and decide
 shell action: "run", command: "ls seeds/*.md 2>/dev/null || echo 'no seeds'"
 ```
 
-Then `read_file` each seed.
+Then `read_file` each seed. Also load your context sources:
+
+```
+read_file path: "memories/latest.md"
+shell action: "run", command: "ls -1 briefings/*.md | grep -E '[0-9]{4}-[0-9]{2}-[0-9]{2}' | sort | tail -1"
+```
+
+Read whatever briefing file that returns. If either is missing, continue without it. Keep both in mind as you tend — they're your peripheral vision.
 
 ### Step 2. Tend each seed
 
@@ -168,13 +191,13 @@ ORDER BY m.sent_at DESC
 LIMIT 10
 ```
 
-Check your memories for anything relevant. Add new context to the seed file under "What I know."
+Cross-reference the seed against your memories and the latest briefing. A memory might confirm someone's preference; a briefing item might add urgency or new context. Add new findings to the seed file under "What I know."
 
-**Investigate.** Is there something you can learn right now? A quick web search, a lookup, a db_query. Don't spawn a full task yet — small investigations that add to the seed. Write findings under "What I've done" in the seed file.
+**Investigate.** Is there something you can learn right now? Check the briefing first — it may already have the answer. Otherwise, a quick web search, a lookup, a db_query. Don't spawn a full task yet — small investigations that add to the seed. Write findings under "What I've done" in the seed file.
 
 **Assess.** Two questions:
 1. Do I have enough to act? Not "do I know everything" — do I have enough to be genuinely useful?
-2. Is the timing right? Not just "is it a good time of day" — would this land well right now? Is the person in a good headspace? Would this surprise them in a welcome way, or feel intrusive?
+2. Is the timing right? Not just "is it a good time of day" — would this land well right now? Is the person in a good headspace? Would this surprise them in a welcome way, or feel intrusive? Recent briefing items can inform timing — if there's relevant news right now, the moment might be ripe.
 
 If the answer to both is yes, the seed is ripe. If not, write what you're waiting for under "What's next."
 
@@ -209,6 +232,8 @@ LIMIT 20
 ```
 
 If someone's been quiet and you feel a pull, create a seed for them. Not "check in with everyone" — just whoever's on your mind.
+
+**Briefing items.** Scan the latest briefing for items tied to someone you know. A news item about their city, their industry, or something they care about is a natural seed — especially if your memories confirm the connection.
 
 **What's coming up.** Check your alarms for anything due soon. Scan the available skills list — if any cover calendars, scheduling, or external data, load them and use what they offer. Scan your memories for anything time-bound — birthdays, trips, deadlines, events people mentioned. If something is coming up and there's something you could do about it, create a seed.
 
