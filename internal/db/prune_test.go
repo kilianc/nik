@@ -46,7 +46,6 @@ func TestPrune(t *testing.T) {
 	assertGone(t, conn, "shell_session", old.shellSessionID)
 	assertGone(t, conn, "task", old.taskID)
 	assertGone(t, conn, "task_report", old.taskReportID)
-	assertGone(t, conn, "task_assessment", old.taskAssessmentID)
 	assertGone(t, conn, "experiment", old.experimentID)
 	assertGone(t, conn, "experiment_variant", old.variantID)
 	assertGone(t, conn, "experiment_variant_run", old.runID)
@@ -58,7 +57,6 @@ func TestPrune(t *testing.T) {
 	assertExists(t, conn, "shell_session", fresh.shellSessionID)
 	assertExists(t, conn, "task", fresh.taskID)
 	assertExists(t, conn, "task_report", fresh.taskReportID)
-	assertExists(t, conn, "task_assessment", fresh.taskAssessmentID)
 	assertExists(t, conn, "experiment", fresh.experimentID)
 	assertExists(t, conn, "experiment_variant", fresh.variantID)
 	assertExists(t, conn, "experiment_variant_run", fresh.runID)
@@ -98,7 +96,7 @@ func TestSplitStatements(t *testing.T) {
 		{"single", "DELETE FROM foo WHERE id = ?1;", 1},
 		{"multiple", "DELETE FROM a;\nDELETE FROM b;\n", 2},
 		{"with comments", "-- phase 1\nDELETE FROM a;\n-- phase 2\nDELETE FROM b;\n", 2},
-		{"prune.sql", queries.Prune, 14},
+		{"prune.sql", queries.Prune, 13},
 	}
 
 	for _, tt := range tests {
@@ -112,18 +110,17 @@ func TestSplitStatements(t *testing.T) {
 }
 
 type chainIDs struct {
-	activationID     string
-	roundID          string
-	toolCallID       string
-	shellSessionID   string
-	taskID           string
-	retryTaskID      string
-	taskReportID     string
-	taskAssessmentID string
-	experimentID     string
-	variantID        string
-	runID            string
-	systemMessageID  string
+	activationID    string
+	roundID         string
+	toolCallID      string
+	shellSessionID  string
+	taskID          string
+	retryTaskID     string
+	taskReportID    string
+	experimentID    string
+	variantID       string
+	runID           string
+	systemMessageID string
 }
 
 func seedFullChain(t *testing.T, ctx context.Context, conn *sql.DB, convID string, ts time.Time) chainIDs {
@@ -223,15 +220,6 @@ func seedFullChain(t *testing.T, ctx context.Context, conn *sql.DB, convID strin
 	})
 	if err != nil {
 		t.Fatalf("seed task_report: %v", err)
-	}
-
-	c.taskAssessmentID = id.V7()
-	_, err = conn.ExecContext(ctx,
-		"INSERT INTO task_assessment (id, task_id, effectiveness_score, expected_duration_seconds) VALUES (?1, ?2, ?3, ?4)",
-		c.taskAssessmentID, c.taskID, 3, 60,
-	)
-	if err != nil {
-		t.Fatalf("seed task_assessment: %v", err)
 	}
 
 	_, err = conn.ExecContext(ctx,

@@ -20,14 +20,13 @@ const (
 )
 
 type Runner struct {
-	cfg       *config.Config
-	llm       *llm.Client
-	recorder  llm.ActivationRecorder
-	criticLLM *llm.Client
-	svc       *Service
-	tools     []llm.Tool
-	cancels   sync.Map
-	wg        sync.WaitGroup
+	cfg      *config.Config
+	llm      *llm.Client
+	recorder llm.ActivationRecorder
+	svc      *Service
+	tools    []llm.Tool
+	cancels  sync.Map
+	wg       sync.WaitGroup
 }
 
 func NewRunner(cfg *config.Config, llmClient *llm.Client, svc *Service, tools []llm.Tool) *Runner {
@@ -42,10 +41,6 @@ func NewRunner(cfg *config.Config, llmClient *llm.Client, svc *Service, tools []
 
 func (r *Runner) SetRecorder(rec llm.ActivationRecorder) {
 	r.recorder = rec
-}
-
-func (r *Runner) SetCriticLLM(c *llm.Client) {
-	r.criticLLM = c
 }
 
 func (r *Runner) Wait() { r.wg.Wait() }
@@ -129,16 +124,6 @@ func (r *Runner) Run(ctx context.Context, t db.Task) {
 		r.svc.UpdateStatus(ctx, t.ID, finalStatus)
 		slog.Info("task "+finalStatus, "pkg", "task", "task_id", t.ID, "goal", t.Goal)
 	}
-
-	t.ActivationID = actID
-	current, getErr := r.svc.Get(ctx, t.ID)
-	if getErr == nil {
-		t = current
-	} else {
-		slog.Warn("get task for critic", "pkg", "task", "task_id", t.ID, "error", getErr)
-	}
-
-	r.RunCritic(context.Background(), t)
 }
 
 func (r *Runner) runLoop(ctx context.Context, t db.Task, act *llm.Activation, exec llm.ToolExecutor) error {

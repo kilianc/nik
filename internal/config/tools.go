@@ -28,7 +28,7 @@ var configDef = llm.ToolDef{
 			},
 			"field": map[string]any{
 				"type":        "string",
-				"description": "Config field name for 'set'. Writable fields: timezone, location, max_history, task.max_rounds, task.timeout, models.main.*, models.task.*, models.recall.*, models.critic.*.",
+				"description": "Config field name for 'set'. Writable fields: timezone, location, max_history, task.max_rounds, task.timeout, models.main.*, models.task.*, models.recall.*.",
 			},
 			"value": map[string]any{
 				"type":        "string",
@@ -95,12 +95,6 @@ func configGet(cfg *Config) (string, error) {
 				"model":            cfg.Models.Recall.Model,
 				"reasoning_effort": cfg.Models.Recall.ReasoningEffort,
 				"verbosity":        cfg.Models.Recall.Verbosity,
-			},
-			"critic": map[string]any{
-				"enabled":          cfg.Models.Critic.Enabled,
-				"model":            cfg.Models.Critic.Model,
-				"reasoning_effort": cfg.Models.Critic.ReasoningEffort,
-				"verbosity":        cfg.Models.Critic.Verbosity,
 			},
 		},
 		"task": map[string]any{
@@ -203,24 +197,6 @@ func configSet(cfg *Config, field, value string) (string, error) {
 			return llm.ToolErrorf("invalid models.recall.verbosity %q (low, medium, high, or empty)", value), nil
 		}
 		cfg.Models.Recall.Verbosity = value
-	case "models.critic.enabled":
-		enabled, err := strconv.ParseBool(value)
-		if err != nil {
-			return llm.ToolErrorf("invalid models.critic.enabled %q (true or false)", value), nil
-		}
-		cfg.Models.Critic.Enabled = enabled
-	case "models.critic.model":
-		cfg.Models.Critic.Model = value
-	case "models.critic.reasoning_effort":
-		if !isValidReasoningEffort(value) {
-			return llm.ToolErrorf("invalid models.critic.reasoning_effort %q (none, minimal, low, medium, high, xhigh, or empty)", value), nil
-		}
-		cfg.Models.Critic.ReasoningEffort = value
-	case "models.critic.verbosity":
-		if !isValidVerbosity(value) {
-			return llm.ToolErrorf("invalid models.critic.verbosity %q (low, medium, high, or empty)", value), nil
-		}
-		cfg.Models.Critic.Verbosity = value
 	default:
 		return llm.ToolErrorf("unknown field %q", field), nil
 	}

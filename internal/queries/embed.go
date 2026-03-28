@@ -186,14 +186,6 @@ var TaskRetryChain string
 //go:embed task_list.sql
 var TaskList string
 
-// task assessment queries
-
-//go:embed task_assessment_insert.sql
-var TaskAssessmentInsert string
-
-//go:embed task_assessment_tool_calls.sql
-var TaskAssessmentToolCalls string
-
 // task report queries
 
 //go:embed task_report_insert.sql

@@ -180,16 +180,6 @@ type Skill struct {
 	UpdatedAt   time.Time      `json:"updated_at"`
 }
 
-type ToolCallInfo struct {
-	Name       string
-	Round      int
-	Input      string
-	Output     string
-	DurationMS int64
-	Error      bool
-	At         time.Time
-}
-
 type Experiment struct {
 	ID                string
 	ActivationRoundID string
