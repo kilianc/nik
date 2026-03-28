@@ -12,6 +12,7 @@ type Stimulus struct {
 type Sensor interface {
 	Check(ctx context.Context) ([]Stimulus, error)
 	Read(ctx context.Context, convID string) string
+	Peek(ctx context.Context, convID string) string
 }
 
 func (b *Brain) SetSensor(s Sensor) {

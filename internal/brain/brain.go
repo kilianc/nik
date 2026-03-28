@@ -170,18 +170,17 @@ const (
 )
 
 func (b *Brain) think(ctx context.Context, getInput func() string) (_ string, _ llm.Usage, retErr error) {
-	input := getInput()
+	meta, _ := ctx.Value("meta").(map[string]string)
+	convID := meta["conversation_id"]
 
 	var recall string
-	if b.recaller != nil {
-		recall = b.recaller(ctx, input)
+	if b.recaller != nil && b.sensor != nil {
+		recall = b.recaller(ctx, b.sensor.Peek(ctx, convID))
 	}
 
 	thinkCtx, cancel := context.WithTimeout(ctx, activationTimeout)
 	defer cancel()
 
-	meta, _ := ctx.Value("meta").(map[string]string)
-	convID := meta["conversation_id"]
 	tools := b.toolsForContext(ctx)
 	executor := b.toolExecutor()
 
@@ -199,7 +198,7 @@ func (b *Brain) think(ctx context.Context, getInput func() string) (_ string, _ 
 		act.SetError(retErr)
 		act.Close(thinkCtx)
 	}()
-	act.SetInput(input)
+	act.SetInput(getInput())
 
 	var nudged bool
 
