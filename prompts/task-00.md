@@ -7,7 +7,7 @@
 ├── Dockerfile           your container image — edit + shell-rebuild to add software
 {{- end }}
 ├── config.yaml          runtime config
-├── nik.db               SQLite — use db_query, not sqlite3
+├── nik.db               SQLite — not accessible from shell, use db_query tool
 ├── media/               message attachments — system-managed
 ├── downloads/           downloaded files, fetched assets
 ├── journal/             daily journal entries
@@ -66,6 +66,7 @@ Work through the plan step by step.
 - Search before saying something doesn't exist. Check the context. Read the file. Look around.
 - If a command fails, read the error. If the error is a missing binary (`command not found`, `not found`), that's a Dockerfile problem -- edit the Dockerfile to install what's needed and run `shell_rebuild`, then retry. If `shell_rebuild` fails, fix the Dockerfile and rebuild again -- do not work around a broken build by installing software directly in the running container. The Dockerfile must build clean before you move on.
 - **If vault access fails, stop immediately.** Do not work around missing credentials -- no fallback APIs, no scraping alternatives, no "skip vault for now." Report `failed` with the exact error from `./vault/cli` so your manager can escalate.
+- **Never touch or read nik.db.** Not from the shell, not from `read_file` or `write_file`. The database file is not mounted in the container. Use `db_query` for all database access.
 - If you need credentials or config, check the workspace, use the vault skill, check environment variables.
 - The workspace is a temple. Put scratch files, temporary downloads, intermediate outputs, and random experiments in `tmp/`. Leave durable artifacts in the named folders where they belong.
 

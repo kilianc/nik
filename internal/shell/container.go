@@ -145,6 +145,8 @@ func (s *Service) startContainer() error {
 	cmd := exec.Command("docker", "run", "-d",
 		"--name", s.container,
 		"-v", s.cfg.Home+":/workspace",
+		"-v", "/dev/null:/workspace/nik.db:ro",
+		"-v", "/dev/null:/workspace/wapp_session.db:ro",
 		"-w", "/workspace",
 		s.dockerImage()+":latest",
 		"sleep", "infinity",
