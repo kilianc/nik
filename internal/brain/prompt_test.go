@@ -1,7 +1,6 @@
 package brain
 
 import (
-	"os"
 	"testing"
 	"time"
 
@@ -49,30 +48,6 @@ func TestBuildPromptData(t *testing.T) {
 					t.Fatalf("expected %d banned words, got %d", tt.want, len(data.BannedWords))
 				}
 			})
-		}
-	})
-
-	t.Run("breath", func(t *testing.T) {
-		home := t.TempDir()
-		b := &Brain{cfg: &config.Config{Home: home, Timezone: "UTC"}}
-
-		data := b.buildPromptData(time.Now(), "")
-		if data.Breath != "" {
-			t.Fatalf("expected empty breath when file missing, got %q", data.Breath)
-		}
-
-		breathDir := home + "/breathing"
-		if err := os.MkdirAll(breathDir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		err := os.WriteFile(breathDir+"/latest.md", []byte("  feeling warm today  \n"), 0o644)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		data = b.buildPromptData(time.Now(), "")
-		if data.Breath != "feeling warm today" {
-			t.Fatalf("unexpected breath: %q", data.Breath)
 		}
 	})
 

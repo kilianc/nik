@@ -19,7 +19,6 @@ var htmlCommentRe = regexp.MustCompile(`(?s)<!--.*?-->\n?`)
 type promptData struct {
 	Now             nowData
 	Soul            string
-	Breath          string
 	Recall          string
 	WorkerTools     string
 	NikTools        string
@@ -211,13 +210,6 @@ func (b *Brain) buildPromptData(now time.Time, recall string) promptData {
 			data.Soul = strings.TrimSpace(string(soulData))
 		} else if !os.IsNotExist(soulErr) {
 			slog.Warn("load soul", "pkg", "brain", "error", soulErr)
-		}
-
-		breathData, breathErr := readFromRoot(homeRoot, "breathing/latest.md")
-		if breathErr == nil {
-			data.Breath = strings.TrimSpace(string(breathData))
-		} else if !os.IsNotExist(breathErr) {
-			slog.Warn("load breath", "pkg", "brain", "error", breathErr)
 		}
 
 		homeRoot.Close()
