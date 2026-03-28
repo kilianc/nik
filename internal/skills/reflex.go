@@ -1,19 +1,19 @@
 package skills
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
 	"log/slog"
-	"os/exec"
 	"strings"
 	"time"
 
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/db"
 )
+
+type CommandRunner func(ctx context.Context, command, stdin string) (stdout, stderr string, err error)
 
 func SkillChangeReflex(cfg *config.Config, conn *sql.DB) func(ctx context.Context) {
 	return func(ctx context.Context) {
@@ -198,7 +198,7 @@ func ExtractInstallSection(content string) string {
 
 const maxCheckTimeout = 30 * time.Second
 
-func SkillCheckReflex(cfg *config.Config, conn *sql.DB, complete Completer) func(ctx context.Context) {
+func SkillCheckReflex(cfg *config.Config, conn *sql.DB, complete Completer, run CommandRunner) func(ctx context.Context) {
 	return func(ctx context.Context) {
 		dirs := []string{cfg.SkillsPath(), cfg.WorkspaceSkillsPath()}
 
@@ -233,12 +233,14 @@ func SkillCheckReflex(cfg *config.Config, conn *sql.DB, complete Completer) func
 				continue
 			}
 
-			runSkillCheck(ctx, cfg, conn, key, def, lastMeta)
+			runSkillCheck(ctx, cfg, conn, key, def, lastMeta, run)
 		}
 	}
 }
 
-func runSkillCheck(ctx context.Context, cfg *config.Config, conn *sql.DB, key string, def SkillReflexDef, lastMeta string) {
+func runSkillCheck(ctx context.Context, cfg *config.Config, conn *sql.DB, key string, def SkillReflexDef, lastMeta string, run CommandRunner) {
+	slog.Info("skill check reflex: running", "key", key, "command", def.Command)
+
 	var newMeta string
 
 	if def.Command == "" {
@@ -247,26 +249,18 @@ func runSkillCheck(ctx context.Context, cfg *config.Config, conn *sql.DB, key st
 		cmdCtx, cancel := context.WithTimeout(ctx, maxCheckTimeout)
 		defer cancel()
 
-		cmd := exec.CommandContext(cmdCtx, "sh", "-c", def.Command)
-		cmd.Dir = cfg.Home
-		cmd.Stdin = strings.NewReader(lastMeta)
-
-		var stdout, stderr bytes.Buffer
-		cmd.Stdout = &stdout
-		cmd.Stderr = &stderr
-
-		err := cmd.Run()
+		out, stderr, err := run(cmdCtx, def.Command, lastMeta)
 		if err != nil {
 			slog.Warn("skill check reflex: command failed",
 				"key", key,
 				"command", def.Command,
 				"error", err,
-				"stderr", stderr.String(),
+				"stderr", stderr,
 			)
 			return
 		}
 
-		newMeta = strings.TrimSpace(stdout.String())
+		newMeta = strings.TrimSpace(out)
 	}
 
 	if newMeta == "" || newMeta == lastMeta {
