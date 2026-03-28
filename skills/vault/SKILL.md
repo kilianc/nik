@@ -58,11 +58,16 @@ When a `read` fails, don't immediately ask the user to add it.
 First run `./vault/cli list` and scan the output for plausible
 matches -- the user may have stored the secret under a different
 name (different separators, prefixes, abbreviations, or word order).
-If a likely match exists, use it. If multiple candidates look
-plausible, ask the user which one is correct. Only when nothing
-in the list looks related, ask the user to add it under the expected
-name. The user manages secrets through their own tool -- don't tell
-them to run vault commands.
+If a likely match exists, use it.
+
+If nothing in the list looks related, the cache may be stale. Run
+`./vault/cli flush` to invalidate it, then `./vault/cli list` again
+to rebuild with fresh data. Scan the new output the same way.
+
+If multiple candidates look plausible, ask the user which one is
+correct. Only when nothing matches after the flush, ask the user to
+add it under the expected name. The user manages secrets through
+their own tool -- don't tell them to run vault commands.
 
 ## Install
 
