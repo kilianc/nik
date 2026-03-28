@@ -147,8 +147,8 @@ else
 fi
 
 echo "=== ASSESSMENTS ==="
-assess_count=$(ls -1 assessments/*.md 2>/dev/null | grep -cv '^$' || echo 0)
-assess_latest=$(ls -1 assessments/ 2>/dev/null | grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}' | sort | tail -1)
+assess_count=$(find assessments/ -name '*.md' 2>/dev/null | grep -c . || echo 0)
+assess_latest=$(find assessments/ -name '*.md' 2>/dev/null | sort | tail -1)
 echo "count=$assess_count latest=$assess_latest"
 
 echo "=== BRIEFING ==="
