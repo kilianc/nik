@@ -337,6 +337,7 @@ Things to revisit periodically. The agent adds entries here when the user flags 
 <!-- example: - 2026-03-14: user prefers X over Y for error handling -- revisit error style rules -->
 
 - 2026-03-24: JSON columns stored in the DB should come back as proper typed objects from the db layer, not raw strings that callers unmarshal. Currently blocked for `ToolSchemas` (`ActivationRow`) because `db` can't import `llm.ToolDef` -- revisit when a shared types package or layering change makes this possible.
+- 2026-03-27: `ErrLogPath` output should capture both `WARN` and `ERROR` levels, not only `ERROR`.
 
 ## Fin
 

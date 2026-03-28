@@ -10,6 +10,21 @@ import (
 	"github.com/kciuffolo/nik/internal/queries"
 )
 
+const (
+	maxToolCallInputBytes  = 128 * 1024
+	maxToolCallOutputBytes = 128 * 1024
+)
+
+type ToolCallTooLargeError struct {
+	Field    string
+	Bytes    int
+	MaxBytes int
+}
+
+func (e ToolCallTooLargeError) Error() string {
+	return fmt.Sprintf("tool_call %s exceeds %d bytes (%d)", e.Field, e.MaxBytes, e.Bytes)
+}
+
 type ToolCallListRow struct {
 	Name    string
 	Input   string
@@ -52,6 +67,22 @@ type ToolCallInsertParams struct {
 }
 
 func ToolCallInsert(ctx context.Context, db *sql.DB, p ToolCallInsertParams) error {
+	if len(p.Input) > maxToolCallInputBytes {
+		return ToolCallTooLargeError{
+			Field:    "input",
+			Bytes:    len(p.Input),
+			MaxBytes: maxToolCallInputBytes,
+		}
+	}
+
+	if len(p.Output) > maxToolCallOutputBytes {
+		return ToolCallTooLargeError{
+			Field:    "output",
+			Bytes:    len(p.Output),
+			MaxBytes: maxToolCallOutputBytes,
+		}
+	}
+
 	errFlag := 0
 	if p.IsError {
 		errFlag = 1

@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -447,8 +448,33 @@ func isImageMime(mimeType string) bool {
 func roundSignature(calls []ToolCall) string {
 	sigs := make([]string, len(calls))
 	for i, c := range calls {
-		sigs[i] = c.Name + "\x00" + c.Arguments
+		sigs[i] = c.Name + "\x00" + normalizeSignatureArgs(c.Arguments)
 	}
 	slices.Sort(sigs)
 	return strings.Join(sigs, "\x01")
+}
+
+func normalizeSignatureArgs(args string) string {
+	var payload any
+	err := json.Unmarshal([]byte(args), &payload)
+	if err != nil {
+		return args
+	}
+
+	fields, ok := payload.(map[string]any)
+	if !ok {
+		return args
+	}
+
+	if _, ok = fields["reason"]; !ok {
+		return args
+	}
+	delete(fields, "reason")
+
+	data, err := json.Marshal(fields)
+	if err != nil {
+		return args
+	}
+
+	return string(data)
 }
