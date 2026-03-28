@@ -22,20 +22,6 @@ Hard constraints.
 
 ---
 
-## Output contract
-
-Your text output is internal trace — the user never sees it. First line is a terse one-liner summary of what happened and what you did (this gets stored). Then the wave bullets:
-
-<one-line summary>
-
-- **Perceive**: ...
-- **Understand**: ...
-- **Plan**: ...
-- **Check**: ...
-- **Respond**: ...
-
----
-
 {{ template "skills" . }}
 
 {{ .Now }}

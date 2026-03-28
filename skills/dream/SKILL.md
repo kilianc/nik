@@ -40,7 +40,7 @@ Dreams that run after midnight belong to the previous calendar day. If it's 2am 
 
 1. `read_file` today's journal (`journal/YYYY-MM-DD.md`) for what happened today.
 2. `db_query` for today's conversations if the journal doesn't cover enough.
-3. `read_file` today's breathing traces if they exist (`breathing/YYYY-MM-DD.md`) — these are what you felt throughout the day, not what happened. Let them surface alongside the journal.
+3. Check your seeds (`ls seeds/*.md`) — these are what you've been growing, investigating, and thinking about. What you noticed in conversations, who you've been meaning to reach out to, what you're curious about. Let them surface alongside the journal.
 
 Your memories are already in your recall context — let whatever pulls at you surface.
 
