@@ -6,12 +6,14 @@ import (
 	"time"
 
 	"github.com/kciuffolo/nik/internal/db"
+	"github.com/kciuffolo/nik/internal/id"
 	"github.com/kciuffolo/nik/internal/llm"
 )
 
 const (
 	maxActivePerConversation = 5
 	maxRetriesPerGoal        = 5
+	statusReportTruncateLen  = 200
 )
 
 var spawnToolDef = llm.ToolDef{
@@ -45,7 +47,7 @@ var spawnToolDef = llm.ToolDef{
 
 var statusToolDef = llm.ToolDef{
 	Name:        "task_status",
-	Description: "Check on a task. Returns status, goal, plan, reports, and retry chain.",
+	Description: "Check on a task that scrolled out of the timeline. Returns current status, goal, last report, and retry count.",
 	Parameters: map[string]any{
 		"type": "object",
 		"properties": map[string]any{
@@ -307,10 +309,9 @@ func statusHandler(svc *Service) llm.ToolExecutor {
 		}
 
 		result := map[string]any{
-			"task_id": t.ID,
+			"task_id": id.Shorten(t.ID),
 			"status":  t.Status,
 			"goal":    t.Goal,
-			"plan":    t.Plan,
 		}
 
 		if t.Status == "cancelled" && t.CancellationReason != "" {
@@ -319,38 +320,20 @@ func statusHandler(svc *Service) llm.ToolExecutor {
 
 		reports, _ := svc.ReportsByTask(ctx, t.ID)
 		if len(reports) > 0 {
-			formatted := make([]map[string]any, len(reports))
-			for i, rpt := range reports {
-				formatted[i] = map[string]any{
-					"status":  rpt.Status,
-					"content": rpt.Content,
-					"at":      rpt.CreatedAt.Format("15:04:05"),
-				}
+			last := reports[len(reports)-1]
+			content := last.Content
+			if len(content) > statusReportTruncateLen {
+				content = content[:statusReportTruncateLen] + " [truncated]"
 			}
-			result["reports"] = formatted
+			result["last_report"] = map[string]any{
+				"status": last.Status,
+				"note":   content,
+				"at":     last.CreatedAt.Format("15:04:05"),
+			}
 		}
 
-		root := t.RetryForTaskID
-		if root == "" {
-			root = t.ID
-		}
-
-		chain, _ := svc.RetryChain(ctx, root)
-		if len(chain) > 1 {
-			formatted := make([]map[string]any, len(chain))
-			for i, entry := range chain {
-				e := map[string]any{
-					"attempt": entry.RetryNumber,
-					"status":  entry.Status,
-					"goal":    entry.Goal,
-				}
-				if len(entry.Reports) > 0 {
-					last := entry.Reports[len(entry.Reports)-1]
-					e["last_report"] = last.Content
-				}
-				formatted[i] = e
-			}
-			result["retry_chain"] = formatted
+		if t.RetryNumber > 0 {
+			result["retry_count"] = t.RetryNumber
 		}
 
 		return llm.ToolResult(result), nil
