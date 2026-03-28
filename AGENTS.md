@@ -173,6 +173,15 @@ EOF
 - `make test` or regular `go test`
 - **strict 1:1 test file naming**: every `.go` file has a `_test.go` with the same base name (`foo.go` → `foo_test.go`). Tests for code in `foo.go` go in `foo_test.go`, nowhere else. Never name a test file after a concept (e.g. `stale_test.go`) when the code lives in another file (e.g. `service.go`). When creating a new `.go` file, create its `_test.go` in the same step. If a file gets too big it's a signal the base `.go` file might have to be split
 - **prefer table-driven tests**: when 3+ cases share the same setup/assertion structure and differ only in inputs and expected outputs, use a `[]struct` table with `t.Run` subtests. Use `t.Run` subtests (not a data table) when cases share setup but have distinct assertion logic
+- stdlib `testing` only — no testify, no `cmp`, no third-party assertion packages
+- `t.Fatalf` to abort on setup failures or unexpected state; `t.Errorf` when checking multiple values in a loop or table (so remaining cases still run)
+- error assertions use `strings.Contains(err.Error(), "substring")` for message checks
+- `db.OpenInMemory()` + `defer conn.Close()` for every test that needs a database
+- seed/fixture helpers are unexported, colocated in the same `_test.go` file, and marked with `t.Helper()`
+- each package owns its own seed helpers — don't import fixtures from other packages
+- never write a test whose only assertion is that a constructor stored a field — if it compiles, it works
+- never write a standalone test with a single assertion that logically belongs in an existing test — add it as a subtest or trailing check instead
+- every test must exercise a unique code path; if two tests differ only in data, they belong in a table
 
 ### Scripts and tools
 
