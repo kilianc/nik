@@ -99,6 +99,10 @@ func (f *fakeSensor) Read(_ context.Context, _ string) string {
 	return ""
 }
 
+func (f *fakeSensor) Peek(_ context.Context, _ string) string {
+	return ""
+}
+
 func TestThinkExitsImmediatelyOnDone(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

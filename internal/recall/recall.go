@@ -53,10 +53,8 @@ func (s *Service) Recall(ctx context.Context, stimulus string) string {
 
 	slog.Info("recall starting", "pkg", "recall", "memories_chars", len(memories), "rows", len(rows))
 
-	instructions := buildRecallPrompt(stimulus)
-
-	act := llm.NewActivation(s.client, llm.NoopRecorder{}, instructions, nil)
-	act.SetInput(numbered)
+	act := llm.NewActivation(s.client, llm.NoopRecorder{}, recallInstructions, nil)
+	act.SetInput("Stimulus:\n" + stimulus + "\n\nMemories:\n" + numbered)
 
 	result, err := act.Round(ctx)
 	if err != nil {
@@ -86,14 +84,9 @@ func (s *Service) Recall(ctx context.Context, stimulus string) string {
 	return strings.Join(selected, "\n")
 }
 
-func buildRecallPrompt(stimulus string) string {
-	return `The input is a numbered list of memories (facts about people, preferences, events, decisions).
+const recallInstructions = `The input contains a stimulus (conversation context) and a numbered list of memories (facts about people, preferences, events, decisions).
 Return ONLY the row numbers relevant to this conversation as a comma-separated list.
-If nothing is relevant, return: nil
-
-Stimulus:
-` + stimulus
-}
+If nothing is relevant, return: nil`
 
 // numberRows parses a markdown table, collecting the header (everything up to
 // and including the separator line), and returns a numbered version for the LLM

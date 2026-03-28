@@ -393,3 +393,52 @@ func TestRenderUsesSystemMessagesOnly(t *testing.T) {
 		t.Fatalf("expected rendered timeline to include task goal, got %q", out)
 	}
 }
+
+func TestPeekSkipsSystemMessages(t *testing.T) {
+	conn, convID := setupTestDB(t)
+	ctx := context.Background()
+
+	err := db.SystemContactEnsure(ctx, conn)
+	if err != nil {
+		t.Fatalf("ensure system contact: %v", err)
+	}
+
+	now := time.Date(2026, 3, 14, 10, 0, 0, 0, time.UTC)
+	insertMsg(t, conn, convID, "msg-human", "ext-human", "text", "hey nik", now)
+
+	err = db.SystemMessageInsert(ctx, conn, db.SystemMessageParams{
+		ConversationID: convID,
+		Kind:           "task_report",
+		Body: db.TaskReport{
+			TaskID:  "aaaa-bbbb-cccc-dddd",
+			Goal:    "run backup",
+			Status:  "running",
+			Content: "in progress",
+		},
+		SentAt: now.Add(time.Second),
+	})
+	if err != nil {
+		t.Fatalf("insert system message: %v", err)
+	}
+
+	cfg := &config.Config{MaxHistory: 10}
+	msgSvc := messaging.NewService(cfg, conn, contacts.NewService(conn))
+	tl := New(cfg, msgSvc)
+
+	peek := tl.Peek(ctx, convID)
+
+	if !strings.Contains(peek, "hey nik") {
+		t.Fatalf("expected peek to contain human message, got %q", peek)
+	}
+	if strings.Contains(peek, "task report") || strings.Contains(peek, "run backup") {
+		t.Fatalf("expected peek to exclude system messages, got %q", peek)
+	}
+
+	conv, err := db.ConversationGet(ctx, conn, db.ConversationGetParams{ID: convID})
+	if err != nil {
+		t.Fatalf("get conversation: %v", err)
+	}
+	if conv.LastReadAt.Valid {
+		t.Fatalf("expected peek to not advance last_read_at, got %v", conv.LastReadAt.Time)
+	}
+}

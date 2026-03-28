@@ -49,6 +49,19 @@ func (t *Timeline) Check(ctx context.Context) ([]brain.Stimulus, error) {
 }
 
 func (t *Timeline) Read(ctx context.Context, convID string) string {
+	return t.read(ctx, convID, readOpts{markRead: true})
+}
+
+func (t *Timeline) Peek(ctx context.Context, convID string) string {
+	return t.read(ctx, convID, readOpts{skipSystem: true})
+}
+
+type readOpts struct {
+	skipSystem bool
+	markRead   bool
+}
+
+func (t *Timeline) read(ctx context.Context, convID string, opts readOpts) string {
 	maxHistory := t.cfg.MaxHistory
 	if maxHistory == 0 {
 		maxHistory = 20
@@ -58,6 +71,16 @@ func (t *Timeline) Read(ctx context.Context, convID string) string {
 	if err != nil {
 		slog.Warn("timeline read", "pkg", "timeline", "conversation_id", convID, "error", err)
 		return ""
+	}
+
+	if opts.skipSystem {
+		filtered := msgs[:0]
+		for _, m := range msgs {
+			if m.Platform != "system" {
+				filtered = append(filtered, m)
+			}
+		}
+		msgs = filtered
 	}
 
 	var readLine time.Time
@@ -74,7 +97,9 @@ func (t *Timeline) Read(ctx context.Context, convID string) string {
 	lines = append(lines, session.Lines...)
 	lines = append(lines, renderTimeline(entries, readLine)...)
 
-	t.markRead(ctx, convID, msgs)
+	if opts.markRead {
+		t.markRead(ctx, convID, msgs)
+	}
 
 	return strings.Join(lines, "\n")
 }
