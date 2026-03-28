@@ -362,7 +362,7 @@ func (s *Service) Reply(ctx context.Context, conversationID string, body string,
 	return s.ReceiveMessage(ctx, echo)
 }
 
-func (s *Service) SendImage(ctx context.Context, conversationID string, imagePath string, caption string) error {
+func (s *Service) SendFile(ctx context.Context, conversationID string, filePath string, caption string) error {
 	err := s.checkBannedWords(caption)
 	if err != nil {
 		return err
@@ -397,18 +397,18 @@ func (s *Service) SendImage(ctx context.Context, conversationID string, imagePat
 		}
 	}
 
-	outbound, err := platform.SendImage(ctx, conv.ExternalConversationID, imagePath, caption)
+	outbound, err := platform.SendFile(ctx, conv.ExternalConversationID, filePath, caption)
 	_ = platform.StopTyping(ctx, conv.ExternalConversationID)
 	if err != nil {
 		return err
 	}
 
 	if outbound.ExternalMessageID == "" {
-		return fmt.Errorf("platform send image missing external_message_id")
+		return fmt.Errorf("platform send file missing external_message_id")
 	}
 
 	if outbound.ExternalSenderID == "" {
-		return fmt.Errorf("platform send image missing external_sender_id")
+		return fmt.Errorf("platform send file missing external_sender_id")
 	}
 
 	sentAt := outbound.SentAt
@@ -418,11 +418,11 @@ func (s *Service) SendImage(ctx context.Context, conversationID string, imagePat
 
 	kind := outbound.Kind
 	if kind == "" {
-		kind = "image"
+		kind = "document"
 	}
 
 	mediaID := id.V7()
-	ext := filepath.Ext(imagePath)
+	ext := filepath.Ext(filePath)
 	datePrefix := time.Now().Format("2006/01")
 	mediaDir := filepath.Join(s.cfg.MediaPath(), datePrefix)
 	localPath := ""
@@ -430,9 +430,9 @@ func (s *Service) SendImage(ctx context.Context, conversationID string, imagePat
 	mkErr := os.MkdirAll(mediaDir, 0o755)
 	if mkErr == nil {
 		mediaFile := filepath.Join(mediaDir, mediaID+ext)
-		cpErr := copyFile(imagePath, mediaFile)
+		cpErr := copyFile(filePath, mediaFile)
 		if cpErr != nil {
-			slog.Warn("copy outbound image to media dir", "pkg", "messaging", "error", cpErr)
+			slog.Warn("copy outbound file to media dir", "pkg", "messaging", "error", cpErr)
 		} else {
 			localPath = filepath.Join("media", datePrefix, mediaID+ext)
 		}
@@ -451,11 +451,11 @@ func (s *Service) SendImage(ctx context.Context, conversationID string, imagePat
 		IsGroup:                conv.Kind == "group",
 		LocalPath:              localPath,
 		MediaID:                mediaID,
-		MediaSizeBytes:         fileSize(imagePath),
+		MediaSizeBytes:         fileSize(filePath),
 	})
 }
 
-func (s *Service) SendAudio(ctx context.Context, conversationID string, audioPath string, voiceNote bool, body string) error {
+func (s *Service) SendVoiceNote(ctx context.Context, conversationID string, audioPath string, body string) error {
 	conv, err := db.ConversationGet(ctx, s.db, db.ConversationGetParams{ID: conversationID})
 	if err != nil {
 		return err
@@ -477,23 +477,23 @@ func (s *Service) SendAudio(ctx context.Context, conversationID string, audioPat
 		mediaFile := filepath.Join(mediaDir, mediaID+ext)
 		cpErr := copyFile(audioPath, mediaFile)
 		if cpErr != nil {
-			slog.Warn("copy outbound audio to media dir", "pkg", "messaging", "error", cpErr)
+			slog.Warn("copy outbound voice note to media dir", "pkg", "messaging", "error", cpErr)
 		} else {
 			localPath = filepath.Join("media", datePrefix, mediaID+ext)
 		}
 	}
 
-	outbound, err := platform.SendAudio(ctx, conv.ExternalConversationID, audioPath, voiceNote)
+	outbound, err := platform.SendVoiceNote(ctx, conv.ExternalConversationID, audioPath)
 	if err != nil {
 		return err
 	}
 
 	if outbound.ExternalMessageID == "" {
-		return fmt.Errorf("platform send audio missing external_message_id")
+		return fmt.Errorf("platform send voice note missing external_message_id")
 	}
 
 	if outbound.ExternalSenderID == "" {
-		return fmt.Errorf("platform send audio missing external_sender_id")
+		return fmt.Errorf("platform send voice note missing external_sender_id")
 	}
 
 	sentAt := outbound.SentAt

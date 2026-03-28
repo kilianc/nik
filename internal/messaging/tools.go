@@ -32,11 +32,11 @@ var sendToolDef = llm.ToolDef{
 					"properties": map[string]any{
 						"text": map[string]any{
 							"type":        "string",
-							"description": "Message text, or image caption when sending an image.",
+							"description": "Message text, or caption when sending a file.",
 						},
-						"image_path": map[string]any{
+						"file_path": map[string]any{
 							"type":        "string",
-							"description": "Path to an image file relative to workspace. Omit or pass empty string for text-only.",
+							"description": "Path to a file relative to workspace (image, video, audio, document, etc.). Omit or pass empty string for text-only.",
 						},
 						"voice": map[string]any{
 							"type":        "boolean",
@@ -51,7 +51,7 @@ var sendToolDef = llm.ToolDef{
 							"description": "HH:MM:SS timestamp of the message to quote, from the timeline brackets. Pass empty string for no quote.",
 						},
 					},
-					"required":             []string{"text", "image_path", "voice", "quote_text", "quote_time"},
+					"required":             []string{"text", "file_path", "voice", "quote_text", "quote_time"},
 					"additionalProperties": false,
 				},
 				"description": "Array of messages to send, in order. Each becomes a separate bubble.",
@@ -116,7 +116,7 @@ func BuildTools(svc *Service) []llm.Tool {
 
 type sendMessage struct {
 	Text      string `json:"text"`
-	ImagePath string `json:"image_path"`
+	FilePath  string `json:"file_path"`
 	Voice     bool   `json:"voice"`
 	QuoteText string `json:"quote_text"`
 	QuoteTime string `json:"quote_time"`
@@ -172,9 +172,9 @@ func sendHandler(svc *Service) llm.ToolExecutor {
 				return llm.ToolError(err), nil
 			}
 
-			if p := strings.TrimSpace(msg.ImagePath); p != "" && svc.cfg != nil {
+			if p := strings.TrimSpace(msg.FilePath); p != "" && svc.cfg != nil {
 				if filepath.IsAbs(p) {
-					return llm.ToolErrorf("image_path must be relative to workspace"), nil
+					return llm.ToolErrorf("file_path must be relative to workspace"), nil
 				}
 
 				root, rootErr := os.OpenRoot(svc.cfg.Home)
@@ -185,7 +185,7 @@ func sendHandler(svc *Service) llm.ToolExecutor {
 				_, statErr := root.Stat(p)
 				root.Close()
 				if statErr != nil {
-					return llm.ToolErrorf("image_path: %v", statErr), nil
+					return llm.ToolErrorf("file_path: %v", statErr), nil
 				}
 			}
 		}
@@ -216,10 +216,10 @@ func sendHandler(svc *Service) llm.ToolExecutor {
 				if speechErr != nil {
 					return llm.ToolError(speechErr), nil
 				}
-				err = svc.SendAudio(ctx, args.ConversationID, audioPath, true, msg.Text)
-			case strings.TrimSpace(msg.ImagePath) != "":
-				absPath := filepath.Join(svc.cfg.Home, strings.TrimSpace(msg.ImagePath))
-				err = svc.SendImage(ctx, args.ConversationID, absPath, msg.Text)
+				err = svc.SendVoiceNote(ctx, args.ConversationID, audioPath, msg.Text)
+			case strings.TrimSpace(msg.FilePath) != "":
+				absPath := filepath.Join(svc.cfg.Home, strings.TrimSpace(msg.FilePath))
+				err = svc.SendFile(ctx, args.ConversationID, absPath, msg.Text)
 			default:
 				err = svc.Reply(ctx, args.ConversationID, msg.Text, quote)
 			}

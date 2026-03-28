@@ -187,18 +187,18 @@ func TestSenderLabelsResolvesContactName(t *testing.T) {
 }
 
 type mockPlatform struct {
-	platform         string
-	startTypingCalls int
-	stopTypingCalls  int
-	replyCalls       int
-	sendImageCalls   int
-	sendAudioCalls   int
-	markReadCalls    int
-	lastReadRefs     []InboundMessage
-	lastQuote        *QuoteTarget
-	outbound         OutboundMessage
-	imageOutbound    OutboundMessage
-	audioOutbound    OutboundMessage
+	platform           string
+	startTypingCalls   int
+	stopTypingCalls    int
+	replyCalls         int
+	sendFileCalls      int
+	sendVoiceNoteCalls int
+	markReadCalls      int
+	lastReadRefs       []InboundMessage
+	lastQuote          *QuoteTarget
+	outbound           OutboundMessage
+	fileOutbound       OutboundMessage
+	voiceNoteOutbound  OutboundMessage
 }
 
 func (m *mockPlatform) Platform() string { return m.platform }
@@ -211,13 +211,13 @@ func (m *mockPlatform) Reply(_ context.Context, _ string, _ string, quote *Quote
 	m.lastQuote = quote
 	return m.outbound, nil
 }
-func (m *mockPlatform) SendImage(_ context.Context, _ string, _ string, _ string) (OutboundMessage, error) {
-	m.sendImageCalls++
-	return m.imageOutbound, nil
+func (m *mockPlatform) SendFile(_ context.Context, _ string, _ string, _ string) (OutboundMessage, error) {
+	m.sendFileCalls++
+	return m.fileOutbound, nil
 }
-func (m *mockPlatform) SendAudio(_ context.Context, _ string, _ string, _ bool) (OutboundMessage, error) {
-	m.sendAudioCalls++
-	return m.audioOutbound, nil
+func (m *mockPlatform) SendVoiceNote(_ context.Context, _ string, _ string) (OutboundMessage, error) {
+	m.sendVoiceNoteCalls++
+	return m.voiceNoteOutbound, nil
 }
 func (m *mockPlatform) React(_ context.Context, _, _, _, _ string) (OutboundMessage, error) {
 	return OutboundMessage{}, nil
@@ -389,7 +389,7 @@ func TestReplyWithQuoteTargetSetsContextStanza(t *testing.T) {
 	}
 }
 
-func TestSendImagePersistsOutbound(t *testing.T) {
+func TestSendFilePersistsOutbound(t *testing.T) {
 	ctx := context.Background()
 
 	conn, err := db.OpenInMemory()
@@ -431,7 +431,7 @@ func TestSendImagePersistsOutbound(t *testing.T) {
 
 	platform := &mockPlatform{
 		platform: "whatsapp",
-		imageOutbound: OutboundMessage{
+		fileOutbound: OutboundMessage{
 			ExternalMessageID: "img-1",
 			ExternalSenderID:  "nik@s.whatsapp.net",
 			SentAt:            now,
@@ -443,9 +443,9 @@ func TestSendImagePersistsOutbound(t *testing.T) {
 	}
 	svc.RegisterPlatform(platform)
 
-	err = svc.SendImage(ctx, conversation.ID, tmpFile.Name(), "check this out")
+	err = svc.SendFile(ctx, conversation.ID, tmpFile.Name(), "check this out")
 	if err != nil {
-		t.Fatalf("send image: %v", err)
+		t.Fatalf("send file: %v", err)
 	}
 
 	msg, err := db.MessageGet(ctx, conn, db.MessageGetParams{
@@ -465,15 +465,15 @@ func TestSendImagePersistsOutbound(t *testing.T) {
 	if msg.Body != "check this out" {
 		t.Fatalf("expected body 'check this out', got %q", msg.Body)
 	}
-	if platform.sendImageCalls != 1 {
-		t.Fatalf("expected one send image call, got %d", platform.sendImageCalls)
+	if platform.sendFileCalls != 1 {
+		t.Fatalf("expected one send file call, got %d", platform.sendFileCalls)
 	}
 	if platform.startTypingCalls != 1 || platform.stopTypingCalls != 1 {
 		t.Fatalf("expected start/stop typing once each, got start=%d stop=%d", platform.startTypingCalls, platform.stopTypingCalls)
 	}
 }
 
-func TestSendAudioPersistsOutbound(t *testing.T) {
+func TestSendVoiceNotePersistsOutbound(t *testing.T) {
 	ctx := context.Background()
 
 	conn, err := db.OpenInMemory()
@@ -514,7 +514,7 @@ func TestSendAudioPersistsOutbound(t *testing.T) {
 
 	platform := &mockPlatform{
 		platform: "whatsapp",
-		audioOutbound: OutboundMessage{
+		voiceNoteOutbound: OutboundMessage{
 			ExternalMessageID: "audio-1",
 			ExternalSenderID:  "nik@s.whatsapp.net",
 			SentAt:            now,
@@ -525,9 +525,9 @@ func TestSendAudioPersistsOutbound(t *testing.T) {
 	}
 	svc.RegisterPlatform(platform)
 
-	err = svc.SendAudio(ctx, conversation.ID, tmpFile.Name(), true, "")
+	err = svc.SendVoiceNote(ctx, conversation.ID, tmpFile.Name(), "")
 	if err != nil {
-		t.Fatalf("send audio: %v", err)
+		t.Fatalf("send voice note: %v", err)
 	}
 
 	msg, err := db.MessageGet(ctx, conn, db.MessageGetParams{
@@ -544,12 +544,12 @@ func TestSendAudioPersistsOutbound(t *testing.T) {
 	if msg.Kind != "audio" {
 		t.Fatalf("expected kind audio, got %q", msg.Kind)
 	}
-	if platform.sendAudioCalls != 1 {
-		t.Fatalf("expected one send audio call, got %d", platform.sendAudioCalls)
+	if platform.sendVoiceNoteCalls != 1 {
+		t.Fatalf("expected one send voice note call, got %d", platform.sendVoiceNoteCalls)
 	}
 }
 
-func TestSendAudioStoresTranscript(t *testing.T) {
+func TestSendVoiceNoteStoresTranscript(t *testing.T) {
 	ctx := context.Background()
 
 	conn, err := db.OpenInMemory()
@@ -592,7 +592,7 @@ func TestSendAudioStoresTranscript(t *testing.T) {
 
 	platform := &mockPlatform{
 		platform: "whatsapp",
-		audioOutbound: OutboundMessage{
+		voiceNoteOutbound: OutboundMessage{
 			ExternalMessageID: "audio-transcript-1",
 			ExternalSenderID:  "nik@s.whatsapp.net",
 			SentAt:            now,
@@ -604,9 +604,9 @@ func TestSendAudioStoresTranscript(t *testing.T) {
 	svc.RegisterPlatform(platform)
 
 	ttsText := "Hey CT, sending you a quick hello"
-	err = svc.SendAudio(ctx, conversation.ID, tmpFile.Name(), true, ttsText)
+	err = svc.SendVoiceNote(ctx, conversation.ID, tmpFile.Name(), ttsText)
 	if err != nil {
-		t.Fatalf("send audio: %v", err)
+		t.Fatalf("send voice note: %v", err)
 	}
 
 	msg, err := db.MessageGet(ctx, conn, db.MessageGetParams{
@@ -1041,7 +1041,7 @@ func TestReplyRejectsBannedWords(t *testing.T) {
 	}
 }
 
-func TestSendImageRejectsBannedWordsInCaption(t *testing.T) {
+func TestSendFileRejectsBannedWordsInCaption(t *testing.T) {
 	ctx := context.Background()
 
 	conn, err := db.OpenInMemory()
@@ -1076,7 +1076,7 @@ func TestSendImageRejectsBannedWordsInCaption(t *testing.T) {
 
 	platform := &mockPlatform{
 		platform: "whatsapp",
-		imageOutbound: OutboundMessage{
+		fileOutbound: OutboundMessage{
 			ExternalMessageID: "img-ban",
 			ExternalSenderID:  "nik@s.whatsapp.net",
 			SentAt:            now,
@@ -1094,15 +1094,15 @@ func TestSendImageRejectsBannedWordsInCaption(t *testing.T) {
 	_, _ = tmpFile.Write([]byte("fake"))
 	tmpFile.Close()
 
-	err = svc.SendImage(ctx, conv.ID, tmpFile.Name(), "nope bad caption")
+	err = svc.SendFile(ctx, conv.ID, tmpFile.Name(), "nope bad caption")
 	if err == nil {
 		t.Fatalf("expected error for banned word in caption")
 	}
 	if !strings.Contains(err.Error(), "banned word") {
 		t.Fatalf("expected banned word error, got %v", err)
 	}
-	if platform.sendImageCalls != 0 {
-		t.Fatalf("expected no platform send image calls, got %d", platform.sendImageCalls)
+	if platform.sendFileCalls != 0 {
+		t.Fatalf("expected no platform send file calls, got %d", platform.sendFileCalls)
 	}
 }
 

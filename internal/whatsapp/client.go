@@ -8,6 +8,7 @@ import (
 	"mime"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/kciuffolo/nik/internal/messaging"
@@ -179,41 +180,82 @@ func (c *Client) Reply(ctx context.Context, conversationJID, text string, quote 
 	}, nil
 }
 
-func (c *Client) SendImage(ctx context.Context, conversationJID, imagePath, caption string) (messaging.OutboundMessage, error) {
+func (c *Client) SendFile(ctx context.Context, conversationJID, filePath, caption string) (messaging.OutboundMessage, error) {
 	jid, err := types.ParseJID(conversationJID)
 	if err != nil {
 		return messaging.OutboundMessage{}, fmt.Errorf("parse conversation jid: %w", err)
 	}
 
-	data, err := os.ReadFile(imagePath)
+	data, err := os.ReadFile(filePath)
 	if err != nil {
-		return messaging.OutboundMessage{}, fmt.Errorf("read image file: %w", err)
+		return messaging.OutboundMessage{}, fmt.Errorf("read file: %w", err)
 	}
 
-	mimeType := mime.TypeByExtension(filepath.Ext(imagePath))
+	mimeType := mime.TypeByExtension(filepath.Ext(filePath))
 	if mimeType == "" {
-		mimeType = "image/jpeg"
+		mimeType = "application/octet-stream"
 	}
 
-	resp, err := c.wm.Upload(ctx, data, whatsmeow.MediaImage)
+	var mediaType whatsmeow.MediaType
+	var msg *waProto.Message
+	kind := "document"
+
+	switch {
+	case strings.HasPrefix(mimeType, "image/"):
+		mediaType = whatsmeow.MediaImage
+		kind = "image"
+	case strings.HasPrefix(mimeType, "video/"):
+		mediaType = whatsmeow.MediaVideo
+		kind = "video"
+	default:
+		mediaType = whatsmeow.MediaDocument
+	}
+
+	resp, err := c.wm.Upload(ctx, data, mediaType)
 	if err != nil {
-		return messaging.OutboundMessage{}, fmt.Errorf("upload image: %w", err)
+		return messaging.OutboundMessage{}, fmt.Errorf("upload file: %w", err)
 	}
 
-	imageMsg := &waProto.ImageMessage{
-		Caption:       proto.String(caption),
-		Mimetype:      proto.String(mimeType),
-		URL:           &resp.URL,
-		DirectPath:    &resp.DirectPath,
-		MediaKey:      resp.MediaKey,
-		FileEncSHA256: resp.FileEncSHA256,
-		FileSHA256:    resp.FileSHA256,
-		FileLength:    &resp.FileLength,
+	switch kind {
+	case "image":
+		msg = &waProto.Message{ImageMessage: &waProto.ImageMessage{
+			Caption:       proto.String(caption),
+			Mimetype:      proto.String(mimeType),
+			URL:           &resp.URL,
+			DirectPath:    &resp.DirectPath,
+			MediaKey:      resp.MediaKey,
+			FileEncSHA256: resp.FileEncSHA256,
+			FileSHA256:    resp.FileSHA256,
+			FileLength:    &resp.FileLength,
+		}}
+	case "video":
+		msg = &waProto.Message{VideoMessage: &waProto.VideoMessage{
+			Caption:       proto.String(caption),
+			Mimetype:      proto.String(mimeType),
+			URL:           &resp.URL,
+			DirectPath:    &resp.DirectPath,
+			MediaKey:      resp.MediaKey,
+			FileEncSHA256: resp.FileEncSHA256,
+			FileSHA256:    resp.FileSHA256,
+			FileLength:    &resp.FileLength,
+		}}
+	default:
+		msg = &waProto.Message{DocumentMessage: &waProto.DocumentMessage{
+			Caption:       proto.String(caption),
+			FileName:      proto.String(filepath.Base(filePath)),
+			Mimetype:      proto.String(mimeType),
+			URL:           &resp.URL,
+			DirectPath:    &resp.DirectPath,
+			MediaKey:      resp.MediaKey,
+			FileEncSHA256: resp.FileEncSHA256,
+			FileSHA256:    resp.FileSHA256,
+			FileLength:    &resp.FileLength,
+		}}
 	}
 
-	sendResp, err := c.wm.SendMessage(ctx, jid, &waProto.Message{ImageMessage: imageMsg})
+	sendResp, err := c.wm.SendMessage(ctx, jid, msg)
 	if err != nil {
-		return messaging.OutboundMessage{}, fmt.Errorf("send image: %w", err)
+		return messaging.OutboundMessage{}, fmt.Errorf("send file: %w", err)
 	}
 
 	externalSenderID := sendResp.Sender.String()
@@ -225,13 +267,13 @@ func (c *Client) SendImage(ctx context.Context, conversationJID, imagePath, capt
 		ExternalMessageID: string(sendResp.ID),
 		ExternalSenderID:  externalSenderID,
 		SentAt:            sendResp.Timestamp,
-		Kind:              "image",
+		Kind:              kind,
 		Body:              caption,
 		MimeType:          mimeType,
 	}, nil
 }
 
-func (c *Client) SendAudio(ctx context.Context, conversationJID, audioPath string, voiceNote bool) (messaging.OutboundMessage, error) {
+func (c *Client) SendVoiceNote(ctx context.Context, conversationJID, audioPath string) (messaging.OutboundMessage, error) {
 	jid, err := types.ParseJID(conversationJID)
 	if err != nil {
 		return messaging.OutboundMessage{}, fmt.Errorf("parse conversation jid: %w", err)
@@ -255,12 +297,12 @@ func (c *Client) SendAudio(ctx context.Context, conversationJID, audioPath strin
 		FileEncSHA256: resp.FileEncSHA256,
 		FileSHA256:    resp.FileSHA256,
 		FileLength:    &resp.FileLength,
-		PTT:           proto.Bool(voiceNote),
+		PTT:           proto.Bool(true),
 	}
 
 	sendResp, err := c.wm.SendMessage(ctx, jid, &waProto.Message{AudioMessage: audioMsg})
 	if err != nil {
-		return messaging.OutboundMessage{}, fmt.Errorf("send audio: %w", err)
+		return messaging.OutboundMessage{}, fmt.Errorf("send voice note: %w", err)
 	}
 
 	externalSenderID := sendResp.Sender.String()

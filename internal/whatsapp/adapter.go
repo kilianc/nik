@@ -42,12 +42,12 @@ func (a *Adapter) Reply(ctx context.Context, externalConversationID string, body
 	return a.client.Reply(ctx, externalConversationID, body, quote)
 }
 
-func (a *Adapter) SendImage(ctx context.Context, externalConversationID string, imagePath string, caption string) (messaging.OutboundMessage, error) {
-	return a.client.SendImage(ctx, externalConversationID, imagePath, caption)
+func (a *Adapter) SendFile(ctx context.Context, externalConversationID string, filePath string, caption string) (messaging.OutboundMessage, error) {
+	return a.client.SendFile(ctx, externalConversationID, filePath, caption)
 }
 
-func (a *Adapter) SendAudio(ctx context.Context, externalConversationID string, audioPath string, voiceNote bool) (messaging.OutboundMessage, error) {
-	return a.client.SendAudio(ctx, externalConversationID, audioPath, voiceNote)
+func (a *Adapter) SendVoiceNote(ctx context.Context, externalConversationID string, audioPath string) (messaging.OutboundMessage, error) {
+	return a.client.SendVoiceNote(ctx, externalConversationID, audioPath)
 }
 
 func (a *Adapter) React(ctx context.Context, externalConversationID string, externalMessageID string, externalSenderID string, emoji string) (messaging.OutboundMessage, error) {
