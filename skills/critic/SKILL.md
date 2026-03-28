@@ -1,7 +1,7 @@
 ---
 name: critic
 summary: >
-  Batch post-task quality assessment. Finds completed/failed tasks without
+  Post-task quality assessment. Finds completed/failed tasks without
   assessments and writes one per task to assessments/. Load when the
   critic reflex fires.
 preload: false
@@ -13,11 +13,9 @@ reflex:
 
 # Critic
 
-Batch assessment of finished tasks. When this skill loads, find all
-completed or failed tasks that don't have an assessment file yet and
-assess each one.
+Assess finished tasks one at a time. Process at most 10 per run.
 
-## Step 1 — Find un-assessed tasks
+## Step 1 — Build the work list
 
 List existing assessment files:
 
@@ -28,45 +26,61 @@ shell action: "run", command: "ls assessments/*.md 2>/dev/null || echo 'none'"
 Query recent terminal tasks:
 
 ```sql
-SELECT id, goal, status, plan, activation_id, created_at, completed_at
+SELECT id, goal, status, activation_id, created_at, completed_at
 FROM task
 WHERE status IN ('completed', 'failed')
   AND completed_at >= DATETIME('now', '-48 hours')
-ORDER BY completed_at DESC
+ORDER BY completed_at ASC
 ```
 
 Skip any task whose short ID already appears in an assessment filename.
 If all tasks are assessed, stop — nothing to do.
 
-## Step 2 — Gather context per task
+Take the first un-assessed task from the list. You will process it
+fully (steps 2–4) before touching the next one.
 
-For each un-assessed task, pull the tool-call trace and reports:
+## Step 2 — Gather evidence for this one task
 
-```sql
-SELECT tc.name, COALESCE(ar.round, 0) AS round,
-  tc.duration_ms, tc.error, tc.created_at
-FROM tool_call tc
-LEFT JOIN activation_round ar ON ar.id = tc.activation_round_id
-WHERE tc.activation_id = '<activation_id>'
-ORDER BY tc.created_at ASC
-```
+Run these three queries separately. Do not combine them.
+
+Tool-call trace:
 
 ```sql
-SELECT id, status, content, created_at
-FROM task_report WHERE task_id = '<task_id>' ORDER BY created_at
+SELECT name, duration_ms, error, created_at
+FROM tool_call
+WHERE activation_id = '<activation_id>'
+ORDER BY created_at ASC
 ```
 
-## Step 3 — Assess each task
+Task reports:
+
+```sql
+SELECT status, content, created_at
+FROM task_report
+WHERE task_id = '<task_id>'
+ORDER BY created_at
+```
+
+Skills loaded:
+
+```sql
+SELECT input
+FROM tool_call
+WHERE activation_id = '<activation_id>'
+  AND name = 'load_skill'
+```
+
+## Step 3 — Assess this task
 
 ### 1. Effectiveness (1-5)
 
-Did the outcome match the goal? Not effort, not difficulty -- results.
+Did the outcome match the goal? Not effort, not difficulty — results.
 
 - 1 = total failure, goal unmet, no useful output
 - 2 = attempted but largely failed
-- 3 = partial success -- core ask addressed but significant gaps
+- 3 = partial success — core ask addressed but significant gaps
 - 4 = mostly succeeded, minor issues
-- 5 = nailed it -- goal fully met, clean execution
+- 5 = nailed it — goal fully met, clean execution
 
 A task that "completed" after 3 retries with errors is a 2-3.
 Reserve 5 for clean first-try completions. Cite trace evidence.
@@ -74,10 +88,10 @@ Reserve 5 for clean first-try completions. Cite trace evidence.
 ### 2. Tool feedback
 
 Per tool: helped / hindered / neutral. If it failed, classify:
-- *transient* -- retry would fix
-- *config* -- credentials/endpoint issue
-- *misuse* -- wrong tool, bad args
-- *gap* -- tool lacks needed capability
+- *transient* — retry would fix
+- *config* — credentials/endpoint issue
+- *misuse* — wrong tool, bad args
+- *gap* — tool lacks needed capability
 
 Were there tools that should have been used but weren't?
 
@@ -98,7 +112,7 @@ Estimate expected seconds, compare to observed. Flag any single
 tool call consuming >30% of total as a bottleneck (avoidable vs
 inherent).
 
-## Step 4 — Write assessments
+## Step 4 — Write the assessment
 
 Use `write_file` to create `assessments/<YYYY-MM-DD>-<task-short-id>.md`:
 
@@ -120,9 +134,16 @@ Use `write_file` to create `assessments/<YYYY-MM-DD>-<task-short-id>.md`:
 <concrete improvements or "none">
 ```
 
+Then go back to step 2 with the next un-assessed task.
+Stop after 10 assessments or when the list is exhausted.
+
 ## Rules
 
 - Don't inflate. When in doubt, round down.
 - Don't hedge. State what worked, what didn't, and why.
 - Don't restate. Analyze, don't narrate.
-- Classify, don't just describe. "shell failed: config -- expired token" drives action.
+- Classify, don't just describe. "shell failed: config — expired token" drives action.
+- One task at a time. Finish writing the file before starting the next.
+- Use only the simple queries shown above. Do not combine them or add aggregation.
+- Do not use GROUP_CONCAT or other functions that embed semicolons in SQL strings.
+- If a query fails, assess with whatever evidence you have — don't retry the same shape.
