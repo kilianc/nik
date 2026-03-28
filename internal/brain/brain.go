@@ -235,8 +235,9 @@ func (b *Brain) think(ctx context.Context, getInput func() string) (_ string, _ 
 			slog.Info("tool call", log.ToolCallAttrs(thinkCtx, "brain", call.Name, act.RoundNumber()-1, call.Arguments)...)
 		}
 
+		toolCallTime := time.Now().UTC()
 		execResults := act.ExecuteTools(thinkCtx, result, executor)
-		b.insertToolCallMessages(ctx, convID, act.RoundNumber()-1, result.ToolCalls, execResults)
+		b.insertToolCallMessages(ctx, convID, act.RoundNumber()-1, result.ToolCalls, execResults, toolCallTime)
 
 		if isDone(result.ToolCalls) {
 			return "", act.Usage(), nil

@@ -109,12 +109,11 @@ func (b *Brain) isPrivilegedContext(meta map[string]string) bool {
 	return b.cfg.IsPrivileged(meta["conversation_id"])
 }
 
-func (b *Brain) insertToolCallMessages(ctx context.Context, convID string, round int, calls []llm.ToolCall, results []llm.ExecResult) {
+func (b *Brain) insertToolCallMessages(ctx context.Context, convID string, round int, calls []llm.ToolCall, results []llm.ExecResult, sentAt time.Time) {
 	if b.conn == nil {
 		return
 	}
 
-	now := time.Now().UTC()
 	for i, call := range calls {
 		body := ToolCallBody{
 			Name:   call.Name,
@@ -127,7 +126,7 @@ func (b *Brain) insertToolCallMessages(ctx context.Context, convID string, round
 			ConversationID: convID,
 			Kind:           "tool_call",
 			Body:           body,
-			SentAt:         now,
+			SentAt:         sentAt,
 		})
 		if err != nil {
 			slog.Warn("insert tool call message", "pkg", "brain", "tool", call.Name, "error", err)
