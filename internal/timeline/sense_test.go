@@ -394,6 +394,64 @@ func TestRenderUsesSystemMessagesOnly(t *testing.T) {
 	}
 }
 
+func TestSystemMessagesTrimmedByAge(t *testing.T) {
+	conn, convID := setupTestDB(t)
+	ctx := context.Background()
+
+	err := db.SystemContactEnsure(ctx, conn)
+	if err != nil {
+		t.Fatalf("ensure system contact: %v", err)
+	}
+
+	now := time.Now().UTC()
+
+	insertMsg(t, conn, convID, "msg-old-human", "ext-old-human", "text", "old chat", now.Add(-2*time.Hour))
+
+	err = db.SystemMessageInsert(ctx, conn, db.SystemMessageParams{
+		ConversationID: convID,
+		Kind:           "task_report",
+		Body: db.TaskReport{
+			TaskID:  "aaaa-bbbb-cccc-dddd",
+			Goal:    "stale task",
+			Status:  "done",
+			Content: "finished long ago",
+		},
+		SentAt: now.Add(-2 * time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("insert old system message: %v", err)
+	}
+
+	err = db.SystemMessageInsert(ctx, conn, db.SystemMessageParams{
+		ConversationID: convID,
+		Kind:           "alarm_fired",
+		Body:           db.Alarm{ID: "eeee-ffff-0000-1111", Goal: "recent alarm"},
+		SentAt:         now.Add(-5 * time.Minute),
+	})
+	if err != nil {
+		t.Fatalf("insert recent system message: %v", err)
+	}
+
+	cfg := &config.Config{
+		MaxHistory:          10,
+		SystemMessageMaxAge: 1 * time.Hour,
+	}
+	msgSvc := messaging.NewService(cfg, conn, contacts.NewService(conn))
+	tl := New(cfg, msgSvc)
+
+	out := tl.Read(ctx, convID)
+
+	if !strings.Contains(out, "old chat") {
+		t.Fatalf("expected old conversation message to be kept, got %q", out)
+	}
+	if strings.Contains(out, "stale task") {
+		t.Fatalf("expected stale system message to be trimmed, got %q", out)
+	}
+	if !strings.Contains(out, "recent alarm") {
+		t.Fatalf("expected recent system message to be kept, got %q", out)
+	}
+}
+
 func TestPeekSkipsSystemMessages(t *testing.T) {
 	conn, convID := setupTestDB(t)
 	ctx := context.Background()

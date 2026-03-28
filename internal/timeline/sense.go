@@ -83,6 +83,16 @@ func (t *Timeline) read(ctx context.Context, convID string, opts readOpts) strin
 		msgs = filtered
 	}
 
+	cutoff := time.Now().UTC().Add(-t.cfg.SystemMessageMaxAgeOrDefault())
+	filtered := msgs[:0]
+	for _, m := range msgs {
+		if m.Platform == "system" && m.SentAt.Before(cutoff) {
+			continue
+		}
+		filtered = append(filtered, m)
+	}
+	msgs = filtered
+
 	var readLine time.Time
 	if conv.LastReadAt.Valid {
 		readLine = conv.LastReadAt.Time
