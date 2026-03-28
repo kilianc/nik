@@ -172,13 +172,14 @@ type Config struct {
 	AllowConversationIDs      ConversationList `yaml:"allow_conversation_ids"`
 	PrivilegedConversationIDs ConversationList `yaml:"privileged_conversation_ids"`
 
-	MaxHistory     int    `yaml:"max_history"`
-	Timezone       string `yaml:"timezone"`
-	Location       string `yaml:"location"`
-	JournalTime    string `yaml:"journal_time"`
-	DreamTime      string `yaml:"dream_time"`
-	BriefingTime   string `yaml:"briefing_time"`
-	DiagnosticTime string `yaml:"diagnostic_time"`
+	MaxHistory          int           `yaml:"max_history"`
+	SystemMessageMaxAge time.Duration `yaml:"system_message_max_age"`
+	Timezone            string        `yaml:"timezone"`
+	Location            string        `yaml:"location"`
+	JournalTime         string        `yaml:"journal_time"`
+	DreamTime           string        `yaml:"dream_time"`
+	BriefingTime        string        `yaml:"briefing_time"`
+	DiagnosticTime      string        `yaml:"diagnostic_time"`
 
 	BannedWords []string `yaml:"banned_words"`
 }
@@ -293,6 +294,13 @@ func (c Config) TTSInstructionsPath() string {
 	}
 
 	return filepath.Join(c.PromptsPath(), "tts-00.md")
+}
+
+func (c Config) SystemMessageMaxAgeOrDefault() time.Duration {
+	if c.SystemMessageMaxAge > 0 {
+		return c.SystemMessageMaxAge
+	}
+	return 2 * time.Hour
 }
 
 func (c Config) MemoriesPath() string {
