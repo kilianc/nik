@@ -46,14 +46,14 @@ func main() {
 
 	logFile, err := os.OpenFile(cfg.LogPath(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error opening log file: %v\n", err)
+		fmt.Fprintf(os.Stderr, "error: open log file: %v\n", err)
 		os.Exit(1)
 	}
 	defer logFile.Close()
 
 	errLogFile, err := os.OpenFile(cfg.ErrLogPath(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error opening error log file: %v\n", err)
+		fmt.Fprintf(os.Stderr, "error: open error log file: %v\n", err)
 		os.Exit(1)
 	}
 	defer errLogFile.Close()
@@ -65,6 +65,13 @@ func main() {
 	logger := slog.New(&niklog.MultiHandler{Handlers: []slog.Handler{fileHandler, stderrHandler, errHandler}})
 	slog.SetDefault(logger)
 
+	if err := run(cfg, *wappLink, *replay); err != nil {
+		slog.Error("startup", "error", err)
+		os.Exit(1)
+	}
+}
+
+func run(cfg *config.Config, wappLink bool, replay string) error {
 	ascii := []string{
 		"oooo   oooo ooooo oooo   oooo",
 		" 8888o  88   888   888  o88",
@@ -89,49 +96,43 @@ func main() {
 
 	conn, err := db.Open(cfg.DBPath(), cfg.TZ())
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 	defer conn.Close()
 
 	err = db.SystemContactEnsure(ctx, conn)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: ensure system contact: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("ensure system contact: %w", err)
 	}
 
 	roConn, err := db.OpenReadOnly(cfg.DBPath(), cfg.TZ())
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 	defer roConn.Close()
 
 	slog.Info("database ready", "path", cfg.DBPath())
 
 	mediaPath := cfg.MediaPath()
+
 	err = os.MkdirAll(mediaPath, 0o755)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error creating media dir: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("create media dir: %w", err)
 	}
 
 	err = os.MkdirAll(cfg.DownloadsPath(), 0o755)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error creating downloads dir: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("create downloads dir: %w", err)
 	}
 
 	err = os.MkdirAll(cfg.TmpPath(), 0o755)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error creating tmp dir: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("create tmp dir: %w", err)
 	}
 
 	whatsappClient, err := whatsapp.NewClient(cfg.WappSessionDBPath(), mediaPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 	defer whatsappClient.Close()
 
@@ -142,13 +143,13 @@ func main() {
 	messagingSvc.RegisterPlatform(whatsappAdapter)
 	whatsappAdapter.Start(ctx, messagingSvc)
 
-	if *replay != "" {
-		if err := whatsappClient.ReplayHistorySync(*replay); err != nil {
-			fmt.Fprintf(os.Stderr, "replay error: %v\n", err)
-			os.Exit(1)
+	if replay != "" {
+		err = whatsappClient.ReplayHistorySync(replay)
+		if err != nil {
+			return fmt.Errorf("replay: %w", err)
 		}
 		slog.Info("replay finished, exiting")
-		return
+		return nil
 	}
 
 	var keyOpts []llm.ClientOption
@@ -161,11 +162,9 @@ func main() {
 
 	var codexAuth *codex.Auth
 	if cfg.Models.AnySubscription() {
-		var err error
 		codexAuth, err = codex.LoadOrLogin("")
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "codex auth error: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("codex auth: %w", err)
 		}
 		slog.Info("codex auth ready", "account_id", codexAuth.AccountID)
 	}
@@ -210,6 +209,12 @@ func main() {
 	recallSvc := recall.NewService(cfg, recallClient)
 	taskSvc := task.NewService(conn)
 	shellSvc := shell.NewService(cfg, conn)
+
+	err = shellSvc.EnsureReady()
+	if err != nil {
+		return err
+	}
+	slog.Info("shell ready", "pkg", "shell", "docker", cfg.Shell.DockerImage != "")
 
 	var taskTools []llm.Tool
 	taskTools = append(taskTools, shellSvc.BuildTools()...)
@@ -277,9 +282,9 @@ func main() {
 		close(brainDone)
 	}()
 
-	if err := whatsappClient.Connect(ctx, *wappLink); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+	err = whatsappClient.Connect(ctx, wappLink)
+	if err != nil {
+		return err
 	}
 
 	<-sig
@@ -296,4 +301,6 @@ func main() {
 	taskRunner.Wait()
 	shellSvc.StopContainer()
 	slog.Info("shutdown complete")
+
+	return nil
 }

@@ -88,6 +88,8 @@ func (s *Service) BuildTools() []llm.Tool {
 	}
 }
 
+func (s *Service) EnsureReady() error { return s.ensureReady() }
+
 func (s *Service) ensureReady() error {
 	img := s.dockerImage()
 
