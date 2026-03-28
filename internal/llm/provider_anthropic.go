@@ -237,6 +237,12 @@ func (p *anthropicProvider) complete(ctx context.Context) (*providerResult, erro
 	return result, nil
 }
 
+func (p *anthropicProvider) reset() {
+	p.messages = nil
+	p.lastResponse = nil
+	p.pendingResults = nil
+}
+
 func (p *anthropicProvider) prune(maxPairs int) int {
 	if len(p.messages) <= 1 {
 		return 0

@@ -2,6 +2,7 @@ package brain
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -15,6 +16,7 @@ import (
 
 type Brain struct {
 	cfg             *config.Config
+	conn            *sql.DB
 	llm             *llm.Client
 	recorder        llm.ActivationRecorder
 	toolDefs        []llm.ToolDef
@@ -44,6 +46,10 @@ func New(cfg *config.Config, llmClient *llm.Client) *Brain {
 	b.RegisterTool(llm.Tool{Def: doneToolDef, Handler: doneHandler()})
 
 	return b
+}
+
+func (b *Brain) SetDB(conn *sql.DB) {
+	b.conn = conn
 }
 
 func (b *Brain) SetRecorder(rec llm.ActivationRecorder) {
@@ -175,6 +181,7 @@ func (b *Brain) think(ctx context.Context, getInput func() string) (_ string, _ 
 	defer cancel()
 
 	meta, _ := ctx.Value("meta").(map[string]string)
+	convID := meta["conversation_id"]
 	tools := b.toolsForContext(ctx)
 	executor := b.toolExecutor()
 
@@ -194,10 +201,7 @@ func (b *Brain) think(ctx context.Context, getInput func() string) (_ string, _ 
 	}()
 	act.SetInput(input)
 
-	var (
-		nudged bool
-		done   bool
-	)
+	var nudged bool
 
 	for {
 		result, err := act.Round(thinkCtx)
@@ -215,9 +219,6 @@ func (b *Brain) think(ctx context.Context, getInput func() string) (_ string, _ 
 		}
 
 		if len(result.ToolCalls) == 0 {
-			if done {
-				return "", act.Usage(), nil
-			}
 			if nudged {
 				return "", act.Usage(), fmt.Errorf("no done call")
 			}
@@ -235,23 +236,24 @@ func (b *Brain) think(ctx context.Context, getInput func() string) (_ string, _ 
 			slog.Info("tool call", log.ToolCallAttrs(thinkCtx, "brain", call.Name, act.RoundNumber()-1, call.Arguments)...)
 		}
 
-		act.ExecuteTools(thinkCtx, result, executor)
+		execResults := act.ExecuteTools(thinkCtx, result, executor)
+		b.insertToolCallMessages(ctx, convID, act.RoundNumber()-1, result.ToolCalls, execResults)
 
-		done = false
-		for _, call := range result.ToolCalls {
-			if call.Name == doneToolName {
-				done = true
-			}
+		if isDone(result.ToolCalls) {
+			return "", act.Usage(), nil
 		}
 
-		act.Prune()
+		act.ResetConversation()
+		act.SetInput(getInput())
+	}
+}
 
-		// skip timeline read after done — getInput advances last_read_at,
-		// which would consume messages that arrived during this round.
-		// the trace round reuses the previous timeline; unconsumed
-		// messages trigger a fresh activation on the next tick.
-		if !done {
-			act.SetInput(getInput())
+func isDone(calls []llm.ToolCall) bool {
+	for _, call := range calls {
+		if call.Name == doneToolName {
+			return true
 		}
 	}
+
+	return false
 }

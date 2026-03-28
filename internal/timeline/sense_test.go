@@ -237,6 +237,111 @@ func TestMessageEntryPlainText(t *testing.T) {
 	}
 }
 
+func TestCheckIgnoresDoneToolCall(t *testing.T) {
+	conn, convID := setupTestDB(t)
+	ctx := context.Background()
+
+	err := db.SystemContactEnsure(ctx, conn)
+	if err != nil {
+		t.Fatalf("ensure system contact: %v", err)
+	}
+
+	now := time.Now().UTC()
+	readAt := now.Add(-time.Second).Format("2006-01-02T15:04:05.000Z")
+	_, err = conn.ExecContext(ctx, "UPDATE conversation SET last_read_at = ? WHERE id = ?", readAt, convID)
+	if err != nil {
+		t.Fatalf("set last_read_at: %v", err)
+	}
+
+	err = db.SystemMessageInsert(ctx, conn, db.SystemMessageParams{
+		ConversationID: convID,
+		Kind:           "tool_call",
+		Body:           map[string]string{"name": "done", "input": `{"reason":"all done"}`, "output": `{"ok":true}`},
+		SentAt:         now,
+	})
+	if err != nil {
+		t.Fatalf("insert done tool call: %v", err)
+	}
+
+	cfg := &config.Config{
+		MaxHistory:           10,
+		AllowConversationIDs: config.ConversationList{{Label: "test", ID: convID}},
+	}
+	msgSvc := messaging.NewService(cfg, conn, contacts.NewService(conn))
+	tl := New(cfg, msgSvc)
+
+	stimuli, err := tl.Check(ctx)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+
+	if len(stimuli) != 0 {
+		t.Fatalf("expected no stimuli (done should be filtered), got %d", len(stimuli))
+	}
+}
+
+func TestToolCallAppearsInTimeline(t *testing.T) {
+	conn, convID := setupTestDB(t)
+	ctx := context.Background()
+
+	err := db.SystemContactEnsure(ctx, conn)
+	if err != nil {
+		t.Fatalf("ensure system contact: %v", err)
+	}
+
+	err = db.SystemMessageInsert(ctx, conn, db.SystemMessageParams{
+		ConversationID: convID,
+		Kind:           "tool_call",
+		Body:           map[string]string{"name": "message_send", "input": `{"body":"hi"}`, "output": `{"sent":1}`},
+		SentAt:         time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("insert tool call: %v", err)
+	}
+
+	cfg := &config.Config{MaxHistory: 10}
+	msgSvc := messaging.NewService(cfg, conn, contacts.NewService(conn))
+	tl := New(cfg, msgSvc)
+
+	_, rendered, err := tl.Render(ctx, convID)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+
+	out := strings.Join(rendered, "\n")
+	if !strings.Contains(out, "YOU: called message_send") {
+		t.Fatalf("expected tool call in rendered timeline, got %q", out)
+	}
+}
+
+func TestMarkReadUsesMaxSentAt(t *testing.T) {
+	conn, convID := setupTestDB(t)
+	ctx := context.Background()
+
+	past := time.Date(2026, 3, 14, 10, 0, 0, 0, time.UTC)
+	insertMsg(t, conn, convID, "msg-markread", "ext-markread", "text", "hello", past)
+
+	cfg := &config.Config{
+		MaxHistory: 10,
+	}
+	msgSvc := messaging.NewService(cfg, conn, contacts.NewService(conn))
+	tl := New(cfg, msgSvc)
+
+	tl.Read(ctx, convID)
+
+	conv, err := db.ConversationGet(ctx, conn, db.ConversationGetParams{ID: convID})
+	if err != nil {
+		t.Fatalf("get conversation: %v", err)
+	}
+
+	if !conv.LastReadAt.Valid {
+		t.Fatal("expected last_read_at to be set")
+	}
+	if !conv.LastReadAt.Time.Equal(past) {
+		t.Fatalf("expected last_read_at = %v (max sent_at), got %v", past, conv.LastReadAt.Time)
+	}
+}
+
 func TestRenderUsesSystemMessagesOnly(t *testing.T) {
 	conn, convID := setupTestDB(t)
 	ctx := context.Background()

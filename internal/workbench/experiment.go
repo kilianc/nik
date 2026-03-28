@@ -74,11 +74,7 @@ func CreateExperimentVariant(ctx context.Context, conn *sql.DB, experimentID, na
 	return variantID, nil
 }
 
-func CreateExperimentVariantRun(ctx context.Context, conn *sql.DB, variantID string, n, maxRounds int, clientOpts []llm.ClientOption) ([]db.ExperimentVariantRun, error) {
-	if maxRounds < 1 {
-		maxRounds = 5
-	}
-
+func CreateExperimentVariantRun(ctx context.Context, conn *sql.DB, variantID string, n int, clientOpts []llm.ClientOption) ([]db.ExperimentVariantRun, error) {
 	var runs []db.ExperimentVariantRun
 
 	for range n {
@@ -97,7 +93,7 @@ func CreateExperimentVariantRun(ctx context.Context, conn *sql.DB, variantID str
 			return nil, fmt.Errorf("apply patches: %w", err)
 		}
 
-		run, err = Run(ctx, run, maxRounds, clientOpts)
+		run, err = Run(ctx, run, clientOpts)
 		if err != nil {
 			return nil, err
 		}

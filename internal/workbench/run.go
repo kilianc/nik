@@ -9,7 +9,7 @@ import (
 	"github.com/kciuffolo/nik/internal/llm"
 )
 
-func Run(ctx context.Context, run db.ExperimentVariantRun, maxRounds int, clientOpts []llm.ClientOption) (db.ExperimentVariantRun, error) {
+func Run(ctx context.Context, run db.ExperimentVariantRun, clientOpts []llm.ClientOption) (db.ExperimentVariantRun, error) {
 	opts := append([]llm.ClientOption{}, clientOpts...)
 	if run.ReasoningEffort != "" {
 		opts = append(opts, llm.WithReasoningEffort(&run.ReasoningEffort))
@@ -28,46 +28,30 @@ func Run(ctx context.Context, run db.ExperimentVariantRun, maxRounds int, client
 		}
 	}
 
-	executor := func(_ context.Context, _ llm.ToolCall) (string, error) {
-		return `"ok"`, nil
-	}
-
 	messages, err := llm.UnmarshalMessages(run.Messages)
 	if err != nil {
 		return run, fmt.Errorf("parse messages: %w", err)
 	}
 
 	activation := llm.NewActivation(client, llm.NoopRecorder{}, run.Instructions, tools)
-	activation.LoadHistory(messages)
 
-	var rounds []llm.RoundResult
-
-	for r := range maxRounds {
-		rr, err := activation.Round(ctx)
-		if err != nil {
-			break
-		}
-
-		rounds = append(rounds, *rr)
-
-		terminal := len(rr.ToolCalls) == 0 || (len(rr.ToolCalls) == 1 && rr.ToolCalls[0].Name == "done")
-		if terminal || r == maxRounds-1 {
-			break
-		}
-
-		activation.ExecuteTools(ctx, rr, executor)
+	if len(messages) > 0 {
+		activation.SetInput(messages[0].Content)
 	}
 
-	for _, rr := range rounds {
-		run.InputTokens += rr.RoundUsage.InputTokens
-		run.OutputTokens += rr.RoundUsage.OutputTokens
-		run.CachedTokens += rr.RoundUsage.CachedTokens
-		run.ReasoningTokens += rr.RoundUsage.ReasoningTokens
+	rr, err := activation.Round(ctx)
+	if err != nil {
+		return run, fmt.Errorf("round: %w", err)
 	}
 
-	run.ToolCalls = marshalToolCalls(rounds)
-	run.ModelOutput = lastOutput(rounds)
-	run.ReasoningSummaries = marshalSummaries(rounds)
+	run.InputTokens = rr.RoundUsage.InputTokens
+	run.OutputTokens = rr.RoundUsage.OutputTokens
+	run.CachedTokens = rr.RoundUsage.CachedTokens
+	run.ReasoningTokens = rr.RoundUsage.ReasoningTokens
+
+	run.ToolCalls = marshalToolCalls([]llm.RoundResult{*rr})
+	run.ModelOutput = rr.Text
+	run.ReasoningSummaries = marshalSummaries([]llm.RoundResult{*rr})
 
 	return run, nil
 }
@@ -87,15 +71,6 @@ func marshalToolCalls(rounds []llm.RoundResult) string {
 
 	data, _ := json.Marshal(calls)
 	return string(data)
-}
-
-func lastOutput(rounds []llm.RoundResult) string {
-	for i := len(rounds) - 1; i >= 0; i-- {
-		if rounds[i].Text != "" {
-			return rounds[i].Text
-		}
-	}
-	return ""
 }
 
 func marshalSummaries(rounds []llm.RoundResult) string {

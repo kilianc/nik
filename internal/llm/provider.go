@@ -11,6 +11,7 @@ type provider interface {
 	conversation() []Message
 	complete(ctx context.Context) (*providerResult, error)
 	prune(maxPairs int) int
+	reset()
 	userInput() string
 	fullInput() string
 	setReasoningEffort(effort string)

@@ -42,4 +42,5 @@ LEFT JOIN media ON media.id = mm.media_id
 WHERE m.conversation_id = ?1
   AND (?2 = '' OR m.id < ?2)
   AND m.sent_at >= COALESCE((SELECT MIN(sent_at) FROM human_window), m.sent_at)
+  AND NOT (m.kind = 'tool_call' AND json_extract(m.body, '$.name') = 'done')
 ORDER BY m.sent_at DESC, m.id DESC

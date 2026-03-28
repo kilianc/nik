@@ -139,6 +139,35 @@ func TestAnthropicProviderSetReasoningEffort(t *testing.T) {
 	}
 }
 
+func TestAnthropicProviderReset(t *testing.T) {
+	model := "claude-opus-4-6"
+	client := &Client{model: &model}
+	p := newAnthropicProvider(client, "instructions", nil)
+
+	p.setInput("timeline")
+	p.appendUser("follow-up")
+
+	if len(p.messages) < 2 {
+		t.Fatalf("expected messages to have content before reset, got %d", len(p.messages))
+	}
+
+	p.reset()
+
+	if len(p.messages) != 0 {
+		t.Fatalf("expected empty messages after reset, got %d", len(p.messages))
+	}
+	if p.lastResponse != nil {
+		t.Fatal("expected nil lastResponse after reset")
+	}
+	if len(p.pendingResults) != 0 {
+		t.Fatalf("expected empty pendingResults after reset, got %d", len(p.pendingResults))
+	}
+
+	if len(p.params.System) == 0 || p.params.System[0].Text != "instructions" {
+		t.Fatal("expected params (system instructions) to be preserved after reset")
+	}
+}
+
 func TestBuildAnthropicTools(t *testing.T) {
 	t.Run("string required", func(t *testing.T) {
 		tools := buildAnthropicTools([]ToolDef{

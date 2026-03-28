@@ -243,6 +243,29 @@ func TestOpenAIProviderSetReasoningEffort(t *testing.T) {
 	}
 }
 
+func TestOpenAIProviderReset(t *testing.T) {
+	model := "gpt-5.4"
+	client := &Client{model: &model}
+	p := newOpenAIProvider(client, "instructions", nil)
+
+	p.setInput("timeline")
+	p.addToolResult(ToolCall{CallID: "c1", Name: "test", Arguments: "{}"}, "ok", false)
+
+	if len(p.items) < 2 {
+		t.Fatalf("expected items to have content before reset, got %d", len(p.items))
+	}
+
+	p.reset()
+
+	if len(p.items) != 0 {
+		t.Fatalf("expected empty items after reset, got %d", len(p.items))
+	}
+
+	if p.params.Instructions.Value == "" {
+		t.Fatal("expected params (instructions) to be preserved after reset")
+	}
+}
+
 func TestBuildToolParamsIncludesDefinitions(t *testing.T) {
 	params := buildToolParams([]ToolDef{
 		{
