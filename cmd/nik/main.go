@@ -270,7 +270,7 @@ func main() {
 	b.RegisterReflex(0, alarmSvc.FireDueAlarms)
 	b.RegisterReflex(30*time.Minute, alarmSvc.StaleAlarmReflex())
 	b.RegisterReflex(5*time.Minute, skills.SkillChangeReflex(cfg, conn))
-	b.RegisterReflex(5*time.Minute, skills.SkillCheckReflex(cfg, conn, llmClient.Generate))
+	b.RegisterReflex(5*time.Minute, skills.SkillCheckReflex(cfg, conn, llmClient.Generate, shellSvc.RunCommand))
 	b.RegisterReflex(10*time.Second, shellSvc.CheckSessions)
 	b.SetSensor(timeline.New(cfg, messagingSvc))
 

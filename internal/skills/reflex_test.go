@@ -1,16 +1,31 @@
 package skills
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/db"
 )
+
+func localRunner(_ context.Context, command, stdin string) (string, string, error) {
+	cmd := exec.Command("sh", "-c", command)
+	cmd.Stdin = strings.NewReader(stdin)
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	return stdout.String(), stderr.String(), err
+}
 
 const privilegedConvID = "priv-conv-001"
 
@@ -362,7 +377,7 @@ func TestSkillCheckReflex(t *testing.T) {
 			Every:   "every minute",
 		}
 
-		runSkillCheck(h.ctx, h.cfg, h.conn, "test_skill/check", def, "")
+		runSkillCheck(h.ctx, h.cfg, h.conn, "test_skill/check", def, "", localRunner)
 
 		meta, _, err := db.SkillReflexLatest(h.ctx, h.conn, "test_skill/check")
 		if err != nil {
@@ -382,7 +397,7 @@ func TestSkillCheckReflex(t *testing.T) {
 			Every:   "every minute",
 		}
 
-		runSkillCheck(h.ctx, h.cfg, h.conn, "silent_skill/check", def, "")
+		runSkillCheck(h.ctx, h.cfg, h.conn, "silent_skill/check", def, "", localRunner)
 
 		meta, _, err := db.SkillReflexLatest(h.ctx, h.conn, "silent_skill/check")
 		if err != nil {
@@ -407,7 +422,7 @@ func TestSkillCheckReflex(t *testing.T) {
 			Every:   "every minute",
 		}
 
-		runSkillCheck(h.ctx, h.cfg, h.conn, "stable_skill/check", def, "same-meta")
+		runSkillCheck(h.ctx, h.cfg, h.conn, "stable_skill/check", def, "same-meta", localRunner)
 
 		var count int
 		err = h.conn.QueryRowContext(h.ctx, "SELECT count(*) FROM skill_reflex WHERE skill_name = 'stable_skill/check'").Scan(&count)
@@ -427,7 +442,7 @@ func TestSkillCheckReflex(t *testing.T) {
 			Every: "every day at 6am",
 		}
 
-		runSkillCheck(h.ctx, h.cfg, h.conn, "journal/journal", def, "")
+		runSkillCheck(h.ctx, h.cfg, h.conn, "journal/journal", def, "", localRunner)
 
 		meta, _, err := db.SkillReflexLatest(h.ctx, h.conn, "journal/journal")
 		if err != nil {
@@ -452,7 +467,7 @@ func TestSkillCheckReflex(t *testing.T) {
 			t.Fatalf("seed reflex: %v", err)
 		}
 
-		checkReflex := SkillCheckReflex(h.cfg, h.conn, mockCompleter("0 23 * * *"))
+		checkReflex := SkillCheckReflex(h.cfg, h.conn, mockCompleter("0 23 * * *"), localRunner)
 		checkReflex(h.ctx)
 
 		var count int
@@ -476,7 +491,7 @@ func TestSkillCheckReflex(t *testing.T) {
 
 		writeSkillFile(t, h.skillsDir, "journal", "---\nname: journal\nsummary: daily journal\nreflex:\n  - name: journal\n    every: \"every day at 11pm\"\n---\n# Journal\n")
 
-		checkReflex := SkillCheckReflex(h.cfg, h.conn, mockCompleter("0 23 * * *"))
+		checkReflex := SkillCheckReflex(h.cfg, h.conn, mockCompleter("0 23 * * *"), localRunner)
 		checkReflex(h.ctx)
 
 		var count int
@@ -494,6 +509,40 @@ func TestSkillCheckReflex(t *testing.T) {
 			t.Fatalf("expected 0 skill_reflex_fired messages, got %d", msgCount)
 		}
 	})
+}
+
+func TestRunSkillCheckUsesCommandRunner(t *testing.T) {
+	h, _ := setupReflexTest(t)
+
+	var gotCommand, gotStdin string
+	runner := func(_ context.Context, command, stdin string) (string, string, error) {
+		gotCommand = command
+		gotStdin = stdin
+		return `{"from":"runner"}`, "", nil
+	}
+
+	def := SkillReflexDef{
+		Name:    "check",
+		Command: "sh skills/test/check.sh",
+		Every:   "every minute",
+	}
+
+	runSkillCheck(h.ctx, h.cfg, h.conn, "test_skill/check", def, "prev-meta", runner)
+
+	if gotCommand != "sh skills/test/check.sh" {
+		t.Fatalf("expected runner to receive command, got %q", gotCommand)
+	}
+	if gotStdin != "prev-meta" {
+		t.Fatalf("expected runner to receive stdin, got %q", gotStdin)
+	}
+
+	meta, _, err := db.SkillReflexLatest(h.ctx, h.conn, "test_skill/check")
+	if err != nil {
+		t.Fatalf("get latest: %v", err)
+	}
+	if meta != `{"from":"runner"}` {
+		t.Fatalf("expected meta from runner, got %q", meta)
+	}
 }
 
 func TestExtractInstallSection(t *testing.T) {
