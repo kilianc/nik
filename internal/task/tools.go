@@ -85,12 +85,8 @@ var cancelToolDef = llm.ToolDef{
 				"type":        "string",
 				"description": "ID of the task to cancel.",
 			},
-			"reason": map[string]any{
-				"type":        "string",
-				"description": "Why the task is being cancelled.",
-			},
 		},
-		"required":             []string{"task_id", "reason"},
+		"required":             []string{"task_id"},
 		"additionalProperties": false,
 	},
 }

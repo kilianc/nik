@@ -71,6 +71,8 @@ type Activation struct {
 }
 
 func NewActivation(client *Client, rec ActivationRecorder, instructions string, tools []ToolDef) *Activation {
+	tools = injectReason(tools)
+
 	var prov provider
 	if client.isAnthropic() {
 		prov = newAnthropicProvider(client, instructions, tools)
@@ -309,4 +311,41 @@ func (s *Activation) UserInput() string {
 
 func (s *Activation) FullInput() string {
 	return s.prov.fullInput()
+}
+
+func injectReason(tools []ToolDef) []ToolDef {
+	out := make([]ToolDef, len(tools))
+
+	for i, t := range tools {
+		props, _ := t.Parameters["properties"].(map[string]any)
+
+		newProps := make(map[string]any, len(props)+1)
+		for k, v := range props {
+			newProps[k] = v
+		}
+		newProps["reason"] = map[string]any{
+			"type":        "string",
+			"description": "Why you are calling this tool right now.",
+		}
+
+		req, _ := t.Parameters["required"].([]string)
+		newReq := make([]string, len(req)+1)
+		copy(newReq, req)
+		newReq[len(req)] = "reason"
+
+		newParams := make(map[string]any, len(t.Parameters))
+		for k, v := range t.Parameters {
+			newParams[k] = v
+		}
+		newParams["properties"] = newProps
+		newParams["required"] = newReq
+
+		out[i] = ToolDef{
+			Name:        t.Name,
+			Description: t.Description,
+			Parameters:  newParams,
+		}
+	}
+
+	return out
 }

@@ -162,6 +162,90 @@ func TestActivationResetConversation(t *testing.T) {
 	}
 }
 
+func TestInjectReason(t *testing.T) {
+	tools := []ToolDef{
+		{
+			Name:        "test_tool",
+			Description: "a tool",
+			Parameters: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"query": map[string]any{
+						"type":        "string",
+						"description": "some query",
+					},
+				},
+				"required":             []string{"query"},
+				"additionalProperties": false,
+			},
+		},
+	}
+
+	result := injectReason(tools)
+
+	if len(result) != 1 {
+		t.Fatalf("expected 1 tool, got %d", len(result))
+	}
+
+	props, _ := result[0].Parameters["properties"].(map[string]any)
+	if _, ok := props["reason"]; !ok {
+		t.Fatal("expected reason property to be injected")
+	}
+
+	req, _ := result[0].Parameters["required"].([]string)
+	found := false
+	for _, r := range req {
+		if r == "reason" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected reason in required list")
+	}
+
+	if len(req) != 2 {
+		t.Fatalf("expected 2 required fields, got %d", len(req))
+	}
+
+	origProps, _ := tools[0].Parameters["properties"].(map[string]any)
+	if _, ok := origProps["reason"]; ok {
+		t.Fatal("original tool should not be mutated")
+	}
+
+	origReq, _ := tools[0].Parameters["required"].([]string)
+	if len(origReq) != 1 {
+		t.Fatalf("original required should still have 1 entry, got %d", len(origReq))
+	}
+}
+
+func TestInjectReasonEmptyProperties(t *testing.T) {
+	tools := []ToolDef{
+		{
+			Name:        "no_params",
+			Description: "empty tool",
+			Parameters: map[string]any{
+				"type":                 "object",
+				"properties":           map[string]any{},
+				"required":             []string{},
+				"additionalProperties": false,
+			},
+		},
+	}
+
+	result := injectReason(tools)
+
+	props, _ := result[0].Parameters["properties"].(map[string]any)
+	if len(props) != 1 {
+		t.Fatalf("expected 1 property (reason), got %d", len(props))
+	}
+
+	req, _ := result[0].Parameters["required"].([]string)
+	if len(req) != 1 || req[0] != "reason" {
+		t.Fatalf("expected [reason], got %v", req)
+	}
+}
+
 func TestActivationState(t *testing.T) {
 	model := "gpt-5.4"
 	client := &Client{model: &model}

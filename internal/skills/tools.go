@@ -30,12 +30,8 @@ var loadSkillDef = llm.ToolDef{
 				"type":        "string",
 				"description": "Skill name (for load). Empty for list.",
 			},
-			"reason": map[string]any{
-				"type":        "string",
-				"description": "Why you are loading this skill -- what problem you expect it to solve. Empty for list.",
-			},
 		},
-		"required":             []string{"action", "name", "reason"},
+		"required":             []string{"action", "name"},
 		"additionalProperties": false,
 	},
 }
