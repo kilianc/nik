@@ -131,12 +131,11 @@ since they represent nik's own actions.
 
 ## The `done` tool and the end of an activation
 
-Every activation ends with the model calling `done`. The `done` tool takes a
-`reason` parameter (for debug logging) and signals that the model has finished
-all its work for this activation. When the brain detects `done` among the
-round's tool calls, it saves the done tool call as a system message (same as
-every other tool call) and exits immediately. There is no trace round —
-`done.reason` and the round's reasoning summaries are the debugging artifacts.
+Every activation ends with the model calling `done`, signaling it has finished
+all its work. When the brain detects `done` among the round's tool calls, it
+saves it as a system message (same as every other tool call) and exits
+immediately. There is no trace round — the round's reasoning summaries are the
+debugging artifacts.
 
 **Done self-reactivation prevention.** Done is saved to DB like every other
 tool call (available for debugging via SQL), but invisible at two layers:

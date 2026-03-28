@@ -24,14 +24,9 @@ var doneToolDef = llm.ToolDef{
 	Name:        doneToolName,
 	Description: "Signal that you are done with this activation. Do all your work first -- messages, reactions, tasks, lookups -- then call done to declare completion.",
 	Parameters: map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"reason": map[string]any{
-				"type":        "string",
-				"description": "Why you are done. What you did, or why there is nothing to do.",
-			},
-		},
-		"required":             []string{"reason"},
+		"type":                 "object",
+		"properties":           map[string]any{},
+		"required":             []string{},
 		"additionalProperties": false,
 	},
 }
