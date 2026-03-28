@@ -76,7 +76,7 @@ FROM message m
 JOIN conversation c ON c.id = m.conversation_id
 LEFT JOIN contact ct ON ct.id = m.contact_id
 WHERE m.body != ''
-  AND m.kind = ''
+  AND m.kind = 'text'
   AND m.sent_at > '<cursor>'
 ORDER BY m.sent_at ASC
 LIMIT 500
