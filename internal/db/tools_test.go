@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/kciuffolo/nik/internal/llm"
 )
@@ -155,6 +156,37 @@ func TestReadOnlyConnectionRejectsWrites(t *testing.T) {
 	err = ro.QueryRow("SELECT count(*) FROM contact").Scan(&count)
 	if err != nil {
 		t.Fatalf("read-only SELECT failed: %v", err)
+	}
+}
+
+func TestPruneHandler(t *testing.T) {
+	ctx := context.Background()
+	conn, err := OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	retention := func() time.Duration { return 24 * time.Hour }
+	handler := pruneHandler(conn, retention)
+
+	call := llm.ToolCall{Name: "db_prune", Arguments: "{}"}
+	out, err := handler(ctx, call)
+	if err != nil {
+		t.Fatalf("prune handler: %v", err)
+	}
+
+	var result struct {
+		RowsDeleted int    `json:"rows_deleted"`
+		Cutoff      string `json:"cutoff"`
+	}
+	err = json.Unmarshal([]byte(out), &result)
+	if err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if result.Cutoff == "" {
+		t.Fatal("expected non-empty cutoff")
 	}
 }
 

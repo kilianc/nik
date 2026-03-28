@@ -260,3 +260,8 @@ var ExperimentVariantRunSaveResult string
 
 //go:embed experiment_variant_run_update.sql
 var ExperimentVariantRunUpdate string
+
+// prune queries
+
+//go:embed prune.sql
+var Prune string

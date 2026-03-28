@@ -131,7 +131,7 @@ func buildTools(cfg *config.Config, llmClient, taskLLMClient *llm.Client, conn *
 			tools[t.Def.Name] = t.Handler
 		}
 
-		for _, t := range db.BuildTools(roConn) {
+		for _, t := range db.BuildTools(roConn, conn, cfg.RetentionOrDefault) {
 			tools[t.Def.Name] = t.Handler
 		}
 
@@ -145,7 +145,7 @@ func buildTools(cfg *config.Config, llmClient, taskLLMClient *llm.Client, conn *
 		var taskToolList []llm.Tool
 		taskToolList = append(taskToolList, shellSvc.BuildTools()...)
 		taskToolList = append(taskToolList, llm.BuildTools(taskLLMClient, cfg.Home, nil)...)
-		taskToolList = append(taskToolList, db.BuildTools(roConn)...)
+		taskToolList = append(taskToolList, db.BuildTools(roConn, conn, cfg.RetentionOrDefault)...)
 		taskToolList = append(taskToolList, fs.BuildTools(cfg.Home)...)
 		taskToolList = append(taskToolList, skills.BuildTools(cfg)...)
 

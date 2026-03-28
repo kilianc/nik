@@ -214,7 +214,7 @@ func main() {
 	var taskTools []llm.Tool
 	taskTools = append(taskTools, shellSvc.BuildTools()...)
 	taskTools = append(taskTools, llm.BuildTools(taskLLMClient, cfg.Home, nil)...)
-	taskTools = append(taskTools, db.BuildTools(roConn)...)
+	taskTools = append(taskTools, db.BuildTools(roConn, conn, cfg.RetentionOrDefault)...)
 	taskTools = append(taskTools, fs.BuildTools(cfg.Home)...)
 
 	var workerToolNames []string
@@ -279,7 +279,7 @@ func main() {
 	b.RegisterTools(messaging.BuildTools(messagingSvc)...)
 	b.RegisterTools(llm.BuildTools(llmClient, cfg.Home, messagingSvc)...)
 	b.RegisterTools(alarms.BuildTools(alarmSvc)...)
-	b.RegisterTools(db.BuildTools(roConn)...)
+	b.RegisterTools(db.BuildTools(roConn, conn, cfg.RetentionOrDefault)...)
 	b.RegisterTools(fs.BuildTools(cfg.Home)...)
 	b.RegisterTools(skills.BuildTools(cfg)...)
 	b.RegisterTools(task.BuildTools(taskSvc, taskRunner)...)

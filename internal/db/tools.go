@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"strings"
+	"time"
 
 	"github.com/kciuffolo/nik/internal/llm"
 )
@@ -31,13 +33,42 @@ var queryToolDef = llm.ToolDef{
 	},
 }
 
-func BuildTools(conn *sql.DB) []llm.Tool {
+var pruneToolDef = llm.ToolDef{
+	Name:        "db_prune",
+	Description: "Delete activations, tasks, and all dependents older than the configured retention period. Returns count of deleted rows. Use to reclaim disk space.",
+	Parameters: map[string]any{
+		"type":                 "object",
+		"properties":           map[string]any{},
+		"required":             []string{},
+		"additionalProperties": false,
+	},
+}
+
+func BuildTools(roConn *sql.DB, rwConn *sql.DB, retention func() time.Duration) []llm.Tool {
 	return []llm.Tool{
 		{
 			Def:        queryToolDef,
-			Handler:    queryHandler(conn),
+			Handler:    queryHandler(roConn),
 			Privileged: true,
 		},
+		{
+			Def:        pruneToolDef,
+			Handler:    pruneHandler(rwConn, retention),
+			Privileged: true,
+		},
+	}
+}
+
+func pruneHandler(conn *sql.DB, retention func() time.Duration) llm.ToolExecutor {
+	return func(ctx context.Context, call llm.ToolCall) (string, error) {
+		cutoff := time.Now().UTC().Add(-retention()).Format("2006-01-02T15:04:05.000Z")
+
+		n, err := Prune(ctx, conn, cutoff)
+		if err != nil {
+			return llm.ToolError(err), nil
+		}
+
+		return fmt.Sprintf(`{"rows_deleted":%d,"cutoff":"%s"}`, n, cutoff), nil
 	}
 }
 

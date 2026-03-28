@@ -425,6 +425,18 @@ func TestSubscription(t *testing.T) {
 	})
 }
 
+func TestRetentionOrDefault(t *testing.T) {
+	var c Config
+	if got := c.RetentionOrDefault(); got != 30*24*time.Hour {
+		t.Fatalf("expected default 720h, got %v", got)
+	}
+
+	c.Retention = 336 * time.Hour
+	if got := c.RetentionOrDefault(); got != 336*time.Hour {
+		t.Fatalf("expected 336h, got %v", got)
+	}
+}
+
 func TestTaskConfigDefaults(t *testing.T) {
 	var tc TaskConfig
 

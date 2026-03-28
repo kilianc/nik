@@ -54,5 +54,8 @@ location: New York, NY
 shell:
   docker_image: nik-shell     # empty = run commands on host via tmux
 
+# data retention
+retention: 720h               # prune activations, tasks, system messages older than this (default 720h / 30 days)
+
 # content filters
 banned_words: []              # words nik must never use
