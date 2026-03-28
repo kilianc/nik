@@ -46,14 +46,9 @@ allow_conversation_ids:       # other conversations nik can respond to
 
 # context
 max_history: 100              # max messages loaded per conversation
+system_message_max_age: 2h    # max age for system messages in timeline (default 2h)
 timezone: America/New_York
 location: New York, NY
-
-# scheduled routines (HH:MM in configured timezone, empty = disabled)
-journal_time: "00:00"         # nightly journal
-dream_time: "02:00"           # nightly dream cycle
-briefing_time: "08:00"        # morning briefing
-diagnostic_time: "08:00"      # daily system diagnostic
 
 # shell sandbox
 shell:
