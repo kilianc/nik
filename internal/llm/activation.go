@@ -227,7 +227,7 @@ type ExecResult struct {
 	IsErr   bool
 }
 
-func (s *Activation) ExecuteTools(ctx context.Context, result *RoundResult, exec ToolExecutor) []ExecResult {
+func (a *Activation) ExecuteTools(ctx context.Context, result *RoundResult, exec ToolExecutor) []ExecResult {
 	results := make([]ExecResult, len(result.ToolCalls))
 
 	var wg sync.WaitGroup
@@ -250,12 +250,12 @@ func (s *Activation) ExecuteTools(ctx context.Context, result *RoundResult, exec
 	wg.Wait()
 
 	if result.Text != "" {
-		s.AppendAssistantText(result.Text)
+		a.AppendAssistantText(result.Text)
 	}
 
 	for i, call := range result.ToolCalls {
-		s.AddToolResult(call, results[i].Output, results[i].IsErr)
-		s.recorder.ToolCall(ctx, s.lastRoundID, call, results[i])
+		a.AddToolResult(call, results[i].Output, results[i].IsErr)
+		a.recorder.ToolCall(ctx, a.lastRoundID, call, results[i])
 	}
 
 	return results
@@ -282,6 +282,10 @@ func (s *Activation) AppendAssistantText(text string) {
 
 func (s *Activation) AppendUserMessage(text string) {
 	s.prov.appendUser(text)
+}
+
+func (s *Activation) ResetConversation() {
+	s.prov.reset()
 }
 
 func (s *Activation) Prune() {

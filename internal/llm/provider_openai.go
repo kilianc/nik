@@ -211,6 +211,10 @@ func (p *openaiProvider) complete(ctx context.Context) (*providerResult, error) 
 	return result, nil
 }
 
+func (p *openaiProvider) reset() {
+	p.items = nil
+}
+
 func (p *openaiProvider) prune(maxPairs int) int {
 	before := len(p.items)
 	p.items = pruneItems(p.items, maxPairs)

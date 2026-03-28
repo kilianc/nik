@@ -260,6 +260,7 @@ func main() {
 	}
 
 	b := brain.New(cfg, llmClient)
+	b.SetDB(conn)
 	b.SetRecorder(recorder)
 
 	b.SetWorkerToolNames(workerToolNames)

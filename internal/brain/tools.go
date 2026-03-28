@@ -5,9 +5,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"time"
 
+	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/llm"
 )
+
+type ToolCallBody struct {
+	Name   string `json:"name"`
+	Input  string `json:"input"`
+	Output string `json:"output"`
+	Round  int    `json:"round"`
+}
 
 const doneToolName = "done"
 
@@ -103,6 +112,32 @@ func (b *Brain) toolsForContext(ctx context.Context) []llm.ToolDef {
 
 func (b *Brain) isPrivilegedContext(meta map[string]string) bool {
 	return b.cfg.IsPrivileged(meta["conversation_id"])
+}
+
+func (b *Brain) insertToolCallMessages(ctx context.Context, convID string, round int, calls []llm.ToolCall, results []llm.ExecResult) {
+	if b.conn == nil {
+		return
+	}
+
+	now := time.Now().UTC()
+	for i, call := range calls {
+		body := ToolCallBody{
+			Name:   call.Name,
+			Input:  call.Arguments,
+			Output: results[i].Output,
+			Round:  round,
+		}
+
+		err := db.SystemMessageInsert(ctx, b.conn, db.SystemMessageParams{
+			ConversationID: convID,
+			Kind:           "tool_call",
+			Body:           body,
+			SentAt:         now,
+		})
+		if err != nil {
+			slog.Warn("insert tool call message", "pkg", "brain", "tool", call.Name, "error", err)
+		}
+	}
 }
 
 func (b *Brain) toolExecutor() llm.ToolExecutor {

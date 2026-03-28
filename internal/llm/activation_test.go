@@ -134,6 +134,34 @@ func TestActivationLoadHistory(t *testing.T) {
 	}
 }
 
+func TestActivationResetConversation(t *testing.T) {
+	models := []string{"gpt-5.4", "claude-opus-4-6"}
+
+	for _, m := range models {
+		t.Run(m, func(t *testing.T) {
+			model := m
+			client := &Client{model: &model}
+			s := NewActivation(client, NoopRecorder{}, "instructions", nil)
+
+			s.SetInput("timeline v0")
+			call := ToolCall{CallID: "c1", Name: "test", Arguments: "{}"}
+			s.AddToolResult(call, "ok", false)
+
+			s.ResetConversation()
+
+			if got := s.UserInput(); got != "" {
+				t.Fatalf("expected empty user input after reset, got %q", got)
+			}
+
+			s.SetInput("timeline v1")
+
+			if got := s.UserInput(); got != "timeline v1" {
+				t.Fatalf("expected 'timeline v1' after re-set, got %q", got)
+			}
+		})
+	}
+}
+
 func TestActivationState(t *testing.T) {
 	model := "gpt-5.4"
 	client := &Client{model: &model}

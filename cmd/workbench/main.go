@@ -40,7 +40,6 @@ func main() {
 	isDesired := fs.String("is_desired", "", "true or false")
 	rationale := fs.String("rationale", "", "rationale for assessment")
 	n := fs.Int("n", 1, "number of replay attempts")
-	maxRounds := fs.Int("max_rounds", 0, "max rounds per attempt (0 = default 5)")
 	jsonOut := fs.Bool("json", false, "structured JSON output")
 
 	err := fs.Parse(os.Args[2:])
@@ -138,7 +137,7 @@ func main() {
 			fatal("codex auth failed and no OpenAI key configured: %v", err)
 		}
 
-		runs, err := workbench.CreateExperimentVariantRun(ctx, conn, *experimentVariantID, *n, *maxRounds, clientOpts)
+		runs, err := workbench.CreateExperimentVariantRun(ctx, conn, *experimentVariantID, *n, clientOpts)
 		if err != nil {
 			fatal("create-experiment-variant-run: %v", err)
 		}

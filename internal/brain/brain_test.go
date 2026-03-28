@@ -99,16 +99,10 @@ func (f *fakeSensor) Read(_ context.Context, _ string) string {
 	return ""
 }
 
-func TestThinkSkipsGetInputAfterDone(t *testing.T) {
-	var reqCount atomic.Int32
+func TestThinkExitsImmediatelyOnDone(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		n := reqCount.Add(1)
 		w.Header().Set("Content-Type", "application/json")
-		if n == 1 {
-			fmt.Fprint(w, `{"id":"r1","object":"response","created_at":0,"status":"completed","output":[{"type":"function_call","id":"fc1","call_id":"c1","name":"done","arguments":"{\"reason\":\"test\"}","status":"completed"}],"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15,"input_tokens_details":{"cached_tokens":0},"output_tokens_details":{"reasoning_tokens":0}}}`)
-			return
-		}
-		fmt.Fprint(w, `{"id":"r2","object":"response","created_at":0,"status":"completed","output":[{"type":"message","id":"m1","role":"assistant","status":"completed","content":[{"type":"output_text","text":"trace","annotations":[]}]}],"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15,"input_tokens_details":{"cached_tokens":0},"output_tokens_details":{"reasoning_tokens":0}}}`)
+		fmt.Fprint(w, `{"id":"r1","object":"response","created_at":0,"status":"completed","output":[{"type":"function_call","id":"fc1","call_id":"c1","name":"done","arguments":"{\"reason\":\"test\"}","status":"completed"}],"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15,"input_tokens_details":{"cached_tokens":0},"output_tokens_details":{"reasoning_tokens":0}}}`)
 	}))
 	defer srv.Close()
 

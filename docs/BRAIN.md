@@ -96,75 +96,57 @@ inbound messages up to the new read time.
 
 **Files:** `internal/timeline/sense.go`, `internal/messaging/service.go`
 
-## Continuous steering
+## Continuous steering (zero accumulation)
 
-The brain does not accumulate messages like a chat transcript. Each LLM round,
-the user message (items[0]) is **replaced** with a fresh timeline read. The
-model always steers based on the current state of the world, not a growing
-history.
+The brain does not accumulate messages between rounds. After each tool
+execution, the provider is **reset** and a fresh timeline is read from the
+database. Each LLM round is a self-contained, single-turn API call whose sole
+user message is the full timeline.
 
-What DOES accumulate is the model's own work within the activation: tool calls,
-their results, and the model's intermediate text output. These are appended to
-the LLM context as assistant/tool messages, building a running record of what
-the model has done so far. The model sees:
-
-> "here is the world right now (timeline), and here is what I've done so far
-> (tool history)."
+Tool calls are stored as system messages in the `message` table
+(`platform: "system"`, `kind: "tool_call"`). When the timeline is re-read next
+round, those tool call messages appear naturally — interleaved chronologically
+with user messages, sent-message echoes, and other system events. The model
+sees cause before effect: a tool call entry sits at its real timestamp, between
+the input that triggered it and the messages it produced.
 
 ```
-  items array across rounds:
+  round 0:  reset → Read() → timeline (no tool calls yet)
+            model calls message_send → execute → insert tool_call system message
 
-  round 0:  [ timeline_v0 ]
-  round 1:  [ timeline_v1,  assistant_0, tool_call_0, tool_result_0 ]
-  round 2:  [ timeline_v2,  assistant_0, tool_call_0, tool_result_0,
-                             assistant_1, tool_call_1, tool_result_1 ]
-  ...
-  round N:  [ timeline_vN,  ... (oldest pairs pruned if >limit) ... ]
-
-  items[0] is REPLACED each round.
-  everything after items[0] ACCUMULATES.
+  round 1:  reset → Read() → timeline includes [tool call] message_send + echoed YOU messages
+            model calls done → execute → insert tool_call system message → exit
 ```
 
-**Pruning** keeps the accumulated tool history from overflowing the context
-window. After each tool round, if there are more tool call/output pairs than
-the limit, the oldest pairs are dropped. The user message (items[0] — the
-timeline) is always preserved. This is purely token budget management.
+Each round's API call contains exactly one user message (the timeline). There
+is no accumulated tool call/result pair history — the timeline IS the history.
+This eliminates temporal inversion (effects appearing before causes) and makes
+the context idempotent: same DB state produces the same timeline.
 
-The pair limit is model-aware: `maxPairsForModel` reserves ~50% of the model's
-context window for tool history, assuming ~8k tokens per pair (p99 from real
-activation data). The result is clamped to 10–40 pairs. Models with unknown
-context windows fall back to the ceiling (40). In practice: 128k-context models
-get 10 pairs, 400k models get 25, and 1M+ models get 40.
+Tool calls are rendered as `YOU:` messages in the timeline (not `system:`),
+since they represent nik's own actions.
 
-The model can run up to 75 rounds per activation, steering continuously. It
-sees a potentially different timeline each round (new messages may have arrived,
-its own replies now appear as `YOU` messages), but its tool call history
-accumulates and eventually gets pruned.
-
-**Files:** `internal/brain/brain.go` (`think`), `internal/llm/activation.go` (`Prune`, `maxPairsForModel`)
+**Files:** `internal/brain/brain.go` (`think`), `internal/brain/tools.go`
+(`insertToolCallMessages`), `internal/timeline/system.go` (`renderToolCall`)
 
 ## The `done` tool and the end of an activation
 
 Every activation ends with the model calling `done`. The `done` tool takes a
 `reason` parameter (for debug logging) and signals that the model has finished
-all its work for this activation. The brain tracks a `done` flag across rounds:
+all its work for this activation. When the brain detects `done` among the
+round's tool calls, it saves the done tool call as a system message (same as
+every other tool call) and exits immediately. There is no trace round —
+`done.reason` and the round's reasoning summaries are the debugging artifacts.
 
-1. Model calls `done` (possibly alongside other tools) → execute → set flag →
-   re-read input → next round.
-2. Next round produces tool calls → continue (the model changed its mind or has
-   more work).
-3. Next round produces zero tool calls → clean exit.
+**Done self-reactivation prevention.** Done is saved to DB like every other
+tool call (available for debugging via SQL), but invisible at two layers:
 
-**Why the extra round?** The model almost never produces text output on
-tool-call rounds. In practice, 99.4% of rounds with tool calls have empty
-`model_output`. The model writes its trace (the five-wave summary stored in
-`activation_round.model_output`) on a dedicated empty round after all tools are
-done. Exiting immediately after `done` would lose this trace, which is the
-primary debugging artifact for understanding what the model was thinking. The
-extra round preserves the model's natural pattern: do work silently, then
-reflect.
+1. **Query excludes done.** The `message_list.sql` query filters out done tool
+   calls: `AND NOT (m.kind = 'tool_call' AND json_extract(m.body, '$.name') = 'done')`.
+   Done messages never leave the database. Both `Check()` and the timeline
+   renderer use the same query, so done is invisible everywhere.
 
-If the model produces zero tool calls without a prior `done`, the brain injects
+If the model produces zero tool calls without calling `done`, the brain injects
 `nik-05-retry.md` as a follow-up user message (one shot). This nudge warns
 about common failure modes and insists on at least one tool call. If the nudge
 also produces no tool calls, the activation fails.
@@ -175,7 +157,7 @@ checks whether a final report already exists. If not, `task-01-nudge.md` is
 injected once. If the worker still produces no tool calls, the task is resolved
 based on the last report status (or fails if no report exists).
 
-**Files:** `internal/brain/brain.go` (`think`, `doneToolName`),
+**Files:** `internal/brain/brain.go` (`think`),
 `internal/brain/tools.go` (`doneToolDef`, `doneHandler`),
 `internal/task/runner.go` (`runLoop`),
 `prompts/nik-05-retry.md`, `prompts/task-01-nudge.md`
@@ -344,17 +326,16 @@ tick
           build prompt(now, recall)
           create llm.Activation
 
-          brain loop (continuous steering):
+          brain loop (zero accumulation):
             round 0: user msg = cached snapshot
-            round 1+: user msg = fresh timeline read ── markRead(now)
             each round:
               session.Round ── model output
               API error? ── retry up to 3× with backoff, else fail
-              tool calls? ── execute in parallel ── add results to session
-                             track done flag
-                             prune if >limit ── refresh input ── next round
-              no tool calls? ── done? ── exit
-                             else nudge once (nik-05-retry.md), else fail
+              tool calls? ── execute in parallel
+                             insert tool_call system messages to DB
+                             done in calls? ── exit immediately
+                             else reset provider ── fresh timeline read ── next round
+              no tool calls? ── nudge once (nik-05-retry.md), else fail
               identical tool calls 4× in a row? ── fail (loop detection)
 
         release conversation lock
@@ -377,8 +358,9 @@ The `brain` and `task runner` own the round loop and all policy:
 - **Activation ID**: generated by the caller, passed via context metadata
 
 The `llm.Activation` type wraps the items array and provides: `SetInput` (replace
-items[0]), `Round` (single API call, no retries), `AddToolResult`, `Prune`,
-`Usage`, `AppendAssistantText`, `AppendUserMessage`.
+items[0]), `Round` (single API call, no retries), `AddToolResult`,
+`ResetConversation`, `Prune`, `Usage`, `AppendAssistantText`,
+`AppendUserMessage`.
 
 **Files:** `internal/llm/activation.go`, `internal/brain/brain.go` (`think`),
 `internal/task/runner.go` (`runLoop`)

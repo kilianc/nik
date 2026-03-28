@@ -76,7 +76,8 @@ CREATE TABLE IF NOT EXISTS message (
     'alarm_fired', 'alarm_stale', 'alarm_created', 'alarm_updated',
     'skill_added', 'skill_removed', 'skill_changed',
     'trigger', 'media_processed',
-    'skill_reflex_fired'
+    'skill_reflex_fired',
+    'tool_call'
   )),
   body                     TEXT NOT NULL DEFAULT '',
   mime_type                TEXT,

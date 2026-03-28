@@ -129,6 +129,20 @@ func TestRenderSkillEvent(t *testing.T) {
 	}
 }
 
+func TestRenderToolCallTruncatesLongFields(t *testing.T) {
+	longInput := strings.Repeat("x", 300)
+	body, _ := json.Marshal(map[string]string{"name": "db_query", "input": longInput, "output": "ok"})
+	msg := db.Message{Kind: "tool_call", Body: string(body), SentAt: time.Now()}
+	e := renderToolCall(msg)
+
+	if !strings.Contains(e.text, "[truncated]") {
+		t.Fatalf("expected truncation marker in text, got %q", e.text)
+	}
+	if e.from != "YOU" {
+		t.Fatalf("expected from=YOU, got %q", e.from)
+	}
+}
+
 func TestRenderSystemMessage(t *testing.T) {
 	now := time.Now().UTC()
 
@@ -222,6 +236,13 @@ func TestRenderSystemMessage(t *testing.T) {
 			body:     map[string]string{"skill": "journal", "name": "journal"},
 			wantFrom: "system",
 			wantSub:  "[skill reflex fired]",
+		},
+		{
+			name:     "tool_call",
+			kind:     "tool_call",
+			body:     map[string]string{"name": "message_send", "input": `{"body":"hi"}`, "output": `{"sent":1}`},
+			wantFrom: "YOU",
+			wantSub:  "called message_send",
 		},
 	}
 

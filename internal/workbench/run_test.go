@@ -27,25 +27,3 @@ func TestMarshalToolCalls(t *testing.T) {
 		}
 	})
 }
-
-func TestLastOutput(t *testing.T) {
-	t.Run("with rounds", func(t *testing.T) {
-		rounds := []llm.RoundResult{
-			{Text: "first"},
-			{Text: ""},
-			{Text: "last"},
-		}
-
-		got := lastOutput(rounds)
-		if got != "last" {
-			t.Fatalf("expected %q, got %q", "last", got)
-		}
-	})
-
-	t.Run("nil", func(t *testing.T) {
-		got := lastOutput(nil)
-		if got != "" {
-			t.Fatalf("expected empty, got %q", got)
-		}
-	})
-}

@@ -37,6 +37,8 @@ func renderSystemMessage(msg db.Message) entry {
 		return renderAlarmUpdated(msg)
 	case "skill_added", "skill_removed", "skill_changed":
 		return renderSkillEvent(msg)
+	case "tool_call":
+		return renderToolCall(msg)
 	case "trigger":
 		return renderTrigger(msg)
 	case "skill_reflex_fired":
@@ -258,6 +260,33 @@ func renderSkillReflexFired(msg db.Message) entry {
 	lines = append(lines, "MANDATORY: load this skill with load_skill and follow all instructions.")
 
 	return entry{at: msg.SentAt, from: "system", text: padLines(lines)}
+}
+
+func renderToolCall(msg db.Message) entry {
+	var tc struct {
+		Name   string `json:"name"`
+		Input  string `json:"input"`
+		Output string `json:"output"`
+	}
+	_ = json.Unmarshal([]byte(msg.Body), &tc)
+
+	input := tc.Input
+	if len(input) > reportTruncateLen {
+		input = input[:reportTruncateLen] + " [truncated]"
+	}
+
+	output := tc.Output
+	if len(output) > reportTruncateLen {
+		output = output[:reportTruncateLen] + " [truncated]"
+	}
+
+	lines := []string{
+		"called " + tc.Name,
+		"input: " + input,
+		"output: " + output,
+	}
+
+	return entry{at: msg.SentAt, from: "YOU", text: padLines(lines)}
 }
 
 func renderMediaProcessed(msg db.Message, database *sql.DB) entry {
