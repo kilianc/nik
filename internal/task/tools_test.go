@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kciuffolo/nik/internal/id"
 	"github.com/kciuffolo/nik/internal/llm"
 )
 
@@ -164,5 +165,191 @@ func TestCancelHandlerRequiresReason(t *testing.T) {
 	}
 	if !strings.Contains(result, "reason is required") {
 		t.Fatalf("expected error about reason, got %q", result)
+	}
+}
+
+func TestStatusHandler(t *testing.T) {
+	svc, _ := testDB(t)
+	ctx := context.Background()
+
+	task, err := svc.Create(ctx, createParams{
+		Goal:           "deploy the widget",
+		Plan:           "step 1: build\nstep 2: deploy",
+		Thinking:       "low",
+		ConversationID: testConvID,
+	})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+
+	err = svc.InsertReport(ctx, task.ID, "running", "building now")
+	if err != nil {
+		t.Fatalf("insert report: %v", err)
+	}
+
+	err = svc.InsertReport(ctx, task.ID, "completed", "deployed successfully")
+	if err != nil {
+		t.Fatalf("insert report: %v", err)
+	}
+
+	handler := statusHandler(svc)
+	args, _ := json.Marshal(statusArgs{TaskID: task.ID})
+	result, err := handler(ctx, llm.ToolCall{
+		CallID:    "call-1",
+		Name:      "task_status",
+		Arguments: string(args),
+	})
+	if err != nil {
+		t.Fatalf("handler error: %v", err)
+	}
+
+	var parsed map[string]any
+	err = json.Unmarshal([]byte(result), &parsed)
+	if err != nil {
+		t.Fatalf("unmarshal result: %v", err)
+	}
+
+	if parsed["task_id"] != id.Shorten(task.ID) {
+		t.Errorf("task_id = %v, want %v", parsed["task_id"], id.Shorten(task.ID))
+	}
+	if parsed["goal"] != "deploy the widget" {
+		t.Errorf("goal = %v, want 'deploy the widget'", parsed["goal"])
+	}
+	if _, ok := parsed["plan"]; ok {
+		t.Error("response should not contain plan")
+	}
+	if _, ok := parsed["reports"]; ok {
+		t.Error("response should not contain reports array")
+	}
+	if _, ok := parsed["retry_chain"]; ok {
+		t.Error("response should not contain retry_chain")
+	}
+
+	lastReport, ok := parsed["last_report"].(map[string]any)
+	if !ok {
+		t.Fatalf("last_report missing or wrong type: %v", parsed["last_report"])
+	}
+	if lastReport["status"] != "completed" {
+		t.Errorf("last_report.status = %v, want 'completed'", lastReport["status"])
+	}
+	if lastReport["note"] != "deployed successfully" {
+		t.Errorf("last_report.note = %v, want 'deployed successfully'", lastReport["note"])
+	}
+}
+
+func TestStatusHandlerTruncatesLongReport(t *testing.T) {
+	svc, _ := testDB(t)
+	ctx := context.Background()
+
+	task, err := svc.Create(ctx, createParams{
+		Goal:           "long report task",
+		Thinking:       "low",
+		ConversationID: testConvID,
+	})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+
+	longContent := strings.Repeat("x", 300)
+	err = svc.InsertReport(ctx, task.ID, "failed", longContent)
+	if err != nil {
+		t.Fatalf("insert report: %v", err)
+	}
+
+	handler := statusHandler(svc)
+	args, _ := json.Marshal(statusArgs{TaskID: task.ID})
+	result, err := handler(ctx, llm.ToolCall{
+		CallID:    "call-1",
+		Name:      "task_status",
+		Arguments: string(args),
+	})
+	if err != nil {
+		t.Fatalf("handler error: %v", err)
+	}
+
+	var parsed map[string]any
+	err = json.Unmarshal([]byte(result), &parsed)
+	if err != nil {
+		t.Fatalf("unmarshal result: %v", err)
+	}
+
+	lastReport := parsed["last_report"].(map[string]any)
+	note := lastReport["note"].(string)
+	if !strings.HasSuffix(note, "[truncated]") {
+		t.Errorf("expected truncated note, got %q", note)
+	}
+	if len(note) > statusReportTruncateLen+len(" [truncated]") {
+		t.Errorf("note length %d exceeds truncation limit", len(note))
+	}
+}
+
+func TestStatusHandlerRetryCount(t *testing.T) {
+	svc, _ := testDB(t)
+	ctx := context.Background()
+
+	original, err := svc.Create(ctx, createParams{
+		Goal:           "flaky task",
+		Thinking:       "low",
+		ConversationID: testConvID,
+	})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+
+	retry, err := svc.Create(ctx, createParams{
+		Goal:           "flaky task",
+		Plan:           "try again",
+		Thinking:       "low",
+		ConversationID: testConvID,
+		RetryForTaskID: original.ID,
+		RetryNumber:    2,
+	})
+	if err != nil {
+		t.Fatalf("create retry: %v", err)
+	}
+
+	handler := statusHandler(svc)
+	args, _ := json.Marshal(statusArgs{TaskID: retry.ID})
+	result, err := handler(ctx, llm.ToolCall{
+		CallID:    "call-1",
+		Name:      "task_status",
+		Arguments: string(args),
+	})
+	if err != nil {
+		t.Fatalf("handler error: %v", err)
+	}
+
+	var parsed map[string]any
+	err = json.Unmarshal([]byte(result), &parsed)
+	if err != nil {
+		t.Fatalf("unmarshal result: %v", err)
+	}
+
+	retryCount, ok := parsed["retry_count"].(float64)
+	if !ok {
+		t.Fatalf("retry_count missing or wrong type: %v", parsed["retry_count"])
+	}
+	if retryCount != 2 {
+		t.Errorf("retry_count = %v, want 2", retryCount)
+	}
+
+	args, _ = json.Marshal(statusArgs{TaskID: original.ID})
+	result, err = handler(ctx, llm.ToolCall{
+		CallID:    "call-2",
+		Name:      "task_status",
+		Arguments: string(args),
+	})
+	if err != nil {
+		t.Fatalf("handler error: %v", err)
+	}
+
+	var origParsed map[string]any
+	err = json.Unmarshal([]byte(result), &origParsed)
+	if err != nil {
+		t.Fatalf("unmarshal result: %v", err)
+	}
+
+	if _, ok := origParsed["retry_count"]; ok {
+		t.Error("original task should not have retry_count")
 	}
 }
