@@ -156,6 +156,24 @@ topics_count=$(grep -c '^\- ' briefings/topics.md 2>/dev/null || echo 0)
 topics_mtime=$(stat -f '%Sm' -t '%Y-%m-%d' briefings/topics.md 2>/dev/null || echo "MISSING")
 echo "topics=$topics_count topics_updated=$topics_mtime"
 
+echo "=== ERROR LOG ==="
+errlog="nik.err.log"
+if [ -f "$errlog" ]; then
+  today=$(date +%Y-%m-%d)
+  yesterday=$(date -v-1d +%Y-%m-%d 2>/dev/null || date -d 'yesterday' +%Y-%m-%d)
+  recent=$(grep -E "time=${today}|time=${yesterday}" "$errlog")
+  total=$(echo "$recent" | grep -c . || echo 0)
+  warns=$(echo "$recent" | grep -c 'level=WARN' || echo 0)
+  errors=$(echo "$recent" | grep -c 'level=ERROR' || echo 0)
+  echo "24h_lines=$total warns=$warns errors=$errors"
+  echo "-- top messages"
+  echo "$recent" | grep -oP 'msg="[^"]*"|msg=\S+' | sort | uniq -c | sort -rn | head -5
+  echo "-- last errors"
+  echo "$recent" | grep 'level=ERROR' | tail -5 | cut -c1-200
+else
+  echo "SKIP no-file"
+fi
+
 echo "=== META ==="
 echo "db_size=$(wc -c < nik.db | tr -d ' ')"
 echo "tmux_sessions=$(tmux list-sessions -F '#{session_name} #{pane_dead}' 2>/dev/null | grep -c '^nik-' || echo 0)"
@@ -299,6 +317,12 @@ per-service: command, PASS/FAIL/SKIP, error detail if any
 for install:true skills, note whether expected resources are healthy
 group downstream failures under root cause (e.g. vault down)
 
+## Error Log
+24h: N warns, M errors
+top messages (deduplicated with counts)
+last 5 errors (truncated)
+WARN if errors > 0, FAIL if errors > 10
+
 ## Alarms
 dead, duplicate, or stale alarms with short IDs and goals
 
@@ -353,6 +377,7 @@ via `message_send`. One message, no fluff. Example:
 Maintenance 2026-03-28
 Pruned 1,204 rows (213MB → 189MB)
 Auth 7/7 PASS · Alarms 20 ok
+Errors 24h: 2 warn / 0 err ✓
 Tasks 7d: 12 completed, 2 failed · Avg score 3.8/5
 Memories 342 rows, cursor current
 Soul evolved 03-27 · Seeds 3 active
@@ -373,6 +398,9 @@ Lead with FAILs if any. Keep it under 10 lines.
 - Integrity failure → back up DB immediately
 - Spend > 2x average → check for loops or large contexts
 - DB size > 500 MB after prune → investigate large tables
+- Error count > 10 in 24h → investigate recurring error messages, check for loops or persistent failures
+- Repeated identical error message → likely a single root cause, cite the message
+- Error log missing → SKIP (nik may not have run)
 - Memory cursor >24h behind → check memory extract alarm health
 - Soul not updated in 2+ days → check dream cycle alarm and recent dream files
 - Seed cursor >8h stale → check seed extract alarm
