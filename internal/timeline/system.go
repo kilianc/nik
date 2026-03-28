@@ -257,7 +257,7 @@ func renderSkillReflexFired(msg db.Message) entry {
 		lines = append(lines, "meta:  "+meta)
 	}
 
-	lines = append(lines, "MANDATORY: load this skill with load_skill and follow all instructions.")
+	lines = append(lines, "MANDATORY: load this skill with load_skill. Follow its guidance, own the outcome.")
 
 	return entry{at: msg.SentAt, from: "system", text: padLines(lines)}
 }
