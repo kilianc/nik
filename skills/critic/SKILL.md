@@ -2,8 +2,8 @@
 name: critic
 summary: >
   Post-task quality assessment. Finds completed/failed tasks without
-  assessments and writes one per task to assessments/. Load when the
-  critic reflex fires.
+  assessments and writes one per task to assessments/YYYY/MM/DD/. Load
+  when the critic reflex fires.
 preload: false
 tools: [db_query, write_file, read_file, shell]
 reflex:
@@ -20,7 +20,7 @@ Assess finished tasks one at a time. Process at most 10 per run.
 List existing assessment files:
 
 ```
-shell action: "run", command: "ls assessments/*.md 2>/dev/null || echo 'none'"
+shell action: "run", command: "find assessments/ -name '*.md' 2>/dev/null || echo 'none'"
 ```
 
 Query recent terminal tasks:
@@ -33,7 +33,10 @@ WHERE status IN ('completed', 'failed')
 ORDER BY completed_at ASC
 ```
 
-Skip any task whose short ID already appears in an assessment filename.
+Skip any task whose short ID already appears in any assessment path.
+Never create a duplicate — no `-2` suffixes, no rewrites. If an
+assessment for that short ID exists anywhere under `assessments/`,
+the task is done. Move on.
 If all tasks are assessed, stop — nothing to do.
 
 Take the first un-assessed task from the list. You will process it
@@ -114,7 +117,14 @@ inherent).
 
 ## Step 4 — Write the assessment
 
-Use `write_file` to create `assessments/<YYYY-MM-DD>-<task-short-id>.md`:
+Create the directory, then write the file:
+
+```
+shell action: "run", command: "mkdir -p assessments/<YYYY>/<MM>/<DD>"
+```
+
+Use `write_file` to create `assessments/<YYYY>/<MM>/<DD>/<task-short-id>.md`
+(date comes from the task's `completed_at`):
 
 ```markdown
 # Assessment — <task short id>
