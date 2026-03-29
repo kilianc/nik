@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/kciuffolo/nik/internal/codex"
 	"github.com/kciuffolo/nik/internal/config"
@@ -52,6 +53,8 @@ func main() {
 		fmt.Fprintf(os.Stderr, "load config: %v\n", err)
 		os.Exit(1)
 	}
+
+	time.Local = cfg.TZ()
 
 	conn, err := db.Open(cfg.DBPath(), cfg.TZ())
 	if err != nil {

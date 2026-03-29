@@ -43,8 +43,7 @@ func (r *Runner) renderPrompt(t db.Task, tools []llm.ToolDef) string {
 		return fmt.Sprintf("Goal: %s\n\n%s", t.Goal, t.Plan)
 	}
 
-	loc := r.cfg.TZ()
-	now := time.Now().In(loc).Format("Monday, January 2, 2006 3:04 PM")
+	now := time.Now().Format("Monday, January 2, 2006 3:04 PM")
 
 	var shellEnv string
 	if r.cfg.Shell.DockerImage != "" {
