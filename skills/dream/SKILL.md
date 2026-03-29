@@ -26,11 +26,11 @@ dreams/
         2026-03-07.md
 
 soul/
-  latest.md              -- current soul (loaded into your system prompt every activation)
+  latest.md              -- symlink to the current soul (loaded into your system prompt every activation)
   2026/
     03/
       06/
-        2026-03-06.md    -- snapshot after that night's evolution
+        2026-03-06.md    -- soul after that night's evolution
       07/
         2026-03-07.md
 ```
@@ -121,11 +121,12 @@ write_file action: "write", path: "dreams/YYYY/MM/DD/YYYY-MM-DD.md", content: "#
 shell action: "run", command: "ln -sf YYYY/MM/DD/YYYY-MM-DD.md dreams/latest.md"
 ```
 
-Then write your evolved soul and snapshot it:
+Then write your evolved soul:
 
 ```
-write_file action: "write", path: "soul/latest.md", content: "<your full soul>"
-shell action: "run", command: "mkdir -p soul/YYYY/MM/DD && cp soul/latest.md soul/YYYY/MM/DD/YYYY-MM-DD.md"
+shell action: "run", command: "mkdir -p soul/YYYY/MM/DD"
+write_file action: "write", path: "soul/YYYY/MM/DD/YYYY-MM-DD.md", content: "<your full soul>"
+shell action: "run", command: "ln -sf YYYY/MM/DD/YYYY-MM-DD.md soul/latest.md"
 ```
 
 ## How to dream

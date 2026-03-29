@@ -19,7 +19,7 @@ Your long-term memory lives in `memories/latest.md`. It's loaded into your conte
 
 ```
 memories/
-  latest.md              -- current memories (loaded into recall on every activation)
+  latest.md              -- symlink to the current memories (loaded into recall on every activation)
   latest-cursor.txt      -- sent_at of last processed message
   2026/
     03/
@@ -163,7 +163,7 @@ write_file action: "write", path: "memories/latest-cursor.txt", content: "<last 
 **Full rebuild only** — snapshot the old file, then atomically swap:
 
 ```
-shell action: "run", command: "mkdir -p memories/$(date +%Y/%m/%d) && cp memories/latest.md memories/$(date +%Y/%m/%d)/$(date +%Y-%m-%d)-pre-rebuild.md 2>/dev/null; mv memories/staging.md memories/latest.md"
+shell action: "run", command: "mkdir -p memories/$(date +%Y/%m/%d) && mv memories/staging.md memories/$(date +%Y/%m/%d)/$(date +%Y-%m-%d).md && ln -sf $(date +%Y/%m/%d)/$(date +%Y-%m-%d).md memories/latest.md"
 ```
 
 Report the total number of facts extracted across all batches.
@@ -182,15 +182,9 @@ shell action: "run", command: "rm -f memories/latest-cursor.txt"
 
 Deduplicates, resolves contradictions, and prunes stale facts. Run daily before the dream cycle so dreams read clean memories.
 
-### Step 1. Snapshot and read
+### Step 1. Read current memories
 
-Back up the current file before compacting:
-
-```
-shell action: "run", command: "mkdir -p memories/$(date +%Y/%m/%d) && cp memories/latest.md memories/$(date +%Y/%m/%d)/$(date +%Y-%m-%d).md"
-```
-
-Then read it:
+No explicit snapshot needed — the previous symlink target is the pre-compact snapshot and stays on disk when the symlink moves to the new dated file.
 
 ```
 read_file path: "memories/latest.md"
@@ -216,7 +210,7 @@ Write the compacted result to a temp file, then replace:
 
 ```
 write_file action: "write", path: "memories/staging.md", content: "<header + compacted rows>"
-shell action: "run", command: "mv memories/staging.md memories/latest.md"
+shell action: "run", command: "mkdir -p memories/$(date +%Y/%m/%d) && mv memories/staging.md memories/$(date +%Y/%m/%d)/$(date +%Y-%m-%d).md && ln -sf $(date +%Y/%m/%d)/$(date +%Y-%m-%d).md memories/latest.md"
 ```
 
 Do NOT touch `memories/latest-cursor.txt` — the cursor tracks messages processed, not facts.
