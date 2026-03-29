@@ -19,11 +19,15 @@ Your long-term memory lives in `memories/latest.md`. It's loaded into your conte
 
 ```
 memories/
-  latest.md            -- current memories (loaded into recall on every activation)
-  latest-cursor.txt    -- sent_at of last processed message
-  2026-03-07.md        -- daily snapshot before compaction
-  2026-03-08.md
-  2026-03-08-pre-rebuild.md  -- snapshot before a full rebuild
+  latest.md              -- current memories (loaded into recall on every activation)
+  latest-cursor.txt      -- sent_at of last processed message
+  2026/
+    03/
+      07/
+        2026-03-07.md              -- daily snapshot before compaction
+      08/
+        2026-03-08.md
+        2026-03-08-pre-rebuild.md  -- snapshot before a full rebuild
 ```
 
 Use `read_file` and `write_file` for these files. Use `shell` for file operations like `cp`, `mv`, `rm`.
@@ -159,7 +163,7 @@ write_file action: "write", path: "memories/latest-cursor.txt", content: "<last 
 **Full rebuild only** — snapshot the old file, then atomically swap:
 
 ```
-shell action: "run", command: "cp memories/latest.md memories/$(date +%Y-%m-%d)-pre-rebuild.md 2>/dev/null; mv memories/staging.md memories/latest.md"
+shell action: "run", command: "mkdir -p memories/$(date +%Y/%m/%d) && cp memories/latest.md memories/$(date +%Y/%m/%d)/$(date +%Y-%m-%d)-pre-rebuild.md 2>/dev/null; mv memories/staging.md memories/latest.md"
 ```
 
 Report the total number of facts extracted across all batches.
@@ -183,7 +187,7 @@ Deduplicates, resolves contradictions, and prunes stale facts. Run daily before 
 Back up the current file before compacting:
 
 ```
-shell action: "run", command: "cp memories/latest.md memories/$(date +%Y-%m-%d).md"
+shell action: "run", command: "mkdir -p memories/$(date +%Y/%m/%d) && cp memories/latest.md memories/$(date +%Y/%m/%d)/$(date +%Y-%m-%d).md"
 ```
 
 Then read it:

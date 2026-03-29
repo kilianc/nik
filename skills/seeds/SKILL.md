@@ -82,10 +82,10 @@ Before scanning messages, load the two things that sharpen your eye:
 
 ```
 read_file path: "memories/latest.md"
-read_file path: "briefings/YYYY-MM-DD.md"
+read_file path: "briefings/latest.md"
 ```
 
-Use today's date for the briefing. If either file is missing, continue without it.
+If either file is missing, continue without it.
 
 Memories tell you what people care about. The briefing tells you what's happening in the world. Together they're the lens you read messages through.
 
@@ -165,10 +165,10 @@ Then `read_file` each seed. Also load your context sources:
 
 ```
 read_file path: "memories/latest.md"
-shell action: "run", command: "ls -1 briefings/*.md | grep -E '[0-9]{4}-[0-9]{2}-[0-9]{2}' | sort | tail -1"
+read_file path: "briefings/latest.md"
 ```
 
-Read whatever briefing file that returns. If either is missing, continue without it. Keep both in mind as you tend — they're your peripheral vision.
+If either is missing, continue without it. Keep both in mind as you tend — they're your peripheral vision.
 
 ### Step 2. Tend each seed
 
