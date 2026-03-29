@@ -3,7 +3,6 @@ package db
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -49,7 +48,6 @@ func ExperimentVariantRunGet(ctx context.Context, conn *sql.DB, runID string) (E
 		&r.Model,
 		&r.Instructions,
 		&r.ToolSchemas,
-		&r.UserInput,
 		&r.Messages,
 		&effort,
 		&verbosity,
@@ -66,11 +64,6 @@ func ExperimentVariantRunGet(ctx context.Context, conn *sql.DB, runID string) (E
 
 	r.ReasoningEffort = effort.String
 	r.Verbosity = verbosity.String
-
-	if r.Messages == "" || r.Messages == "[]" {
-		content, _ := json.Marshal(r.UserInput)
-		r.Messages = `[{"role":"user","content":` + string(content) + `}]`
-	}
 
 	return r, nil
 }

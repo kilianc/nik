@@ -62,7 +62,6 @@ func TestToolCallInsert(t *testing.T) {
 			roundID, err := ActivationRoundInsert(ctx, conn, ActivationRoundInsertParams{
 				ActivationID: actID,
 				Round:        0,
-				UserInput:    "test input",
 			})
 			if err != nil {
 				t.Fatalf("insert activation round: %v", err)
@@ -125,7 +124,6 @@ func TestToolCallInsert(t *testing.T) {
 		r0ID, err := ActivationRoundInsert(ctx, conn, ActivationRoundInsertParams{
 			ActivationID: actID,
 			Round:        0,
-			UserInput:    "round 0",
 		})
 		if err != nil {
 			t.Fatalf("insert round 0: %v", err)
@@ -134,7 +132,6 @@ func TestToolCallInsert(t *testing.T) {
 		r1ID, err := ActivationRoundInsert(ctx, conn, ActivationRoundInsertParams{
 			ActivationID: actID,
 			Round:        1,
-			UserInput:    "round 1",
 		})
 		if err != nil {
 			t.Fatalf("insert round 1: %v", err)

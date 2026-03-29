@@ -9,10 +9,8 @@
 - Round {{.Round.Round}} of activation {{shorten .Round.ActivationID}}
 - Model: {{.Activation.Model}}{{if .Activation.ReasoningEffort}} | Effort: {{.Activation.ReasoningEffort}}{{end}}{{if .Activation.Verbosity}} | Verbosity: {{.Activation.Verbosity}}{{end}}
 
-### Actual Response
-{{if .Round.ModelOutput}}
-> {{truncate .Round.ModelOutput 500}}
-{{end}}{{if .ToolCalls}}Tool calls: {{tcNames .ToolCalls}}
+{{- if .ToolCalls}}
+Tool calls: {{tcNames .ToolCalls}}
 {{end}}
 {{- if .DesiredOutcome}}
 ---

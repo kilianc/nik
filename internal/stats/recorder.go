@@ -40,7 +40,7 @@ func (r *Recorder) Start(ctx context.Context, model string) {
 	}
 }
 
-func (r *Recorder) Round(ctx context.Context, round, attempt int, userInput string, modelOutput string, messages string, reasoningSummaries []string, usage llm.Usage) string {
+func (r *Recorder) Round(ctx context.Context, round, attempt int, messages string, reasoningSummaries []string, usage llm.Usage) string {
 	meta := metaFromCtx(ctx)
 	actID := meta["activation_id"]
 	if actID == "" {
@@ -50,8 +50,6 @@ func (r *Recorder) Round(ctx context.Context, round, attempt int, userInput stri
 	roundID, err := db.ActivationRoundInsert(ctx, r.conn, db.ActivationRoundInsertParams{
 		ActivationID:       actID,
 		Round:              round,
-		UserInput:          userInput,
-		ModelOutput:        modelOutput,
 		Messages:           messages,
 		ReasoningSummaries: reasoningSummaries,
 		InputTokens:        usage.InputTokens,

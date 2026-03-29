@@ -10,7 +10,7 @@ import (
 
 type ActivationRecorder interface {
 	Start(ctx context.Context, model string)
-	Round(ctx context.Context, round, attempt int, input, output, messages string, summaries []string, usage Usage) string
+	Round(ctx context.Context, round, attempt int, messages string, summaries []string, usage Usage) string
 	ToolCall(ctx context.Context, roundID string, call ToolCall, result ExecResult)
 	Sync(ctx context.Context, stats ActivationStats)
 	Finish(ctx context.Context, stats ActivationStats)
@@ -33,7 +33,7 @@ type ActivationStats struct {
 type NoopRecorder struct{}
 
 func (NoopRecorder) Start(context.Context, string) {}
-func (NoopRecorder) Round(context.Context, int, int, string, string, string, []string, Usage) string {
+func (NoopRecorder) Round(context.Context, int, int, string, []string, Usage) string {
 	return ""
 }
 func (NoopRecorder) ToolCall(context.Context, string, ToolCall, ExecResult) {}
@@ -206,7 +206,7 @@ func (s *Activation) Round(ctx context.Context) (*RoundResult, error) {
 
 	msgs := MarshalMessages(s.prov.conversation())
 
-	s.lastRoundID = s.recorder.Round(ctx, s.round, s.attempt, s.UserInput(), result.Text, msgs, pr.reasoningSummaries, pr.usage)
+	s.lastRoundID = s.recorder.Round(ctx, s.round, s.attempt, msgs, pr.reasoningSummaries, pr.usage)
 	s.attempt = 0
 	s.round++
 

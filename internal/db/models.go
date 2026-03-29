@@ -228,7 +228,6 @@ type ExperimentVariantRun struct {
 	Model           string `json:"-"`
 	Instructions    string `json:"-"`
 	ToolSchemas     string `json:"-"`
-	UserInput       string `json:"-"`
 	ReasoningEffort string `json:"-"`
 	Verbosity       string `json:"-"`
 	Patches         string `json:"-"`

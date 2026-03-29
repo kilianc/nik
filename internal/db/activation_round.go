@@ -13,8 +13,6 @@ type ActivationRound struct {
 	ID                 string
 	ActivationID       string
 	Round              int
-	UserInput          string
-	ModelOutput        string
 	Messages           string
 	ReasoningSummaries []string
 	InputTokens        int64
@@ -32,8 +30,6 @@ func scanActivationRound(s scanner) (ActivationRound, error) {
 		&r.ID,
 		&r.ActivationID,
 		&r.Round,
-		&r.UserInput,
-		&r.ModelOutput,
 		&r.Messages,
 		&summaries,
 		&r.InputTokens,
@@ -87,8 +83,6 @@ func ActivationRoundList(ctx context.Context, db DBTX, activationID string, befo
 type ActivationRoundInsertParams struct {
 	ActivationID       string
 	Round              int
-	UserInput          string
-	ModelOutput        string
 	Messages           string
 	ReasoningSummaries []string
 	InputTokens        int64
@@ -104,8 +98,6 @@ func ActivationRoundInsert(ctx context.Context, db DBTX, p ActivationRoundInsert
 		roundID,
 		p.ActivationID,
 		p.Round,
-		p.UserInput,
-		p.ModelOutput,
 		p.Messages,
 		MarshalStringSlice(p.ReasoningSummaries),
 		p.InputTokens,

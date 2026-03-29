@@ -2,8 +2,6 @@ SELECT
   id,
   activation_id,
   round,
-  user_input,
-  model_output,
   messages,
   reasoning_summaries,
   input_tokens,

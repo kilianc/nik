@@ -169,8 +169,6 @@ func seedRound(t *testing.T, conn db.DBTX) string {
 	roundID, err := db.ActivationRoundInsert(context.Background(), conn, db.ActivationRoundInsertParams{
 		ActivationID: actID,
 		Round:        0,
-		UserInput:    "test input",
-		ModelOutput:  "test output",
 	})
 	if err != nil {
 		t.Fatalf("seed round: %v", err)
