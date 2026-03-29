@@ -183,8 +183,7 @@ func (b *Brain) buildPromptData(now time.Time, recall string) promptData {
 	}
 
 	loc := b.cfg.TZ()
-	t := now.In(loc)
-	abbrev, offset := t.Zone()
+	abbrev, offset := now.Zone()
 	hours := offset / 3600
 
 	sign := "+"
@@ -193,7 +192,7 @@ func (b *Brain) buildPromptData(now time.Time, recall string) promptData {
 	}
 
 	data.Now = nowData{
-		Date:     t.Format("Monday, January 2, 2006 3:04 PM"),
+		Date:     now.Format("Monday, January 2, 2006 3:04 PM"),
 		Timezone: fmt.Sprintf("%s (%s, UTC%s%d)", loc.String(), abbrev, sign, hours),
 		Location: b.cfg.Location,
 	}

@@ -97,6 +97,30 @@ func TestSQLTimestampFunctions(t *testing.T) {
 	}
 }
 
+func TestParseTimestampStringPreservesLocalTimezone(t *testing.T) {
+	loc := time.FixedZone("PDT", -7*60*60)
+	orig := time.Local
+	time.Local = loc
+	defer func() { time.Local = orig }()
+
+	// round-trip: ISO8601MS serializes to UTC string, parseTimestampString reads back in time.Local
+	input := time.Date(2026, 3, 29, 4, 0, 0, 0, loc)
+	serialized := ISO8601MS(input)
+
+	parsed, err := parseTimestampString(serialized)
+	if err != nil {
+		t.Fatalf("parseTimestampString: %v", err)
+	}
+
+	if parsed.Location() != time.Local {
+		t.Errorf("location = %v, want %v", parsed.Location(), time.Local)
+	}
+
+	if parsed.Hour() != 4 {
+		t.Errorf("hour = %d, want 4", parsed.Hour())
+	}
+}
+
 func TestNullableISO8601MS(t *testing.T) {
 	ctx := context.Background()
 

@@ -36,7 +36,7 @@ func IsISO8601MS(value string) bool {
 func ParseTimeValue(value any) (time.Time, error) {
 	switch v := value.(type) {
 	case time.Time:
-		return v.UTC().Truncate(time.Millisecond), nil
+		return v.In(time.Local).Truncate(time.Millisecond), nil
 	case string:
 		return parseTimestampString(v)
 	case []byte:
@@ -50,7 +50,7 @@ func parseTimestampString(value string) (time.Time, error) {
 	for _, layout := range parseTimestampLayouts {
 		parsed, err := time.Parse(layout, value)
 		if err == nil {
-			return parsed.UTC().Truncate(time.Millisecond), nil
+			return parsed.In(time.Local).Truncate(time.Millisecond), nil
 		}
 	}
 

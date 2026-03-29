@@ -44,6 +44,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	time.Local = cfg.TZ()
+
 	logFile, err := os.OpenFile(cfg.LogPath(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: open log file: %v\n", err)

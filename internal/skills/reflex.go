@@ -208,7 +208,7 @@ func SkillCheckReflex(cfg *config.Config, conn *sql.DB, complete Completer, run 
 			return
 		}
 
-		now := time.Now().In(cfg.TZ())
+		now := time.Now()
 
 		for key, def := range reflexes {
 			sched, err := resolveCron(ctx, conn, def.Every, complete)
