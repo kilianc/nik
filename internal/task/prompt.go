@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"text/template"
@@ -180,14 +179,6 @@ func scanTokenTraps(home string) string {
 		"tmp":      true,
 	}
 
-	datePattern := regexp.MustCompile(`\d{4}-\d{2}-\d{2}`)
-
-	type datedDir struct {
-		Path   string
-		Count  int
-		Latest string
-	}
-
 	type largeFile struct {
 		Path string
 		Size int64
@@ -199,9 +190,9 @@ func scanTokenTraps(home string) string {
 	}
 
 	var (
-		dateds []datedDir
-		large  []largeFile
-		denses []denseDir
+		dated []string
+		large []largeFile
+		dense []denseDir
 	)
 
 	_ = filepath.WalkDir(home, func(path string, d fs.DirEntry, err error) error {
@@ -209,8 +200,7 @@ func scanTokenTraps(home string) string {
 			return nil
 		}
 		if path != home && d.IsDir() {
-			name := d.Name()
-			if skipDirs[name] {
+			if skipDirs[d.Name()] {
 				return filepath.SkipDir
 			}
 		}
@@ -224,47 +214,6 @@ func scanTokenTraps(home string) string {
 			return nil
 		}
 
-		var (
-			fileCount int
-			latest    string
-			isDated   bool
-		)
-
-		for _, entry := range entries {
-			name := entry.Name()
-			isDir := entry.IsDir()
-			if !isDir {
-				fileCount++
-			}
-
-			matchesDate := datePattern.MatchString(name) || strings.HasPrefix(name, "latest.")
-			if matchesDate {
-				isDated = true
-				if name > latest {
-					latest = name
-				}
-			}
-
-			if isDir {
-				continue
-			}
-
-			info, err := entry.Info()
-			if err != nil {
-				continue
-			}
-			if info.Size() > sizeThreshold {
-				rel, err := filepath.Rel(home, filepath.Join(path, name))
-				if err != nil {
-					continue
-				}
-				large = append(large, largeFile{
-					Path: rel,
-					Size: info.Size(),
-				})
-			}
-		}
-
 		rel, err := filepath.Rel(home, path)
 		if err != nil {
 			return nil
@@ -274,17 +223,41 @@ func scanTokenTraps(home string) string {
 		}
 		rel = rel + string(filepath.Separator)
 
-		if isDated {
-			dateds = append(dateds, datedDir{
-				Path:   rel,
-				Count:  fileCount,
-				Latest: latest,
-			})
-			return nil
+		latestPath := filepath.Join(path, "latest.md")
+		if _, err := os.Lstat(latestPath); err == nil {
+			target, _ := os.Readlink(latestPath)
+			if target == "" {
+				target = "latest.md"
+			}
+			dated = append(dated, fmt.Sprintf("  %-18s latest: %s", rel, target))
+			return filepath.SkipDir
+		}
+
+		fileCount := 0
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			fileCount++
+
+			info, err := entry.Info()
+			if err != nil {
+				continue
+			}
+			if info.Size() > sizeThreshold {
+				frel, err := filepath.Rel(home, filepath.Join(path, entry.Name()))
+				if err != nil {
+					continue
+				}
+				large = append(large, largeFile{
+					Path: frel,
+					Size: info.Size(),
+				})
+			}
 		}
 
 		if fileCount > countThreshold {
-			denses = append(denses, denseDir{
+			dense = append(dense, denseDir{
 				Path:  rel,
 				Count: fileCount,
 			})
@@ -293,25 +266,22 @@ func scanTokenTraps(home string) string {
 		return nil
 	})
 
-	sort.Slice(dateds, func(i, j int) bool {
-		return dateds[i].Count > dateds[j].Count
-	})
 	sort.Slice(large, func(i, j int) bool {
 		return large[i].Size > large[j].Size
 	})
-	sort.Slice(denses, func(i, j int) bool {
-		return denses[i].Count > denses[j].Count
+	sort.Slice(dense, func(i, j int) bool {
+		return dense[i].Count > dense[j].Count
 	})
 
-	if len(dateds) == 0 && len(large) == 0 && len(denses) == 0 {
+	if len(dated) == 0 && len(large) == 0 && len(dense) == 0 {
 		return ""
 	}
 
 	var b strings.Builder
-	if len(dateds) > 0 {
-		b.WriteString("Dated directories — read latest or most recent, never list:\n")
-		for _, d := range dateds {
-			fmt.Fprintf(&b, "  %-18s %d entries, latest: %s\n", d.Path, d.Count, d.Latest)
+	if len(dated) > 0 {
+		b.WriteString("Dated directories — read latest.md, never list:\n")
+		for _, line := range dated {
+			fmt.Fprintln(&b, line)
 		}
 	}
 
@@ -325,12 +295,12 @@ func scanTokenTraps(home string) string {
 		}
 	}
 
-	if len(denses) > 0 {
+	if len(dense) > 0 {
 		if b.Len() > 0 {
 			b.WriteByte('\n')
 		}
 		b.WriteString("Dense directories — avoid listing contents:\n")
-		for _, d := range denses {
+		for _, d := range dense {
 			fmt.Fprintf(&b, "  %-18s %d files\n", d.Path, d.Count)
 		}
 	}

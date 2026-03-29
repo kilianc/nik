@@ -56,28 +56,23 @@ func TestScanTokenTraps(t *testing.T) {
 
 	home := t.TempDir()
 
-	journal := filepath.Join(home, "journal")
-	os.MkdirAll(journal, 0o755)
-	for _, file := range []string{
-		"2026-03-12.md",
-		"2026-03-13.md",
-		"2026-03-14.md",
-		"2026-03-15.md",
-		"2026-03-16.md",
-	} {
-		if err := os.WriteFile(filepath.Join(journal, file), []byte("note"), 0o644); err != nil {
+	for _, day := range []string{"12", "13", "14", "15", "16"} {
+		dir := filepath.Join(home, "journal", "2026", "03", day)
+		os.MkdirAll(dir, 0o755)
+		if err := os.WriteFile(filepath.Join(dir, "2026-03-"+day+".md"), []byte("note"), 0o644); err != nil {
 			t.Fatalf("write dated journal file: %v", err)
 		}
 	}
+	os.Symlink("2026/03/16/2026-03-16.md", filepath.Join(home, "journal", "latest.md"))
 
-	soul := filepath.Join(home, "soul")
-	os.MkdirAll(soul, 0o755)
-	for _, file := range []string{
-		"latest.md",
-		"2026-03-15.md",
-		"2026-03-16.md",
-	} {
-		if err := os.WriteFile(filepath.Join(soul, file), []byte("note"), 0o644); err != nil {
+	os.MkdirAll(filepath.Join(home, "soul"), 0o755)
+	if err := os.WriteFile(filepath.Join(home, "soul", "latest.md"), []byte("note"), 0o644); err != nil {
+		t.Fatalf("write soul latest: %v", err)
+	}
+	for _, day := range []string{"15", "16"} {
+		dir := filepath.Join(home, "soul", "2026", "03", day)
+		os.MkdirAll(dir, 0o755)
+		if err := os.WriteFile(filepath.Join(dir, "2026-03-"+day+".md"), []byte("note"), 0o644); err != nil {
 			t.Fatalf("write dated soul file: %v", err)
 		}
 	}
@@ -119,8 +114,7 @@ func TestScanTokenTraps(t *testing.T) {
 	for _, wanted := range []string{
 		"journal/",
 		"soul/",
-		"2026-03-16.md",
-		"latest.md",
+		"2026/03/16/2026-03-16.md",
 		"skills/google_workspace/cache/big.json",
 		"100 KB",
 		"skills/dense_cache/",

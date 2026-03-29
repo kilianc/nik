@@ -17,12 +17,17 @@ Your morning news feed. You maintain a list of topics to follow — some for you
 
 ```
 briefings/
-  topics.md            -- your topic list (you maintain this)
-  2026-03-06.md        -- daily briefing summary
-  2026-03-07.md        -- daily briefing summary
+  topics.md              -- your topic list (you maintain this)
+  latest.md              -- symlink to the most recent daily summary
+  2026/
+    03/
+      06/
+        2026-03-06.md    -- daily briefing summary
+      07/
+        2026-03-07.md
 ```
 
-Use `read_file` and `write_file` for these files.
+Use `read_file` and `write_file` for these files. Use `shell` for `mkdir -p` and symlink updates.
 
 ## Topics
 
@@ -83,7 +88,9 @@ Load the `web` skill and use it to search for news and read articles for each to
 Write today's briefing file:
 
 ```
-write_file action: "write", path: "briefings/YYYY-MM-DD.md", content: "<your summary>"
+shell action: "run", command: "mkdir -p briefings/YYYY/MM/DD"
+write_file action: "write", path: "briefings/YYYY/MM/DD/YYYY-MM-DD.md", content: "<your summary>"
+shell action: "run", command: "ln -sf YYYY/MM/DD/YYYY-MM-DD.md briefings/latest.md"
 ```
 
 Include: what you read and stored, topic changes and why, anything to bring up with someone next time you talk to them.

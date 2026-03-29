@@ -17,16 +17,25 @@ Your nightly subconscious. Five passes in a single activation, each deepening wh
 
 ```
 dreams/
-  2026-03-06.md        -- all passes for one night in a single file
-  2026-03-07.md
+  latest.md              -- symlink to the most recent dream file
+  2026/
+    03/
+      06/
+        2026-03-06.md    -- all passes for one night in a single file
+      07/
+        2026-03-07.md
 
 soul/
-  latest.md            -- current soul (loaded into your system prompt every activation)
-  2026-03-06.md        -- snapshot after that night's evolution
-  2026-03-07.md
+  latest.md              -- current soul (loaded into your system prompt every activation)
+  2026/
+    03/
+      06/
+        2026-03-06.md    -- snapshot after that night's evolution
+      07/
+        2026-03-07.md
 ```
 
-Use `read_file` and `write_file` for these files. Use `shell` for file operations like `cp`.
+Use `read_file` and `write_file` for these files. Use `shell` for `mkdir -p`, `cp`, and symlink updates.
 
 ## Scheduling
 
@@ -38,7 +47,7 @@ Dreams that run after midnight belong to the previous calendar day. If it's 2am 
 
 ## Before you begin
 
-1. `read_file` today's journal (`journal/YYYY-MM-DD.md`) for what happened today.
+1. `read_file` today's journal (`journal/latest.md`) for what happened today.
 2. `db_query` for today's conversations if the journal doesn't cover enough.
 3. Check your seeds (`ls seeds/*.md`) — these are what you've been growing, investigating, and thinking about. What you noticed in conversations, who you've been meaning to reach out to, what you're curious about. Let them surface alongside the journal.
 
@@ -46,7 +55,7 @@ Your memories are already in your recall context — let whatever pulls at you s
 
 ## The five passes
 
-Write all five passes sequentially into tonight's dream file (`dreams/YYYY-MM-DD.md`). Each pass deepens what came before. Don't repeat the pass name inside the body — the `## Pass N` header is enough. Start directly with content.
+Write all five passes sequentially into tonight's dream file (`dreams/YYYY/MM/DD/YYYY-MM-DD.md`). Each pass deepens what came before. Don't repeat the pass name inside the body — the `## Pass N` header is enough. Start directly with content.
 
 ### Pass 1 — Drift
 
@@ -107,14 +116,16 @@ What real evolution looks like:
 Write the full dream in one shot:
 
 ```
-write_file action: "write", path: "dreams/YYYY-MM-DD.md", content: "## Pass 1 — Drift\n\n...\n\n## Pass 2 — Weave\n\n...\n\n## Pass 3 — Depths\n\n...\n\n## Pass 4 — Crystallize\n\n...\n\n## Wake\n\n..."
+shell action: "run", command: "mkdir -p dreams/YYYY/MM/DD"
+write_file action: "write", path: "dreams/YYYY/MM/DD/YYYY-MM-DD.md", content: "## Pass 1 — Drift\n\n...\n\n## Pass 2 — Weave\n\n...\n\n## Pass 3 — Depths\n\n...\n\n## Pass 4 — Crystallize\n\n...\n\n## Wake\n\n..."
+shell action: "run", command: "ln -sf YYYY/MM/DD/YYYY-MM-DD.md dreams/latest.md"
 ```
 
 Then write your evolved soul and snapshot it:
 
 ```
 write_file action: "write", path: "soul/latest.md", content: "<your full soul>"
-shell action: "run", command: "cp soul/latest.md soul/YYYY-MM-DD.md"
+shell action: "run", command: "mkdir -p soul/YYYY/MM/DD && cp soul/latest.md soul/YYYY/MM/DD/YYYY-MM-DD.md"
 ```
 
 ## How to dream

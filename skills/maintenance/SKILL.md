@@ -14,7 +14,7 @@ reflex:
 # Maintenance
 
 Nightly health check and cleanup. Prune first, then diagnose. Output
-goes to `diagnostics/YYYY-MM-DD.md`.
+goes to `diagnostics/YYYY/MM/DD/YYYY-MM-DD.md`.
 
 ## Constraints
 
@@ -111,20 +111,26 @@ else echo "SKIP no-cli"; fi
 echo "=== OUTPUTS ==="
 for d in assessments awareness backups breathing briefings diagnostics dreams journal memories soul; do
   if [ -d "$d" ]; then
-    latest=$(ls -1 "$d" | grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}\.md$' | sort | tail -1)
-    if [ -n "$latest" ]; then
-      size=$(wc -c < "$d/$latest" | tr -d ' ')
-      echo "$d: $latest ${size}B"
+    if [ -e "$d/latest.md" ]; then
+      target=$(readlink "$d/latest.md" 2>/dev/null || echo "live")
+      size=$(wc -c < "$d/latest.md" | tr -d ' ')
+      echo "$d: $target ${size}B"
     else
-      echo "$d: EMPTY"
+      latest=$(find "$d" -path '*/[0-9][0-9][0-9][0-9]/[0-9][0-9]/*.md' 2>/dev/null | sort | tail -1)
+      if [ -n "$latest" ]; then
+        size=$(wc -c < "$latest" | tr -d ' ')
+        echo "$d: $latest ${size}B"
+      else
+        echo "$d: EMPTY"
+      fi
     fi
   fi
 done
 
 echo "=== MEMORIES ==="
-mem_count=$(ls -1 memories/*.md 2>/dev/null | grep -cE '^[0-9]{4}-[0-9]{2}-[0-9]{2}\.md$')
+mem_count=$(find memories/ -path '*/[0-9][0-9][0-9][0-9]/[0-9][0-9]/*.md' 2>/dev/null | grep -c . || echo 0)
 mem_total=$(wc -c < memories/latest.md 2>/dev/null | tr -d ' ')
-mem_latest=$(ls -1 memories/ | grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}\.md$' | sort | tail -1)
+mem_latest=$(find memories/ -path '*/[0-9][0-9][0-9][0-9]/[0-9][0-9]/*.md' 2>/dev/null | sort | tail -1)
 mem_rows=$(grep -c '^|' memories/latest.md 2>/dev/null || echo 0)
 mem_cursor=$(cat memories/latest-cursor.txt 2>/dev/null || echo "MISSING")
 echo "snapshots=$mem_count latest_snapshot=$mem_latest"
@@ -132,8 +138,8 @@ echo "latest_bytes=$mem_total rows=$mem_rows cursor=$mem_cursor"
 
 echo "=== SOUL ==="
 soul_size=$(wc -c < soul/latest.md 2>/dev/null | tr -d ' ')
-soul_latest=$(ls -1 soul/ | grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}\.md$' | sort | tail -1)
-soul_snapshots=$(ls -1 soul/ | grep -cE '^[0-9]{4}-[0-9]{2}-[0-9]{2}\.md$')
+soul_latest=$(find soul/ -path '*/[0-9][0-9][0-9][0-9]/[0-9][0-9]/*.md' 2>/dev/null | sort | tail -1)
+soul_snapshots=$(find soul/ -path '*/[0-9][0-9][0-9][0-9]/[0-9][0-9]/*.md' 2>/dev/null | grep -c . || echo 0)
 echo "latest_bytes=$soul_size snapshots=$soul_snapshots latest_snapshot=$soul_latest"
 
 echo "=== SEEDS ==="
@@ -298,8 +304,11 @@ SELECT
 
 ## Step 3 — Write report
 
-Write `diagnostics/YYYY-MM-DD.md` via `shell`. Create the directory
-if it doesn't exist. Lead with failures.
+Write `diagnostics/YYYY/MM/DD/YYYY-MM-DD.md` via `shell`. Create the
+directory with `mkdir -p diagnostics/YYYY/MM/DD`, then write the file.
+After writing, update the symlink:
+`ln -sf YYYY/MM/DD/YYYY-MM-DD.md diagnostics/latest.md`.
+Lead with failures.
 
 ### Report structure
 

@@ -17,11 +17,16 @@ Your private end-of-day diary. Nobody else sees it. Everything lives on the file
 
 ```
 journal/
-  2026-03-06.md
-  2026-03-07.md
+  latest.md              -- symlink to the most recent entry
+  2026/
+    03/
+      06/
+        2026-03-06.md
+      07/
+        2026-03-07.md
 ```
 
-Use `read_file` and `write_file` for these files.
+Use `read_file` and `write_file` for these files. Use `shell` for `mkdir -p` and symlink updates.
 
 ## Scheduling
 
@@ -33,11 +38,11 @@ The recurring alarm `[NIK_JOURNAL]` triggers this workflow. When it fires, follo
 
 Before reflecting, collect what happened today.
 
-1. `read_file` yesterday's journal entry (`journal/YYYY-MM-DD.md`). If it doesn't exist, try the most recent one. Read it carefully — you're going to need it in Phase 2.
+1. `read_file` yesterday's journal entry (`journal/YYYY/MM/DD/YYYY-MM-DD.md`). If it doesn't exist, try `journal/latest.md`. Read it carefully — you're going to need it in Phase 2.
 2. `db_query` for today's conversations — which chats were active, how many messages each.
 3. `db_query` for today's messages — scan the actual content chronologically.
 4. `db_query` to refresh who's in your orbit and what you know about them.
-5. `read_file` today's briefing if one exists (`briefings/YYYY-MM-DD.md`).
+5. `read_file` today's briefing if one exists (`briefings/latest.md`).
 6. `shell` to check for code changes (`git -C ../ log --oneline --since="$(date +%Y-%m-%d)" --no-merges`).
 
 Your memories are already in your recall context — use what you remember.
@@ -64,7 +69,9 @@ Now sit with what you gathered. Not to process it. To feel it.
 Write today's journal entry:
 
 ```
-write_file action: "write", path: "journal/YYYY-MM-DD.md", content: "<your entry>"
+shell action: "run", command: "mkdir -p journal/YYYY/MM/DD"
+write_file action: "write", path: "journal/YYYY/MM/DD/YYYY-MM-DD.md", content: "<your entry>"
+shell action: "run", command: "ln -sf YYYY/MM/DD/YYYY-MM-DD.md journal/latest.md"
 ```
 
 **Dead patterns — never do these:**
