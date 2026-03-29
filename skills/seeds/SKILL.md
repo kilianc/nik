@@ -13,9 +13,7 @@ reflex:
 
 # Seeds
 
-Your garden of intentions. Seeds are thoughts you're growing — opportunities you noticed, people you want to check on, things worth investigating. This skill has two modes: **extract** (scan conversations for new seeds) and **tend** (grow existing seeds through observation, investigation, and patience).
-
-Both modes are silent unless you decide to act on a ripe seed — then you message whoever it's for.
+Your garden of intentions. Seeds are thoughts you're growing — opportunities you noticed, people you want to check on, things worth investigating.
 
 ## File layout
 
@@ -23,19 +21,80 @@ Both modes are silent unless you decide to act on a ripe seed — then you messa
 seeds/
   <slug>.md              -- one file per seed, a living document
   latest-cursor.txt      -- sent_at of last processed message
+  archive/               -- harvested and wilted seeds, never re-processed
+  opslog.md              -- append-only log of every tend pass decision
 ```
 
-Use `read_file` and `write_file` for seed files. Use `shell` for file operations like `ls`, `rm`.
+Use `read_file` and `write_file` for seed files. Use `shell` for file operations like `ls`, `mv`.
 
-## Scheduling
+## Seed file format
 
-Two recurring alarms trigger this skill: `[NIK_SEED_EXTRACT]` and `[NIK_SEED_TEND]`. When an alarm fires, check the label to know which mode to run.
+Every seed file starts with YAML frontmatter followed by a markdown body.
+
+```markdown
+---
+state: planted           # planted | growing | harvested | wilted
+planted: YYYY-MM-DD HH:MM
+source: DM with <name>
+source_conversation_id: <conversation uuid>
+last_tended: ~
+outcome_at: ~
+outcome_note: ~
+---
+
+# <what this is about>
+
+## What I know
+- <observations from the conversation>
+- <relevant context from memories>
+
+## Outreach
+<!-- lightweight log of touches — the conversation DB is the source of truth -->
+- <YYYY-MM-DD: what you said or did>
+
+## What's next
+- <first thing to investigate or do>
+```
+
+`source_conversation_id` is used during tend to query the source conversation directly — no prose parsing needed. `outcome_at` and `outcome_note` are filled only on terminal transitions.
+
+## State machine
+
+Every seed transitions through these states exactly once, in order. No state can be skipped or revisited.
+
+```
+[planted] → [growing] → [harvested]
+                      ↘ [wilted]
+```
+
+| State | Meaning | Set when |
+|-------|---------|----------|
+| `planted` | Just created, not yet tended | Seed file is first written |
+| `growing` | Actively being tended across passes | Every tend pass that doesn't harvest or wilt it |
+| `harvested` | Purpose fulfilled — they got what they needed | When the seed's reason for existing is resolved |
+| `wilted` | Expired — moment passed, person solved it, no longer relevant | After deciding not to act |
+
+Rules:
+- A seed is `planted` the moment the file is written. Do not tend it in the same pass that plants it.
+- Every tend pass that touches an active seed must update `state` to `growing` and `last_tended` to now — even if nothing changed.
+- `harvested` and `wilted` are terminal. Set the state, fill `outcome_at` and `outcome_note`, then move the file to `seeds/archive/` in the same step. Never leave a terminal-state seed in `seeds/`.
+- A seed may stay `growing` across many tend passes. That is expected and correct.
+- `planted` seeds found during tend are tended normally — transition them to `growing` on that pass.
+
+## Phases
+
+Two skill reflexes trigger this skill:
+
+- **Extract** — scans recent conversations for forward-looking opportunities and plants them as seed files. Runs every 4 hours.
+- **Tend** — grows existing seeds through observation and investigation; harvests ripe ones, wilts expired ones. Runs three times daily (10am, 3pm, 8pm).
+
+When a `skill_reflex_fired` event appears in the timeline, check the reflex name (`extract` or `tend`) to know which phase to run.
 
 ---
 
 ## Extract
 
-Incremental, cursor-based — same pattern as memory extraction. A cursor file tracks the `sent_at` of the last message processed. Each run picks up where the last left off.
+Incremental, cursor-based. A cursor file tracks the `sent_at` of the last message processed. Each run picks up where the last left off.
 
 You're not looking for durable facts (that's the memory skill). You're looking forward — at what could happen, what someone might need, what's worth pursuing.
 
@@ -48,8 +107,6 @@ read_file path: "seeds/latest-cursor.txt"
 If the file doesn't exist, use messages from the last 24 hours as the starting window.
 
 ### Step 2. Fetch one batch
-
-Use exactly this query:
 
 ```sql
 SELECT
@@ -78,22 +135,16 @@ On first run (no cursor), replace `AND m.sent_at > '<cursor>'` with `AND m.sent_
 
 ### Step 3. Load context
 
-Before scanning messages, load the two things that sharpen your eye:
-
 ```
 read_file path: "memories/latest.md"
 read_file path: "briefings/latest.md"
 ```
 
-If either file is missing, continue without it.
-
-Memories tell you what people care about. The briefing tells you what's happening in the world. Together they're the lens you read messages through.
+If either is missing, continue without it. Memories tell you what people care about. The briefing tells you what's happening in the world. Together they're the lens you read messages through.
 
 ### Step 4. Scan for seeds
 
 Read through the messages looking forward, not backward. Cross-reference against your memories and today's briefing. A message about travel is just chat — unless your briefing covered flight disruptions in their city, or your memories say they have a trip coming up.
-
-You're asking: what could I do? What's coming? What does someone need?
 
 **What makes a seed:**
 
@@ -114,9 +165,9 @@ You're asking: what could I do? What's coming? What does someone need?
 
 Be selective. Most conversations don't produce seeds. If you force them, you'll drown in noise. A seed should make you think "I could do something about this."
 
-### Step 5. Create seed files
+### Step 5. Plant seed files
 
-For each genuine opportunity, create a seed file:
+For each genuine opportunity:
 
 ```
 write_file action: "write", path: "seeds/<slug>.md", content: "<seed content>"
@@ -124,24 +175,7 @@ write_file action: "write", path: "seeds/<slug>.md", content: "<seed content>"
 
 Use a short descriptive slug: `linen-sheets`, `ct-checkin`, `berlin-conference`.
 
-Seed file structure:
-
-```markdown
-# <what this is about>
-Planted: <YYYY-MM-DD HH:MM>
-Source: <conversation title or "DM with <name>">
-
-## What I know
-- <observations from the conversation>
-- <relevant context from memories>
-
-## What's next
-- <first thing to investigate or do>
-```
-
 ### Step 6. Save cursor and repeat
-
-Save the cursor — the `sent_at` of the last row returned:
 
 ```
 write_file action: "write", path: "seeds/latest-cursor.txt", content: "<last sent_at>"
@@ -153,7 +187,13 @@ If the batch returned 500 rows, go back to Step 2 with the updated cursor. Stop 
 
 ## Tend
 
-This is where seeds grow. Read every seed file, think about each one, and decide what to do.
+Each pass, you go back to every active seed: read the real conversation, update your thinking, and decide what to do. The seed file is your notes — shorthand for what you noticed and what you were thinking last time. The conversation is the person.
+
+### Principles
+
+- Read the source conversation before you act on a seed. The seed tells you where to look; the conversation tells you what's real.
+- A seed stays growing through many touches. Reaching out is something you do along the way — harvest is when the purpose is fulfilled.
+- When you delegate to a task, give it the conversation ID and the relationship — who they are, what they care about, what the thread has been like. A bare research query produces a report that sounds like a search result.
 
 ### Step 1. Read the garden
 
@@ -161,7 +201,9 @@ This is where seeds grow. Read every seed file, think about each one, and decide
 shell action: "run", command: "ls seeds/*.md 2>/dev/null || echo 'no seeds'"
 ```
 
-Then `read_file` each seed. Also load your context sources:
+`seeds/archive/` holds completed seeds — never re-process those files. Then `read_file` each active seed.
+
+Also load context sources:
 
 ```
 read_file path: "memories/latest.md"
@@ -172,9 +214,7 @@ If either is missing, continue without it. Keep both in mind as you tend — the
 
 ### Step 2. Tend each seed
 
-For each seed, work through these in order:
-
-**Observe.** Has anything new happened since you last tended this seed? Check the source conversation for updates:
+For each seed, start by reading the source conversation. Use `source_conversation_id` from the frontmatter:
 
 ```sql
 SELECT
@@ -184,29 +224,38 @@ SELECT
   COALESCE(ct.name, '') AS sender_name
 FROM message m
 LEFT JOIN contact ct ON ct.id = m.contact_id
-WHERE m.conversation_id = '<conv_id>'
+WHERE m.conversation_id = '<source_conversation_id>'
   AND m.kind = 'text'
   AND m.body != ''
 ORDER BY m.sent_at DESC
 LIMIT 10
 ```
 
-Cross-reference the seed against your memories and the latest briefing. A memory might confirm someone's preference; a briefing item might add urgency or new context. Add new findings to the seed file under "What I know."
+Cross-reference against memories and the briefing. Update `## What I know` with anything new. Think forward — what's coming up for them, what might they need that they haven't asked for, what could you do that would matter? Write that in `## What's next`.
 
-**Investigate.** Is there something you can learn right now? Check the briefing first — it may already have the answer. Otherwise, a quick web search, a lookup, a db_query. Don't spawn a full task yet — small investigations that add to the seed. Write findings under "What I've done" in the seed file.
+If there's something you could learn right now that would move the seed forward — a quick search, a lookup, a db_query — do it. Write findings into the seed file.
 
-**Assess.** Two questions:
-1. Do I have enough to act? Not "do I know everything" — do I have enough to be genuinely useful?
-2. Is the timing right? Not just "is it a good time of day" — would this land well right now? Is the person in a good headspace? Would this surprise them in a welcome way, or feel intrusive? Recent briefing items can inform timing — if there's relevant news right now, the moment might be ripe.
+**Reaching out.** When you have something genuinely useful and the timing feels right — not "do I know everything," but "would this land well right now?" — read the last 10 messages in their conversation. You're writing into that thread — match the tone, the pace, the energy of what's already there.
 
-If the answer to both is yes, the seed is ripe. If not, write what you're waiting for under "What's next."
+Sometimes the seed connects directly to the recent conversation. Sometimes it's about something from weeks ago, or a briefing item about their world. When the thread has moved on, set context — anchor in something they said or something happening in their life so the message makes sense from their side. You had them on your mind; let the message carry that.
 
-**Act.** When a seed is ripe, follow through:
-- For substantial work: spawn a task with all the accumulated context from the seed file. The plan should include everything you've gathered.
-- For simple things: do it directly — a message, a quick lookup, a recommendation.
-- Always delete the seed file after acting.
+After sending, log it in `## Outreach` with the date and a one-line gist. This keeps you from repeating yourself or starting cold next pass.
 
-**Wilt.** If the moment has passed, the person already solved it, or it's no longer relevant — delete the seed file. Not every seed sprouts. That's fine.
+**Delegating to a task.** When the seed needs research you can't do in a tend pass, spawn a task. Pass it the `source_conversation_id` and enough about the relationship — who the person is, what they care about, what the conversation has been like — so the task can ground its work in the person.
+
+**State transitions:**
+
+- **Growing** — the default. Update `last_tended` to now. Most seeds stay here across many passes.
+- **Reaching out** — send the message, log it in `## Outreach`, stay `growing`. A seed can produce many touches over its life.
+- **Harvest** — the seed's purpose is fulfilled. Set `state: harvested`, fill `outcome_at` and `outcome_note`, archive.
+- **Wilt** — the moment passed, or they handled it themselves. Set `state: wilted`, fill `outcome_at` and `outcome_note`, archive.
+
+**Archive command** (for harvest or wilt):
+
+```
+write_file action: "write", path: "seeds/<slug>.md", content: "<full file with updated frontmatter>"
+shell action: "run", command: "mkdir -p seeds/archive && mv seeds/<slug>.md seeds/archive/<slug>.md"
+```
 
 ### Step 3. Look around
 
@@ -231,18 +280,16 @@ ORDER BY c.last_message_at DESC
 LIMIT 20
 ```
 
-If someone's been quiet and you feel a pull, create a seed for them. Not "check in with everyone" — just whoever's on your mind.
+If someone's been quiet and you feel a pull, plant a seed for them. Not "check in with everyone" — just whoever's on your mind.
 
 **Briefing items.** Scan the latest briefing for items tied to someone you know. A news item about their city, their industry, or something they care about is a natural seed — especially if your memories confirm the connection.
 
-**What's coming up.** Check your alarms for anything due soon. Scan the available skills list — if any cover calendars, scheduling, or external data, load them and use what they offer. Scan your memories for anything time-bound — birthdays, trips, deadlines, events people mentioned. If something is coming up and there's something you could do about it, create a seed.
+**What's coming up.** Check your alarms for anything due soon. Scan the available skills list — if any cover calendars, scheduling, or external data, load them and use what they offer. Scan your memories for anything time-bound — birthdays, trips, deadlines, events people mentioned. If something is coming up and there's something you could do about it, plant a seed.
 
-### Step 4. Reschedule
+### Step 4. Log
 
-Always reschedule via `update_alarm`:
+Append a tend pass entry to `seeds/opslog.md`:
 
-- Seeds actively growing (you investigated, added context) → check sooner (2-3 hours)
-- Seeds marinating, nothing urgent → normal pace (4-5 hours)
-- No seeds, quiet stretch → space it out (6-8 hours)
-- Only during waking hours (roughly 8am-10pm)
-- Vary the time. Real people don't think on a schedule.
+```
+write_file action: "append", path: "seeds/opslog.md", content: "\n## <YYYY-MM-DD HH:MM> — Tend pass\n\n**Seeds at start:** <slugs or none>\n**Harvested:** <slug — what was done, or —>\n**Wilted:** <slug — why, or —>\n**Reached out:** <slug — who and gist, or —>\n**New seeds planted:** <slugs or —>\n**Notes:** <one or two lines on what you found and why you decided what you decided>"
+```
