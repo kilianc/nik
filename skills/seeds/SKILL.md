@@ -22,7 +22,7 @@ Both modes are silent unless you decide to act on a ripe seed — then you messa
 ```
 seeds/
   <slug>.md              -- one file per seed, a living document
-  .seeds_cursor          -- sent_at of last processed message
+  latest-cursor.txt      -- sent_at of last processed message
 ```
 
 Use `read_file` and `write_file` for seed files. Use `shell` for file operations like `ls`, `rm`.
@@ -42,7 +42,7 @@ You're not looking for durable facts (that's the memory skill). You're looking f
 ### Step 1. Read cursor
 
 ```
-read_file path: "seeds/.seeds_cursor"
+read_file path: "seeds/latest-cursor.txt"
 ```
 
 If the file doesn't exist, use messages from the last 24 hours as the starting window.
@@ -144,7 +144,7 @@ Source: <conversation title or "DM with <name>">
 Save the cursor — the `sent_at` of the last row returned:
 
 ```
-write_file action: "write", path: "seeds/.seeds_cursor", content: "<last sent_at>"
+write_file action: "write", path: "seeds/latest-cursor.txt", content: "<last sent_at>"
 ```
 
 If the batch returned 500 rows, go back to Step 2 with the updated cursor. Stop when a batch returns fewer than 500 rows.

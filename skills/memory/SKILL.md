@@ -40,7 +40,7 @@ Two recurring alarms trigger this skill: `[NIK_MEMORY_EXTRACT]` and `[NIK_MEMORY
 
 ## Extract
 
-Always incremental. Always append. A cursor file (`.memories_cursor`) tracks the `sent_at` of the last message processed. Each run picks up where the last one left off.
+Always incremental. Always append. A cursor file (`latest-cursor.txt`) tracks the `sent_at` of the last message processed. Each run picks up where the last one left off.
 
 ### Step 1. Read cursor
 
