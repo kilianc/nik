@@ -34,8 +34,6 @@ func TestActivationRoundInsert(t *testing.T) {
 	roundID, err := ActivationRoundInsert(ctx, conn, ActivationRoundInsertParams{
 		ActivationID:       actID,
 		Round:              0,
-		UserInput:          "hello world",
-		ModelOutput:        "thinking...",
 		Messages:           msgs,
 		ReasoningSummaries: []string{"considered greeting"},
 		InputTokens:        500,
@@ -53,8 +51,6 @@ func TestActivationRoundInsert(t *testing.T) {
 
 	var got struct {
 		round              int
-		userInput          string
-		modelOutput        string
 		messages           string
 		reasoningSummaries string
 		inputTokens        int64
@@ -64,14 +60,12 @@ func TestActivationRoundInsert(t *testing.T) {
 	}
 
 	err = conn.QueryRowContext(ctx,
-		`SELECT round, user_input, model_output, messages, reasoning_summaries,
+		`SELECT round, messages, reasoning_summaries,
 		  input_tokens, output_tokens, cached_tokens, reasoning_tokens
 		FROM activation_round WHERE id = ?1`,
 		roundID,
 	).Scan(
 		&got.round,
-		&got.userInput,
-		&got.modelOutput,
 		&got.messages,
 		&got.reasoningSummaries,
 		&got.inputTokens,
@@ -85,12 +79,6 @@ func TestActivationRoundInsert(t *testing.T) {
 
 	if got.round != 0 {
 		t.Fatalf("expected round 0, got %d", got.round)
-	}
-	if got.userInput != "hello world" {
-		t.Fatalf("expected user_input %q, got %q", "hello world", got.userInput)
-	}
-	if got.modelOutput != "thinking..." {
-		t.Fatalf("expected model_output %q, got %q", "thinking...", got.modelOutput)
 	}
 	if got.messages != msgs {
 		t.Fatalf("expected messages %q, got %q", msgs, got.messages)
@@ -114,7 +102,6 @@ func TestActivationRoundInsert(t *testing.T) {
 	_, err = ActivationRoundInsert(ctx, conn, ActivationRoundInsertParams{
 		ActivationID: actID,
 		Round:        1,
-		UserInput:    "round 1 input",
 	})
 	if err != nil {
 		t.Fatalf("insert round 1: %v", err)
@@ -158,8 +145,6 @@ func TestActivationRoundGet(t *testing.T) {
 	roundID, err := ActivationRoundInsert(ctx, conn, ActivationRoundInsertParams{
 		ActivationID: actID,
 		Round:        0,
-		UserInput:    "hello",
-		ModelOutput:  "world",
 	})
 	if err != nil {
 		t.Fatalf("insert round: %v", err)
@@ -175,12 +160,6 @@ func TestActivationRoundGet(t *testing.T) {
 	}
 	if got.Round != 0 {
 		t.Fatalf("expected round 0, got %d", got.Round)
-	}
-	if got.UserInput != "hello" {
-		t.Fatalf("expected user_input %q, got %q", "hello", got.UserInput)
-	}
-	if got.ModelOutput != "world" {
-		t.Fatalf("expected model_output %q, got %q", "world", got.ModelOutput)
 	}
 }
 
@@ -210,7 +189,6 @@ func TestActivationRoundList(t *testing.T) {
 		_, err = ActivationRoundInsert(ctx, conn, ActivationRoundInsertParams{
 			ActivationID: actID,
 			Round:        i,
-			UserInput:    "input",
 		})
 		if err != nil {
 			t.Fatalf("insert round %d: %v", i, err)

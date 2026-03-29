@@ -46,7 +46,7 @@ func TestRecorderNoMeta(t *testing.T) {
 		r.Start(ctx, "gpt-4o")
 	})
 	t.Run("round", func(t *testing.T) {
-		got := r.Round(ctx, 0, 0, "input", "output", "[]", nil, llm.Usage{})
+		got := r.Round(ctx, 0, 0, "[]", nil, llm.Usage{})
 		if got != "" {
 			t.Fatalf("expected empty string, got %q", got)
 		}
@@ -106,7 +106,7 @@ func TestRecorderRound(t *testing.T) {
 	r := NewRecorder(conn)
 	r.Start(ctx, "gpt-4o")
 
-	roundID := r.Round(ctx, 0, 0, "hello", "thinking", `[{"role":"user","content":"hello"}]`, []string{"considered"}, llm.Usage{
+	roundID := r.Round(ctx, 0, 0, `[{"role":"user","content":"hello"}]`, []string{"considered"}, llm.Usage{
 		InputTokens:  300,
 		OutputTokens: 75,
 		CachedTokens: 50,
@@ -115,14 +115,10 @@ func TestRecorderRound(t *testing.T) {
 		t.Fatal("expected non-empty round ID")
 	}
 
-	var userInput string
 	var inputTokens int64
-	err = conn.QueryRowContext(ctx, `SELECT user_input, input_tokens FROM activation_round WHERE id = ?1`, roundID).Scan(&userInput, &inputTokens)
+	err = conn.QueryRowContext(ctx, `SELECT input_tokens FROM activation_round WHERE id = ?1`, roundID).Scan(&inputTokens)
 	if err != nil {
 		t.Fatalf("query round: %v", err)
-	}
-	if userInput != "hello" {
-		t.Errorf("expected user_input 'hello', got %q", userInput)
 	}
 	if inputTokens != 300 {
 		t.Errorf("expected input_tokens 300, got %d", inputTokens)
@@ -148,7 +144,7 @@ func TestRecorderToolCall(t *testing.T) {
 
 	r := NewRecorder(conn)
 	r.Start(ctx, "gpt-4o")
-	roundID := r.Round(ctx, 0, 0, "input", "output", "[]", nil, llm.Usage{})
+	roundID := r.Round(ctx, 0, 0, "[]", nil, llm.Usage{})
 
 	call := llm.ToolCall{CallID: "c1", Name: "db_query", Arguments: `{"query":"SELECT 1"}`}
 	result := llm.ExecResult{Output: `{"rows":[]}`, Elapsed: 42 * time.Millisecond}
@@ -183,7 +179,7 @@ func TestRecorderSync(t *testing.T) {
 
 	r := NewRecorder(conn)
 	r.Start(ctx, "gpt-5.4")
-	r.Round(ctx, 0, 0, "hello", "thinking", "[]", nil, llm.Usage{InputTokens: 200, OutputTokens: 50})
+	r.Round(ctx, 0, 0, "[]", nil, llm.Usage{InputTokens: 200, OutputTokens: 50})
 
 	r.Sync(ctx, llm.ActivationStats{
 		Model:         "gpt-5.4",

@@ -14,7 +14,6 @@ SELECT
   a.model,
   a.instructions,
   a.tool_schemas,
-  ar.user_input,
   ar.messages,
   COALESCE(NULLIF(ev.reasoning_effort, ''), a.reasoning_effort),
   COALESCE(NULLIF(ev.verbosity, ''), a.verbosity),

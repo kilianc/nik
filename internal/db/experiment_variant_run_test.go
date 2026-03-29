@@ -201,9 +201,6 @@ func TestExperimentVariantRunGet(t *testing.T) {
 	if run.Model != "test-model" {
 		t.Fatalf("expected model %q, got %q", "test-model", run.Model)
 	}
-	if run.UserInput != "test input" {
-		t.Fatalf("expected user_input %q, got %q", "test input", run.UserInput)
-	}
 	if run.ReasoningEffort != "high" {
 		t.Fatalf("expected reasoning_effort %q, got %q", "high", run.ReasoningEffort)
 	}

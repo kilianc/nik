@@ -187,8 +187,6 @@ CREATE TABLE IF NOT EXISTS activation_round (
   id                  TEXT PRIMARY KEY,
   activation_id       TEXT NOT NULL REFERENCES activation(id),
   round               INTEGER NOT NULL,
-  user_input          TEXT NOT NULL DEFAULT '',
-  model_output        TEXT NOT NULL DEFAULT '',
   messages            TEXT NOT NULL DEFAULT '[]',
   reasoning_summaries TEXT NOT NULL DEFAULT '[]',
   input_tokens        INTEGER NOT NULL DEFAULT 0,

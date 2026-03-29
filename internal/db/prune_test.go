@@ -182,8 +182,6 @@ func seedFullChain(t *testing.T, ctx context.Context, conn *sql.DB, convID strin
 	c.roundID, err = ActivationRoundInsert(ctx, conn, ActivationRoundInsertParams{
 		ActivationID: c.activationID,
 		Round:        1,
-		UserInput:    "hello",
-		ModelOutput:  "world",
 		Messages:     "[]",
 	})
 	if err != nil {
