@@ -4,6 +4,8 @@ ENV HOME=/root
 
 RUN apt-get update
 
+RUN apt-get install -y --no-install-recommends ca-certificates
+RUN apt-get install -y --no-install-recommends openssl
 RUN apt-get install -y --no-install-recommends curl
 RUN apt-get install -y --no-install-recommends jq
 RUN apt-get install -y --no-install-recommends nodejs npm
