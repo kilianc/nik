@@ -328,10 +328,10 @@ func injectReason(tools []ToolDef) []ToolDef {
 			"description": "Why you are calling this tool right now.",
 		}
 
-		req, _ := t.Parameters["required"].([]string)
-		newReq := make([]string, len(req)+1)
-		copy(newReq, req)
-		newReq[len(req)] = "reason"
+		newReq := make([]string, 0, len(newProps))
+		for k := range newProps {
+			newReq = append(newReq, k)
+		}
 
 		newParams := make(map[string]any, len(t.Parameters))
 		for k, v := range t.Parameters {
