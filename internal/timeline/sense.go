@@ -93,11 +93,6 @@ func (t *Timeline) read(ctx context.Context, convID string, opts readOpts) strin
 	}
 	msgs = filtered
 
-	var readLine time.Time
-	if conv.LastReadAt.Valid {
-		readLine = conv.LastReadAt.Time
-	}
-
 	senderLabels := t.msgSvc.SenderLabels(ctx, msgs)
 	session := t.msgSvc.ConversationHeader(ctx, conv)
 	entries := t.buildEntries(msgs, senderLabels)
@@ -105,7 +100,7 @@ func (t *Timeline) read(ctx context.Context, convID string, opts readOpts) strin
 	var lines []string
 	lines = append(lines, "## Conversation", "")
 	lines = append(lines, session.Lines...)
-	lines = append(lines, renderTimeline(entries, readLine)...)
+	lines = append(lines, renderTimeline(entries)...)
 
 	if opts.markRead {
 		t.markRead(ctx, convID, msgs)
@@ -122,16 +117,11 @@ func (t *Timeline) Render(ctx context.Context, convID string) (session []string,
 		return nil, nil, err
 	}
 
-	var readLine time.Time
-	if conv.LastReadAt.Valid {
-		readLine = conv.LastReadAt.Time
-	}
-
 	senderLabels := t.msgSvc.SenderLabels(ctx, msgs)
 	header := t.msgSvc.ConversationHeader(ctx, conv)
 	entries := t.buildEntries(msgs, senderLabels)
 
-	return header.Lines, renderTimeline(entries, readLine), nil
+	return header.Lines, renderTimeline(entries), nil
 }
 
 // check determines whether a conversation has new events worth activating on.
@@ -234,7 +224,7 @@ func (t *Timeline) buildEntries(msgs []db.Message, senderLabels map[string]strin
 	return entries
 }
 
-func renderTimeline(entries []entry, readLine time.Time) []string {
+func renderTimeline(entries []entry) []string {
 	if len(entries) == 0 {
 		return nil
 	}
@@ -245,36 +235,7 @@ func renderTimeline(entries []entry, readLine time.Time) []string {
 		return sorted[i].at.Before(sorted[j].at)
 	})
 
-	var handled, fresh []entry
-	if readLine.IsZero() {
-		fresh = sorted
-	} else {
-		for i, e := range sorted {
-			if e.at.After(readLine) {
-				handled = sorted[:i]
-				fresh = sorted[i:]
-				break
-			}
-		}
-		if len(fresh) == 0 && len(handled) == 0 {
-			handled = sorted
-		}
-	}
-
-	var lines []string
-
-	if len(handled) > 0 {
-		lines = append(lines, "### Old messages (you have already seen these)", "")
-		lines = append(lines, renderEntries(handled)...)
-		lines = append(lines, "")
-	}
-
-	if len(fresh) > 0 {
-		lines = append(lines, "### New messages (since your last activation)", "")
-		lines = append(lines, renderEntries(fresh)...)
-	}
-
-	return lines
+	return renderEntries(sorted)
 }
 
 func renderEntries(entries []entry) []string {
