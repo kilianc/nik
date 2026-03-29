@@ -246,6 +246,36 @@ func TestInjectReasonEmptyProperties(t *testing.T) {
 	}
 }
 
+func TestInjectReasonAlreadyPresent(t *testing.T) {
+	tools := []ToolDef{
+		{
+			Name:        "config",
+			Description: "config tool",
+			Parameters: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"action": map[string]any{"type": "string"},
+					"reason": map[string]any{"type": "string", "description": "Why you are calling this tool right now."},
+				},
+				"required":             []any{"action", "reason"},
+				"additionalProperties": false,
+			},
+		},
+	}
+
+	result := injectReason(tools)
+
+	req, _ := result[0].Parameters["required"].([]string)
+	if len(req) != 2 {
+		t.Fatalf("expected 2 required fields, got %d: %v", len(req), req)
+	}
+
+	props, _ := result[0].Parameters["properties"].(map[string]any)
+	if len(props) != 2 {
+		t.Fatalf("expected 2 properties, got %d", len(props))
+	}
+}
+
 func TestActivationState(t *testing.T) {
 	model := "gpt-5.4"
 	client := &Client{model: &model}
