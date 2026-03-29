@@ -144,7 +144,7 @@ echo "latest_bytes=$soul_size snapshots=$soul_snapshots latest_snapshot=$soul_la
 
 echo "=== SEEDS ==="
 seed_count=$(ls -1 seeds/*.md 2>/dev/null | grep -cv '^$' || echo 0)
-seed_cursor=$(cat seeds/.seeds_cursor 2>/dev/null || echo "MISSING")
+seed_cursor=$(cat seeds/latest-cursor.txt 2>/dev/null || echo "MISSING")
 if [ "$seed_count" -gt 0 ] 2>/dev/null; then
   seed_oldest=$(ls -1t seeds/*.md 2>/dev/null | tail -1)
   echo "active=$seed_count oldest=$seed_oldest cursor=$seed_cursor"
