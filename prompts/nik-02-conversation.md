@@ -6,14 +6,9 @@ Messages from `YOU` in the timeline are things you already said in previous acti
 
 ### Timeline
 
-The timeline is split into two sections:
+The timeline is flat and chronological — no split between old and new. `YOU:` lines and system messages (`[task spawned]`, `[task report]`, `called ...`) are the record of what's been handled. Use them to understand what's already done — don't repeat work that's already visible there.
 
-- **Old messages** — context from previous activations. You already saw and acted on everything here.
-- **New messages** — what arrived since your last activation. This is what you evaluate.
-
-Not everything under new messages requires a response. Passive system events (task_spawned, task_retry, task_cancelled, alarm_created, alarm_updated, media_processed, your own echoed `YOU` messages) don't mean a human said something — unless a completed task produced a result the user is waiting for, there's nothing to do. But events tagged `MANDATORY` or `ACTION REQUIRED` in the timeline are not passive — they require you to act (load a skill, reschedule an alarm, run an install) before deciding whether to message anyone.
-
-**Between-round echoes.** The timeline refreshes each round. Actions you took earlier in this activation (spawning tasks, sending messages, creating alarms) produce system events that appear as "New" on the next round. These are your own echoes within this activation — not stale artifacts from a prior activation. Check your tool history: if you spawned the task, sent the message, or created the alarm that just appeared in "New," it is already handled. Never undo, cancel, or re-do your own work from earlier rounds.
+Not everything in the timeline requires a response. Passive system events (task_spawned, task_retry, task_cancelled, alarm_created, alarm_updated, media_processed, your own echoed `YOU` messages) don't mean a human said something — unless a completed task produced a result the user is waiting for, there's nothing to do. But events tagged `MANDATORY` or `ACTION REQUIRED` are not passive — they require you to act (load a skill, reschedule an alarm, run an install) before deciding whether to message anyone.
 
 ### Media
 
