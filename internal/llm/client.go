@@ -269,6 +269,7 @@ var transientNetworkSubstrings = []string{
 	"i/o timeout",
 	"tls: protocol is shutdown",
 	"no such host",
+	"INTERNAL_ERROR",
 }
 
 func IsTransient(err error) bool {

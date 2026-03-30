@@ -176,6 +176,7 @@ func TestIsTransient(t *testing.T) {
 		{"i/o timeout", fmt.Errorf("read tcp [::1]:1234: i/o timeout"), true},
 		{"tls protocol shutdown", fmt.Errorf("tls: protocol is shutdown"), true},
 		{"dns no such host", fmt.Errorf(`Post "https://api.openai.com/v1/responses": dial tcp: lookup api.openai.com: no such host`), true},
+		{"raw http2 INTERNAL_ERROR", fmt.Errorf("round 29: stream error: stream ID 93; INTERNAL_ERROR; received from peer"), true},
 		{"wrapped tls error", fmt.Errorf("complete round 4: %w", fmt.Errorf("remote error: tls: bad record MAC")), true},
 	}
 
