@@ -14,7 +14,7 @@ import (
 
 const (
 	pad               = "           " // 11 spaces — width of [HH:MM:SS] + space
-	reportTruncateLen = 200
+	reportTruncateLen = 2000
 )
 
 func renderSystemMessage(msg db.Message) entry {
