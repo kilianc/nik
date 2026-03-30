@@ -449,6 +449,10 @@ func validateConfig(cfg Config) error {
 		return err
 	}
 
+	if len(cfg.PrivilegedConversationIDs) == 0 {
+		return fmt.Errorf("missing required config key privileged_conversation_ids (at least one required)")
+	}
+
 	return nil
 }
 

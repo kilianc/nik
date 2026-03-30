@@ -47,12 +47,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	privIDs := cfg.PrivilegedIDs()
-	if len(privIDs) == 0 {
-		fmt.Fprintln(os.Stderr, "no privileged conversations configured")
-		os.Exit(1)
-	}
-	convID := privIDs[0]
+	convID := cfg.PrivilegedIDs()[0]
 
 	conn, err := db.Open(cfg.DBPath(), cfg.TZ())
 	if err != nil {
