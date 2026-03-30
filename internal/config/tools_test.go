@@ -54,6 +54,7 @@ func TestConfigSetSupportsPurposeModelFields(t *testing.T) {
 				Model: "gpt-4.1-nano",
 			},
 		},
+		PrivilegedConversationIDs: ConversationList{{Label: "owner", ID: "conv-1"}},
 	}
 
 	out, err := configSet(cfg, "models.main.model", "gpt-5.4")
@@ -75,6 +76,7 @@ func TestConfigSetSupportsTaskModelFields(t *testing.T) {
 		Models: ModelsConfig{
 			Main: ModelConfig{Model: "gpt-5"},
 		},
+		PrivilegedConversationIDs: ConversationList{{Label: "owner", ID: "conv-1"}},
 	}
 
 	out, err := configSet(cfg, "models.task.model", "gpt-4.1-mini")
@@ -233,9 +235,10 @@ func TestConfigGetTask(t *testing.T) {
 func TestConfigSetTaskFields(t *testing.T) {
 	t.Run("max_rounds", func(t *testing.T) {
 		cfg := &Config{
-			Home:      t.TempDir(),
-			OpenAIKey: "sk-test",
-			Models:    ModelsConfig{Main: ModelConfig{Model: "gpt-5"}},
+			Home:                      t.TempDir(),
+			OpenAIKey:                 "sk-test",
+			Models:                    ModelsConfig{Main: ModelConfig{Model: "gpt-5"}},
+			PrivilegedConversationIDs: ConversationList{{Label: "owner", ID: "conv-1"}},
 		}
 
 		out, err := configSet(cfg, "task.max_rounds", "250")
@@ -262,9 +265,10 @@ func TestConfigSetTaskFields(t *testing.T) {
 
 	t.Run("timeout", func(t *testing.T) {
 		cfg := &Config{
-			Home:      t.TempDir(),
-			OpenAIKey: "sk-test",
-			Models:    ModelsConfig{Main: ModelConfig{Model: "gpt-5"}},
+			Home:                      t.TempDir(),
+			OpenAIKey:                 "sk-test",
+			Models:                    ModelsConfig{Main: ModelConfig{Model: "gpt-5"}},
+			PrivilegedConversationIDs: ConversationList{{Label: "owner", ID: "conv-1"}},
 		}
 
 		out, err := configSet(cfg, "task.timeout", "90m")

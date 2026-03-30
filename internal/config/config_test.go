@@ -89,6 +89,8 @@ models:
     model: gpt-4
     reasoning_effort: low
     verbosity: medium
+privileged_conversation_ids:
+  owner: conv-1
 timezone: UTC
 max_history: 50
 `)
@@ -110,6 +112,8 @@ models:
     model: gpt-5
     reasoning_effort: high
     verbosity: low
+privileged_conversation_ids:
+  owner: conv-1
 timezone: America/Chicago
 max_history: 200
 location: Chicago
@@ -144,6 +148,8 @@ openai_key: sk-test
 models:
   main:
     model: gpt-4
+privileged_conversation_ids:
+  owner: conv-1
 `)
 
 		cfg, err := Load(dir)
@@ -167,6 +173,8 @@ openai_key: sk-test
 models:
   main:
     model: gpt-4
+privileged_conversation_ids:
+  owner: conv-1
 `)
 
 		cfg, err := Load(dir)
@@ -182,6 +190,8 @@ openai_key: sk-test
 models:
   main:
     model: gpt-5
+privileged_conversation_ids:
+  owner: conv-1
 `)
 
 		_, err = cfg.ReloadIfChanged()
@@ -267,17 +277,17 @@ func TestLoadValidation(t *testing.T) {
 		},
 		{
 			"empty backend is valid",
-			"openai_key: sk-test\nmodels:\n  main:\n    model: gpt-5\n    backend: \"\"\n",
+			"openai_key: sk-test\nmodels:\n  main:\n    model: gpt-5\n    backend: \"\"\nprivileged_conversation_ids:\n  owner: conv-1\n",
 			false,
 		},
 		{
 			"api backend is valid",
-			"openai_key: sk-test\nmodels:\n  main:\n    model: gpt-5\n    backend: api\n",
+			"openai_key: sk-test\nmodels:\n  main:\n    model: gpt-5\n    backend: api\nprivileged_conversation_ids:\n  owner: conv-1\n",
 			false,
 		},
 		{
 			"subscription backend is valid",
-			"models:\n  main:\n    model: gpt-5\n    backend: subscription\n",
+			"models:\n  main:\n    model: gpt-5\n    backend: subscription\nprivileged_conversation_ids:\n  owner: conv-1\n",
 			false,
 		},
 		{
@@ -292,12 +302,17 @@ func TestLoadValidation(t *testing.T) {
 		},
 		{
 			"subscription satisfies auth requirement",
-			"models:\n  main:\n    model: gpt-5\n    backend: subscription\n",
+			"models:\n  main:\n    model: gpt-5\n    backend: subscription\nprivileged_conversation_ids:\n  owner: conv-1\n",
 			false,
 		},
 		{
 			"no key and no subscription fails",
 			"models:\n  main:\n    model: gpt-5\n",
+			true,
+		},
+		{
+			"missing privileged_conversation_ids",
+			"openai_key: sk-test\nmodels:\n  main:\n    model: gpt-5\n",
 			true,
 		},
 	}
@@ -329,6 +344,8 @@ models:
     model: gpt-4.1-mini
     reasoning_effort: low
     verbosity: medium
+privileged_conversation_ids:
+  owner: conv-1
 `)
 
 	cfg, err := Load(dir)
@@ -438,6 +455,8 @@ openai_key: sk-test
 models:
   main:
     model: gpt-5
+privileged_conversation_ids:
+  owner: conv-1
 task:
   max_rounds: 250
   timeout: 45m
@@ -463,6 +482,8 @@ openai_key: sk-test
 models:
   main:
     model: gpt-5
+privileged_conversation_ids:
+  owner: conv-1
 `)
 
 		cfg, err := Load(dir)
@@ -486,6 +507,8 @@ exa_api_key: exa-old-key
 models:
   main:
     model: gpt-5
+privileged_conversation_ids:
+  owner: conv-1
 `)
 
 		cfg, err := Load(dir)

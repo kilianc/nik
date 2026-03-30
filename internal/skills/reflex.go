@@ -288,10 +288,6 @@ func runSkillCheck(ctx context.Context, cfg *config.Config, conn *sql.DB, key st
 	}
 
 	privIDs := cfg.PrivilegedIDs()
-	if len(privIDs) == 0 {
-		slog.Warn("skill check reflex: no privileged conversations", "key", key)
-		return
-	}
 
 	skillName, _, _ := strings.Cut(key, "/")
 
