@@ -37,13 +37,13 @@ func SkillChangeReflex(cfg *config.Config, conn *sql.DB) func(ctx context.Contex
 			}
 		})
 		if err != nil {
-			slog.Warn("skill reflex: walk dirs", "error", err)
+			slog.Error("skill reflex: walk dirs", "error", err)
 			return
 		}
 
 		existing, err := db.SkillList(ctx, conn)
 		if err != nil {
-			slog.Warn("skill reflex: list skills", "error", err)
+			slog.Error("skill reflex: list skills", "error", err)
 			return
 		}
 
@@ -91,7 +91,7 @@ func SkillChangeReflex(cfg *config.Config, conn *sql.DB) func(ctx context.Contex
 				InstallHash: fs.installHash,
 			})
 			if err != nil {
-				slog.Warn("skill reflex: upsert prompt-only change", "name", name, "error", err)
+				slog.Error("skill reflex: upsert prompt-only change", "name", name, "error", err)
 			}
 		}
 
@@ -114,14 +114,14 @@ func SkillChangeReflex(cfg *config.Config, conn *sql.DB) func(ctx context.Contex
 func applySkillChange(ctx context.Context, conn *sql.DB, privIDs []string, kind string, p db.SkillUpsertParams) {
 	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
-		slog.Warn("skill reflex: begin tx", "name", p.Name, "error", err)
+		slog.Error("skill reflex: begin tx", "name", p.Name, "error", err)
 		return
 	}
 	defer tx.Rollback()
 
 	skill, err := db.SkillUpsert(ctx, tx, p)
 	if err != nil {
-		slog.Warn("skill reflex: upsert "+kind, "name", p.Name, "error", err)
+		slog.Error("skill reflex: upsert "+kind, "name", p.Name, "error", err)
 		return
 	}
 
@@ -132,7 +132,7 @@ func applySkillChange(ctx context.Context, conn *sql.DB, privIDs []string, kind 
 		InstallHash: p.InstallHash,
 	})
 	if err != nil {
-		slog.Warn("skill reflex: insert event", "name", p.Name, "kind", kind, "error", err)
+		slog.Error("skill reflex: insert event", "name", p.Name, "kind", kind, "error", err)
 		return
 	}
 
@@ -143,13 +143,13 @@ func applySkillChange(ctx context.Context, conn *sql.DB, privIDs []string, kind 
 		SentAt:         skill.UpdatedAt,
 	})
 	if err != nil {
-		slog.Warn("skill reflex: insert system message", "name", p.Name, "kind", kind, "error", err)
+		slog.Error("skill reflex: insert system message", "name", p.Name, "kind", kind, "error", err)
 		return
 	}
 
 	err = tx.Commit()
 	if err != nil {
-		slog.Warn("skill reflex: commit", "name", p.Name, "error", err)
+		slog.Error("skill reflex: commit", "name", p.Name, "error", err)
 		return
 	}
 
@@ -204,7 +204,7 @@ func SkillCheckReflex(cfg *config.Config, conn *sql.DB, complete Completer, run 
 
 		reflexes, err := ListReflexes(dirs...)
 		if err != nil {
-			slog.Warn("skill check reflex: list reflexes", "error", err)
+			slog.Error("skill check reflex: list reflexes", "error", err)
 			return
 		}
 
@@ -213,13 +213,13 @@ func SkillCheckReflex(cfg *config.Config, conn *sql.DB, complete Completer, run 
 		for key, def := range reflexes {
 			sched, err := resolveCron(ctx, conn, def.Every, complete)
 			if err != nil {
-				slog.Warn("skill check reflex: resolve cron", "key", key, "every", def.Every, "error", err)
+				slog.Error("skill check reflex: resolve cron", "key", key, "every", def.Every, "error", err)
 				continue
 			}
 
 			lastMeta, firedAt, err := db.SkillReflexLatest(ctx, conn, key)
 			if err != nil {
-				slog.Warn("skill check reflex: get latest", "key", key, "error", err)
+				slog.Error("skill check reflex: get latest", "key", key, "error", err)
 				continue
 			}
 
@@ -229,7 +229,11 @@ func SkillCheckReflex(cfg *config.Config, conn *sql.DB, complete Completer, run 
 			}
 
 			next, err := sched.NextAfter(baseline)
-			if err != nil || next.After(now) {
+			if err != nil {
+				slog.Error("skill check reflex: next after baseline", "key", key, "error", err)
+				continue
+			}
+			if next.After(now) {
 				continue
 			}
 
@@ -260,16 +264,26 @@ func runSkillCheck(ctx context.Context, cfg *config.Config, conn *sql.DB, key st
 			return
 		}
 
+		if stderr != "" {
+			slog.Warn("skill check reflex: command stderr", "key", key, "stderr", stderr)
+		}
+
 		newMeta = strings.TrimSpace(out)
 	}
 
-	if newMeta == "" || newMeta == lastMeta {
+	if newMeta == "" {
+		slog.Info("skill check reflex: skip, no output", "key", key)
+		return
+	}
+
+	if newMeta == lastMeta {
+		slog.Info("skill check reflex: skip, same output as last time", "key", key)
 		return
 	}
 
 	err := db.SkillReflexInsert(ctx, conn, key, newMeta)
 	if err != nil {
-		slog.Warn("skill check reflex: insert meta", "key", key, "error", err)
+		slog.Error("skill check reflex: insert meta", "key", key, "error", err)
 		return
 	}
 
@@ -296,7 +310,7 @@ func runSkillCheck(ctx context.Context, cfg *config.Config, conn *sql.DB, key st
 		SentAt:         time.Now().UTC(),
 	})
 	if err != nil {
-		slog.Warn("skill check reflex: insert system message", "key", key, "error", err)
+		slog.Error("skill check reflex: insert system message", "key", key, "error", err)
 		return
 	}
 
