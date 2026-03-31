@@ -85,7 +85,7 @@ Entry points: `cmd/nik/main.go`, `cmd/workbench/main.go`
 | `internal/alarms/` | alarm/reminder scheduling service, tools, and reflex |
 | `internal/recall/` | pre-activation recall — reads MEMORIES.md + structured data, LLM filters for relevance |
 | `internal/timeline/` | unified Sense implementation — reads messages, task reports, alarm occurrences and maps them to Stimulus |
-| `internal/skills/` | skill loader — reads SKILL.md files and registers tools dynamically |
+| `internal/skills/` | skill loader — reads SKILL.md files and registers tools dynamically; see [docs/SKILLS.md](docs/SKILLS.md) |
 | `tools/` | codegen/build/debug tools invoked by `make` — no runtime code; each tool has its own README |
 | `tools/sqlite/` | custom SQLite CLI with `sqlite3_nik` driver — exposes all custom functions |
 | `prompts/` | system prompt templates loaded at runtime |
@@ -158,6 +158,7 @@ EOF
 - **always pass `*config.Config`** — never copy individual fields into local config structs. Every package reads from the pointer directly. Config is realtime (`ReloadIfChanged` on every activation); derived paths live as getters (e.g. `DBPath()`, `MediaPath()`)
 - bash/shell scripts use two-space indentation
 - YAML uses two-space indentation
+- markdown paragraphs are single long lines — no hard-wrapped newlines inside a paragraph; let the editor soft-wrap
 
 ### Comments
 
