@@ -39,6 +39,11 @@ updated: 2026-03-15
 
 When a Google Calendar write call fails, never ask the owner to reauth
 on the first failure. Instead...
+
+## Changelog
+
+- 2026-03-15: initial guide after debugging write failures on kciuffolo account
+- 2026-03-31: added tokeninfo step — scope snapshot was missing from evidence
 ```
 
 | Field | Purpose |
@@ -76,6 +81,14 @@ Read any guide whose title matches what you're about to do. After reading, bump 
 ### Refine
 
 After completing work that used a guide — was it accurate? Incomplete? Wrong? Rewrite the parts that need it while the experience is fresh. Update `updated` to today. Bad guides get rewritten, not patched with addenda.
+
+Append to the `## Changelog` section at the bottom of the guide:
+
+```
+- YYYY-MM-DD: <what changed and why>
+```
+
+Every guide should have a `## Changelog` as its last section. Create it on the first refinement if it doesn't exist.
 
 ### Tend
 
