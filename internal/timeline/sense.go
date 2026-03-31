@@ -100,6 +100,7 @@ func (t *Timeline) read(ctx context.Context, convID string, opts readOpts) strin
 	var lines []string
 	lines = append(lines, "## Conversation", "")
 	lines = append(lines, session.Lines...)
+	lines = append(lines, "")
 	lines = append(lines, renderTimeline(entries)...)
 
 	if opts.markRead {
@@ -245,7 +246,7 @@ func renderEntries(entries []entry) []string {
 	for _, e := range entries {
 		date := e.at.Format("Jan 2, 2006")
 		if date != lastDate {
-			lines = append(lines, fmt.Sprintf("--- %s ---", date))
+			lines = append(lines, fmt.Sprintf("--- %s ---", date), "")
 			lastDate = date
 		}
 		lines = append(lines, fmt.Sprintf("[%s] %s: %s", e.at.Format("15:04:05"), e.from, e.text))

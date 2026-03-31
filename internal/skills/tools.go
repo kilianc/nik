@@ -38,8 +38,9 @@ var loadSkillDef = llm.ToolDef{
 
 type SkillReflexDef struct {
 	Name    string
-	Command string // empty for schedule-only reflexes
-	Every   string // natural language schedule (e.g. "every day at 11:30pm")
+	Command string   // empty for schedule-only reflexes
+	Every   string   // natural language schedule (e.g. "every day at 11:30pm")
+	Tools   []string // inherited from the parent skill's tools list
 }
 
 type SkillSummary struct {
@@ -367,7 +368,12 @@ func ListReflexes(dirs ...string) (map[string]SkillReflexDef, error) {
 	err := walkSkillDirs(dirs, func(s SkillSummary, _ []byte) {
 		for _, r := range s.Reflexes {
 			key := s.Name + "/" + r.Name
-			result[key] = r
+			result[key] = SkillReflexDef{
+				Name:    r.Name,
+				Command: r.Command,
+				Every:   r.Every,
+				Tools:   s.Tools,
+			}
 		}
 	})
 

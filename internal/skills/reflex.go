@@ -298,6 +298,9 @@ func runSkillCheck(ctx context.Context, cfg *config.Config, conn *sql.DB, key st
 	if def.Command != "" {
 		body["meta"] = newMeta
 	}
+	if len(def.Tools) > 0 {
+		body["tools"] = strings.Join(def.Tools, ", ")
+	}
 
 	err = db.SystemMessageInsert(ctx, conn, db.SystemMessageParams{
 		ConversationID: privIDs[0],

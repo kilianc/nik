@@ -1,4 +1,4 @@
-package brain
+package prompt
 
 import (
 	"io"
@@ -22,7 +22,7 @@ func loadHooks(home, model string) []promptHook {
 	root, err := os.OpenRoot(home)
 	if err != nil {
 		if !os.IsNotExist(err) {
-			slog.Warn("open hooks root", "pkg", "brain", "error", err)
+			slog.Warn("open hooks root", "pkg", "prompt", "error", err)
 		}
 		return nil
 	}
@@ -31,7 +31,7 @@ func loadHooks(home, model string) []promptHook {
 	dirFile, err := root.Open("prompts")
 	if err != nil {
 		if !os.IsNotExist(err) {
-			slog.Warn("read hooks dir", "pkg", "brain", "error", err)
+			slog.Warn("read hooks dir", "pkg", "prompt", "error", err)
 		}
 		return nil
 	}
@@ -39,7 +39,7 @@ func loadHooks(home, model string) []promptHook {
 	entries, err := dirFile.ReadDir(-1)
 	dirFile.Close()
 	if err != nil {
-		slog.Warn("read hooks dir", "pkg", "brain", "error", err)
+		slog.Warn("read hooks dir", "pkg", "prompt", "error", err)
 		return nil
 	}
 
@@ -52,20 +52,20 @@ func loadHooks(home, model string) []promptHook {
 
 		f, openErr := root.Open(filepath.Join("prompts", e.Name()))
 		if openErr != nil {
-			slog.Warn("read hook file", "pkg", "brain", "file", e.Name(), "error", openErr)
+			slog.Warn("read hook file", "pkg", "prompt", "file", e.Name(), "error", openErr)
 			continue
 		}
 
 		raw, readErr := io.ReadAll(f)
 		f.Close()
 		if readErr != nil {
-			slog.Warn("read hook file", "pkg", "brain", "file", e.Name(), "error", readErr)
+			slog.Warn("read hook file", "pkg", "prompt", "file", e.Name(), "error", readErr)
 			continue
 		}
 
 		h, ok := parseHook(string(raw))
 		if !ok {
-			slog.Warn("parse hook frontmatter", "pkg", "brain", "file", e.Name())
+			slog.Warn("parse hook frontmatter", "pkg", "prompt", "file", e.Name())
 			continue
 		}
 

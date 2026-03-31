@@ -74,7 +74,7 @@ Entry points: `cmd/nik/main.go`, `cmd/workbench/main.go`
 | `internal/config/` | `Config` struct + `Load(home)` from `config.yaml` in home dir |
 | `internal/db/` | SQLite open/schema, models, one Go file per query function |
 | `internal/queries/` | embedded `.sql` files for canonical entities (`conversation_*`, `message_*`, `media_*`, etc.) |
-| `internal/brain/` | main loop, sense + reflex + tool registration, prompt loading |
+| `internal/brain/` | main loop, sense + reflex + tool registration |
 | `internal/codex/` | Codex auth for LLM client (login, token management) |
 | `internal/id/` | UUID generation — `V4()`, `V7()`, `Short(n)` |
 | `internal/llm/` | LLM API client — `Activation` (multi-round protocol state), `Transcribe`, `Describe`; supports OpenAI and Codex auth. No retries, no loop control — callers own the loop. |
@@ -84,11 +84,11 @@ Entry points: `cmd/nik/main.go`, `cmd/workbench/main.go`
 | `internal/shell/` | tmux-backed persistent shell tool |
 | `internal/alarms/` | alarm/reminder scheduling service, tools, and reflex |
 | `internal/recall/` | pre-activation recall — reads MEMORIES.md + structured data, LLM filters for relevance |
+| `internal/prompt/` | prompt rendering — embedded templates, data builders (`BuildBrainData`, `BuildTaskData`), hooks, `Renderer` type |
 | `internal/timeline/` | unified Sense implementation — reads messages, task reports, alarm occurrences and maps them to Stimulus |
 | `internal/skills/` | skill loader — reads SKILL.md files and registers tools dynamically; see [docs/SKILLS.md](docs/SKILLS.md) |
 | `tools/` | codegen/build/debug tools invoked by `make` — no runtime code; each tool has its own README |
 | `tools/sqlite/` | custom SQLite CLI with `sqlite3_nik` driver — exposes all custom functions |
-| `prompts/` | system prompt templates loaded at runtime |
 | `skills/` | built-in skill definitions (SKILL.md files), git-tracked |
 | `workspace/` | user-facing workspace — runtime artifacts (db, logs, media, config) |
 | `workspace/skills/` | nik-authored skills written at runtime, loaded every activation, override built-in skills by name, not git-tracked |
@@ -206,7 +206,7 @@ Each prompt file has one job. Don't duplicate rules across files.
 
 **Rule of thumb**: if a rule is about *who nik is*, it goes in `nik-01-identity.md`. If it's about *how nik thinks or acts*, it goes in `nik-04-brain.md`. If it's a hard constraint, `nik-00-base.md`. If it's about *how workers execute*, `task-00.md`. Never say the same thing in two files.
 
-**Workspace skills are runtime knowledge.** Base prompts (`prompts/`) must never reference specific workspace skills by name. Workspace skills teach through their summaries in the available skills index; base prompts stay generic.
+**Workspace skills are runtime knowledge.** Base prompts (embedded in `internal/prompt/`) must never reference specific workspace skills by name. Workspace skills teach through their summaries in the available skills index; base prompts stay generic.
 
 ### Brain concepts
 
@@ -250,7 +250,7 @@ Wiring steps:
 2. Register adapter with messaging service, start adapter
 3. Build LLM client (OpenAI key or Codex auth)
 4. Create domain services: `alarms`, `recall`
-5. Create brain: `b := brain.New(cfg, llmClient)` (soul loaded from `soul/latest.md` automatically)
+5. Create brain: `b := brain.New(cfg, llmClient, pr)` where `pr := prompt.NewRenderer(cfg)`
 6. Register reflexes: `taskSvc.CheckStale`, `alarmSvc.FireDueAlarms`, `alarmSvc.StaleAlarmReflex()`, `skills.SkillChangeReflex(cfg, conn)`, `shellSvc.CheckSessions`
 7. Set sense: `timeline.New(cfg, messagingSvc, taskSvc, alarmSvc, skillsSvc)`
 8. Register tools from all domain packages
@@ -334,15 +334,6 @@ Before applying any migration to the live DB:
 - **Back up first**: copy the DB file in workspace/backups/<date-time>.db before touching it. Ensure all data is committed, nik might be running.
 - **One statement at a time**: execute each `ALTER TABLE` / `CREATE TABLE` / `DROP TABLE` independently so a failure doesn't leave the DB in a half-migrated state.
 - **Do not lose data**: migrate the data, and abort if you are not confident.
-
-## Candidates
-
-Things to revisit periodically. The agent adds entries here when the user flags a mistake or suggests a different approach. Only the user removes entries.
-
-<!-- example: - 2026-03-14: user prefers X over Y for error handling -- revisit error style rules -->
-
-- 2026-03-24: JSON columns stored in the DB should come back as proper typed objects from the db layer, not raw strings that callers unmarshal. Currently blocked for `ToolSchemas` (`ActivationRow`) because `db` can't import `llm.ToolDef` -- revisit when a shared types package or layering change makes this possible.
-- 2026-03-27: `ErrLogPath` output should capture both `WARN` and `ERROR` levels, not only `ERROR`.
 
 ## Fin
 

@@ -21,6 +21,7 @@ import (
 	"github.com/kciuffolo/nik/internal/llm"
 	niklog "github.com/kciuffolo/nik/internal/log"
 	"github.com/kciuffolo/nik/internal/messaging"
+	"github.com/kciuffolo/nik/internal/prompt"
 	"github.com/kciuffolo/nik/internal/recall"
 	"github.com/kciuffolo/nik/internal/shell"
 	"github.com/kciuffolo/nik/internal/skills"
@@ -232,28 +233,23 @@ func run(cfg *config.Config, wappLink bool, replay string) error {
 	}
 
 	recorder := stats.NewRecorder(conn)
+	pr := prompt.NewRenderer(cfg)
 
 	messagingSvc.SetSpeechFn(func(ctx context.Context, text string) (string, error) {
-		var instructions string
-		data, readErr := os.ReadFile(cfg.TTSInstructionsPath())
-		if readErr == nil {
-			instructions = strings.TrimSpace(string(data))
-		}
-
 		return llmClient.Speech(
 			ctx,
 			text,
 			cfg.TTSModelOrDefault(),
 			cfg.TTSVoiceOrDefault(),
-			instructions,
+			pr.TTS(),
 			cfg.TTSSpeedOrDefault(),
 		)
 	})
 
-	taskRunner := task.NewRunner(cfg, taskLLMClient, taskSvc, taskTools)
+	taskRunner := task.NewRunner(cfg, taskLLMClient, pr, taskSvc, taskTools)
 	taskRunner.SetRecorder(recorder)
 
-	b := brain.New(cfg, llmClient)
+	b := brain.New(cfg, llmClient, pr)
 	b.SetDB(conn)
 	b.SetRecorder(recorder)
 

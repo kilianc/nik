@@ -16,6 +16,7 @@ import (
 	"github.com/kciuffolo/nik/internal/fs"
 	"github.com/kciuffolo/nik/internal/llm"
 	"github.com/kciuffolo/nik/internal/messaging"
+	"github.com/kciuffolo/nik/internal/prompt"
 	"github.com/kciuffolo/nik/internal/shell"
 	"github.com/kciuffolo/nik/internal/skills"
 	"github.com/kciuffolo/nik/internal/task"
@@ -149,7 +150,8 @@ func buildTools(cfg *config.Config, llmClient, taskLLMClient *llm.Client, conn *
 		taskToolList = append(taskToolList, fs.BuildTools(cfg.Home)...)
 		taskToolList = append(taskToolList, skills.BuildTools(cfg)...)
 
-		taskRunner := task.NewRunner(cfg, taskLLMClient, taskSvc, taskToolList)
+		pr := prompt.NewRenderer(cfg)
+		taskRunner := task.NewRunner(cfg, taskLLMClient, pr, taskSvc, taskToolList)
 		for _, t := range task.BuildTools(taskSvc, taskRunner) {
 			tools[t.Def.Name] = t.Handler
 		}

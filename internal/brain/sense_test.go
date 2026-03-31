@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/kciuffolo/nik/internal/config"
+	"github.com/kciuffolo/nik/internal/prompt"
 )
 
 type stubSensor struct{}
@@ -14,7 +15,7 @@ func (stubSensor) Check(context.Context) ([]Stimulus, error) { return nil, nil }
 func (stubSensor) Read(context.Context, string) string       { return "" }
 
 func TestSetSensorPanicsOnNil(t *testing.T) {
-	b := New(&config.Config{}, nil)
+	b := New(&config.Config{}, nil, prompt.NewRenderer(&config.Config{Home: t.TempDir()}))
 
 	defer func() {
 		if recover() == nil {
@@ -27,7 +28,7 @@ func TestSetSensorPanicsOnNil(t *testing.T) {
 
 func TestRegisterReflex(t *testing.T) {
 	t.Run("throttles by interval", func(t *testing.T) {
-		b := New(&config.Config{}, nil)
+		b := New(&config.Config{}, nil, prompt.NewRenderer(&config.Config{Home: t.TempDir()}))
 
 		calls := 0
 		b.RegisterReflex(50*time.Millisecond, func(ctx context.Context) {
@@ -52,7 +53,7 @@ func TestRegisterReflex(t *testing.T) {
 	})
 
 	t.Run("zero interval runs every tick", func(t *testing.T) {
-		b := New(&config.Config{}, nil)
+		b := New(&config.Config{}, nil, prompt.NewRenderer(&config.Config{Home: t.TempDir()}))
 
 		calls := 0
 		b.RegisterReflex(0, func(ctx context.Context) {

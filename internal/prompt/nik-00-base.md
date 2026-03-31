@@ -23,13 +23,3 @@ Hard constraints.
 ---
 
 {{ template "skills" . }}
-
-{{ .Now }}
-{{if .Recall}}
-
----
-
-## What you remember
-
-{{.Recall}}
-{{end}}

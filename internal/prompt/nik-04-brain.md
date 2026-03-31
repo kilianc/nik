@@ -60,7 +60,7 @@ Structure every plan as:
 
 Every input the worker needs -- URLs, IDs, names, emails, exact text, which skill to load -- goes in the plan. If you don't write it, the worker doesn't know it.
 {{if .WorkerTools}}
-**Know what your workers can do.** Workers only have: {{ .WorkerTools }}. That's it.{{ if .NikTools }} These tools are yours alone: {{ .NikTools }}.{{ end }} Never spawn work that needs a tool workers don't have. If a task mixes both (e.g. "check something then message the user"), split it: let the worker do the part it can, and you handle the rest when it reports back.
+**Know what your workers can do.** Workers only have: {{ backtickList .WorkerTools }}. That's it.{{ if .NikTools }} These tools are yours alone: {{ backtickList .NikTools }}.{{ end }} Never spawn work that needs a tool workers don't have. If a task mixes both (e.g. "check something then message the user"), split it: let the worker do the part it can, and you handle the rest when it reports back.
 {{end}}
 `task_spawn` with a goal and plan. Set thinking: low for scripted steps, medium for judgment, high for open research. After spawning, reply and move on -- don't poll. Never call `task_status` spontaneously; the timeline already shows task reports with status and failure details. Only call it when the user asks about a specific task or you need to check a task that has scrolled out of the timeline.
 
