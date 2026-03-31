@@ -231,6 +231,13 @@ func TestRenderSystemMessage(t *testing.T) {
 			wantSub:  "[skill reflex fired]",
 		},
 		{
+			name:     "skill_reflex_fired with tools",
+			kind:     "skill_reflex_fired",
+			body:     map[string]string{"skill": "google_workspace", "name": "check_gmail", "tools": "shell, db_query", "meta": `{"count":3}`},
+			wantFrom: "system",
+			wantSub:  "tools: shell, db_query",
+		},
+		{
 			name:     "skill_reflex_fired schedule only",
 			kind:     "skill_reflex_fired",
 			body:     map[string]string{"skill": "journal", "name": "journal"},

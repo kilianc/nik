@@ -239,6 +239,7 @@ func renderSkillReflexFired(msg db.Message) entry {
 	var t struct {
 		Skill string `json:"skill"`
 		Name  string `json:"name"`
+		Tools string `json:"tools"`
 		Meta  string `json:"meta"`
 	}
 	_ = json.Unmarshal([]byte(msg.Body), &t)
@@ -247,6 +248,10 @@ func renderSkillReflexFired(msg db.Message) entry {
 		"[skill reflex fired]",
 		"skill: " + t.Skill,
 		"name:  " + t.Name,
+	}
+
+	if t.Tools != "" {
+		lines = append(lines, "tools: "+t.Tools)
 	}
 
 	if t.Meta != "" {

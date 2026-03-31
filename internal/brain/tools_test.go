@@ -7,10 +7,11 @@ import (
 
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/llm"
+	"github.com/kciuffolo/nik/internal/prompt"
 )
 
 func TestRegisterToolPanicsOnEmptyName(t *testing.T) {
-	b := New(&config.Config{}, nil)
+	b := New(&config.Config{}, nil, prompt.NewRenderer(&config.Config{Home: t.TempDir()}))
 
 	defer func() {
 		if recover() == nil {
@@ -27,7 +28,7 @@ func TestRegisterToolPanicsOnEmptyName(t *testing.T) {
 }
 
 func TestToolsForContextFiltersPrivilegedTools(t *testing.T) {
-	b := New(&config.Config{PrivilegedConversationIDs: config.ConversationList{{Label: "owner", ID: "owner-conv"}}}, nil)
+	b := New(&config.Config{PrivilegedConversationIDs: config.ConversationList{{Label: "owner", ID: "owner-conv"}}}, nil, prompt.NewRenderer(&config.Config{Home: t.TempDir()}))
 	handler := func(context.Context, llm.ToolCall) (string, error) { return `{"ok":true}`, nil }
 
 	b.RegisterTool(llm.Tool{
@@ -54,7 +55,7 @@ func TestToolsForContextFiltersPrivilegedTools(t *testing.T) {
 }
 
 func TestToolExecutorBlocksPrivilegedInUnprivilegedContext(t *testing.T) {
-	b := New(&config.Config{PrivilegedConversationIDs: config.ConversationList{{Label: "owner", ID: "owner-conv"}}}, nil)
+	b := New(&config.Config{PrivilegedConversationIDs: config.ConversationList{{Label: "owner", ID: "owner-conv"}}}, nil, prompt.NewRenderer(&config.Config{Home: t.TempDir()}))
 
 	called := false
 	b.RegisterTool(llm.Tool{

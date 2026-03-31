@@ -511,6 +511,9 @@ func TestListReflexes(t *testing.T) {
 	if r.Every != "every minute" {
 		t.Errorf("every = %q, want every minute", r.Every)
 	}
+	if len(r.Tools) != 1 || r.Tools[0] != "shell" {
+		t.Errorf("tools = %v, want [shell]", r.Tools)
+	}
 }
 
 func keys(m map[string]SkillReflexDef) []string {

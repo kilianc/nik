@@ -47,6 +47,7 @@ type ShellConfig struct {
 type TaskConfig struct {
 	MaxRounds int           `yaml:"max_rounds"`
 	Timeout   time.Duration `yaml:"timeout"`
+	Profile   string        `yaml:"profile"`
 }
 
 func (t TaskConfig) MaxRoundsOrDefault() int {
@@ -148,13 +149,12 @@ type Config struct {
 	Home        string    `yaml:"-"`
 	lastModTime time.Time `yaml:"-"`
 
-	OpenAIKey       string       `yaml:"openai_key"`
-	AnthropicKey    string       `yaml:"anthropic_key"`
-	Models          ModelsConfig `yaml:"models"`
-	Task            TaskConfig   `yaml:"task"`
-	Shell           ShellConfig  `yaml:"shell"`
-	PromptsDirValue string       `yaml:"prompts_dir"`
-	SkillsDirValue  string       `yaml:"skills_dir"`
+	OpenAIKey      string       `yaml:"openai_key"`
+	AnthropicKey   string       `yaml:"anthropic_key"`
+	Models         ModelsConfig `yaml:"models"`
+	Task           TaskConfig   `yaml:"task"`
+	Shell          ShellConfig  `yaml:"shell"`
+	SkillsDirValue string       `yaml:"skills_dir"`
 
 	AllowConversationIDs      ConversationList `yaml:"allow_conversation_ids"`
 	PrivilegedConversationIDs ConversationList `yaml:"privileged_conversation_ids"`
@@ -205,19 +205,6 @@ func (c Config) TmpPath() string {
 
 func (c Config) ConfigPath() string {
 	return filepath.Join(c.Home, "config.yaml")
-}
-
-func (c Config) PromptsPath() string {
-	dir := c.PromptsDirValue
-	if dir == "" {
-		dir = "prompts"
-	}
-
-	if filepath.IsAbs(dir) {
-		return dir
-	}
-
-	return filepath.Join(c.Home, dir)
 }
 
 func (c Config) SkillsPath() string {
@@ -277,15 +264,6 @@ func (c Config) TTSModelOrDefault() string {
 		return "gpt-4o-mini-tts"
 	}
 	return c.Models.TTS.Model
-}
-
-func (c Config) TTSInstructionsPath() string {
-	override := filepath.Join(c.Home, "prompts", "tts-00.md")
-	if _, err := os.Stat(override); err == nil {
-		return override
-	}
-
-	return filepath.Join(c.PromptsPath(), "tts-00.md")
 }
 
 func (c Config) SystemMessageMaxAgeOrDefault() time.Duration {

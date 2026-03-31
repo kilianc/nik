@@ -27,9 +27,9 @@ models:
 task:
   max_rounds: 200             # max LLM rounds per task (default 200)
   timeout: 60m                # max wall-clock time per task (default 60m)
+  profile: nik                # "nik" = include identity/soul in worker prompt, anything else = generic worker
 
 # paths (relative to home dir)
-prompts_dir: ../prompts
 skills_dir: ../skills
 
 # conversations (label: uuid)

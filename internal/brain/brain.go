@@ -12,12 +12,14 @@ import (
 	"github.com/kciuffolo/nik/internal/id"
 	"github.com/kciuffolo/nik/internal/llm"
 	"github.com/kciuffolo/nik/internal/log"
+	"github.com/kciuffolo/nik/internal/prompt"
 )
 
 type Brain struct {
 	cfg             *config.Config
 	conn            *sql.DB
 	llm             *llm.Client
+	pr              *prompt.Renderer
 	recorder        llm.ActivationRecorder
 	toolDefs        []llm.ToolDef
 	toolExec        map[string]llm.ToolExecutor
@@ -32,10 +34,11 @@ type Brain struct {
 	wg      sync.WaitGroup
 }
 
-func New(cfg *config.Config, llmClient *llm.Client) *Brain {
+func New(cfg *config.Config, llmClient *llm.Client, pr *prompt.Renderer) *Brain {
 	b := &Brain{
 		cfg:        cfg,
 		llm:        llmClient,
+		pr:         pr,
 		recorder:   llm.NoopRecorder{},
 		toolExec:   make(map[string]llm.ToolExecutor),
 		privileged: make(map[string]bool),
@@ -184,10 +187,7 @@ func (b *Brain) think(ctx context.Context, getInput func() string) (_ string, _ 
 	tools := b.toolsForContext(ctx)
 	executor := b.toolExecutor()
 
-	instructions, err := b.loadInstructions(b.now(), recall)
-	if err != nil {
-		return "", llm.Usage{}, err
-	}
+	instructions := b.pr.Brain(prompt.BuildBrainData(b.cfg, b.workerToolNames, b.toolDefs))
 
 	actID := id.V7()
 	meta["activation_id"] = actID
@@ -198,7 +198,9 @@ func (b *Brain) think(ctx context.Context, getInput func() string) (_ string, _ 
 		act.SetError(retErr)
 		act.Close(thinkCtx)
 	}()
-	act.SetInput(getInput())
+
+	id := prompt.InputData{Recall: recall, Timeline: getInput()}
+	act.SetInput(b.pr.Input(id))
 
 	var nudged bool
 
@@ -223,7 +225,7 @@ func (b *Brain) think(ctx context.Context, getInput func() string) (_ string, _ 
 			}
 			nudged = true
 			act.AppendAssistantText(result.Text)
-			act.AppendUserMessage(b.loadNudge(result.Text))
+			act.AppendUserMessage(b.pr.Nudge("nik-05-retry.md", struct{ Text string }{result.Text}))
 			continue
 		}
 
@@ -244,7 +246,9 @@ func (b *Brain) think(ctx context.Context, getInput func() string) (_ string, _ 
 		}
 
 		act.ResetConversation()
-		act.SetInput(getInput())
+
+		id.Timeline = getInput()
+		act.SetInput(b.pr.Input(id))
 	}
 }
 

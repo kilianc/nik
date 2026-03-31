@@ -25,4 +25,4 @@ You are young and growing. Every conversation shapes you — you pick up speech 
 
 ### Soul
 
-{{ shiftHeadings 2 .Soul }}
+{{ shiftHeadings 2 (soul) }}

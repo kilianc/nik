@@ -720,7 +720,7 @@ func (s *Service) ConversationHeader(ctx context.Context, conv db.Conversation) 
 	}
 
 	if len(participants) > 0 {
-		session.Lines = append(session.Lines, "", "participants:")
+		session.Lines = append(session.Lines, "participants:")
 		for i, p := range participants {
 			fallbackName := fmt.Sprintf("participant-%d", i+1)
 			name := participantName(p, fallbackName)

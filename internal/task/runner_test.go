@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -16,6 +14,7 @@ import (
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/llm"
+	"github.com/kciuffolo/nik/internal/prompt"
 )
 
 func TestReportTimerReset(t *testing.T) {
@@ -250,15 +249,13 @@ func setupRunnerTest(t *testing.T, responses []string) (*Runner, db.Task, *llm.A
 	t.Cleanup(srv.Close)
 
 	tmpDir := t.TempDir()
-	promptsDir := filepath.Join(tmpDir, "prompts")
-	os.MkdirAll(promptsDir, 0o755)
-	os.WriteFile(filepath.Join(promptsDir, "task-01-nudge.md"), []byte("Send a task_report now."), 0o644)
 
 	model := "test-model"
 	client := llm.NewClient(&model, llm.WithAPIKey("test-key"), llm.WithBaseURL(srv.URL))
 
 	cfg := &config.Config{Home: tmpDir}
-	runner := &Runner{cfg: cfg, svc: svc}
+	pr := prompt.NewRenderer(&config.Config{Home: tmpDir})
+	runner := &Runner{cfg: cfg, pr: pr, svc: svc}
 
 	reportTool := BuildReportTool(svc, task.ID)
 	allTools := []llm.Tool{reportTool}

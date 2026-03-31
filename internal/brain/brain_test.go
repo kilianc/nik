@@ -5,18 +5,17 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/llm"
+	"github.com/kciuffolo/nik/internal/prompt"
 )
 
 func TestNewInitializesInternalState(t *testing.T) {
-	b := New(&config.Config{}, nil)
+	b := New(&config.Config{}, nil, prompt.NewRenderer(&config.Config{Home: t.TempDir()}))
 	if b == nil {
 		t.Fatalf("expected non-nil brain")
 	}
@@ -42,7 +41,7 @@ func TestNewInitializesInternalState(t *testing.T) {
 }
 
 func TestAwakeDrainsActivationsBeforeReturning(t *testing.T) {
-	b := New(&config.Config{}, nil)
+	b := New(&config.Config{}, nil, prompt.NewRenderer(&config.Config{Home: t.TempDir()}))
 
 	var activationDone atomic.Bool
 
@@ -111,18 +110,12 @@ func TestThinkExitsImmediatelyOnDone(t *testing.T) {
 	defer srv.Close()
 
 	tmpDir := t.TempDir()
-	promptsDir := filepath.Join(tmpDir, "prompts")
-	os.MkdirAll(promptsDir, 0o755)
-	os.WriteFile(filepath.Join(promptsDir, "nik-00-base.md"), []byte("test"), 0o644)
-	for _, name := range []string{"nik-01-identity.md", "nik-02-conversation.md", "nik-03-skills.md", "nik-04-brain.md"} {
-		os.WriteFile(filepath.Join(promptsDir, name), []byte(""), 0o644)
-	}
 
 	model := "test-model"
 	client := llm.NewClient(&model, llm.WithAPIKey("test-key"), llm.WithBaseURL(srv.URL))
 
 	cfg := &config.Config{Home: tmpDir}
-	b := New(cfg, client)
+	b := New(cfg, client, prompt.NewRenderer(cfg))
 	b.now = func() time.Time { return time.Date(2026, 3, 27, 0, 0, 0, 0, time.UTC) }
 
 	var getInputCalls atomic.Int32

@@ -12,6 +12,7 @@ import (
 	"github.com/kciuffolo/nik/internal/id"
 	"github.com/kciuffolo/nik/internal/llm"
 	"github.com/kciuffolo/nik/internal/log"
+	"github.com/kciuffolo/nik/internal/prompt"
 )
 
 const (
@@ -22,6 +23,7 @@ const (
 type Runner struct {
 	cfg      *config.Config
 	llm      *llm.Client
+	pr       *prompt.Renderer
 	recorder llm.ActivationRecorder
 	svc      *Service
 	tools    []llm.Tool
@@ -29,10 +31,11 @@ type Runner struct {
 	wg       sync.WaitGroup
 }
 
-func NewRunner(cfg *config.Config, llmClient *llm.Client, svc *Service, tools []llm.Tool) *Runner {
+func NewRunner(cfg *config.Config, llmClient *llm.Client, pr *prompt.Renderer, svc *Service, tools []llm.Tool) *Runner {
 	return &Runner{
 		cfg:      cfg,
 		llm:      llmClient,
+		pr:       pr,
 		recorder: llm.NoopRecorder{},
 		svc:      svc,
 		tools:    tools,
@@ -70,7 +73,7 @@ func (r *Runner) Run(ctx context.Context, t db.Task) {
 	allTools := append(tools, reportTool)
 	defs, exec := llm.SplitTools(allTools)
 
-	instructions := r.renderPrompt(t, defs)
+	instructions := r.pr.Task(prompt.BuildTaskData(r.cfg, t, defs))
 
 	act := llm.NewActivation(r.llm, r.recorder, instructions, defs)
 	act.SetMaxRounds(r.cfg.Task.MaxRoundsOrDefault())
@@ -158,7 +161,7 @@ func (r *Runner) runLoop(ctx context.Context, t db.Task, act *llm.Activation, ex
 				return nil
 			}
 			nudged = true
-			nudgeText := r.loadNudge()
+			nudgeText := r.pr.Nudge("task-01-nudge.md", nil)
 			if nudgeText == "" {
 				return nil
 			}
