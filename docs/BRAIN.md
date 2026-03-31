@@ -203,7 +203,7 @@ they're triggers that mutate DB state so the timeline has something new to show:
 - `SkillCheckReflex` — runs skill-declared check commands (declared in SKILL.md
   frontmatter via `reflex:` block). Pipes the previous record via stdin, checks
   stdout. Non-empty + different = new record, stored in `skill_reflex` table and
-  emits `skill_reflex_fired` system message.
+  emits `skill_reflex_fired` system message. Full contract in [REFLEXES.md](REFLEXES.md).
 - `CheckSessions` — reaps dead/stale shell sessions.
 
 Without reflexes, the brain would still work — it would just wait passively for
