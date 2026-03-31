@@ -163,117 +163,119 @@ func TestActivationResetConversation(t *testing.T) {
 }
 
 func TestInjectReason(t *testing.T) {
-	tools := []ToolDef{
-		{
-			Name:        "test_tool",
-			Description: "a tool",
-			Parameters: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"query": map[string]any{
-						"type":        "string",
-						"description": "some query",
+	t.Run("injects reason and preserves original", func(t *testing.T) {
+		tools := []ToolDef{
+			{
+				Name:        "test_tool",
+				Description: "a tool",
+				Parameters: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"query": map[string]any{
+							"type":        "string",
+							"description": "some query",
+						},
 					},
+					"required":             []string{"query"},
+					"additionalProperties": false,
 				},
-				"required":             []string{"query"},
-				"additionalProperties": false,
 			},
-		},
-	}
-
-	result := injectReason(tools)
-
-	if len(result) != 1 {
-		t.Fatalf("expected 1 tool, got %d", len(result))
-	}
-
-	props, _ := result[0].Parameters["properties"].(map[string]any)
-	if _, ok := props["reason"]; !ok {
-		t.Fatal("expected reason property to be injected")
-	}
-
-	req, _ := result[0].Parameters["required"].([]string)
-	found := false
-	for _, r := range req {
-		if r == "reason" {
-			found = true
-			break
 		}
-	}
-	if !found {
-		t.Fatal("expected reason in required list")
-	}
 
-	if len(req) != 2 {
-		t.Fatalf("expected 2 required fields, got %d", len(req))
-	}
+		result := injectReason(tools)
 
-	origProps, _ := tools[0].Parameters["properties"].(map[string]any)
-	if _, ok := origProps["reason"]; ok {
-		t.Fatal("original tool should not be mutated")
-	}
+		if len(result) != 1 {
+			t.Fatalf("expected 1 tool, got %d", len(result))
+		}
 
-	origReq, _ := tools[0].Parameters["required"].([]string)
-	if len(origReq) != 1 {
-		t.Fatalf("original required should still have 1 entry, got %d", len(origReq))
-	}
-}
+		props, _ := result[0].Parameters["properties"].(map[string]any)
+		if _, ok := props["reason"]; !ok {
+			t.Fatal("expected reason property to be injected")
+		}
 
-func TestInjectReasonEmptyProperties(t *testing.T) {
-	tools := []ToolDef{
-		{
-			Name:        "no_params",
-			Description: "empty tool",
-			Parameters: map[string]any{
-				"type":                 "object",
-				"properties":           map[string]any{},
-				"required":             []string{},
-				"additionalProperties": false,
-			},
-		},
-	}
+		req, _ := result[0].Parameters["required"].([]string)
+		found := false
+		for _, r := range req {
+			if r == "reason" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatal("expected reason in required list")
+		}
 
-	result := injectReason(tools)
+		if len(req) != 2 {
+			t.Fatalf("expected 2 required fields, got %d", len(req))
+		}
 
-	props, _ := result[0].Parameters["properties"].(map[string]any)
-	if len(props) != 1 {
-		t.Fatalf("expected 1 property (reason), got %d", len(props))
-	}
+		origProps, _ := tools[0].Parameters["properties"].(map[string]any)
+		if _, ok := origProps["reason"]; ok {
+			t.Fatal("original tool should not be mutated")
+		}
 
-	req, _ := result[0].Parameters["required"].([]string)
-	if len(req) != 1 || req[0] != "reason" {
-		t.Fatalf("expected [reason], got %v", req)
-	}
-}
+		origReq, _ := tools[0].Parameters["required"].([]string)
+		if len(origReq) != 1 {
+			t.Fatalf("original required should still have 1 entry, got %d", len(origReq))
+		}
+	})
 
-func TestInjectReasonAlreadyPresent(t *testing.T) {
-	tools := []ToolDef{
-		{
-			Name:        "config",
-			Description: "config tool",
-			Parameters: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"action": map[string]any{"type": "string"},
-					"reason": map[string]any{"type": "string", "description": "Why you are calling this tool right now."},
+	t.Run("empty properties", func(t *testing.T) {
+		tools := []ToolDef{
+			{
+				Name:        "no_params",
+				Description: "empty tool",
+				Parameters: map[string]any{
+					"type":                 "object",
+					"properties":           map[string]any{},
+					"required":             []string{},
+					"additionalProperties": false,
 				},
-				"required":             []any{"action", "reason"},
-				"additionalProperties": false,
 			},
-		},
-	}
+		}
 
-	result := injectReason(tools)
+		result := injectReason(tools)
 
-	req, _ := result[0].Parameters["required"].([]string)
-	if len(req) != 2 {
-		t.Fatalf("expected 2 required fields, got %d: %v", len(req), req)
-	}
+		props, _ := result[0].Parameters["properties"].(map[string]any)
+		if len(props) != 1 {
+			t.Fatalf("expected 1 property (reason), got %d", len(props))
+		}
 
-	props, _ := result[0].Parameters["properties"].(map[string]any)
-	if len(props) != 2 {
-		t.Fatalf("expected 2 properties, got %d", len(props))
-	}
+		req, _ := result[0].Parameters["required"].([]string)
+		if len(req) != 1 || req[0] != "reason" {
+			t.Fatalf("expected [reason], got %v", req)
+		}
+	})
+
+	t.Run("already present", func(t *testing.T) {
+		tools := []ToolDef{
+			{
+				Name:        "config",
+				Description: "config tool",
+				Parameters: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"action": map[string]any{"type": "string"},
+						"reason": map[string]any{"type": "string", "description": "Why you are calling this tool right now."},
+					},
+					"required":             []any{"action", "reason"},
+					"additionalProperties": false,
+				},
+			},
+		}
+
+		result := injectReason(tools)
+
+		req, _ := result[0].Parameters["required"].([]string)
+		if len(req) != 2 {
+			t.Fatalf("expected 2 required fields, got %d: %v", len(req), req)
+		}
+
+		props, _ := result[0].Parameters["properties"].(map[string]any)
+		if len(props) != 2 {
+			t.Fatalf("expected 2 properties, got %d", len(props))
+		}
+	})
 }
 
 func TestActivationState(t *testing.T) {

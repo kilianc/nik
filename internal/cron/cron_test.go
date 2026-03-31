@@ -119,16 +119,21 @@ func TestNextAfter(t *testing.T) {
 }
 
 func TestIsValid(t *testing.T) {
-	if !IsValid("0 9 * * *") {
-		t.Fatal("expected valid")
+	tests := []struct {
+		expr string
+		want bool
+	}{
+		{"0 9 * * *", true},
+		{"@daily", true},
+		{"not cron", false},
+		{"5m", false},
 	}
-	if !IsValid("@daily") {
-		t.Fatal("expected @daily valid")
-	}
-	if IsValid("not cron") {
-		t.Fatal("expected invalid")
-	}
-	if IsValid("5m") {
-		t.Fatal("expected duration string invalid as cron")
+
+	for _, tt := range tests {
+		t.Run(tt.expr, func(t *testing.T) {
+			if got := IsValid(tt.expr); got != tt.want {
+				t.Errorf("IsValid(%q) = %v, want %v", tt.expr, got, tt.want)
+			}
+		})
 	}
 }

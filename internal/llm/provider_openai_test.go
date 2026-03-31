@@ -286,16 +286,23 @@ func TestBuildToolParamsIncludesDefinitions(t *testing.T) {
 }
 
 func TestEnsureJSONInput(t *testing.T) {
-	if got := ensureJSONInput("", false); got != "" {
-		t.Fatalf("expected empty input without json mode, got %q", got)
+	tests := []struct {
+		name     string
+		input    string
+		jsonMode bool
+		want     string
+	}{
+		{"no json mode", "", false, ""},
+		{"non-empty passes through", "already json", true, "already json"},
+		{"blank input gets hint", "   ", true, jsonObjectInputHint},
 	}
 
-	if got := ensureJSONInput("already json", true); got != "already json" {
-		t.Fatalf("expected non-empty input to pass through, got %q", got)
-	}
-
-	if got := ensureJSONInput("   ", true); got != jsonObjectInputHint {
-		t.Fatalf("expected json hint for blank input, got %q", got)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ensureJSONInput(tt.input, tt.jsonMode); got != tt.want {
+				t.Errorf("ensureJSONInput(%q, %v) = %q, want %q", tt.input, tt.jsonMode, got, tt.want)
+			}
+		})
 	}
 
 	if !strings.Contains(strings.ToLower(jsonObjectInputHint), "json") {
