@@ -2,7 +2,7 @@
 
 The [brain](BRAIN.md) is nik's thinking. Skills are nik's knowledge — learned capabilities that teach it what it can do and how. Without skills, nik can think and talk but not act on the world. Each skill is a manual for a capability domain: how to send email, how to manage alarms, how to browse the web. The `load_skill` tool is nik picking up a manual and reading it before acting.
 
-Skills are not single-purpose wrappers. A skill is a **coherent capability domain** — a group of related tools and approaches. "web" covers link reading, headless browsing, and X/Twitter fetching. "google_workspace" covers Calendar, Gmail, Drive, Docs, and Sheets. Don't create a skill for every individual tool.
+Skills are not single-purpose wrappers. A skill is a **coherent capability domain** — a group of related tools and approaches. "web" covers link reading, headless browsing, and X/Twitter fetching. "memory" covers extraction, storage, and recall of durable facts. A workspace skill might cover an entire SaaS product (calendar, email, drive all under one skill). Don't create a skill for every individual tool.
 
 ## Anatomy
 
@@ -10,12 +10,13 @@ A skill is a folder with a `SKILL.md` file:
 
 ```
 skills/<name>/
-  SKILL.md          # required — frontmatter + instructions
-  main.go           # optional — Go companion program
+  SKILL.md            # required — frontmatter + instructions
+  main.go             # optional — Go companion program
+  go.mod / go.sum     # optional — if the skill has Go code
   check_something.sh  # optional — reflex check script
 ```
 
-The `SKILL.md` is the documentation, the instructions, and the machine contract all in one file. Nothing else is required. For the full authoring guide (Go companions, vault credentials, checklist), load the `skill_builder` skill.
+The `SKILL.md` is the documentation, the instructions, and the machine contract all in one file. Skills with Go code are self-contained modules — their `go.mod`, `go.sum`, and source files live inside the skill folder so they can be built and run independently. For the full authoring guide (Go companions, vault credentials, checklist), load the `skill_builder` skill.
 
 ## SKILL.md format
 
@@ -67,22 +68,6 @@ If a skill needs infrastructure (alarms, credentials, binaries), add `## Install
 - For preloaded skills, `## Install` is stripped from prompt content to save tokens. The `load_skill` tool always returns the full file including install.
 - Install instructions must be **idempotent** — nik checks current state before acting (no duplicate alarms, no re-creating existing credentials).
 
-## Built-in vs workspace
-
-Skills live in two directories:
-
-| Location | Tracked | Who writes them | Override |
-|----------|---------|-----------------|----------|
-| `skills/` | git-tracked | developer | base layer |
-| `workspace/skills/` | not tracked | nik or user at runtime | overrides built-in by name |
-
-**Override semantics:** the system processes built-in first, workspace second. When both directories contain a skill with the same name, workspace wins:
-
-- **Metadata** (`ListSkills`, `PreloadedSkills`): `walkSkillDirs` uses a `seen` map keyed by name. Workspace entries replace built-in entries.
-- **Full file** (`load_skill`): iterates directories in reverse — workspace is checked first, first match wins.
-
-This means a workspace skill can completely replace a built-in skill just by using the same `name:` in its frontmatter.
-
 ## Preload
 
 Most skills are loaded on demand via `load_skill`. A skill with `preload: true` is injected into **every activation's prompt** automatically.
@@ -129,7 +114,23 @@ Events are stored in the `skill_event` table. System messages land in the timeli
 
 For periodic check commands declared via `reflex:` in frontmatter, see [REFLEXES.md](REFLEXES.md).
 
-## Built-in skill inventory
+## Built-in vs workspace
+
+Skills live in two directories:
+
+| Location | Tracked | Who writes them | Override |
+|----------|---------|-----------------|----------|
+| `skills/` | git-tracked | developer | base layer |
+| `workspace/skills/` | not tracked | nik or user at runtime | overrides built-in by name |
+
+**Override semantics:** the system processes built-in first, workspace second. When both directories contain a skill with the same name, workspace wins:
+
+- **Metadata** (`ListSkills`, `PreloadedSkills`): `walkSkillDirs` uses a `seen` map keyed by name. Workspace entries replace built-in entries.
+- **Full file** (`load_skill`): iterates directories in reverse — workspace is checked first, first match wins.
+
+This means a workspace skill can completely replace a built-in skill just by using the same `name:` in its frontmatter.
+
+### Built-in skill inventory
 
 | Name | Summary | Preload |
 |------|---------|---------|
@@ -152,3 +153,9 @@ For periodic check commands declared via `reflex:` in frontmatter, see [REFLEXES
 | web | search the web, fetch URLs, and read tweets | |
 
 Workspace skills are not listed here — they are runtime artifacts, not git-tracked, and vary per deployment.
+
+### Creating a workspace skill
+
+The [`skill_builder`](../skills/skill_builder/SKILL.md) built-in skill is nik's authoring guide. It covers folder layout, Go companion conventions, vault credential patterns, and a pre-flight checklist. Nik knows how to use it — you can ask nik to create a new skill, extend an existing one, or fix a broken one, and it will load `skill_builder` and follow the guide.
+
+Nik writes workspace skills autonomously when it recognizes a recurring pattern that would benefit from a dedicated capability. You can also ask nik to write one: describe the capability you want, and nik will scaffold the folder, write the `SKILL.md`, add Go companions if needed, and wire up reflexes and install steps.
