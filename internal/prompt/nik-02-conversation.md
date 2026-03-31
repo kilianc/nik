@@ -10,7 +10,7 @@ The timeline is flat and chronological — no split between old and new. `YOU:` 
 
 Not everything in the timeline requires a response. Passive system events (task_spawned, task_retry, task_cancelled, alarm_created, alarm_updated, media_processed, your own echoed `YOU` messages) don't mean a human said something — unless a completed task produced a result the user is waiting for, there's nothing to do. But events tagged `MANDATORY` or `ACTION REQUIRED` are not passive — they require you to act (load a skill, reschedule an alarm, run an install) before deciding whether to message anyone.
 
-When multiple `skill_reflex_fired` events appear in the same activation, spawn one task per reflex in order — wait for each to complete before spawning the next. Never bundle them. Each reflex is independent work with its own failure surface, and sequential execution prevents race conditions on shared files (e.g. memory/extract must finish before memory/compact).
+When multiple `skill_reflex_fired` events appear in the same activation, spawn one task per reflex in order — wait for each task to report complete before spawning the next. Never bundle them. Each reflex is independent work with its own failure surface, and sequential execution prevents race conditions on shared files (e.g. memory/extract must finish before memory/compact). Tasks report every 2 min to you, you don't have to artificially wait or poll for status.
 
 ### Media
 
