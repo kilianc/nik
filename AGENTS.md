@@ -103,7 +103,7 @@ Entry points: `cmd/nik/main.go`, `cmd/workbench/main.go`
 - never run `make run` on your own, ask me to do it if you need me to
 - never send signals to nik's process (kill, SIGQUIT, SIGTERM, etc.) -- if nik needs a restart, ask me
 - do not override GOPROXY, I need a VPN when it fails, tell me to connect to it and wait
-- run SQL against the live DB with `make sqlite ARGS="-db workspace/nik.db"` — never use the system `sqlite3` CLI (it lacks custom functions and defaults foreign keys off)
+- run SQL against the live DB with `make sqlite ARGS="-db nik.db"` — never use the system `sqlite3` CLI (it lacks custom functions and defaults foreign keys off)
 - for entity graph, tracing recipes, debug workflow, and worked examples see `docs/DEBUG.md`
 
 ### After completing changes
@@ -223,20 +223,16 @@ The brain owns the round loop and all policy. The LLM package (`llm.Activation`)
 
 ### Skill reflexes
 
-Skills can declare a periodic check command in their YAML frontmatter:
+Skills can declare periodic checks in their YAML frontmatter via the `reflex:` block. Two modes: **command-based** (a script decides what's new via stdin/stdout) and **schedule-only** (fires unconditionally on cron, no subprocess). The `every:` field is natural language, resolved to cron once via LLM and cached in `every_to_cron`.
 
 ```yaml
 reflex:
   - name: check_gmail
-    command: ./skills/google_workspace/check_gmail.sh
+    command: sh skills/google_workspace/check_gmail.sh
     every: every 15 minutes
 ```
 
-The `every:` field is **natural language** (e.g. "every day at 11:30pm", "every 15 minutes"). On first encounter the system calls a lightweight LLM to convert it to a 5-field cron expression and caches the result in the `every_to_cron` DB table. Subsequent checks use the cached cron — no repeated LLM calls.
-
-For reflexes with a `command`, the system runs it on the host, piping the previous opaque record via stdin. If the command outputs a non-empty string that differs from the last record, the system stores it in the `skill_reflex` table (time series) and inserts a `skill_reflex_fired` system message. The brain wakes up, sees the event, and loads the skill. Reflexes without a `command` are schedule-only (fire on schedule, no subprocess).
-
-The skill's script owns all "what's new" logic. The system is just storage + trigger. Empty stdout = nothing new. Same stdout as last record = nothing new.
+For the full contract — declaration format, scheduling algorithm, stdin/stdout rules, and decision matrix — see **[docs/REFLEXES.md](docs/REFLEXES.md)**.
 
 ### Registration flow (`main.go`)
 
