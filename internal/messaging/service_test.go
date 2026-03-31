@@ -2,6 +2,7 @@ package messaging
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"os"
 	"strings"
@@ -969,6 +970,136 @@ func TestConversationHeaderUnifiedDM(t *testing.T) {
 	}
 }
 
+func TestParticipantGaps(t *testing.T) {
+	tests := []struct {
+		name string
+		p    db.ConversationParticipant
+		want string
+	}{
+		{
+			name: "all fields empty",
+			p:    db.ConversationParticipant{},
+			want: "[needs: name, timezone, location, one_liner]",
+		},
+		{
+			name: "all fields populated",
+			p: db.ConversationParticipant{
+				ContactName: validString("Alice"),
+				Timezone:    validString("America/New_York"),
+				Location:    validString("New York"),
+				OneLiner:    validString("Friend from college"),
+			},
+			want: "",
+		},
+		{
+			name: "only name set",
+			p: db.ConversationParticipant{
+				ContactName: validString("Bob"),
+			},
+			want: "[needs: timezone, location, one_liner]",
+		},
+		{
+			name: "whitespace-only fields treated as empty",
+			p: db.ConversationParticipant{
+				ContactName: validString("  "),
+				Timezone:    validString("  "),
+			},
+			want: "[needs: name, timezone, location, one_liner]",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := participantGaps(tt.p)
+			if got != tt.want {
+				t.Errorf("participantGaps() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestConversationHeaderGaps(t *testing.T) {
+	ctx := context.Background()
+	conn, err := db.OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	contactsSvc := contacts.NewService(conn)
+	svc := NewService(&config.Config{}, conn, contactsSvc)
+
+	now := time.Now()
+	err = svc.ReceiveMessage(ctx, InboundMessage{
+		Platform:               "whatsapp",
+		ExternalConversationID: "peer@s.whatsapp.net",
+		ExternalMessageID:      "msg-from-me",
+		ExternalSenderID:       "nik@s.whatsapp.net",
+		Kind:                   "text",
+		Body:                   "hello",
+		SentAt:                 now,
+		IsFromMe:               true,
+	})
+	if err != nil {
+		t.Fatalf("receive from-me message: %v", err)
+	}
+
+	err = svc.ReceiveMessage(ctx, InboundMessage{
+		Platform:               "whatsapp",
+		ExternalConversationID: "peer@s.whatsapp.net",
+		ExternalMessageID:      "msg-from-peer",
+		ExternalSenderID:       "peer@s.whatsapp.net",
+		Kind:                   "text",
+		Body:                   "hi",
+		SentAt:                 now.Add(time.Second),
+		IsFromMe:               false,
+	})
+	if err != nil {
+		t.Fatalf("receive peer message: %v", err)
+	}
+
+	conv, err := db.ConversationGet(ctx, conn, db.ConversationGetParams{
+		Platform:               "whatsapp",
+		ExternalConversationID: "peer@s.whatsapp.net",
+	})
+	if err != nil {
+		t.Fatalf("get conversation: %v", err)
+	}
+
+	session := svc.ConversationHeader(ctx, conv)
+	lines := session.Lines
+
+	nikGaps := false
+	peerGaps := false
+	for i, line := range lines {
+		if !strings.HasPrefix(line, "- ") {
+			continue
+		}
+
+		isNik := strings.Contains(line, contacts.NikContactID)
+		hasGaps := false
+		for j := i + 1; j < len(lines) && strings.HasPrefix(lines[j], "  "); j++ {
+			if strings.Contains(lines[j], "[needs:") {
+				hasGaps = true
+			}
+		}
+
+		if isNik && hasGaps {
+			nikGaps = true
+		}
+		if !isNik && hasGaps {
+			peerGaps = true
+		}
+	}
+
+	if nikGaps {
+		t.Errorf("nik's participant should not show gaps, got:\n%s", strings.Join(lines, "\n"))
+	}
+	if !peerGaps {
+		t.Errorf("peer participant should show gaps, got:\n%s", strings.Join(lines, "\n"))
+	}
+}
+
 func TestReplyRejectsBannedWords(t *testing.T) {
 	ctx := context.Background()
 
@@ -1276,4 +1407,8 @@ func sendInboundMessageForReadTest(
 	if err != nil {
 		t.Fatalf("receive inbound message %s: %v", externalMessageID, err)
 	}
+}
+
+func validString(s string) sql.NullString {
+	return sql.NullString{String: s, Valid: true}
 }

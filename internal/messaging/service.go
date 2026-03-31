@@ -730,6 +730,12 @@ func (s *Service) ConversationHeader(ctx context.Context, conv db.Conversation) 
 			if detail != "" {
 				session.Lines = append(session.Lines, fmt.Sprintf("  %s", detail))
 			}
+
+			if p.ContactID != contacts.NikContactID {
+				if gaps := participantGaps(p); gaps != "" {
+					session.Lines = append(session.Lines, fmt.Sprintf("  %s", gaps))
+				}
+			}
 		}
 	}
 
@@ -777,6 +783,29 @@ func participantDetail(p db.ConversationParticipant) string {
 	}
 
 	return strings.Join(parts, " — ")
+}
+
+func participantGaps(p db.ConversationParticipant) string {
+	var missing []string
+
+	if !p.ContactName.Valid || strings.TrimSpace(p.ContactName.String) == "" {
+		missing = append(missing, "name")
+	}
+	if !p.Timezone.Valid || strings.TrimSpace(p.Timezone.String) == "" {
+		missing = append(missing, "timezone")
+	}
+	if !p.Location.Valid || strings.TrimSpace(p.Location.String) == "" {
+		missing = append(missing, "location")
+	}
+	if !p.OneLiner.Valid || strings.TrimSpace(p.OneLiner.String) == "" {
+		missing = append(missing, "one_liner")
+	}
+
+	if len(missing) == 0 {
+		return ""
+	}
+
+	return "[needs: " + strings.Join(missing, ", ") + "]"
 }
 
 func nonEmpty(ss ...string) []string {
