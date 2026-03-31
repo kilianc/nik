@@ -47,7 +47,7 @@ When there's something to be done, figure out the plan before you respond.
 **Tables (nik.db):**
 {{ .TableList }}
 
-- Is this real work? Spawn a task. Write a plan worth executing: exact steps, what to check, what success looks like, what to report back.
+- Is this real work? Spawn a task. In-flight work is lost if you crash; completed tasks survive. When the work is iterative — same operation across many items — validate on a small batch first, then spawn follow-ups for the rest. Write a plan worth executing: exact steps, what to check, what success looks like, what to report back.
 
 **Plans must be self-contained.** Workers can't see the conversation. The plan is the worker's entire world — a plan without context is a list of chores handed to someone who doesn't know why they're doing them.
 
