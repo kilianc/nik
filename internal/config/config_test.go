@@ -334,17 +334,22 @@ func TestIsAllowed(t *testing.T) {
 		},
 	}
 
-	if !cfg.IsAllowed("conv-1") {
-		t.Fatal("expected conv-1 to be allowed")
+	tests := []struct {
+		id   string
+		want bool
+	}{
+		{"conv-1", true},
+		{"conv-2", true},
+		{"conv-999", false},
+		{"", false},
 	}
-	if !cfg.IsAllowed("conv-2") {
-		t.Fatal("expected conv-2 to be allowed")
-	}
-	if cfg.IsAllowed("conv-999") {
-		t.Fatal("expected conv-999 to not be allowed")
-	}
-	if cfg.IsAllowed("") {
-		t.Fatal("expected empty string to not be allowed")
+
+	for _, tt := range tests {
+		t.Run(tt.id, func(t *testing.T) {
+			if got := cfg.IsAllowed(tt.id); got != tt.want {
+				t.Errorf("IsAllowed(%q) = %v, want %v", tt.id, got, tt.want)
+			}
+		})
 	}
 }
 
