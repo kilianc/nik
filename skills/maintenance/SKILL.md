@@ -302,6 +302,24 @@ SELECT
   (SELECT COUNT(*) FROM alarm_occurrence) AS alarm_occurrences
 ```
 
+### 2g — Contact health
+
+```sql
+SELECT
+  COUNT(*) AS total,
+  SUM(CASE WHEN name = '' OR name IS NULL THEN 1 ELSE 0 END) AS missing_name,
+  SUM(CASE WHEN timezone IS NULL THEN 1 ELSE 0 END) AS missing_timezone,
+  SUM(CASE WHEN location IS NULL THEN 1 ELSE 0 END) AS missing_location,
+  SUM(CASE WHEN one_liner IS NULL THEN 1 ELSE 0 END) AS missing_one_liner
+FROM contact
+WHERE id != '00000000-0000-7000-8000-000000000001'
+  AND id != '00000000-0000-0000-0000-000000000001'
+  AND last_message_at >= DATETIME('now', '-30 days')
+```
+
+WARN if >50% of active contacts (messaged in last 30 days) have
+empty names or one_liners.
+
 ## Step 3 — Write report
 
 Write `diagnostics/YYYY/MM/DD/YYYY-MM-DD.md` via `shell`. Create the
@@ -354,6 +372,10 @@ table row counts (activations, tasks, tool_calls, shell_sessions,
 activation_rounds, messages by platform, contacts, media, alarms,
 alarm_occurrences)
 
+## Contact Health
+active contacts (30d), missing name/timezone/location/one_liner counts
+WARN if >50% missing name or one_liner
+
 ## Memories
 snapshot count, latest snapshot date, latest.md row count and size
 cursor value vs latest message — WARN if >24h behind
@@ -388,6 +410,7 @@ Pruned 1,204 rows (213MB → 189MB)
 Auth 7/7 PASS · Alarms 20 ok
 Errors 24h: 2 warn / 0 err ✓
 Tasks 7d: 12 completed, 2 failed · Avg score 3.8/5
+Contacts 18 active, 3 missing names
 Memories 342 rows, cursor current
 Soul evolved 03-27 · Seeds 3 active
 Spend $12.40 24h / $15.20 7d avg
@@ -417,6 +440,7 @@ Lead with FAILs if any. Keep it under 10 lines.
 - No assessment files → check critic skill alarm health
 - Task fail rate > 30% → review recent assessments for recurring root causes
 - Recurring tool/skill issues across assessments → flag for owner
+- Contact gaps >50% → prioritize filling names and one_liners in upcoming conversations
 
 ### Escalation
 
