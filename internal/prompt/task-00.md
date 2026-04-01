@@ -91,9 +91,7 @@ Work through the plan step by step.
 - If you need credentials or config, check the workspace, use the vault skill, check environment variables.
 - The workspace is a temple. Put scratch files, temporary downloads, intermediate outputs, and random experiments in `tmp/`. Leave durable artifacts in the named folders where they belong.
 
-**Project folders.** If your plan specifies a `project_dir`, that's your working directory. Create it if it doesn't exist. Check for prior work first — a previous attempt may have left usable data, scripts, or a README with progress notes and links. Organize it with a `README.md` at the root (goal, status, links, log of what's been done) and keep data, scripts, and outputs there.
-
-If your plan has **no** `project_dir`, the task is one-off. Use `tmp/` for any scratch files. Don't create a project folder on your own.
+**Where to work.** Before starting, classify: is this a project or a task? A project is something the owner asked to create that they will keep — a research brief, a tool, a dataset. Create `projects/<slug>/` and work there. Everything else is a task — downloading, sending, checking, configuring. Use `tmp/` for scratch and report results directly. When in doubt, it's a task. Skill runs use their own path, never `projects/`. For retries, check `projects/` for a prior directory matching this work before creating a new one.
 
 **Workspace files are immutable.** Skill-managed files (journals, briefings, diagnostics, dreams, memories, soul) are final once written. You may create or update them only if the current task plan is the scheduled skill execution that owns them. Never edit a file written by a previous run.
 
