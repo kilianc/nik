@@ -33,14 +33,18 @@ Tool calls: {{tcNames .ToolCalls}}
 
 | # | Rate | Variant | Runs | Hit | Miss | Link |
 |---|------|---------|------|-----|------|------|
-{{- range $i, $v := reverse .Variants}}{{if $v.Runs}}
+{{- range $i, $v := reverse .Variants}}{{if $v.Runs}}{{if gt (classifiedRuns $v) 0}}
 | v{{sub (sub (len $.Variants) 1) $i}} | {{printf "%.0f" (rate $v.DesiredCount $v.RunCount)}}% | {{$v.Name}} | {{$v.RunCount}} | {{$v.DesiredCount}} | {{sub $v.RunCount $v.DesiredCount}} | [details](#{{anchor (sub (sub (len $.Variants) 1) $i) $v.Name}}) |
-{{- end}}{{end}}
+{{- else}}
+| v{{sub (sub (len $.Variants) 1) $i}} | N/A | {{$v.Name}} | {{$v.RunCount}} | N/A | N/A | [details](#{{anchor (sub (sub (len $.Variants) 1) $i) $v.Name}}) |
+{{- end}}{{end}}{{end}}
 {{end}}
 {{range $i, $v := reverse .Variants}}
-{{- if $v.Runs}}
+{{- if $v.Runs}}{{if gt (classifiedRuns $v) 0}}
 ### v{{sub (sub (len $.Variants) 1) $i}} — {{$v.Name}} — {{$v.DesiredCount}} hit, {{sub $v.RunCount $v.DesiredCount}} miss ({{printf "%.0f" (rate $v.DesiredCount $v.RunCount)}}%)
 {{- else}}
+### v{{sub (sub (len $.Variants) 1) $i}} — {{$v.Name}} — {{$v.RunCount}} runs, N/A
+{{- end}}{{else}}
 ### v{{sub (sub (len $.Variants) 1) $i}} — {{$v.Name}} — pending
 {{- end}}
 {{- if $v.Hypothesis}}

@@ -4,6 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sync"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/id"
@@ -74,10 +77,10 @@ func CreateExperimentVariant(ctx context.Context, conn *sql.DB, experimentID, na
 	return variantID, nil
 }
 
-func CreateExperimentVariantRun(ctx context.Context, conn *sql.DB, variantID string, n int, clientOpts []llm.ClientOption) ([]db.ExperimentVariantRun, error) {
-	var runs []db.ExperimentVariantRun
+func CreateExperimentVariantRun(ctx context.Context, conn *sql.DB, variantID string, n int, clientOpts []llm.ClientOption, afterEach func()) ([]db.ExperimentVariantRun, error) {
+	runs := make([]db.ExperimentVariantRun, n)
 
-	for range n {
+	for i := range n {
 		bare, err := db.ExperimentVariantRunInsert(ctx, conn, variantID)
 		if err != nil {
 			return nil, fmt.Errorf("insert run: %w", err)
@@ -93,22 +96,45 @@ func CreateExperimentVariantRun(ctx context.Context, conn *sql.DB, variantID str
 			return nil, fmt.Errorf("apply patches: %w", err)
 		}
 
-		run, err = Run(ctx, run, clientOpts)
-		if err != nil {
-			return nil, err
-		}
+		runs[i] = run
+	}
 
-		err = db.ExperimentVariantRunSaveResult(ctx, conn, run)
-		if err != nil {
-			return nil, fmt.Errorf("save run result: %w", err)
-		}
+	var mu sync.Mutex
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(6)
 
-		err = db.ExperimentVariantRefreshCounts(ctx, conn, variantID)
-		if err != nil {
-			return nil, fmt.Errorf("refresh variant counts: %w", err)
-		}
+	for i := range runs {
+		g.Go(func() error {
+			result, err := Run(gctx, runs[i], clientOpts)
+			if err != nil {
+				return err
+			}
 
-		runs = append(runs, run)
+			mu.Lock()
+			defer mu.Unlock()
+
+			runs[i] = result
+
+			err = db.ExperimentVariantRunSaveResult(ctx, conn, result)
+			if err != nil {
+				return fmt.Errorf("save run result: %w", err)
+			}
+
+			err = db.ExperimentVariantRefreshCounts(ctx, conn, variantID)
+			if err != nil {
+				return fmt.Errorf("refresh variant counts: %w", err)
+			}
+
+			if afterEach != nil {
+				afterEach()
+			}
+
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		return nil, err
 	}
 
 	return runs, nil

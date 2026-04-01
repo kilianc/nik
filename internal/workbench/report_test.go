@@ -113,8 +113,8 @@ func TestRenderReportWithRuns(t *testing.T) {
 	if !strings.Contains(report, "v0 — baseline") {
 		t.Fatal("expected report to contain v0 baseline detail section")
 	}
-	if !strings.Contains(report, "0 hit, 2 miss") {
-		t.Fatal("expected report to show hit/miss counts")
+	if !strings.Contains(report, "2 runs, N/A") {
+		t.Fatal("expected unclassified runs to show N/A")
 	}
 	if !strings.Contains(report, "done") {
 		t.Fatal("expected report to contain tool call name")
@@ -189,11 +189,11 @@ func TestRenderReportVariantTable(t *testing.T) {
 		t.Fatalf("render report: %v", err)
 	}
 
-	if !strings.Contains(report, "| v0 | 0% | baseline") {
-		t.Fatalf("expected variant table to contain v0 baseline, got:\n%s", report)
+	if !strings.Contains(report, "| v0 | N/A | baseline") {
+		t.Fatalf("expected variant table to contain v0 baseline with N/A, got:\n%s", report)
 	}
-	if !strings.Contains(report, "| v1 | 0% | shorter-ack") {
-		t.Fatalf("expected variant table to contain v1 shorter-ack, got:\n%s", report)
+	if !strings.Contains(report, "| v1 | N/A | shorter-ack") {
+		t.Fatalf("expected variant table to contain v1 shorter-ack with N/A, got:\n%s", report)
 	}
 	if !strings.Contains(report, "v1 — shorter-ack") {
 		t.Fatalf("expected variant detail with v1 numbering, got:\n%s", report)
