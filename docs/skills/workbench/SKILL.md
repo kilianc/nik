@@ -19,7 +19,7 @@ All commands go through `make workbench ARGS="..."`. Every mutation auto-renders
 | `create-experiment` | `-activation_round_id <id> -desired_outcome '<text>' -analysis '<text>'` |
 | `update-experiment` | `-experiment_id <id> [-status <s>] [-desired_outcome <d>] [-analysis <a>]` |
 | `create-experiment-variant` | `-experiment_id <id> -name '<name>' -hypothesis '<text>' [-patches <file>] [-reasoning_effort '<e>'] [-verbosity '<v>']` |
-| `create-experiment-variant-run` | `-experiment_variant_id <id> -n <count> [-max_rounds <int>] [-json]` |
+| `create-experiment-variant-run` | `-experiment_variant_id <id> -n <count> [-json]` |
 | `update-experiment-variant-run` | `-experiment_variant_run_id <id> -is_desired true\|false -rationale '<text>'` |
 
 ---
@@ -51,7 +51,7 @@ ORDER BY m.sent_at DESC LIMIT 10;
 
 ## Find the activation round
 
-Now we need the activation round where nik first saw this message. Rounds store the formatted timeline in `user_input`. Search all rounds created after the message was received for the first one where it appears in the `### New` section:
+Now we need the activation round where nik first saw this message. Rounds store the formatted timeline in `messages`. Search all rounds created after the message was received for the first one where it appears in the `### New` section:
 
 ```sql
 SELECT
@@ -62,13 +62,13 @@ SELECT
   a.created_at
 FROM activation_round ar
 JOIN activation a ON a.id = ar.activation_id
-WHERE ar.user_input LIKE '%<message text>%'
+WHERE ar.messages LIKE '%<message text>%'
   AND a.created_at >= '<message sent_at>'
 ORDER BY a.created_at ASC
 LIMIT 5;
 ```
 
-Read the `user_input` of the first result and confirm the message is under `### New`, not `### Already handled`. That's the round to replay.
+Read the `messages` of the first result and confirm the message is under `### New`, not `### Already handled`. That's the round to replay.
 
 ## Create the experiment
 
@@ -76,7 +76,7 @@ Create the experiment with `create-experiment` as soon as you have the round. Th
 
 ## Analysis
 
-Read the round's `model_output`, `reasoning_summaries`, and tool calls. Compare what actually happened vs what the user wanted. Explain WHY — read the `user_input` (`### New` section) and the `reasoning_summaries`. Build the causal chain: "the model saw X, which led it to conclude Y, which caused action Z."
+Read the round's `model_output`, `reasoning_summaries`, and tool calls. Compare what actually happened vs what the user wanted. Explain WHY — read the `messages` (`### New` section) and the `reasoning_summaries`. Build the causal chain: "the model saw X, which led it to conclude Y, which caused action Z."
 
 Store the analysis via `update-experiment -experiment_id <id> -analysis '<text>'`. Ask and address any feedback — update via the CLI until the user is satisfied.
 
