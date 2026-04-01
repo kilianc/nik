@@ -17,19 +17,20 @@ import (
 )
 
 var funcMap = template.FuncMap{
-	"shorten":       shorten,
-	"fmtDate":       fmtDate,
-	"truncate":      truncateLines,
-	"sub":           sub,
-	"add":           add,
-	"rate":          rate,
-	"desiredStr":    desiredStr,
-	"defaultStr":    defaultStr,
-	"toolCallNames": toolCallNames,
-	"anchor":        variantAnchor,
-	"tcNames":       tcNames,
-	"hasRuns":       hasRuns,
-	"reverse":       reverse[db.ExperimentVariant],
+	"shorten":        shorten,
+	"fmtDate":        fmtDate,
+	"truncate":       truncateLines,
+	"sub":            sub,
+	"add":            add,
+	"rate":           rate,
+	"desiredStr":     desiredStr,
+	"defaultStr":     defaultStr,
+	"toolCallNames":  toolCallNames,
+	"anchor":         variantAnchor,
+	"tcNames":        tcNames,
+	"hasRuns":        hasRuns,
+	"classifiedRuns": classifiedRuns,
+	"reverse":        reverse[db.ExperimentVariant],
 }
 
 //go:embed report.md.tpl
@@ -131,6 +132,16 @@ func hasRuns(variants []db.ExperimentVariant) bool {
 		}
 	}
 	return false
+}
+
+func classifiedRuns(v db.ExperimentVariant) int {
+	n := 0
+	for _, r := range v.Runs {
+		if r.IsDesired != nil {
+			n++
+		}
+	}
+	return n
 }
 
 func reverse[T any](s []T) []T {

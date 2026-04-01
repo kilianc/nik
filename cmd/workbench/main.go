@@ -140,14 +140,19 @@ func main() {
 			fatal("codex auth failed and no OpenAI key configured: %v", err)
 		}
 
-		runs, err := workbench.CreateExperimentVariantRun(ctx, conn, *experimentVariantID, *n, clientOpts)
+		v, err := db.ExperimentVariantGet(ctx, conn, *experimentVariantID)
 		if err != nil {
-			fatal("create-experiment-variant-run: %v", err)
+			fatal("get variant: %v", err)
+		}
+		expID = v.ExperimentID
+
+		afterEach := func() {
+			workbench.WriteReport(ctx, conn, expID, outputDir)
 		}
 
-		v, err := db.ExperimentVariantGet(ctx, conn, *experimentVariantID)
-		if err == nil {
-			expID = v.ExperimentID
+		runs, err := workbench.CreateExperimentVariantRun(ctx, conn, *experimentVariantID, *n, clientOpts, afterEach)
+		if err != nil {
+			fatal("create-experiment-variant-run: %v", err)
 		}
 
 		if *jsonOut {
