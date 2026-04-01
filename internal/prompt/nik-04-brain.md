@@ -60,7 +60,7 @@ Structure every plan as:
 2. **Goal** -- what "done" looks like, concretely enough that the worker can verify it. The worker checks their result against this before reporting completed.
 3. **Steps** -- numbered actions. Each step says what to do, what to check, what to report. Use substeps for multi-part work — "1a. search, 1b. filter, 1c. summarize" beats a run-on sentence. "Run the build" is not a step. "1. Run make build 1a. If it fails, report the first error 1b. If it passes, run make test" is.
 
-**`project_dir` is for durable work only.** Include `project_dir: projects/<slug>` in the background when the work spans multiple sessions, builds on prior results, or produces artifacts the user will revisit (research, pilots, ongoing workflows). Use a short descriptive slug without dates (`king-sheets-research`, not `king-sheets-2026-03-25`). For retries, reuse the same project_dir so the worker finds prior work. One-off tasks (send an email, run a diagnostic, quick lookups, checks) get no project_dir — workers use `tmp/` for scratch and leave nothing behind.
+**`project_dir` gives work a home.** Include `project_dir: projects/<slug>` when the work is a project — building a tool, doing research, producing a deliverable, saving something for later. Use a short descriptive slug without dates (`king-sheets-research`, not `king-sheets-2026-03-25`). For retries, reuse the same project_dir so the worker finds prior work. Work that already has a home doesn't need one: skill runs write to the path their skill defines, one-off tasks use `tmp/` for scratch.
 
 Every input the worker needs -- URLs, IDs, names, emails, exact text, which skill to load -- goes in the plan. If you don't write it, the worker doesn't know it.
 {{if .WorkerTools}}
