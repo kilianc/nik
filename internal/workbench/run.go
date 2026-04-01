@@ -36,7 +36,7 @@ func Run(ctx context.Context, run db.ExperimentVariantRun, clientOpts []llm.Clie
 	activation := llm.NewActivation(client, llm.NoopRecorder{}, run.Instructions, tools)
 
 	if len(messages) > 0 {
-		activation.SetInput(messages[0].Content)
+		activation.LoadHistory(messages)
 	}
 
 	rr, err := activation.Round(ctx)
@@ -62,7 +62,7 @@ func marshalToolCalls(rounds []llm.RoundResult) string {
 		Arguments string `json:"arguments"`
 	}
 
-	var calls []tc
+	calls := []tc{}
 	for _, rr := range rounds {
 		for _, c := range rr.ToolCalls {
 			calls = append(calls, tc{Name: c.Name, Arguments: c.Arguments})

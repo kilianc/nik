@@ -127,7 +127,7 @@ func main() {
 
 	case "create-experiment-variant-run":
 		if *experimentVariantID == "" || *n < 1 {
-			fatal("usage: workbench create-experiment-variant-run -experiment_variant_id <id> -n <count> [-max_rounds <int>] [-json]")
+			fatal("usage: workbench create-experiment-variant-run -experiment_variant_id <id> -n <count> [-json]")
 		}
 
 		var clientOpts []llm.ClientOption
