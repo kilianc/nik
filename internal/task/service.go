@@ -246,7 +246,7 @@ func (s *Service) RetryChain(ctx context.Context, rootID string) ([]db.RetryChai
 	return db.TaskRetryChain(ctx, s.conn, rootID)
 }
 
-const StaleThreshold = 2 * time.Minute
+const StaleThreshold = 5 * time.Minute
 
 func (s *Service) CheckStale(ctx context.Context) {
 	staleCutoff := time.Now().UTC().Add(-StaleThreshold)

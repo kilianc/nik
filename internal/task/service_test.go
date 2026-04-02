@@ -199,7 +199,7 @@ func TestCheckStaleInsertReports(t *testing.T) {
 	svc, conn := testDB(t)
 	ctx := context.Background()
 
-	old := time.Now().UTC().Add(-5 * time.Minute).Format("2006-01-02T15:04:05.000Z")
+	old := time.Now().UTC().Add(-10 * time.Minute).Format("2006-01-02T15:04:05.000Z")
 
 	actID := "act-stale-test"
 	_, err := conn.ExecContext(ctx,
