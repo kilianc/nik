@@ -335,6 +335,10 @@ Before applying any migration to the live DB:
 - **One statement at a time**: execute each `ALTER TABLE` / `CREATE TABLE` / `DROP TABLE` independently so a failure doesn't leave the DB in a half-migrated state.
 - **Do not lose data**: migrate the data, and abort if you are not confident.
 
+## Candidates
+
+- rename `howto/` to `recipes/` — the old name implied tutorial content; the actual artifacts are operational procedures, diagnostic runbooks, and learned workflows. "Recipes" matches the skill's own language and doesn't carry DevOps connotations like "runbooks." Applied 2026-04-02.
+
 ## Fin
 
 - scarlet
