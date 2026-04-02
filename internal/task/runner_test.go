@@ -18,8 +18,8 @@ import (
 )
 
 func TestReportTimerReset(t *testing.T) {
-	if StaleThreshold != 2*time.Minute {
-		t.Fatalf("StaleThreshold = %v, want 2m", StaleThreshold)
+	if StaleThreshold != 5*time.Minute {
+		t.Fatalf("StaleThreshold = %v, want 5m", StaleThreshold)
 	}
 
 	tests := []struct {
@@ -41,7 +41,7 @@ func TestReportTimerReset(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			lastReport := time.Now().Add(-3 * time.Minute)
+			lastReport := time.Now().Add(-6 * time.Minute)
 
 			for _, call := range tt.calls {
 				if call.Name == "task_report" {

@@ -138,7 +138,7 @@ func (r *Runner) runLoop(ctx context.Context, t db.Task, act *llm.Activation, ex
 
 	for {
 		if time.Since(lastReport) >= StaleThreshold {
-			act.AppendUserMessage("You haven't reported in 2 minutes. Call task_report now with your current status before continuing.")
+			act.AppendUserMessage("You haven't reported in 5 minutes. Call task_report now with your current status before continuing.")
 			lastReport = time.Now()
 		}
 
