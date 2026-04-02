@@ -120,6 +120,13 @@ func (s *Service) UpdateStatus(ctx context.Context, taskID, status string) error
 	})
 }
 
+func (s *Service) UpdatePlan(ctx context.Context, taskID, plan string) error {
+	return db.TaskUpdate(ctx, s.conn, db.TaskUpdateParams{
+		ID:   taskID,
+		Plan: &plan,
+	})
+}
+
 func (s *Service) Cancel(ctx context.Context, taskID, reason string) error {
 	tx, err := s.conn.BeginTx(ctx, nil)
 	if err != nil {

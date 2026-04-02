@@ -69,8 +69,8 @@ func (r *Runner) Run(ctx context.Context, t db.Task) {
 		tools = filterUnprivileged(tools)
 	}
 
-	reportTool := BuildReportTool(r.svc, t.ID)
-	allTools := append(tools, reportTool)
+	workerTools := BuildWorkerTools(r.svc, t.ID)
+	allTools := append(tools, workerTools...)
 	defs, exec := llm.SplitTools(allTools)
 
 	instructions := r.pr.Task(prompt.BuildTaskData(r.cfg, t, defs))

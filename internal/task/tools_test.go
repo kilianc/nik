@@ -215,8 +215,8 @@ func TestStatusHandler(t *testing.T) {
 	if parsed["goal"] != "deploy the widget" {
 		t.Errorf("goal = %v, want 'deploy the widget'", parsed["goal"])
 	}
-	if _, ok := parsed["plan"]; ok {
-		t.Error("response should not contain plan")
+	if parsed["plan"] != "step 1: build\nstep 2: deploy" {
+		t.Errorf("plan = %v, want 'step 1: build\\nstep 2: deploy'", parsed["plan"])
 	}
 	if _, ok := parsed["reports"]; ok {
 		t.Error("response should not contain reports array")
@@ -352,4 +352,62 @@ func TestStatusHandlerRetryCount(t *testing.T) {
 	if _, ok := origParsed["retry_count"]; ok {
 		t.Error("original task should not have retry_count")
 	}
+}
+
+func TestPlanUpdateHandler(t *testing.T) {
+	svc, _ := testDB(t)
+	ctx := context.Background()
+
+	task, err := svc.Create(ctx, createParams{
+		Goal:           "checklist task",
+		Plan:           "- [ ] step one\n- [ ] step two",
+		Thinking:       "low",
+		ConversationID: testConvID,
+	})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+
+	handler := planUpdateHandler(svc, task.ID)
+
+	t.Run("updates plan", func(t *testing.T) {
+		updated := "- [x] step one\n- [>] step two\n  - [ ] substep added"
+		args, _ := json.Marshal(planUpdateArgs{Plan: updated})
+
+		result, err := handler(ctx, llm.ToolCall{
+			CallID:    "call-1",
+			Name:      "task_plan_update",
+			Arguments: string(args),
+		})
+		if err != nil {
+			t.Fatalf("handler error: %v", err)
+		}
+		if !strings.Contains(result, "ok") {
+			t.Fatalf("expected ok result, got %q", result)
+		}
+
+		got, err := svc.Get(ctx, task.ID)
+		if err != nil {
+			t.Fatalf("get task: %v", err)
+		}
+		if got.Plan != updated {
+			t.Errorf("plan = %q, want %q", got.Plan, updated)
+		}
+	})
+
+	t.Run("rejects empty plan", func(t *testing.T) {
+		args, _ := json.Marshal(planUpdateArgs{Plan: ""})
+
+		result, err := handler(ctx, llm.ToolCall{
+			CallID:    "call-2",
+			Name:      "task_plan_update",
+			Arguments: string(args),
+		})
+		if err != nil {
+			t.Fatalf("handler error: %v", err)
+		}
+		if !strings.Contains(result, "plan is required") {
+			t.Errorf("expected error about plan, got %q", result)
+		}
+	})
 }

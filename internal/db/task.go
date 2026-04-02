@@ -74,6 +74,7 @@ type TaskUpdateParams struct {
 	ActivationID       *string
 	LastReportAt       *time.Time
 	CancellationReason *string
+	Plan               *string
 }
 
 func TaskUpdate(ctx context.Context, db DBTX, p TaskUpdateParams) error {
@@ -83,6 +84,7 @@ func TaskUpdate(ctx context.Context, db DBTX, p TaskUpdateParams) error {
 		p.ActivationID,
 		p.LastReportAt,
 		p.CancellationReason,
+		p.Plan,
 	)
 	if err != nil {
 		return fmt.Errorf("update task %s: %w", p.ID, err)

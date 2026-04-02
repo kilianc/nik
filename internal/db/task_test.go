@@ -106,6 +106,52 @@ func TestTaskRetryChain(t *testing.T) {
 		}
 	})
 
+	t.Run("update plan", func(t *testing.T) {
+		ctx := context.Background()
+
+		conn, err := OpenInMemory()
+		if err != nil {
+			t.Fatalf("open db: %v", err)
+		}
+		defer conn.Close()
+
+		taskID := id.V7()
+		convID := seedConversation(t, ctx, conn, "whatsapp", "plan-update@s.whatsapp.net", "dm")
+
+		err = TaskInsert(ctx, conn, TaskInsertParams{
+			ID:             taskID,
+			ConversationID: convID,
+			Goal:           "test plan update",
+			Plan:           "- [ ] step one\n- [ ] step two",
+			Thinking:       "low",
+			Status:         "running",
+			CreatedAt:      time.Now().UTC(),
+		})
+		if err != nil {
+			t.Fatalf("insert task: %v", err)
+		}
+
+		updatedPlan := "- [x] step one\n- [>] step two\n  - [ ] substep added"
+		err = TaskUpdate(ctx, conn, TaskUpdateParams{
+			ID:   taskID,
+			Plan: &updatedPlan,
+		})
+		if err != nil {
+			t.Fatalf("update plan: %v", err)
+		}
+
+		got, err := TaskGet(ctx, conn, taskID)
+		if err != nil {
+			t.Fatalf("get task: %v", err)
+		}
+		if got.Plan != updatedPlan {
+			t.Errorf("plan = %q, want %q", got.Plan, updatedPlan)
+		}
+		if got.Status != "running" {
+			t.Errorf("status changed unexpectedly: got %q", got.Status)
+		}
+	})
+
 	t.Run("no reports", func(t *testing.T) {
 		ctx := context.Background()
 

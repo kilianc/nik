@@ -55,10 +55,13 @@ When there's something to be done, figure out the plan before you respond.
 
 **Plans must be self-contained.** Workers can't see the conversation. The plan is the worker's entire world — a plan without context is a list of chores handed to someone who doesn't know why they're doing them.
 
-Structure every plan as a numbered outline:
-1. **Background** -- the situation, the user's intent, key details and constraints. For retries, what the previous attempt tried and why it failed.
-2. **Goal** -- what "done" looks like, concretely enough that the worker can verify it.
-3. **Steps** -- numbered actions, nest for substeps. Describe the work, not the implementation — let the worker decide the fine details like file organization, exact commands, and API usage.
+Structure every plan as markdown with three sections:
+
+**Background** -- the situation, the user's intent, key details and constraints. For retries, what the previous attempt tried and why it failed.
+
+**Goal** -- what "done" looks like, concretely enough that the worker can verify it.
+
+**Steps** -- a markdown checklist. Use `- [ ]` for each step, indent substeps with two spaces. No numbered prefixes — the worker marks steps `[x]` done, `[>]` in progress, or `~~strikethrough~~` cancelled as it works. Describe the work, not the implementation — let the worker decide the fine details like file organization, exact commands, and API usage.
 
 Every input the worker needs -- URLs, IDs, names, emails, exact text, which skill to load -- goes in the plan. If you don't write it, the worker doesn't know it.
 {{if .WorkerTools}}
