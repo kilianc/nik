@@ -452,6 +452,100 @@ func TestSystemMessagesTrimmedByAge(t *testing.T) {
 	}
 }
 
+func TestMessageEntryMentions(t *testing.T) {
+	tests := []struct {
+		name         string
+		body         string
+		mentionedIDs []string
+		seedContacts []struct {
+			externalID string
+			name       string
+		}
+		wantContains    string
+		wantNotContains string
+	}{
+		{
+			name:         "resolved mention",
+			body:         "@247506181066940 what you think?",
+			mentionedIDs: []string{"247506181066940@lid"},
+			seedContacts: []struct {
+				externalID string
+				name       string
+			}{
+				{"247506181066940@lid", "Penelope"},
+			},
+			wantContains: "(mentioning Penelope)",
+		},
+		{
+			name:            "unresolved mention",
+			body:            "@999999999999999 hey",
+			mentionedIDs:    []string{"999999999999999@lid"},
+			wantNotContains: "(mentioning",
+		},
+		{
+			name:         "multiple mentions",
+			body:         "@111111111111111 @222222222222222 let's go",
+			mentionedIDs: []string{"111111111111111@lid", "222222222222222@lid"},
+			seedContacts: []struct {
+				externalID string
+				name       string
+			}{
+				{"111111111111111@lid", "Alice"},
+				{"222222222222222@lid", "Bob"},
+			},
+			wantContains: "(mentioning Alice, Bob)",
+		},
+		{
+			name:            "empty mentions",
+			body:            "no mentions here",
+			mentionedIDs:    nil,
+			wantNotContains: "(mentioning",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			conn, err := db.OpenInMemory()
+			if err != nil {
+				t.Fatalf("open in-memory db: %v", err)
+			}
+			defer conn.Close()
+
+			ctx := context.Background()
+			for _, sc := range tt.seedContacts {
+				_, err := db.ContactUpsert(ctx, conn, db.ContactUpsertParams{
+					Platform:      "whatsapp",
+					ExternalID:    sc.externalID,
+					Name:          sc.name,
+					Phone:         "0000",
+					LastMessageAt: time.Now(),
+				})
+				if err != nil {
+					t.Fatalf("seed contact %s: %v", sc.name, err)
+				}
+			}
+
+			msg := db.Message{
+				ID:                  "mention-" + tt.name,
+				Kind:                "text",
+				Body:                tt.body,
+				IsFromMe:            false,
+				SentAt:              time.Now(),
+				ContextMentionedIDs: tt.mentionedIDs,
+			}
+
+			e := messageEntry(msg, "Sender", conn)
+
+			if tt.wantContains != "" && !strings.Contains(e.text, tt.wantContains) {
+				t.Fatalf("expected text to contain %q, got %q", tt.wantContains, e.text)
+			}
+			if tt.wantNotContains != "" && strings.Contains(e.text, tt.wantNotContains) {
+				t.Fatalf("expected text to not contain %q, got %q", tt.wantNotContains, e.text)
+			}
+		})
+	}
+}
+
 func TestPeekSkipsSystemMessages(t *testing.T) {
 	conn, convID := setupTestDB(t)
 	ctx := context.Background()

@@ -273,6 +273,13 @@ func messageEntry(msg db.Message, sender string, database *sql.DB) entry {
 
 	text := messaging.FormatMessageText(msg)
 
+	if len(msg.ContextMentionedIDs) > 0 {
+		names := resolveMentionNames(msg.ContextMentionedIDs, database)
+		if len(names) > 0 {
+			text += " (mentioning " + strings.Join(names, ", ") + ")"
+		}
+	}
+
 	if msg.ContextStanzaID.Valid && database != nil {
 		target, err := db.MessageGet(context.Background(), database, db.MessageGetParams{
 			Platform:          msg.Platform,
@@ -345,4 +352,28 @@ func resolveContactName(ctx context.Context, database *sql.DB, msg db.Message) s
 	}
 
 	return "unknown"
+}
+
+func resolveMentionNames(mentionedIDs []string, database *sql.DB) []string {
+	if database == nil {
+		return nil
+	}
+
+	var names []string
+
+	for _, jid := range mentionedIDs {
+		contact, err := db.ContactGet(context.Background(), database, jid)
+		if err != nil {
+			continue
+		}
+
+		name := strings.TrimSpace(contact.Name)
+		if name == "" {
+			continue
+		}
+
+		names = append(names, name)
+	}
+
+	return names
 }
