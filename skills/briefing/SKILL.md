@@ -49,7 +49,7 @@ During any conversation — if you learn someone cares about something, add it t
 
 ## Scheduling
 
-The recurring alarm `[NIK_BRIEFING]` triggers this workflow. When it fires, follow the full morning workflow below.
+This skill is triggered by the schedule-only `briefing` reflex every day at 7am. When a `skill_reflex_fired` event appears for `briefing`, follow the full morning workflow below.
 
 ## Morning workflow
 

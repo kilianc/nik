@@ -103,6 +103,7 @@ Reflexes create the conditions the sensor detects:
 | `CheckStale` | task | every tick | inserts stale reports for tasks with no recent activity |
 | `StaleAlarmReflex` | alarms | 30 min | detects recurring alarms with null/past `next_fire_at` |
 | `SkillChangeReflex` | skills | 5 min | detects skill file additions, removals, content changes |
+| `SkillCheckReflex` | skills | 5 min | runs skill-declared reflexes and emits `skill_reflex_fired` |
 | `CheckSessions` | shell | 10 sec | reaps dead/stale tmux sessions |
 
 ## Messaging: Adapters and the Canonical Model
@@ -179,12 +180,19 @@ When a message arrives: the WhatsApp adapter normalizes it and calls `ReceiveMes
 
 ## Autonomous Systems
 
-These run on schedule via alarms. The `FireDueAlarms` reflex creates alarm occurrence messages when `next_fire_at` has passed. The timeline sensor sees these as new events, triggers an activation, and the model loads the relevant skill. Core alarms use `[NIK_XXX]` goal prefixes (e.g. `[NIK_JOURNAL]`, `[NIK_DREAM_1]`). Skills document the alarm format and install them on first load.
+Recurring work can be triggered in two ways:
 
-- **Journal**: managed by the `journal` skill. Recurring alarm, gathers day context via `db_query`/`shell`, writes to `journal/` files. No domain package.
-- **Dream**: managed by the `dream` skill. Multiple recurring alarms (one per dream pass), processes journal and memories, writes to `dreams/` files. The final pass (Wake) evolves nik's **soul** — a living identity document stored in `soul/latest.md` and loaded into the system prompt on every activation. Dated snapshots in `soul/YYYY/MM/DD/YYYY-MM-DD.md` preserve history. No domain package.
-- **Briefing**: managed by the `briefing` skill. Recurring alarm, searches the web for news (via the `web` skill), writes to `briefings/` files. No domain package.
-- **Diagnostic**: managed by the `diagnostic` skill. Recurring alarm, discovers skills/services, tests auth, verifies alarm chains and skill outputs, checks data integrity and spending. Writes to `diagnostics/` files. No domain package.
+- **alarms** — `FireDueAlarms` creates `alarm_fired` system messages when `next_fire_at` passes
+- **skill reflexes** — `SkillCheckReflex` evaluates each skill's `reflex:` block and emits `skill_reflex_fired`
+
+The timeline sensor sees those system messages as new events, triggers an activation, and the model loads the relevant skill.
+
+- **Journal**: managed by the `journal` skill. Schedule-only `journal` reflex, gathers day context via `db_query` and `shell`, writes to `journal/` files. No domain package.
+- **Dream**: managed by the `dream` skill. Schedule-only `dream` reflex, runs all five passes in one activation, writes to `dreams/` files. The final pass (Wake) evolves nik's **soul** — a living identity document stored in `soul/latest.md` and loaded into the system prompt on every activation. Dated snapshots in `soul/YYYY/MM/DD/YYYY-MM-DD.md` preserve history. No domain package.
+- **Briefing**: managed by the `briefing` skill. Schedule-only `briefing` reflex, searches the web for news (via the `web` skill), writes to `briefings/` files. No domain package.
+- **Maintenance**: managed by the `maintenance` skill. Schedule-only `maintenance` reflex, prunes old runtime data, checks auth and outputs, and writes to `diagnostics/` files. No domain package.
+- **Memory**: managed by the `memory` skill. Two schedule-only reflexes (`extract`, `compact`) keep `memories/` current. No domain package.
+- **Seeds**: managed by the `seeds` skill. Reflexes (`extract`, `tend`) grow forward-looking opportunities over time. No domain package.
 
 ## Tasks and the Timeline
 

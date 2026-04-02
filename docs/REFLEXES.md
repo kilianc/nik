@@ -159,12 +159,12 @@ The brain runs [core reflexes](BRAIN.md#reflexes-constructing-the-timeline) ever
 
 | Reflex | Interval | What it does |
 |--------|----------|--------------|
-| `FireDueAlarms` | 2s | creates alarm occurrences, emits `alarm_fired` |
-| `StaleAlarmReflex` | 2s | detects recurring alarms with no next fire time, emits `alarm_stale` |
-| `CheckStale` | 2s | flags tasks with no activity, inserts stale task reports |
-| `SkillChangeReflex` | 2s | detects skill file add/remove/change, emits `skill_added`/`skill_removed`/`skill_changed` |
+| `FireDueAlarms` | every tick | creates alarm occurrences, emits `alarm_fired` |
+| `StaleAlarmReflex` | 30 min | detects recurring alarms with no next fire time, emits `alarm_stale` |
+| `CheckStale` | every tick | flags tasks with no activity, inserts stale task reports |
+| `SkillChangeReflex` | 5 min | detects skill file add/remove/change, emits `skill_added`/`skill_removed`/`skill_changed` |
 | `SkillCheckReflex` | 5min | runs skill-declared check commands (this doc), emits `skill_reflex_fired` |
-| `CheckSessions` | 2s | reaps dead/stale shell sessions |
+| `CheckSessions` | 10 sec | reaps dead/stale shell sessions |
 
 `SkillCheckReflex` is the bridge between core and skill reflexes — it's a core reflex that iterates all skill-declared reflexes and runs them.
 

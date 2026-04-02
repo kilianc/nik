@@ -12,7 +12,7 @@ Three tools for getting content from the web:
 - **fetch** -- Exa contents API (curl fallback). Default choice for reading a URL.
 - **tweets** -- X API v2 via curl. Use for fetching tweet data.
 
-For JS-heavy pages that need rendering or interaction, load the `browse` skill.
+For JS-heavy pages that need rendering or interaction, use the browser tooling available in your current environment instead of this skill's curl-based flow.
 
 ## search
 
@@ -68,7 +68,7 @@ curl -L -s -A 'Mozilla/5.0' "<URL>" | head -c 50000
 Tips:
 - Exa handles JS-rendered pages and complex layouts natively -- no manual tag stripping needed.
 - Search results already include highlights and text excerpts -- often enough without fetching.
-- For JS-heavy pages that need interaction (not just reading), load the `browse` skill.
+- For JS-heavy pages that need interaction (not just reading), switch to the browser tooling available in your current environment.
 
 ## tweets
 

@@ -39,7 +39,7 @@ Use `read_file` and `write_file` for these files. Use `shell` for `mkdir -p`, `c
 
 ## Scheduling
 
-The recurring alarm `[NIK_DREAM_CYCLE]` triggers this workflow nightly.
+This skill is triggered by the schedule-only `dream` reflex every day at 4am. When a `skill_reflex_fired` event appears for `dream`, run the full cycle below in one activation.
 
 ## Determining tonight's date
 

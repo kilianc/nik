@@ -26,7 +26,7 @@ YAML frontmatter between `---` lines, followed by a markdown body.
 ---
 name: my_skill
 summary: One packed sentence telling the LLM what this skill lets it do.
-tools: [shell, store_memory]
+tools: [shell, read_file]
 preload: false
 reflex:
   - name: check_something
@@ -51,7 +51,7 @@ Infrastructure setup steps (last section, idempotent).
 | `summary` | yes | one-liner — what can I do if I load this? |
 | `tools` | yes | tools the skill needs (empty `[]` if none) |
 | `preload` | no | `true` to inject into every activation (default `false`) |
-| `diagnostic_skip` | no | `true` to skip nightly maintenance checks (default `false`) |
+| `diagnostic_skip` | no | maintenance hint stored in raw frontmatter; use it only after loading the full skill |
 | `reflex` | no | periodic check commands — see [REFLEXES.md](REFLEXES.md) |
 
 ### Body rules
@@ -84,7 +84,7 @@ Currently preloaded: **messaging** and **vault**. Use sparingly — every preloa
 
 ## How skills appear in the prompt
 
-The `prompts/nik-03-skills.md` template renders two sections:
+The `internal/prompt/nik-03-skills.md` template renders two sections:
 
 **Preloaded Skills** — full body of each `preload: true` skill, headings shifted. The LLM sees the complete instructions without needing to call `load_skill`.
 
@@ -99,7 +99,7 @@ The LLM reads this index, decides which skill it needs, calls `load_skill` to ge
 
 ## Lifecycle
 
-`SkillChangeReflex` runs every 2 seconds. It walks both skill directories, hashes each `SKILL.md` (full content hash + install section hash separately), and compares against the `skill` table in the database.
+`SkillChangeReflex` runs every 5 minutes. It walks both skill directories, hashes each `SKILL.md` (full content hash + install section hash separately), and compares against the `skill` table in the database.
 
 | What changed | Event | System message | Brain action |
 |-------------|-------|----------------|-------------|
@@ -140,6 +140,7 @@ This means a workspace skill can completely replace a built-in skill just by usi
 | contacts | address book — search and update contact profiles | |
 | dream | nightly dream cycle — five passes of reflection and growth | |
 | journal | end-of-day private journal | |
+| learning | manage `howto/` guides — write, consult, refine, and tend procedural knowledge | |
 | maintenance | nightly system maintenance — prune old data, test auth, verify alarms | |
 | media | describe or transcribe images, audio, stickers, and documents | |
 | memory | extract durable facts from conversations into memories | |

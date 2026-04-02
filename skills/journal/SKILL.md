@@ -30,7 +30,7 @@ Use `read_file` and `write_file` for these files. Use `shell` for `mkdir -p` and
 
 ## Scheduling
 
-The recurring alarm `[NIK_JOURNAL]` triggers this workflow. When it fires, follow the full workflow below.
+This skill is triggered by the schedule-only `journal` reflex every day at 11:30pm. When a `skill_reflex_fired` event appears for `journal`, follow the full workflow below.
 
 ## Evening workflow
 

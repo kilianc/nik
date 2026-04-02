@@ -61,7 +61,8 @@ Run these in order. Each is one tool call.
 ### 1a — Skill inventory
 
 `load_skill` action `list`. Note each skill's name, summary, tools,
-and whether it has `diagnostic_skip`.
+and preload status. If a skill may need auth or install checks, load the
+full skill before judging whether it should be skipped.
 
 ### 1b — Runtime probes
 
