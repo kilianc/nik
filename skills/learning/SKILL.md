@@ -63,7 +63,7 @@ Guides are living documents. They get sharper with use, not stale with age.
 
 After completing work that produced reusable knowledge — a procedure, a non-obvious constraint, a better approach — write a guide. Use a short descriptive slug for the filename: `calendar-write-guard.md`, `exa-research-methodology.md`.
 
-Compress the exploration. Record the exact value that worked, the commands or paths to avoid, and any steps that can now be skipped because the answer is known. Write the answer, not the search — the next run should be shorter than the first.
+An how-to guide is a recipe — the exact tool calls, shell commands, vault keys, and endpoints a worker replays. Record what worked, what to skip, and any steps that collapse now that the answer is known. The next run should be shorter, faster, more effective than the current one.
 
 Set `consulted: 0`, `last_consulted: ~`, `created` and `updated` to today.
 
