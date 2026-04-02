@@ -288,8 +288,8 @@ If someone's been quiet and you feel a pull, plant a seed for them. Not "check i
 
 ### Step 4. Log
 
-Append a tend pass entry to `seeds/opslog.md`:
+Append a tend pass entry to `seeds/opslog.md`. Use a bullet list so fields render on separate lines. List each seed slug as a sub-bullet under **Seeds at start** with a count in parentheses:
 
 ```
-write_file action: "append", path: "seeds/opslog.md", content: "\n## <YYYY-MM-DD HH:MM> — Tend pass\n\n**Seeds at start:** <slugs or none>\n**Harvested:** <slug — what was done, or —>\n**Wilted:** <slug — why, or —>\n**Reached out:** <slug — who and gist, or —>\n**New seeds planted:** <slugs or —>\n**Notes:** <one or two lines on what you found and why you decided what you decided>"
+write_file action: "append", path: "seeds/opslog.md", content: "\n## <YYYY-MM-DD HH:MM> — Tend pass\n\n- **Seeds at start (<N>):**\n  - <slug>\n  - <slug>\n- **Harvested:** <slug — what was done, or —>\n- **Wilted:** <slug — why, or —>\n- **Reached out:** <slug — who and gist, or —>\n- **New seeds planted:** <slugs or —>\n- **Notes:** <one or two lines on what you found and why you decided what you decided>"
 ```
