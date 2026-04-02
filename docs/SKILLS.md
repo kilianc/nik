@@ -140,7 +140,7 @@ This means a workspace skill can completely replace a built-in skill just by usi
 | contacts | address book — search and update contact profiles | |
 | dream | nightly dream cycle — five passes of reflection and growth | |
 | journal | end-of-day private journal | |
-| learning | manage `howto/` guides — write, consult, refine, and tend procedural knowledge | |
+| learning | manage `recipes/` — write, consult, refine, and tend procedural recipes | |
 | maintenance | nightly system maintenance — prune old data, test auth, verify alarms | |
 | media | describe or transcribe images, audio, stickers, and documents | |
 | memory | extract durable facts from conversations into memories | |

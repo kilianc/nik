@@ -18,7 +18,7 @@
 ├── dreams/              dream cycle outputs
 ├── soul/                latest.md = current soul
 ├── memories/            structured memories
-├── howto/               procedural guides — check before starting
+├── recipes/             procedural recipes — check before starting
 ├── diagnostics/         system diagnostics
 ├── skills/              runtime skills — only read SKILL.md files
 ├── projects/            long-lived deliverables — research, tools, builds
