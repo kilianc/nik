@@ -257,8 +257,8 @@ func setupRunnerTest(t *testing.T, responses []string) (*Runner, db.Task, *llm.A
 	pr := prompt.NewRenderer(&config.Config{Home: tmpDir})
 	runner := &Runner{cfg: cfg, pr: pr, svc: svc}
 
-	reportTool := BuildReportTool(svc, task.ID)
-	allTools := []llm.Tool{reportTool}
+	workerTools := BuildWorkerTools(svc, task.ID)
+	allTools := workerTools
 	defs, exec := llm.SplitTools(allTools)
 
 	act := llm.NewActivation(client, llm.NoopRecorder{}, "test", defs)

@@ -32,7 +32,7 @@ var spawnToolDef = llm.ToolDef{
 			},
 			"plan": map[string]any{
 				"type":        "string",
-				"description": "Detailed instructions: steps, what to check, what to report. The task executes your plan.",
+				"description": "Markdown checklist plan. Use - [ ] for each step, indent substeps with two spaces. The worker marks steps done and can add substeps.",
 			},
 			"thinking": map[string]any{
 				"type":        "string",
@@ -114,6 +114,22 @@ var reportToolDef = llm.ToolDef{
 	},
 }
 
+var planUpdateToolDef = llm.ToolDef{
+	Name:        "task_plan_update",
+	Description: "Update the task plan to reflect current progress. Mark steps done, in-progress, cancelled, or add new substeps. Send the full updated plan text.",
+	Parameters: map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"plan": map[string]any{
+				"type":        "string",
+				"description": "The full updated plan as markdown checklist. Use - [ ] pending, - [>] in progress, - [x] done, - ~~step~~ cancelled. Indent substeps with two spaces.",
+			},
+		},
+		"required":             []string{"plan"},
+		"additionalProperties": false,
+	},
+}
+
 type spawnArgs struct {
 	ContactID string `json:"contact_id"`
 	Goal      string `json:"goal"`
@@ -139,6 +155,10 @@ type reportArgs struct {
 	Note   string `json:"note"`
 }
 
+type planUpdateArgs struct {
+	Plan string `json:"plan"`
+}
+
 var retryToolDef = llm.ToolDef{
 	Name:        "task_retry",
 	Description: "Retry a failed task with a better plan. Use instead of task_spawn for work that already failed.",
@@ -155,7 +175,7 @@ var retryToolDef = llm.ToolDef{
 			},
 			"plan": map[string]any{
 				"type":        "string",
-				"description": "New plan -- what to do differently.",
+				"description": "New markdown checklist plan -- what to do differently. Use - [ ] for each step, indent substeps with two spaces.",
 			},
 			"thinking": map[string]any{
 				"type":        "string",
@@ -185,10 +205,10 @@ func BuildTools(svc *Service, runner *Runner) []llm.Tool {
 	}
 }
 
-func BuildReportTool(svc *Service, taskID string) llm.Tool {
-	return llm.Tool{
-		Def:     reportToolDef,
-		Handler: reportHandler(svc, taskID),
+func BuildWorkerTools(svc *Service, taskID string) []llm.Tool {
+	return []llm.Tool{
+		{Def: reportToolDef, Handler: reportHandler(svc, taskID)},
+		{Def: planUpdateToolDef, Handler: planUpdateHandler(svc, taskID)},
 	}
 }
 
@@ -312,6 +332,10 @@ func statusHandler(svc *Service) llm.ToolExecutor {
 			"task_id": id.Shorten(t.ID),
 			"status":  t.Status,
 			"goal":    t.Goal,
+		}
+
+		if t.Plan != "" {
+			result["plan"] = t.Plan
 		}
 
 		if t.Status == "cancelled" && t.CancellationReason != "" {
@@ -475,6 +499,28 @@ func reportHandler(svc *Service, taskID string) llm.ToolExecutor {
 		}
 
 		err = svc.InsertReport(ctx, taskID, args.Status, args.Note)
+		if err != nil {
+			return llm.ToolError(err), nil
+		}
+
+		return llm.ToolResult(map[string]any{"ok": true}), nil
+	}
+}
+
+func planUpdateHandler(svc *Service, taskID string) llm.ToolExecutor {
+	return func(ctx context.Context, call llm.ToolCall) (string, error) {
+		var args planUpdateArgs
+
+		err := json.Unmarshal([]byte(call.Arguments), &args)
+		if err != nil {
+			return llm.ToolError(err), nil
+		}
+
+		if args.Plan == "" {
+			return llm.ToolErrorf("plan is required"), nil
+		}
+
+		err = svc.UpdatePlan(ctx, taskID, args.Plan)
 		if err != nil {
 			return llm.ToolError(err), nil
 		}
