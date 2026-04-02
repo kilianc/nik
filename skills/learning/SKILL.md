@@ -63,17 +63,15 @@ Guides are living documents. They get sharper with use, not stale with age.
 
 After completing work that produced reusable knowledge — a procedure, a non-obvious constraint, a better approach — write a guide. Use a short descriptive slug for the filename: `calendar-write-guard.md`, `exa-research-methodology.md`.
 
+Compress the exploration. Record the exact value that worked, the commands or paths to avoid, and any steps that can now be skipped because the answer is known. Write the answer, not the search — the next run should be shorter than the first.
+
 Set `consulted: 0`, `last_consulted: ~`, `created` and `updated` to today.
 
 ### Consult
 
-Before starting work, scan `howto/` for relevant guides:
+Before starting work, search `howto/` for relevant guides by tags and content. Match on the problem you're solving.
 
-```
-shell action: "run", command: "ls howto/*.md 2>/dev/null || echo 'no guides'"
-```
-
-Read any guide whose title matches what you're about to do. After reading, bump the frontmatter:
+If a guide matches, follow it — it's the compressed path. Deviate only when the current situation is meaningfully different from what the guide describes. After reading, bump the frontmatter:
 
 - Increment `consulted` by 1
 - Set `last_consulted` to today

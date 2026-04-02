@@ -138,7 +138,6 @@ This means a workspace skill can completely replace a built-in skill just by usi
 | briefing | morning news research session and topic management | |
 | config | read and update nik's runtime config and conversation allow list (owner-only) | |
 | contacts | address book — search and update contact profiles | |
-| critic | post-task quality assessment for completed/failed tasks | |
 | dream | nightly dream cycle — five passes of reflection and growth | |
 | journal | end-of-day private journal | |
 | maintenance | nightly system maintenance — prune old data, test auth, verify alarms | |
