@@ -7,10 +7,10 @@ tools: [db_query]
 # Search (db_query)
 
 Run a read-only SQL query against nik's SQLite database. Only `SELECT`,
-`WITH`, `SHOW`, `DESCRIBE`, and `PRAGMA` statements are allowed.
+`WITH`, `SHOW`, `DESCRIBE`, and read-only `PRAGMA` statements are allowed.
 
 - `query` -- the SQL query string
-- Returns up to 50 rows. If truncated, the response includes
+- Returns up to 500 rows. If truncated, the response includes
   `"truncated": true`.
 
 ## Start with the schema

@@ -34,7 +34,12 @@ Use `read_file` and `write_file` for these files. Use `shell` for file operation
 
 ## Scheduling
 
-Two recurring alarms trigger this skill: `[NIK_MEMORY_EXTRACT]` and `[NIK_MEMORY_COMPACT]`. When an alarm fires, check the label to know which mode to run. Both modes are silent -- do not message anyone about the run.
+Two schedule-only skill reflexes trigger this skill:
+
+- `extract` — every day at 11pm
+- `compact` — every day at 12:30am
+
+When a `skill_reflex_fired` event appears for `memory`, check the reflex name to know which mode to run. Both modes are silent -- do not message anyone about the run.
 
 ---
 
