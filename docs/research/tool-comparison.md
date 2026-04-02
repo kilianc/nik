@@ -10,104 +10,108 @@ Every tool registered in each product, grouped by category. Sources:
 
 ### File System
 
-| Capability                 | Codex CLI     | OpenCode      | OpenClaw                 | Nik |
-| -------------------------- | ------------- | ------------- | ------------------------ | --- |
-| Read file                  | `read_file`   | `read`        | `read`                   | --  |
-| Write file                 | --            | `write`       | `write`                  | --  |
-| Edit file (string replace) | --            | `edit`        | `edit`                   | --  |
-| Multi-file edit            | --            | `multiedit`   | --                       | --  |
-| Apply patch/diff           | `apply_patch` | `apply_patch` | `apply_patch` (optional) | --  |
-| List directory             | `list_dir`    | `ls`          | `ls`                     | --  |
-| Find files by pattern      | --            | `glob`        | `find`                   | --  |
-| Search file contents       | `grep_files`  | `grep`        | `grep`                   | --  |
-| Semantic code search       | --            | `codesearch`  | --                       | --  |
+| Capability                 | Codex CLI     | OpenCode      | OpenClaw                 | Nik                      |
+| -------------------------- | ------------- | ------------- | ------------------------ | ------------------------ |
+| Read file                  | `read_file`   | `read`        | `read`                   | `read_file` (privileged) |
+| Write file                 | --            | `write`       | `write`                  | `write_file` (privileged)|
+| Edit file (string replace) | --            | `edit`        | `edit`                   | --                       |
+| Multi-file edit            | --            | `multiedit`   | --                       | --                       |
+| Apply patch/diff           | `apply_patch` | `apply_patch` | `apply_patch` (optional) | --                       |
+| List directory             | `list_dir`    | `ls`          | `ls`                     | --                       |
+| Find files by pattern      | --            | `glob`        | `find`                   | --                       |
+| Search file contents       | `grep_files`  | `grep`        | `grep`                   | --                       |
+| Semantic code search       | --            | `codesearch`  | --                       | --                       |
 
 ### Shell / Execution
 
-| Capability                   | Codex CLI                   | OpenCode | OpenClaw                                             | Nik          |
-| ---------------------------- | --------------------------- | -------- | ---------------------------------------------------- | ------------ |
-| Shell command (basic)        | `shell`                     | `bash`   | `bash`                                               | -- (planned) |
-| Shell command (user's shell) | `shell_command`             | --       | --                                                   | --           |
-| PTY/interactive exec         | `exec_command`              | --       | `exec` (pty flag)                                    | -- (planned) |
-| Write to stdin               | `write_stdin`               | --       | `process` write action                               | -- (planned) |
-| Background process mgmt      | --                          | --       | `process` (poll/log/write/kill/list/clear/send-keys) | -- (planned) |
-| Container exec               | `container.exec`            | --       | --                                                   | --           |
-| Local shell                  | `local_shell`               | --       | --                                                   | --           |
-| JavaScript REPL              | `js_repl` + `js_repl_reset` | --       | --                                                   | --           |
+| Capability                   | Codex CLI                    | OpenCode | OpenClaw                                             | Nik                                         |
+| ---------------------------- | ---------------------------- | -------- | ---------------------------------------------------- | ------------------------------------------- |
+| Shell command (basic)        | `shell`                      | `bash`   | `bash`                                               | `shell` run (task worker, tmux-backed)      |
+| Shell command (user's shell) | `shell_command`              | --       | --                                                   | --                                          |
+| PTY/interactive exec         | `exec_command`               | --       | `exec` (pty flag)                                    | `shell` send (task worker)                  |
+| Write to stdin               | `write_stdin`                | --       | `process` write action                               | `shell` send (task worker)                  |
+| Background process mgmt      | --                           | --       | `process` (poll/log/write/kill/list/clear/send-keys) | `shell` read/kill (task worker)             |
+| Container exec               | `container.exec`             | --       | --                                                   | `shell` Docker mode (task worker)           |
+| Container rebuild             | --                           | --       | --                                                   | `shell-rebuild` / `shell-factory-reset`     |
+| Local shell                  | `local_shell`                | --       | --                                                   | --                                          |
+| JavaScript REPL              | `js_repl` + `js_repl_reset`  | --       | --                                                   | --                                          |
 
 ### Web
 
-| Capability        | Codex CLI                   | OpenCode             | OpenClaw                               | Nik |
-| ----------------- | --------------------------- | -------------------- | -------------------------------------- | --- |
-| Web search        | `web_search` (API built-in) | `websearch` (Exa AI) | `web_search` (Brave/Perplexity/Gemini) | --  |
-| Fetch URL content | --                          | `webfetch`           | `web_fetch`                            | --  |
+| Capability        | Codex CLI                   | OpenCode             | OpenClaw                               | Nik                                       |
+| ----------------- | --------------------------- | -------------------- | -------------------------------------- | ----------------------------------------- |
+| Web search        | `web_search` (API built-in) | `websearch` (Exa AI) | `web_search` (Brave/Perplexity/Gemini) | `web` skill (Exa via shell)               |
+| Fetch URL content | --                          | `webfetch`           | `web_fetch`                            | `web` skill (Exa contents / curl via shell)|
+| Fetch tweets      | --                          | --                   | --                                     | `web` skill (X API v2 via shell)          |
 
 ### Memory / Persistent State
 
-| Capability              | Codex CLI                       | OpenCode                 | OpenClaw                         | Nik |
-| ----------------------- | ------------------------------- | ------------------------ | -------------------------------- | --- |
-| Todo / task tracking    | `update_plan` (doubles as todo) | `todoread` / `todowrite` | --                               | --  |
-| Long-term memory read   | --                              | --                       | `memory_get`                     | --  |
-| Long-term memory search | --                              | --                       | `memory_search` (vector-indexed) | --  |
+| Capability              | Codex CLI                       | OpenCode                 | OpenClaw                         | Nik                                        |
+| ----------------------- | ------------------------------- | ------------------------ | -------------------------------- | ------------------------------------------ |
+| Todo / task tracking    | `update_plan` (doubles as todo) | `todoread` / `todowrite` | --                               | `task_spawn` / `task_list` / `task_status` |
+| Long-term memory read   | --                              | --                       | `memory_get`                     | `read_file` (MEMORIES.md, privileged)      |
+| Long-term memory search | --                              | --                       | `memory_search` (vector-indexed) | recall (pre-activation, not a tool)        |
 
 ### Scheduling / Automation
 
-| Capability        | Codex CLI | OpenCode | OpenClaw                                     | Nik     |
-| ----------------- | --------- | -------- | -------------------------------------------- | ------- |
-| One-shot alarm    | --        | --       | `cron` (at: one-shot ISO timestamp)          | `alarm` |
-| Recurring cron    | --        | --       | `cron` (cron: 5-field expr, every: interval) | --      |
-| Gateway / restart | --        | --       | `gateway` (restart/config.get/config.patch)  | --      |
+| Capability        | Codex CLI | OpenCode | OpenClaw                                     | Nik                                                    |
+| ----------------- | --------- | -------- | -------------------------------------------- | ------------------------------------------------------ |
+| One-shot alarm    | --        | --       | `cron` (at: one-shot ISO timestamp)          | `alarm` (one-shot)                                     |
+| Recurring cron    | --        | --       | `cron` (cron: 5-field expr, every: interval) | `alarm` (recurring, natural-language → cron via LLM)   |
+| Update schedule   | --        | --       | `cron` update                                | `update_alarm` (goal, recurrence, next fire, note)     |
+| Cancel schedule   | --        | --       | `cron` remove                                | `cancel_alarm`                                         |
+| Gateway / restart | --        | --       | `gateway` (restart/config.get/config.patch)  | --                                                     |
 
 ### Multi-Agent / Sessions
 
-| Capability           | Codex CLI                                         | OpenCode | OpenClaw                        | Nik |
-| -------------------- | ------------------------------------------------- | -------- | ------------------------------- | --- |
-| Spawn sub-agent      | `spawn_agent`                                     | `task`   | `sessions_spawn`                | --  |
-| Send input to agent  | `send_input`                                      | --       | `sessions_send`                 | --  |
-| Resume agent         | `resume_agent`                                    | --       | --                              | --  |
-| Wait for agent       | `wait`                                            | --       | --                              | --  |
-| Close agent          | `close_agent`                                     | --       | --                              | --  |
-| List sessions/agents | --                                                | --       | `sessions_list` / `agents_list` | --  |
-| Session history      | --                                                | --       | `sessions_history`              | --  |
-| Session status       | --                                                | --       | `session_status`                | --  |
-| Batch jobs from CSV  | `spawn_agents_on_csv` + `report_agent_job_result` | `batch`  | --                              | --  |
+| Capability           | Codex CLI                                         | OpenCode | OpenClaw                        | Nik                         |
+| -------------------- | ------------------------------------------------- | -------- | ------------------------------- | --------------------------- |
+| Spawn sub-agent      | `spawn_agent`                                     | `task`   | `sessions_spawn`                | `task_spawn`                |
+| Send input to agent  | `send_input`                                      | --       | `sessions_send`                 | --                          |
+| Resume agent         | `resume_agent`                                    | --       | --                              | `task_retry`                |
+| Wait for agent       | `wait`                                            | --       | --                              | --                          |
+| Close agent          | `close_agent`                                     | --       | --                              | `task_cancel`               |
+| List sessions/agents | --                                                | --       | `sessions_list` / `agents_list` | `task_list`                 |
+| Session history      | --                                                | --       | `sessions_history`              | `task_status` (last report) |
+| Session status       | --                                                | --       | `session_status`                | `task_status`               |
+| Worker → manager     | `report_agent_job_result`                         | --       | --                              | `task_report` (worker only) |
+| Batch jobs from CSV  | `spawn_agents_on_csv` + `report_agent_job_result` | `batch`  | --                              | --                          |
 
 ### User Interaction / Planning
 
-| Capability                   | Codex CLI                        | OpenCode                   | OpenClaw             | Nik               |
-| ---------------------------- | -------------------------------- | -------------------------- | -------------------- | ----------------- |
-| Ask user structured question | `request_user_input`             | `question`                 | -- (via messaging)   | -- (via WhatsApp) |
-| Plan mode toggle             | -- (separate collaboration mode) | `plan-enter` / `plan-exit` | --                   | --                |
-| Update plan/todo             | `update_plan`                    | `todowrite`                | --                   | --                |
-| Skills management            | --                               | `skill`                    | -- (via skills dirs) | --                |
+| Capability                   | Codex CLI                        | OpenCode                   | OpenClaw             | Nik                                            |
+| ---------------------------- | -------------------------------- | -------------------------- | -------------------- | ---------------------------------------------- |
+| Ask user structured question | `request_user_input`             | `question`                 | -- (via messaging)   | -- (via WhatsApp)                              |
+| Plan mode toggle             | -- (separate collaboration mode) | `plan-enter` / `plan-exit` | --                   | --                                             |
+| Update plan/todo             | `update_plan`                    | `todowrite`                | --                   | --                                             |
+| Skills management            | --                               | `skill`                    | -- (via skills dirs) | `load_skill` (list index or load full SKILL.md)|
 
 ### Messaging
 
-| Capability           | Codex CLI | OpenCode | OpenClaw                                         | Nik                                                              |
-| -------------------- | --------- | -------- | ------------------------------------------------ | ---------------------------------------------------------------- |
-| Send messages        | --        | --       | `message` send (multi-platform)                  | `wapp_reply`                                                     |
-| Reactions            | --        | --       | `message` react                                  | `wapp_react`                                                     |
-| Presence / typing    | --        | --       | --                                               | `wapp_set_presence` / `wapp_send_composing` / `wapp_send_paused` |
-| Search messages      | --        | --       | `message` search                                 | -- (in TODO.md)                                                  |
-| Edit/delete messages | --        | --       | `message` edit/delete                            | --                                                               |
-| Threads              | --        | --       | `message` thread-create/thread-reply/thread-list | --                                                               |
-| Pins                 | --        | --       | `message` pin/unpin/list-pins                    | --                                                               |
-| Polls                | --        | --       | `message` poll                                   | --                                                               |
-| Roles/permissions    | --        | --       | `message` role-add/role-remove/permissions       | --                                                               |
-| Emoji/sticker upload | --        | --       | `message` emoji-upload/sticker-upload            | --                                                               |
-| Channel info         | --        | --       | `message` channel-info/channel-list              | --                                                               |
-| Events               | --        | --       | `message` event-list/event-create                | --                                                               |
-| Moderation           | --        | --       | `message` timeout/kick/ban                       | --                                                               |
+| Capability           | Codex CLI | OpenCode | OpenClaw                                         | Nik                                    |
+| -------------------- | --------- | -------- | ------------------------------------------------ | -------------------------------------- |
+| Send messages        | --        | --       | `message` send (multi-platform)                  | `message_send` (text, file, voice/TTS) |
+| Reactions            | --        | --       | `message` react                                  | `message_react`                            |
+| Presence / typing    | --        | --       | --                                               | `message_set_presence`                     |
+| Search messages      | --        | --       | `message` search                                 | --                                         |
+| Edit/delete messages | --        | --       | `message` edit/delete                            | --                                         |
+| Threads              | --        | --       | `message` thread-create/thread-reply/thread-list | --                                         |
+| Pins                 | --        | --       | `message` pin/unpin/list-pins                    | --                                         |
+| Polls                | --        | --       | `message` poll                                   | --                                         |
+| Roles/permissions    | --        | --       | `message` role-add/role-remove/permissions       | --                                         |
+| Emoji/sticker upload | --        | --       | `message` emoji-upload/sticker-upload            | --                                         |
+| Channel info         | --        | --       | `message` channel-info/channel-list              | --                                         |
+| Events               | --        | --       | `message` event-list/event-create                | --                                         |
+| Moderation           | --        | --       | `message` timeout/kick/ban                       | --                                         |
 
 ### Media / Vision
 
-| Capability              | Codex CLI    | OpenCode | OpenClaw              | Nik                             |
-| ----------------------- | ------------ | -------- | --------------------- | ------------------------------- |
-| View/analyze image      | `view_image` | --       | `image`               | `describe_media`                |
-| Audio transcription     | --           | --       | --                    | `describe_media`                |
-| Media description store | --           | --       | --                    | `wapp_update_media_description` |
-| Camera snap             | --           | --       | `nodes` camera_snap   | --                              |
-| Screen record           | --           | --       | `nodes` screen_record | --                              |
+| Capability          | Codex CLI    | OpenCode | OpenClaw              | Nik                                      |
+| ------------------- | ------------ | -------- | --------------------- | ---------------------------------------- |
+| View/analyze image  | `view_image` | --       | `image`               | `describe_media`                         |
+| Audio transcription | --           | --       | --                    | `describe_media`                         |
+| Camera snap         | --           | --       | `nodes` camera_snap   | --                                       |
+| Screen record       | --           | --       | `nodes` screen_record | --                                       |
 
 ### Browser / UI
 
@@ -144,11 +148,12 @@ Every tool registered in each product, grouped by category. Sources:
 
 ### Data / Config (nik-specific)
 
-| Capability         | Codex CLI | OpenCode | OpenClaw         | Nik                          |
-| ------------------ | --------- | -------- | ---------------- | ---------------------------- |
-| Database queries   | --        | --       | --               | `db_query` (privileged)      |
-| Contact management | --        | --       | --               | `update_contact`             |
-| Config management  | --        | --       | `gateway` config | `config` (privileged) |
+| Capability         | Codex CLI | OpenCode | OpenClaw         | Nik                                        |
+| ------------------ | --------- | -------- | ---------------- | ------------------------------------------ |
+| Database queries   | --        | --       | --               | `db_query` (privileged, read-only)         |
+| Database pruning   | --        | --       | --               | `db_prune` (privileged, retention cleanup) |
+| Contact management | --        | --       | --               | `update_contact`                           |
+| Config management  | --        | --       | `gateway` config | `config` (privileged)                      |
 
 ---
 
@@ -159,7 +164,7 @@ Every tool registered in each product, grouped by category. Sources:
 | **Codex CLI** | 27 registered handlers (some are aliases/variants of the same capability) |
 | **OpenCode**  | 19 tools (each .ts file = one tool)                                       |
 | **OpenClaw**  | 24+ tools (across 10 tool groups, `message` alone has 20+ actions)        |
-| **Nik**       | 10 tools                                                                  |
+| **Nik**       | 24 tools (20 main brain + 4 task-worker-only)                             |
 
 ---
 
@@ -351,31 +356,32 @@ Execution modes: `isolated` (dedicated agent turn) or `main` (enqueue on next he
 
 ---
 
-## Nik's Current Toolset (10 tools)
+## Nik's Current Toolset (24 tools)
 
-- **WhatsApp**: `wapp_reply`, `wapp_react`, `wapp_set_presence`, `wapp_send_composing`, `wapp_send_paused`, `wapp_update_media_description`
+### Main brain (20 tools)
+
+- **Messaging**: `message_send`, `message_react`, `message_set_presence`
 - **AI**: `describe_media`
-- **Schedule**: `alarm`
-- **Data (privileged)**: `db_query`, `config`
+- **Schedule**: `alarm`, `update_alarm`, `cancel_alarm`
+- **Tasks**: `task_spawn`, `task_retry`, `task_list`, `task_status`, `task_cancel`
+- **Skills**: `load_skill`
 - **CRM**: `update_contact`
+- **Data (privileged)**: `db_query`, `db_prune`, `read_file`, `write_file`, `config`
+- **Control**: `done`
 
-## Already Planned
+### Task worker adds (4 tools)
 
-- **`exec` + `process`** -- full plan in [docs/plans/03-exec-process.md](03-exec-process.md)
+- **Shell (privileged)**: `shell`, `shell-rebuild`, `shell-factory-reset`
+- **Reporting**: `task_report`
 
-## Candidate Tools for Nik
+## Gap Analysis
 
-The six tools we're evaluating, with effort/impact notes:
+No major capability gaps remain. Previous candidates resolved:
 
-| Tool               | Who has it                                                           | Effort                                                  | Impact for nik                                                               |
-| ------------------ | -------------------------------------------------------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `exec` + `process` | Codex, OpenCode, OpenClaw                                            | Medium (plan exists in `docs/plans/03-exec-process.md`) | High -- unlocks running commands on your machine                             |
-| `web_search`       | Codex (built-in), OpenCode (Exa), OpenClaw (Brave/Perplexity/Gemini) | Low-Medium (API wrapper + config)                       | High -- real-world knowledge, lookups, news                                  |
-| `web_fetch`        | OpenCode, OpenClaw                                                   | Low (HTTP GET + readability extraction)                 | Medium-High -- pairs with web_search, read articles/docs                     |
-| `ask_question`     | Codex, OpenCode                                                      | Low (structured question + options via WhatsApp)        | Medium -- nik already talks via WhatsApp, but structured choices are cleaner |
-| `todo` / `plan`    | Codex (update_plan), OpenCode (todowrite + plan-enter/exit)          | Low (state tracking, no external deps)                  | Medium -- helps nik break down complex requests                              |
-| `cron`             | OpenClaw only                                                        | Medium (extends alarm infra, needs persistence)         | Medium-High -- "remind me every Monday", "check X daily"                     |
+- **Web search / fetch** -- covered by `web` skill (Exa API + curl via task worker shell)
+- **Ask question** -- covered by WhatsApp prose; a structured-choice tool would be a UX refinement, not a missing capability
+- **Exec / process** -- built (`shell` tool, tmux-backed, Docker mode)
+- **Todo / plan** -- covered by task system (`task_spawn` / `task_list` / `task_status`)
+- **Cron** -- covered by `alarm` (one-shot + recurring)
 
-## Decision Point
-
-Which tool(s) should we build next? Pick one or prioritize the order.
+Remaining `--` entries in nik's column are either coding-assistant features (edit/patch/grep/LSP) irrelevant to a messaging agent, or platform-specific features (OpenClaw nodes, browser automation) outside nik's scope.
