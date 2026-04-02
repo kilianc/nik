@@ -61,11 +61,13 @@ Guides are living documents. They get sharper with use, not stale with age.
 
 ### Write
 
-After completing work that produced reusable knowledge — a procedure, a non-obvious constraint, a better approach — write a guide. Use a short descriptive slug for the filename: `calendar-write-guard.md`, `exa-research-methodology.md`.
+After completing work where you discovered something non-obvious — a failure mode, a workaround, a constraint that contradicts docs — write a guide. The litmus test: "Would I get this wrong next time without this note?" If yes, write it. If no, don't.
 
-An how-to guide is a recipe — the exact tool calls, shell commands, vault keys, and endpoints a worker replays. Record what worked, what to skip, and any steps that collapse now that the answer is known. The next run should be shorter, faster, more effective than the current one.
+A guide is a recipe — the exact tool calls, shell commands, vault keys, and endpoints a worker replays. Record what worked, what to skip, and any steps that collapse now that the answer is known. The next run should be shorter, faster, more effective than the current one.
 
-Set `consulted: 0`, `last_consulted: ~`, `created` and `updated` to today.
+Use a short descriptive slug for the filename: `calendar-write-guard.md`, `exa-research-methodology.md`. Set `consulted: 0`, `last_consulted: ~`, `created` and `updated` to today.
+
+A guide earns its place by recording something you'd get wrong by default — an API quirk, a failure diagnostic, a workaround, a learned preference, an undocumented constraint. Response templates, decision-brief scaffolding, and "load context, analyze, write output" sequences are just task decomposition, which is what you already do.
 
 ### Consult
 
@@ -112,7 +114,8 @@ The tend pass is silent — no messages to anyone. The goal is a tight, trustwor
 
 ## What belongs here vs elsewhere
 
-- **Procedural knowledge from experience** → howto guide
+- **Non-obvious technical knowledge from execution** → howto guide (API quirks, failure diagnostics, workarounds, undocumented constraints)
 - **How to use a tool or system** → skill (generic, token-optimal)
 - **Facts about people and relationships** → memory
 - **Skill gaps or better workflows for existing skills** → update the workspace skill directly
+- **How to handle a type of request** → nowhere — you already know how to think
