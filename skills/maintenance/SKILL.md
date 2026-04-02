@@ -109,7 +109,7 @@ if command -v agent-browser >/dev/null; then
 else echo "SKIP no-cli"; fi
 
 echo "=== OUTPUTS ==="
-for d in assessments awareness backups breathing briefings diagnostics dreams journal memories soul; do
+for d in awareness backups breathing briefings diagnostics dreams journal memories soul; do
   if [ -d "$d" ]; then
     if [ -e "$d/latest.md" ]; then
       target=$(readlink "$d/latest.md" 2>/dev/null || echo "live")
@@ -151,11 +151,6 @@ if [ "$seed_count" -gt 0 ] 2>/dev/null; then
 else
   echo "active=0 cursor=$seed_cursor"
 fi
-
-echo "=== ASSESSMENTS ==="
-assess_count=$(find assessments/ -name '*.md' 2>/dev/null | grep -c . || echo 0)
-assess_latest=$(find assessments/ -name '*.md' 2>/dev/null | sort | tail -1)
-echo "count=$assess_count latest=$assess_latest"
 
 echo "=== BRIEFING ==="
 topics_count=$(grep -c '^\- ' briefings/topics.md 2>/dev/null || echo 0)
@@ -268,11 +263,6 @@ WHERE created_at >= DATETIME('now', '-7 days')
   AND status IN ('completed', 'failed', 'cancelled')
 ```
 
-Cross-reference with assessment files: `read_file` the most recent
-2-3 assessments from `assessments/` (if any exist). Note the
-effectiveness scores and any recurring recommendations across tasks.
-If no assessments exist, WARN that the critic skill may not be running.
-
 ### 2e — Memory cursor lag
 
 ```sql
@@ -360,8 +350,6 @@ cross-reference: if alarm dead, that's the root cause
 
 ## Task Effectiveness
 7-day completed/failed/cancelled counts
-recent assessment scores and recurring themes
-WARN if no assessment files exist (critic skill not running)
 WARN if fail rate > 30%
 
 ## Data Quality
@@ -409,7 +397,7 @@ Maintenance 2026-03-28
 Pruned 1,204 rows (213MB → 189MB)
 Auth 7/7 PASS · Alarms 20 ok
 Errors 24h: 2 warn / 0 err ✓
-Tasks 7d: 12 completed, 2 failed · Avg score 3.8/5
+Tasks 7d: 12 completed, 2 failed
 Contacts 18 active, 3 missing names
 Memories 342 rows, cursor current
 Soul evolved 03-27 · Seeds 3 active
@@ -437,9 +425,7 @@ Lead with FAILs if any. Keep it under 10 lines.
 - Soul not updated in 2+ days → check dream cycle alarm and recent dream files
 - Seed cursor >8h stale → check seed extract alarm
 - Briefing topics stale 7+ days → topics may need refresh
-- No assessment files → check critic skill alarm health
-- Task fail rate > 30% → review recent assessments for recurring root causes
-- Recurring tool/skill issues across assessments → flag for owner
+- Task fail rate > 30% → review recent failed tasks for recurring root causes
 - Contact gaps >50% → prioritize filling names and one_liners in upcoming conversations
 
 ### Escalation
