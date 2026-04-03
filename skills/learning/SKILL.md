@@ -80,7 +80,9 @@ If a recipe matches, follow it — it's the compressed path. Deviate only when t
 
 ### Refine
 
-After completing work that used a recipe — was it accurate? Incomplete? Wrong? Rewrite the parts that need it while the experience is fresh. Update `updated` to today. Bad recipes get rewritten, not patched with addenda.
+After completing work that used a recipe — was it accurate? Incomplete? Wrong? Slower than it needs to be? Rewrite the parts that need it while the experience is fresh. Update `updated` to today. Bad recipes get rewritten, not patched with addenda.
+
+A recipe should converge toward a straight line. The first version is exploratory because you don't know the environment. After a successful run, you do. If a discovery step found a stable answer, replace the discovery with the answer.
 
 Append to the `## Changelog` section at the bottom of the recipe:
 
