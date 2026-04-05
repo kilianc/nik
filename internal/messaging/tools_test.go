@@ -13,14 +13,13 @@ import (
 
 func TestBuildToolsReturnsExpectedToolNames(t *testing.T) {
 	tools := BuildTools(&Service{})
-	if len(tools) != 3 {
-		t.Fatalf("expected 3 tools, got %d", len(tools))
+	if len(tools) != 2 {
+		t.Fatalf("expected 2 tools, got %d", len(tools))
 	}
 
 	want := []string{
 		"message_send",
 		"message_react",
-		"message_set_presence",
 	}
 	for i, name := range want {
 		if tools[i].Def.Name != name {

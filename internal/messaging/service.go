@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -22,6 +23,8 @@ type ContactService interface {
 	EnsureContactForMessage(ctx context.Context, platform string, externalIDs []string, isFromMe bool, at time.Time) (string, error)
 }
 
+const presenceTimeout = 60 * time.Second
+
 type Service struct {
 	cfg        *config.Config
 	db         *sql.DB
@@ -29,6 +32,10 @@ type Service struct {
 	contacts   ContactService
 	replyDelay func(body string) time.Duration
 	speechFn   func(ctx context.Context, text string) (string, error)
+
+	presenceMu     sync.Mutex
+	presenceOnline bool
+	presenceTimer  *time.Timer
 }
 
 func NewService(cfg *config.Config, conn *sql.DB, contacts ContactService) *Service {
@@ -315,6 +322,7 @@ func (s *Service) Reply(ctx context.Context, conversationID string, body string,
 	if err != nil {
 		return err
 	}
+	s.touchPresence(platform)
 
 	if outbound.ExternalMessageID == "" {
 		return fmt.Errorf("platform reply missing external_message_id")
@@ -402,6 +410,7 @@ func (s *Service) SendFile(ctx context.Context, conversationID string, filePath 
 	if err != nil {
 		return err
 	}
+	s.touchPresence(platform)
 
 	if outbound.ExternalMessageID == "" {
 		return fmt.Errorf("platform send file missing external_message_id")
@@ -487,6 +496,7 @@ func (s *Service) SendVoiceNote(ctx context.Context, conversationID string, audi
 	if err != nil {
 		return err
 	}
+	s.touchPresence(platform)
 
 	if outbound.ExternalMessageID == "" {
 		return fmt.Errorf("platform send voice note missing external_message_id")
@@ -544,6 +554,7 @@ func (s *Service) React(ctx context.Context, messageID string, emoji string) err
 	if err != nil {
 		return err
 	}
+	s.touchPresence(platform)
 
 	if outbound.ExternalMessageID == "" {
 		return nil
@@ -574,6 +585,60 @@ func (s *Service) SetPresence(ctx context.Context, platformName string, availabl
 	}
 
 	return platform.SetPresence(ctx, available)
+}
+
+func (s *Service) touchPresence(platform MessagingPlatform) {
+	s.presenceMu.Lock()
+	defer s.presenceMu.Unlock()
+
+	if !s.presenceOnline {
+		err := platform.SetPresence(context.Background(), true)
+		if err != nil {
+			slog.Warn("set presence available", "pkg", "messaging", "error", err)
+			return
+		}
+		s.presenceOnline = true
+	}
+
+	if s.presenceTimer != nil {
+		s.presenceTimer.Stop()
+	}
+	s.presenceTimer = time.AfterFunc(presenceTimeout, s.presenceExpire)
+}
+
+func (s *Service) presenceExpire() {
+	s.presenceMu.Lock()
+	defer s.presenceMu.Unlock()
+
+	if !s.presenceOnline {
+		return
+	}
+
+	s.presenceOnline = false
+	err := s.SetPresence(context.Background(), "whatsapp", false)
+	if err != nil {
+		slog.Warn("set presence unavailable", "pkg", "messaging", "error", err)
+	}
+}
+
+func (s *Service) StopPresence() {
+	s.presenceMu.Lock()
+	defer s.presenceMu.Unlock()
+
+	if s.presenceTimer != nil {
+		s.presenceTimer.Stop()
+		s.presenceTimer = nil
+	}
+
+	if !s.presenceOnline {
+		return
+	}
+
+	s.presenceOnline = false
+	err := s.SetPresence(context.Background(), "whatsapp", false)
+	if err != nil {
+		slog.Warn("set presence unavailable", "pkg", "messaging", "error", err)
+	}
 }
 
 func (s *Service) MarkRead(ctx context.Context, conversationID string, readAt time.Time) error {
