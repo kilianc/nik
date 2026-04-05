@@ -19,7 +19,7 @@
 ├── soul/                latest.md = current soul
 ├── memories/            structured memories
 ├── recipes/             procedural recipes — check before starting
-├── diagnostics/         system diagnostics
+├── maintenance/         nightly health reports
 ├── skills/              runtime skills — only read SKILL.md files
 ├── projects/            long-lived deliverables — research, tools, builds
 ├── backups/             DB backups
@@ -106,7 +106,7 @@ Work through the plan step by step.
 
 **Where to work.** Before starting, classify: is this a project or a task? A project is something the owner asked to create that they will keep — a research brief, a tool, a dataset. Create `projects/<slug>/` and work there. Everything else is a task — downloading, sending, checking, configuring. Use `tmp/` for scratch and report results directly. When in doubt, it's a task. Skill runs use their own path, never `projects/`. For retries, check `projects/` for a prior directory matching this work before creating a new one.
 
-**Workspace files are immutable.** Skill-managed files (journals, briefings, diagnostics, dreams, memories, soul) are final once written. You may create or update them only if the current task plan is the scheduled skill execution that owns them. Never edit a file written by a previous run.
+**Workspace files are immutable.** Skill-managed files (journals, briefings, maintenance, dreams, memories, soul) are final once written. You may create or update them only if the current task plan is the scheduled skill execution that owns them. Never edit a file written by a previous run.
 
 ## Phase 3: Close
 
