@@ -190,7 +190,7 @@ The timeline sensor sees those system messages as new events, triggers an activa
 - **Journal**: managed by the `journal` skill. Schedule-only `journal` reflex, gathers day context via `db_query` and `shell`, writes to `journal/` files. No domain package.
 - **Dream**: managed by the `dream` skill. Schedule-only `dream` reflex, runs all five passes in one activation, writes to `dreams/` files. The final pass (Wake) evolves nik's **soul** — a living identity document stored in `soul/latest.md` and loaded into the system prompt on every activation. Dated snapshots in `soul/YYYY/MM/DD/YYYY-MM-DD.md` preserve history. No domain package.
 - **Briefing**: managed by the `briefing` skill. Schedule-only `briefing` reflex, searches the web for news (via the `web` skill), writes to `briefings/` files. No domain package.
-- **Maintenance**: managed by the `maintenance` skill. Schedule-only `maintenance` reflex, prunes old runtime data, checks auth and outputs, and writes to `diagnostics/` files. No domain package.
+- **Maintenance**: managed by the `maintenance` skill. Schedule-only `maintenance` reflex, prunes old runtime data, checks auth and outputs, and writes to `maintenance/` files. No domain package.
 - **Memory**: managed by the `memory` skill. Two schedule-only reflexes (`extract`, `compact`) keep `memories/` current. No domain package.
 - **Seeds**: managed by the `seeds` skill. Reflexes (`extract`, `tend`) grow forward-looking opportunities over time. No domain package.
 

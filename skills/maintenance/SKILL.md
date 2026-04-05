@@ -1,9 +1,6 @@
 ---
 name: maintenance
-summary: >
-  Nightly system maintenance: prune old data, test auth, verify alarms and
-  skill outputs, check data integrity and spending, report to diagnostics/.
-  Load when the maintenance reflex fires or DB size is large.
+summary: "Nightly health check: prune, verify skills/auth/vault, check errors and integrity."
 tools: [db_prune, db_query, shell, alarm, load_skill, read_file, message_send]
 diagnostic_skip: true
 reflex:
@@ -13,191 +10,29 @@ reflex:
 
 # Maintenance
 
-Nightly health check and cleanup. Prune first, then diagnose. Output
-goes to `diagnostics/YYYY/MM/DD/YYYY-MM-DD.md`.
-
-## Constraints
-
-- Target: **under 25 rounds**. Batch shell commands into scripts.
-- Load this skill exactly once. Do not re-load it mid-run.
-- Read the prior diagnostic at most once.
-- Do not fix anything. Report only.
-
-## Skip policy
-
-A skill may opt out of nightly auth/install checks by setting
-`diagnostic_skip: true` in its frontmatter. Record `SKIP` with the
-reason from the skill docs.
-
-## db_prune reference
-
-Deletes all ephemeral data older than the configured `retention` period
-(config.yaml, default `720h` / 30 days). One tool call, no arguments.
-
-**What it deletes:**
-- `activation` and all children: `activation_round`, `tool_call`,
-  `shell_session`, `experiment`, `experiment_variant`,
-  `experiment_variant_run`
-- `task` and all children: `task_report`
-- Cross-references (`task.activation_id`, `activation.task_id`,
-  `task.retry_for_task_id`) are detached before deletion
-- `message` rows with `platform = 'system'` (task reports, alarm events,
-  skill events, etc.)
-
-**What it preserves:**
-Conversations, WhatsApp messages, contacts, media, alarms, alarm
-occurrences, skills, skill events, skill reflexes, and cron cache.
+Nightly system health check. Report only — do not fix anything. Output goes to `maintenance/YYYY/MM/DD/YYYY-MM-DD.md`.
 
 ## Step 0 — Prune
 
-1. Record DB size before: `wc -c < nik.db`
-2. Call `db_prune`. Record `rows_deleted` and `cutoff`.
-3. Record DB size after: `wc -c < nik.db`
+Record DB size before and after. Call `db_prune` (no arguments). Record `rows_deleted`, `cutoff`, and size delta.
 
-## Step 1 — Collect
+## Step 1 — Skill health
 
-Run these in order. Each is one tool call.
+Call `load_skill` action `list`. For each skill that is not `diagnostic_skip` and has an install section, call `load_skill` to read it. Verify only what the `## Install` section declares:
 
-### 1a — Skill inventory
+- **Binaries**: `command -v <name>`. PASS if found, FAIL if declared but missing. If the shell runs in Docker, also check the Dockerfile includes the install step — a binary present at runtime but absent from the Dockerfile will be lost on rebuild.
+- **Vault credentials**: `./vault/cli get <key>` for each key the install section references. PASS if exits 0, FAIL otherwise.
+- **Auth**: if the install section describes an auth check command, run it.
 
-`load_skill` action `list`. Note each skill's name, summary, tools,
-and preload status. If a skill may need auth or install checks, load the
-full skill before judging whether it should be skipped.
+Never speculatively probe CLIs or invent health checks. If vault itself fails, mark all vault-dependent checks as BLOCKED and skip them.
 
-### 1b — Runtime probes
+Record PASS / FAIL / SKIP / BLOCKED per skill.
 
-Run a **single** shell script that performs all of the following and
-prints structured output. Adapt the script to the skills discovered
-in 1a — if a CLI is missing, print SKIP for that service.
+## Step 2 — System checks
 
-```sh
-#!/bin/sh
-echo "=== AUTH ==="
+Batch into as few `db_query` and `shell` calls as possible.
 
-echo "-- vault"
-timeout 10 ./vault/cli list >/dev/null 2>&1 && echo "PASS" || echo "FAIL exit=$?"
-
-echo "-- gws"
-if command -v gws >/dev/null; then
-  timeout 15 env GOOGLE_WORKSPACE_CLI_CONFIG_DIR=skills/google_workspace \
-    GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE=skills/google_workspace/nik.json \
-    gws auth status 2>&1 | head -5 || echo "FAIL exit=$?"
-else echo "SKIP no-cli"; fi
-
-echo "-- blockware"
-if command -v go >/dev/null && [ -f skills/blockware/main.go ]; then
-  timeout 30 go run ./skills/blockware/main.go summary 2>&1 | head -3 && echo "PASS" || echo "FAIL exit=$?"
-else echo "SKIP no-cli"; fi
-
-echo "-- robinhood"
-if command -v go >/dev/null && [ -f skills/robinhood/main.go ]; then
-  timeout 30 go run ./skills/robinhood/main.go account 2>&1 | head -3 && echo "PASS" || echo "FAIL exit=$?"
-else echo "SKIP no-cli"; fi
-
-echo "-- tesla"
-if command -v go >/dev/null && [ -f skills/tesla/main.go ]; then
-  timeout 30 go run ./skills/tesla/main.go vehicles 2>&1 | head -3 && echo "PASS" || echo "FAIL exit=$?"
-else echo "SKIP no-cli"; fi
-
-echo "-- lights"
-if command -v openhue >/dev/null; then
-  timeout 15 openhue get light 2>&1 | head -3 && echo "PASS" || echo "FAIL exit=$?"
-else echo "SKIP no-cli"; fi
-
-echo "-- browse"
-if command -v agent-browser >/dev/null; then
-  timeout 10 agent-browser --help >/dev/null 2>&1 && echo "PASS" || echo "FAIL exit=$?"
-else echo "SKIP no-cli"; fi
-
-echo "=== OUTPUTS ==="
-for d in awareness backups breathing briefings diagnostics dreams journal memories soul; do
-  if [ -d "$d" ]; then
-    if [ -e "$d/latest.md" ]; then
-      target=$(readlink "$d/latest.md" 2>/dev/null || echo "live")
-      size=$(wc -c < "$d/latest.md" | tr -d ' ')
-      echo "$d: $target ${size}B"
-    else
-      latest=$(find "$d" -path '*/[0-9][0-9][0-9][0-9]/[0-9][0-9]/*.md' 2>/dev/null | sort | tail -1)
-      if [ -n "$latest" ]; then
-        size=$(wc -c < "$latest" | tr -d ' ')
-        echo "$d: $latest ${size}B"
-      else
-        echo "$d: EMPTY"
-      fi
-    fi
-  fi
-done
-
-echo "=== MEMORIES ==="
-mem_count=$(find memories/ -path '*/[0-9][0-9][0-9][0-9]/[0-9][0-9]/*.md' 2>/dev/null | grep -c . || echo 0)
-mem_total=$(wc -c < memories/latest.md 2>/dev/null | tr -d ' ')
-mem_latest=$(find memories/ -path '*/[0-9][0-9][0-9][0-9]/[0-9][0-9]/*.md' 2>/dev/null | sort | tail -1)
-mem_rows=$(grep -c '^|' memories/latest.md 2>/dev/null || echo 0)
-mem_cursor=$(cat memories/latest-cursor.txt 2>/dev/null || echo "MISSING")
-echo "snapshots=$mem_count latest_snapshot=$mem_latest"
-echo "latest_bytes=$mem_total rows=$mem_rows cursor=$mem_cursor"
-
-echo "=== SOUL ==="
-soul_size=$(wc -c < soul/latest.md 2>/dev/null | tr -d ' ')
-soul_latest=$(find soul/ -path '*/[0-9][0-9][0-9][0-9]/[0-9][0-9]/*.md' 2>/dev/null | sort | tail -1)
-soul_snapshots=$(find soul/ -path '*/[0-9][0-9][0-9][0-9]/[0-9][0-9]/*.md' 2>/dev/null | grep -c . || echo 0)
-echo "latest_bytes=$soul_size snapshots=$soul_snapshots latest_snapshot=$soul_latest"
-
-echo "=== SEEDS ==="
-seed_count=$(ls -1 seeds/*.md 2>/dev/null | grep -cv '^$' || echo 0)
-seed_cursor=$(cat seeds/latest-cursor.txt 2>/dev/null || echo "MISSING")
-if [ "$seed_count" -gt 0 ] 2>/dev/null; then
-  seed_oldest=$(ls -1t seeds/*.md 2>/dev/null | tail -1)
-  echo "active=$seed_count oldest=$seed_oldest cursor=$seed_cursor"
-else
-  echo "active=0 cursor=$seed_cursor"
-fi
-
-echo "=== BRIEFING ==="
-topics_count=$(grep -c '^\- ' briefings/topics.md 2>/dev/null || echo 0)
-topics_mtime=$(stat -f '%Sm' -t '%Y-%m-%d' briefings/topics.md 2>/dev/null || echo "MISSING")
-echo "topics=$topics_count topics_updated=$topics_mtime"
-
-echo "=== ERROR LOG ==="
-errlog="nik.err.log"
-if [ -f "$errlog" ]; then
-  today=$(date +%Y-%m-%d)
-  yesterday=$(date -v-1d +%Y-%m-%d 2>/dev/null || date -d 'yesterday' +%Y-%m-%d)
-  recent=$(grep -E "time=${today}|time=${yesterday}" "$errlog")
-  total=$(echo "$recent" | grep -c . || echo 0)
-  warns=$(echo "$recent" | grep -c 'level=WARN' || echo 0)
-  errors=$(echo "$recent" | grep -c 'level=ERROR' || echo 0)
-  echo "24h_lines=$total warns=$warns errors=$errors"
-  echo "-- top messages"
-  echo "$recent" | grep -oP 'msg="[^"]*"|msg=\S+' | sort | uniq -c | sort -rn | head -5
-  echo "-- last errors"
-  echo "$recent" | grep 'level=ERROR' | tail -5 | cut -c1-200
-else
-  echo "SKIP no-file"
-fi
-
-echo "=== META ==="
-echo "db_size=$(wc -c < nik.db | tr -d ' ')"
-echo "tmux_sessions=$(tmux list-sessions -F '#{session_name} #{pane_dead}' 2>/dev/null | grep -c '^nik-' || echo 0)"
-```
-
-If vault fails, note that downstream vault-dependent services are
-blocked and skip their individual probes. If a new skill with a CLI
-appears in the `load_skill list` that is not in the script above,
-test it with its lightest read-only command (prefer `status`, then
-`list`/`get`/`account`/`info`). A "command not found" is not a
-failure — record SKIP.
-
-### 1c — Prior diagnostic (optional)
-
-If a prior diagnostic exists, `read_file` the most recent one to
-compare trends. Do this at most once.
-
-## Step 2 — Query
-
-Run these as `db_query` calls. Combine into as few calls as possible.
-
-### 2a — Alarm health
+### Alarms
 
 ```sql
 SELECT
@@ -209,12 +44,9 @@ WHERE cancelled_at IS NULL
 ORDER BY next_fire_at
 ```
 
-Check each row:
-- `next_fire_at IS NULL` → FAIL (dead recurring alarm)
-- `next_fire_at` in the past → FAIL (stale)
-- Duplicate goals across rows → WARN
+Duplicate goals across rows → WARN.
 
-### 2b — Data quality + stale tasks
+### DB integrity
 
 ```sql
 SELECT 'integrity' AS check_name, integrity_check AS result
@@ -227,7 +59,7 @@ SELECT 'fk' AS check_name,
   ) AS result
 ```
 
-Stale tasks:
+### Stale tasks
 
 ```sql
 SELECT t.id, t.goal, t.status, t.created_at,
@@ -240,7 +72,23 @@ HAVING last_report IS NULL
    OR last_report < DATETIME('now', '-24 hours')
 ```
 
-### 2c — Spending
+### Contacts
+
+```sql
+SELECT
+  COUNT(*) AS total,
+  SUM(CASE WHEN name = '' OR name IS NULL THEN 1 ELSE 0 END) AS missing_name,
+  SUM(CASE WHEN timezone IS NULL THEN 1 ELSE 0 END) AS missing_tz,
+  SUM(CASE WHEN one_liner IS NULL THEN 1 ELSE 0 END) AS missing_one_liner
+FROM contact
+WHERE id NOT IN (
+  '00000000-0000-7000-8000-000000000001',
+  '00000000-0000-0000-0000-000000000001'
+)
+AND last_message_at >= DATETIME('now', '-30 days')
+```
+
+### Spending
 
 ```sql
 SELECT
@@ -251,7 +99,7 @@ FROM activation
 WHERE created_at >= DATETIME('now', '-30 days')
 ```
 
-### 2d — Task effectiveness (7-day)
+### Tasks (7-day)
 
 ```sql
 SELECT
@@ -264,172 +112,91 @@ WHERE created_at >= DATETIME('now', '-7 days')
   AND status IN ('completed', 'failed', 'cancelled')
 ```
 
-### 2e — Memory cursor lag
-
-```sql
-SELECT MAX(sent_at) AS latest_msg
-FROM message
-WHERE kind = 'text'
-  AND body != ''
-```
-
-Compare `latest_msg` to the cursor value from the shell output. If
-the cursor is more than 24h behind, extraction is falling behind — WARN.
-
-### 2f — Data health
+### Row counts
 
 ```sql
 SELECT
   (SELECT COUNT(*) FROM activation) AS activations,
   (SELECT COUNT(*) FROM task) AS tasks,
   (SELECT COUNT(*) FROM tool_call) AS tool_calls,
-  (SELECT COUNT(*) FROM shell_session) AS shell_sessions,
-  (SELECT COUNT(*) FROM activation_round) AS activation_rounds,
   (SELECT COUNT(*) FROM message WHERE platform = 'system') AS system_msgs,
   (SELECT COUNT(*) FROM message WHERE platform = 'whatsapp') AS whatsapp_msgs,
   (SELECT COUNT(*) FROM contact) AS contacts,
-  (SELECT COUNT(*) FROM media) AS media,
-  (SELECT COUNT(*) FROM alarm) AS alarms,
-  (SELECT COUNT(*) FROM alarm_occurrence) AS alarm_occurrences
+  (SELECT COUNT(*) FROM alarm) AS alarms
 ```
 
-### 2g — Contact health
+### Error log
 
-```sql
-SELECT
-  COUNT(*) AS total,
-  SUM(CASE WHEN name = '' OR name IS NULL THEN 1 ELSE 0 END) AS missing_name,
-  SUM(CASE WHEN timezone IS NULL THEN 1 ELSE 0 END) AS missing_timezone,
-  SUM(CASE WHEN location IS NULL THEN 1 ELSE 0 END) AS missing_location,
-  SUM(CASE WHEN one_liner IS NULL THEN 1 ELSE 0 END) AS missing_one_liner
-FROM contact
-WHERE id != '00000000-0000-7000-8000-000000000001'
-  AND id != '00000000-0000-0000-0000-000000000001'
-  AND last_message_at >= DATETIME('now', '-30 days')
-```
+Run a shell script against `nik.err.log`. Extract 24h warns and errors, top 5 deduplicated messages, last 5 error lines. WARN if errors > 0, FAIL if errors > 10.
 
-WARN if >50% of active contacts (messaged in last 30 days) have
-empty names or one_liners.
+### Core skill outputs
+
+Run a shell script to check freshness of output directories that scheduled skills produce (e.g. `journal/`, `briefings/`, `dreams/`, `memories/`, `soul/`, `seeds/`). For each, find the latest dated file and report its age.
+
+Also check memory and seed cursors (`memories/latest-cursor.txt`, `seeds/latest-cursor.txt`) against the latest message timestamp. WARN if >24h behind.
 
 ## Step 3 — Write report
 
-Write `diagnostics/YYYY/MM/DD/YYYY-MM-DD.md` via `shell`. Create the
-directory with `mkdir -p diagnostics/YYYY/MM/DD`, then write the file.
-After writing, update the symlink:
-`ln -sf YYYY/MM/DD/YYYY-MM-DD.md diagnostics/latest.md`.
-Lead with failures.
+Write `maintenance/YYYY/MM/DD/YYYY-MM-DD.md` via `shell`. Create the directory with `mkdir -p`, then write the file. Update the symlink: `ln -sf YYYY/MM/DD/YYYY-MM-DD.md maintenance/latest.md`. Lead with failures.
 
 ### Report structure
 
 ```markdown
-# Diagnostic — YYYY-MM-DD
+# Maintenance — YYYY-MM-DD
 
 ## Summary
-all clear / N issues — one-line per FAIL/WARN
+All clear / N issues — one line per FAIL/WARN
 
 ## Pruning
-rows_deleted, cutoff, db_size_before → db_size_after (delta)
+rows_deleted · cutoff · size_before → size_after (delta)
 
-## Auth & Services
-per-service: command, PASS/FAIL/SKIP, error detail if any
-for install:true skills, note whether expected resources are healthy
-group downstream failures under root cause (e.g. vault down)
+## Skill Health
+| Skill | Status | Detail |
+|-------|--------|--------|
+per-skill row: PASS/FAIL/SKIP/BLOCKED with error detail
+
+## Alarms
+Dead, duplicate, or stale alarms with short IDs and goals
 
 ## Error Log
 24h: N warns, M errors
-top messages (deduplicated with counts)
-last 5 errors (truncated)
-WARN if errors > 0, FAIL if errors > 10
+Top messages (deduplicated with counts)
+Last errors (truncated)
 
-## Alarms
-dead, duplicate, or stale alarms with short IDs and goals
+## Contacts
+Active (30d), missing name/tz/one_liner counts
 
-## Skill Outputs
-per-directory: latest file, gap analysis
-missing 1 day = WARN, missing 2+ days = FAIL
-cross-reference: if alarm dead, that's the root cause
-
-## Task Effectiveness
-7-day completed/failed/cancelled counts
-WARN if fail rate > 30%
-
-## Data Quality
-PRAGMA results, stale tasks
-
-## Data Health
-table row counts (activations, tasks, tool_calls, shell_sessions,
-activation_rounds, messages by platform, contacts, media, alarms,
-alarm_occurrences)
-
-## Contact Health
-active contacts (30d), missing name/timezone/location/one_liner counts
-WARN if >50% missing name or one_liner
-
-## Memories
-snapshot count, latest snapshot date, latest.md row count and size
-cursor value vs latest message — WARN if >24h behind
-
-## Soul
-latest.md size, snapshot count, latest snapshot date
-WARN if latest snapshot is 2+ days old (dream cycle not evolving soul)
-
-## Seeds
-active seed count, oldest seed, cursor value
-WARN if cursor >8h stale (extract not running)
-
-## Briefings
-topic count, topics.md last modified date
-WARN if topics.md not updated in 7+ days
+## Core Outputs
+| Output | Latest | Age | Status |
+|--------|--------|-----|--------|
+per-directory row with gap analysis
 
 ## Spending
-30-day total, 24h vs 7-day avg, DB size
+30d total · 24h · 7d avg · DB size
+
+## Data
+Integrity, FK check, stale tasks, row counts, task effectiveness
 
 ## Recommendations
-concrete action for every FAIL
+Concrete next action for every FAIL
 ```
 
 ## Step 4 — Recap
 
-After writing the report, send a concise WhatsApp recap to the owner
-via `message_send`. One message, no fluff. Example:
+Send a WhatsApp recap via `message_send` with the full report file attached. Lead with FAILs in the message body. Example body:
 
 ```
-Maintenance 2026-03-28
-Pruned 1,204 rows (213MB → 189MB)
-Auth 7/7 PASS · Alarms 20 ok
-Errors 24h: 2 warn / 0 err ✓
-Tasks 7d: 12 completed, 2 failed
-Contacts 18 active, 3 missing names
-Memories 342 rows, cursor current
-Soul evolved 03-27 · Seeds 3 active
-Spend $12.40 24h / $15.20 7d avg
-All clear ✓
+*Maintenance — 2026-03-28*
+
+*Pruning:* 1,204 rows deleted · 213 MB → 189 MB
+*Skills:* 12/12 PASS
+*Alarms:* 20 active, 0 duplicates
+*Errors:* 2 warn / 0 err (24h)
+*Tasks:* 12 completed, 2 failed (7d)
+*Contacts:* 18 active, 3 missing names
+*Spending:* $12.40 24h · $15.20 7d avg
+
+All clear.
 ```
 
-Lead with FAILs if any. Keep it under 10 lines.
-
-### Recommendation patterns
-
-- Auth failure → re-run `setup` or rotate credentials
-- Dead alarm → reschedule with `update_alarm`
-- Duplicate alarms → cancel one with `cancel_alarm`
-- Missing output + healthy alarm → load skill, check recent activations
-- Missing output + dead alarm → fix alarm first
-- Stale task → check `task_status`, cancel if stuck
-- Integrity failure → back up DB immediately
-- Spend > 2x average → check for loops or large contexts
-- DB size > 500 MB after prune → investigate large tables
-- Error count > 10 in 24h → investigate recurring error messages, check for loops or persistent failures
-- Repeated identical error message → likely a single root cause, cite the message
-- Error log missing → SKIP (nik may not have run)
-- Memory cursor >24h behind → check memory extract alarm health
-- Soul not updated in 2+ days → check dream cycle alarm and recent dream files
-- Seed cursor >8h stale → check seed extract alarm
-- Briefing topics stale 7+ days → topics may need refresh
-- Task fail rate > 30% → review recent failed tasks for recurring root causes
-- Contact gaps >50% → prioritize filling names and one_liners in upcoming conversations
-
-### Escalation
-
-The Step 4 recap always goes to the owner. If any CRITICAL finding or
-3+ FAIL findings, call out the failures prominently in the recap.
+Attach `maintenance/YYYY/MM/DD/YYYY-MM-DD.md` so the full report is accessible from the message.
