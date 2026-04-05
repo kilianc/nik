@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -188,18 +189,20 @@ func TestSenderLabelsResolvesContactName(t *testing.T) {
 }
 
 type mockPlatform struct {
-	platform           string
-	startTypingCalls   int
-	stopTypingCalls    int
-	replyCalls         int
-	sendFileCalls      int
-	sendVoiceNoteCalls int
-	markReadCalls      int
-	lastReadRefs       []InboundMessage
-	lastQuote          *QuoteTarget
-	outbound           OutboundMessage
-	fileOutbound       OutboundMessage
-	voiceNoteOutbound  OutboundMessage
+	platform            string
+	startTypingCalls    int
+	stopTypingCalls     int
+	replyCalls          int
+	sendFileCalls       int
+	sendVoiceNoteCalls  int
+	markReadCalls       int
+	setPresenceCalls    int
+	lastPresenceOnline  bool
+	lastReadRefs        []InboundMessage
+	lastQuote           *QuoteTarget
+	outbound            OutboundMessage
+	fileOutbound        OutboundMessage
+	voiceNoteOutbound   OutboundMessage
 }
 
 func (m *mockPlatform) Platform() string { return m.platform }
@@ -223,7 +226,11 @@ func (m *mockPlatform) SendVoiceNote(_ context.Context, _ string, _ string) (Out
 func (m *mockPlatform) React(_ context.Context, _, _, _, _ string) (OutboundMessage, error) {
 	return OutboundMessage{}, nil
 }
-func (m *mockPlatform) SetPresence(_ context.Context, _ bool) error { return nil }
+func (m *mockPlatform) SetPresence(_ context.Context, available bool) error {
+	m.setPresenceCalls++
+	m.lastPresenceOnline = available
+	return nil
+}
 func (m *mockPlatform) StartTyping(_ context.Context, _ string) error {
 	m.startTypingCalls++
 	return nil
@@ -1406,6 +1413,93 @@ func sendInboundMessageForReadTest(
 	})
 	if err != nil {
 		t.Fatalf("receive inbound message %s: %v", externalMessageID, err)
+	}
+}
+
+func TestTouchPresenceSetsAvailableOnFirstSend(t *testing.T) {
+	ctx := context.Background()
+	conn, err := db.OpenInMemory()
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer conn.Close()
+
+	contactsSvc := contacts.NewService(conn)
+	svc := NewService(&config.Config{}, conn, contactsSvc)
+
+	now := time.Now()
+	platform := &mockPlatform{
+		platform: "whatsapp",
+		outbound: OutboundMessage{
+			ExternalMessageID: "reply-1",
+			ExternalSenderID:  "nik@s.whatsapp.net",
+			SentAt:            now,
+			Kind:              "text",
+			Body:              "hi",
+		},
+	}
+	svc.RegisterPlatform(platform)
+	svc.replyDelay = func(_ string) time.Duration { return 0 }
+
+	convID := seedConversation(t, ctx, svc, "whatsapp", "chat@s.whatsapp.net", "dm")
+
+	err = svc.Reply(ctx, convID, "hi", nil)
+	if err != nil {
+		t.Fatalf("reply: %v", err)
+	}
+
+	if platform.setPresenceCalls != 1 {
+		t.Fatalf("expected 1 SetPresence call, got %d", platform.setPresenceCalls)
+	}
+	if !platform.lastPresenceOnline {
+		t.Fatalf("expected presence to be online")
+	}
+}
+
+func TestTouchPresenceDebounces(t *testing.T) {
+	ctx := context.Background()
+	conn, err := db.OpenInMemory()
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer conn.Close()
+
+	contactsSvc := contacts.NewService(conn)
+	svc := NewService(&config.Config{}, conn, contactsSvc)
+
+	now := time.Now()
+	platform := &mockPlatform{
+		platform: "whatsapp",
+		outbound: OutboundMessage{
+			ExternalSenderID: "nik@s.whatsapp.net",
+			SentAt:           now,
+			Kind:             "text",
+			Body:             "hi",
+		},
+	}
+	svc.RegisterPlatform(platform)
+	svc.replyDelay = func(_ string) time.Duration { return 0 }
+
+	convID := seedConversation(t, ctx, svc, "whatsapp", "chat@s.whatsapp.net", "dm")
+
+	for i := 0; i < 3; i++ {
+		platform.outbound.ExternalMessageID = fmt.Sprintf("reply-%d", i+1)
+		err = svc.Reply(ctx, convID, "hi", nil)
+		if err != nil {
+			t.Fatalf("reply %d: %v", i+1, err)
+		}
+	}
+
+	if platform.setPresenceCalls != 1 {
+		t.Fatalf("expected 1 SetPresence call (debounced), got %d", platform.setPresenceCalls)
+	}
+
+	svc.StopPresence()
+	if platform.setPresenceCalls != 2 {
+		t.Fatalf("expected 2 SetPresence calls after StopPresence, got %d", platform.setPresenceCalls)
+	}
+	if platform.lastPresenceOnline {
+		t.Fatalf("expected presence to be offline after StopPresence")
 	}
 }
 

@@ -296,6 +296,7 @@ func run(cfg *config.Config, wappLink bool, replay string) error {
 	}()
 
 	<-brainDone
+	messagingSvc.StopPresence()
 	taskRunner.Wait()
 	shellSvc.StopContainer()
 	slog.Info("shutdown complete")

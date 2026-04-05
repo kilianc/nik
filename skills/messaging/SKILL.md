@@ -1,67 +1,42 @@
 ---
 name: messaging
 preload: true
-summary: Send messages, reactions, typing indicators, and presence across platforms.
+summary: Send messages, reactions, and typing indicators across platforms.
 tools:
   - message_send
   - message_react
-  - message_set_presence
 ---
 
-# Messaging
+All tools use canonical nik IDs. Pass empty `conversation_id` for current conversation. Message targeting uses exact content + timestamp from the timeline.
 
-All messaging tools use canonical nik IDs, not platform-specific ones.
-Conversation IDs come from context automatically -- pass empty string to
-use the current conversation. Message targeting uses exact matching on
-content + timestamp from the timeline.
+## message_send
 
-## Tools
+Each array item becomes a separate bubble. One thought per message.
 
-### message_send
+- `conversation_id` -- empty = current conversation
+- `contact_id` -- set only when starting a new DM
+- `messages` -- array of `{text, image_path, voice, quote_text, quote_time}` sent in order
+- `quote_text` / `quote_time` -- almost always empty. Only set to anchor to a specific message (see quote reply rules in conversation prompt). Never quote-reply to the message directly above you in a 1:1 DM.
 
-Send one or more messages to a conversation. Each item in the array
-becomes a separate text bubble -- like texting. One thought per message.
+## message_react
 
-- `conversation_id` -- nik conversation UUID (empty = current)
-- `contact_id` -- contact UUID for starting a new DM (empty = skip)
-- `messages` -- array of `{text, image_path, voice, quote_text, quote_time}` objects sent in order
-- `quote_text` / `quote_time` -- almost always empty strings. Only set
-  them when you need to anchor to a specific message (see quote reply
-  rules in the conversation prompt). Never quote-reply to the message
-  directly above you in a 1:1 DM.
+React to a message with one emoji.
 
-### message_react
-
-React to a specific message with one emoji.
-
-- `text` -- exact message content as shown after sender name in timeline,
-  before any `(quote replying to ...)`/`(reacting to ...)`/`(edit of ...)` context
-- `time` -- timestamp in HH:MM:SS from the timeline brackets
+- `text` -- exact content after sender name, before any `(quote replying to ...)`/`(reacting to ...)`/`(edit of ...)` suffix
+- `time` -- HH:MM:SS from timeline brackets
 - `emoji` -- reaction emoji
 
 Examples:
-- Reply `where? (quote replying to [09:12:45] Bob: ok)` → react to original: text="ok", time="09:12:45"
-- Reaction `(👍) (reacting to [09:12:30] Alice: hello)` → react to original: text="hello", time="09:12:30"
-- Edit `hello (edit of [09:12:30] Alice: helo)` → react to edit: text="hello", time="09:12:35"
-- Edit `hello (edit of [09:12:30] Alice: helo)` → react to original: text="helo", time="09:12:30"
-
-### message_set_presence
-
-Set account-level presence for a platform.
-
-- `platform` -- platform name (e.g. "whatsapp")
-- `available` -- true for online, false for offline
+- `where? (quote replying to [09:12:45] Bob: ok)` → text="ok", time="09:12:45"
+- `(👍) (reacting to [09:12:30] Alice: hello)` → text="hello", time="09:12:30"
 
 ## Behavior
 
-- Typing indicators are sent automatically as part of reply -- no need
-  to manage them manually.
-- Reactions are cheap and expressive. A single emoji often says more
-  than a message. When you're doing work triggered by a person's message
-  and you're only acknowledging progress, react to it so they know you're
-  on it. Pick the emoji that fits:
-  ⏰ alarms, 🔕 cancelling, 👤 contacts, 🔍 researching, 🫡 tasks,
-  🎛️ config, 👀 looking at media, 🧠 noted a memory. One react per
-  message -- pick the most relevant. Don't react during autonomous
-  activations (alarms, task reports) -- only when a person asked for
-  something.
+- Typing indicators are automatic.
+- Reactions are cheap. When acknowledging progress on someone's request, react instead of replying:
+  ⏰ alarms, 🔕 cancelling, 👤 contacts, 🔍 researching, 🫡 tasks, 🎛️ config, 👀 media, 🧠 memory.
+  One react per message, pick the most relevant. Don't react during autonomous activations.
+
+## WhatsApp Formatting
+
+`*bold*`, `_italic_`, `~strikethrough~`, `` `code` ``, ```` ```block``` ````, `> quote`, `- list` / `* list`, `1. numbered`

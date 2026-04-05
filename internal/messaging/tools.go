@@ -86,31 +86,10 @@ var reactToolDef = llm.ToolDef{
 	},
 }
 
-var setPresenceToolDef = llm.ToolDef{
-	Name:        "message_set_presence",
-	Description: "Set account-level presence for a messaging platform.",
-	Parameters: map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"platform": map[string]any{
-				"type":        "string",
-				"description": "Platform name (e.g. whatsapp).",
-			},
-			"available": map[string]any{
-				"type":        "boolean",
-				"description": "True for available, false for unavailable.",
-			},
-		},
-		"required":             []string{"platform", "available"},
-		"additionalProperties": false,
-	},
-}
-
 func BuildTools(svc *Service) []llm.Tool {
 	return []llm.Tool{
 		{Def: sendToolDef, Handler: sendHandler(svc)},
 		{Def: reactToolDef, Handler: reactHandler(svc)},
-		{Def: setPresenceToolDef, Handler: setPresenceHandler(svc)},
 	}
 }
 
@@ -275,27 +254,6 @@ func reactHandler(svc *Service) llm.ToolExecutor {
 		}
 
 		return `{"sent":true}`, nil
-	}
-}
-
-func setPresenceHandler(svc *Service) llm.ToolExecutor {
-	return func(ctx context.Context, call llm.ToolCall) (string, error) {
-		var args struct {
-			Platform  string `json:"platform"`
-			Available bool   `json:"available"`
-		}
-
-		err := json.Unmarshal([]byte(call.Arguments), &args)
-		if err != nil {
-			return llm.ToolError(err), nil
-		}
-
-		err = svc.SetPresence(ctx, args.Platform, args.Available)
-		if err != nil {
-			return llm.ToolError(err), nil
-		}
-
-		return `{"ok":true}`, nil
 	}
 }
 
