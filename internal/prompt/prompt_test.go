@@ -166,13 +166,20 @@ func TestInputRender(t *testing.T) {
 func TestNudgeRender(t *testing.T) {
 	r := NewRenderer(&config.Config{Home: t.TempDir()})
 
-	got := r.Nudge("nik-05-retry.md", struct{ Text string }{Text: "hello world"})
+	got := r.Nudge("nik-05-retry.md", struct {
+		Text        string
+		Attempt     int
+		MaxAttempts int
+	}{Text: "hello world", Attempt: 2, MaxAttempts: 5})
 
 	if !strings.Contains(got, "hello world") {
 		t.Fatalf("expected nudge text in output, got:\n%s", got)
 	}
 	if !strings.Contains(got, "Missing tool call") {
 		t.Fatalf("expected nudge header, got:\n%s", got)
+	}
+	if !strings.Contains(got, "attempt 2/5") {
+		t.Fatalf("expected attempt counter in output, got:\n%s", got)
 	}
 }
 
