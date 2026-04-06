@@ -170,6 +170,7 @@ func (b *Brain) activate(ctx context.Context, output Stimulus) {
 const (
 	maxAttempts   = 3
 	loopThreshold = 4
+	maxNudges     = 5
 )
 
 func (b *Brain) think(ctx context.Context, getInput func() string) (_ string, _ llm.Usage, retErr error) {
@@ -202,7 +203,7 @@ func (b *Brain) think(ctx context.Context, getInput func() string) (_ string, _ 
 	id := prompt.InputData{Recall: recall, Timeline: getInput()}
 	act.SetInput(b.pr.Input(id))
 
-	var nudged bool
+	var nudges int
 
 	for {
 		result, err := act.Round(thinkCtx)
@@ -220,12 +221,16 @@ func (b *Brain) think(ctx context.Context, getInput func() string) (_ string, _ 
 		}
 
 		if len(result.ToolCalls) == 0 {
-			if nudged {
+			if nudges >= maxNudges {
 				return "", act.Usage(), fmt.Errorf("no done call")
 			}
-			nudged = true
+			nudges++
 			act.AppendAssistantText(result.Text)
-			act.AppendUserMessage(b.pr.Nudge("nik-05-retry.md", struct{ Text string }{result.Text}))
+			act.AppendUserMessage(b.pr.Nudge("nik-05-retry.md", struct {
+				Text        string
+				Attempt     int
+				MaxAttempts int
+			}{result.Text, nudges, maxNudges}))
 			continue
 		}
 
