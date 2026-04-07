@@ -289,10 +289,13 @@ func completeStreaming(ctx context.Context, client *openai.Client, params respon
 	defer stream.Close()
 
 	var final *responses.Response
+	var accumulated []responses.ResponseOutputItemUnion
 	for stream.Next() {
 		evt := stream.Current()
-		completed := evt.AsResponseCompleted()
-		if completed.Type == "response.completed" {
+		if done := evt.AsResponseOutputItemDone(); done.Type == "response.output_item.done" {
+			accumulated = append(accumulated, done.Item)
+		}
+		if completed := evt.AsResponseCompleted(); completed.Type == "response.completed" {
 			final = &completed.Response
 		}
 	}
@@ -303,6 +306,11 @@ func completeStreaming(ctx context.Context, client *openai.Client, params respon
 
 	if final == nil {
 		return nil, fmt.Errorf("stream ended without response.completed event")
+	}
+
+	// the codex proxy omits output from response.completed; use accumulated items
+	if len(final.Output) == 0 && len(accumulated) > 0 {
+		final.Output = accumulated
 	}
 
 	return final, nil
