@@ -327,7 +327,7 @@ func (c *Client) Speech(ctx context.Context, text string, model string, voice st
 	params := openai.AudioSpeechNewParams{
 		Input:          text,
 		Model:          speechModel,
-		Voice:          openai.AudioSpeechNewParamsVoice(voice),
+		Voice:          openai.AudioSpeechNewParamsVoiceUnion{OfString: openai.Opt(voice)},
 		ResponseFormat: openai.AudioSpeechNewParamsResponseFormatOpus,
 		Speed:          openai.Float(speed),
 	}

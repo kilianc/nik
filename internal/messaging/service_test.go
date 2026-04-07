@@ -189,20 +189,20 @@ func TestSenderLabelsResolvesContactName(t *testing.T) {
 }
 
 type mockPlatform struct {
-	platform            string
-	startTypingCalls    int
-	stopTypingCalls     int
-	replyCalls          int
-	sendFileCalls       int
-	sendVoiceNoteCalls  int
-	markReadCalls       int
-	setPresenceCalls    int
-	lastPresenceOnline  bool
-	lastReadRefs        []InboundMessage
-	lastQuote           *QuoteTarget
-	outbound            OutboundMessage
-	fileOutbound        OutboundMessage
-	voiceNoteOutbound   OutboundMessage
+	platform           string
+	startTypingCalls   int
+	stopTypingCalls    int
+	replyCalls         int
+	sendFileCalls      int
+	sendVoiceNoteCalls int
+	markReadCalls      int
+	setPresenceCalls   int
+	lastPresenceOnline bool
+	lastReadRefs       []InboundMessage
+	lastQuote          *QuoteTarget
+	outbound           OutboundMessage
+	fileOutbound       OutboundMessage
+	voiceNoteOutbound  OutboundMessage
 }
 
 func (m *mockPlatform) Platform() string { return m.platform }
