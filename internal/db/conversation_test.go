@@ -141,6 +141,91 @@ func TestConversationParticipantListIncludesContactProfile(t *testing.T) {
 	}
 }
 
+func TestConversationGetByContactID(t *testing.T) {
+	ctx := context.Background()
+
+	conn, err := OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	contact, err := ContactUpsert(ctx, conn, ContactUpsertParams{
+		Platform:      "whatsapp",
+		ExternalID:    "bob@lid",
+		Name:          "Bob",
+		Phone:         "bob",
+		LastMessageAt: time.Now(),
+	})
+	if err != nil {
+		t.Fatalf("upsert contact: %v", err)
+	}
+
+	convID := seedConversation(t, ctx, conn, "whatsapp", "bob@lid", "dm")
+
+	err = ConversationParticipantUpsert(ctx, conn, ConversationParticipantUpsertParams{
+		ConversationID: convID,
+		ContactID:      contact.ID,
+	})
+	if err != nil {
+		t.Fatalf("upsert participant: %v", err)
+	}
+
+	found, err := ConversationGet(ctx, conn, ConversationGetParams{
+		Platform:  "whatsapp",
+		ContactID: contact.ID,
+	})
+	if err != nil {
+		t.Fatalf("get by contact id: %v", err)
+	}
+	if found.ID != convID {
+		t.Fatalf("expected conversation %s, got %s", convID, found.ID)
+	}
+
+	_, err = ConversationGet(ctx, conn, ConversationGetParams{
+		Platform:  "whatsapp",
+		ContactID: "nonexistent-contact",
+	})
+	if err == nil {
+		t.Fatalf("expected error for nonexistent contact")
+	}
+}
+
+func TestConversationUpdate(t *testing.T) {
+	ctx := context.Background()
+
+	conn, err := OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	convID := seedConversation(t, ctx, conn, "whatsapp", "old-jid@lid", "dm")
+
+	now := time.Now()
+	err = ConversationUpdate(ctx, conn, ConversationUpdateParams{
+		ID:                     convID,
+		ExternalConversationID: "new-jid@s.whatsapp.net",
+		Title:                  "Bob",
+		LastMessageAt:          &now,
+	})
+	if err != nil {
+		t.Fatalf("update conversation: %v", err)
+	}
+
+	conv, err := ConversationGet(ctx, conn, ConversationGetParams{ID: convID})
+	if err != nil {
+		t.Fatalf("get updated conversation: %v", err)
+	}
+
+	if conv.ExternalConversationID != "new-jid@s.whatsapp.net" {
+		t.Fatalf("expected external_conversation_id new-jid@s.whatsapp.net, got %s", conv.ExternalConversationID)
+	}
+	if !conv.Title.Valid || conv.Title.String != "Bob" {
+		t.Fatalf("expected title Bob, got %+v", conv.Title)
+	}
+}
+
 func TestConversationUpsertParticipantDeduplicatesByContactID(t *testing.T) {
 	ctx := context.Background()
 

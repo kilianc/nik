@@ -1168,6 +1168,86 @@ func TestConversationHeaderGaps(t *testing.T) {
 	}
 }
 
+func TestReceiveMessageDMReusesConversationOnJIDChange(t *testing.T) {
+	ctx := context.Background()
+
+	conn, err := db.OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	_, err = db.ContactUpsert(ctx, conn, db.ContactUpsertParams{
+		Platform:      "whatsapp",
+		ExternalID:    "bob@lid",
+		Name:          "Bob",
+		Phone:         "bob",
+		LastMessageAt: time.Now(),
+	})
+	if err != nil {
+		t.Fatalf("seed contact: %v", err)
+	}
+
+	contactsSvc := contacts.NewService(conn)
+	svc := NewService(&config.Config{}, conn, contactsSvc)
+
+	now := time.Now()
+	err = svc.ReceiveMessage(ctx, InboundMessage{
+		Platform:               "whatsapp",
+		ExternalConversationID: "bob@lid",
+		ExternalMessageID:      "msg-lid-1",
+		ExternalSenderID:       "bob@lid",
+		Kind:                   "text",
+		Body:                   "hello via lid",
+		SentAt:                 now,
+	})
+	if err != nil {
+		t.Fatalf("receive first message: %v", err)
+	}
+
+	conv1, err := db.ConversationGet(ctx, conn, db.ConversationGetParams{
+		Platform:               "whatsapp",
+		ExternalConversationID: "bob@lid",
+	})
+	if err != nil {
+		t.Fatalf("get conversation by lid: %v", err)
+	}
+
+	err = svc.ReceiveMessage(ctx, InboundMessage{
+		Platform:               "whatsapp",
+		ExternalConversationID: "bob@s.whatsapp.net",
+		ExternalMessageID:      "msg-phone-1",
+		ExternalSenderID:       "bob@s.whatsapp.net",
+		ExternalSenderIDs:      []string{"bob@s.whatsapp.net", "bob@lid"},
+		Kind:                   "text",
+		Body:                   "hello via phone jid",
+		SentAt:                 now.Add(time.Second),
+	})
+	if err != nil {
+		t.Fatalf("receive second message: %v", err)
+	}
+
+	msg, err := db.MessageGet(ctx, conn, db.MessageGetParams{
+		Platform:          "whatsapp",
+		ExternalMessageID: "msg-phone-1",
+	})
+	if err != nil {
+		t.Fatalf("get second message: %v", err)
+	}
+
+	if msg.ConversationID != conv1.ID {
+		t.Fatalf("expected same conversation %s, got %s", conv1.ID, msg.ConversationID)
+	}
+
+	conv1Updated, err := db.ConversationGet(ctx, conn, db.ConversationGetParams{ID: conv1.ID})
+	if err != nil {
+		t.Fatalf("get updated conversation: %v", err)
+	}
+	if conv1Updated.ExternalConversationID != "bob@s.whatsapp.net" {
+		t.Fatalf("expected external_conversation_id updated to bob@s.whatsapp.net, got %s", conv1Updated.ExternalConversationID)
+	}
+}
+
 func TestReplyRejectsBannedWords(t *testing.T) {
 	ctx := context.Background()
 
