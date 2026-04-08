@@ -175,7 +175,7 @@ func (s *Service) ReceiveMessage(ctx context.Context, msg InboundMessage) error 
 	}
 	slog.Info("receive inbound message", logAttrs...)
 
-	err = db.MessageInsert(ctx, tx, db.MessageInsertParams{
+	inserted, err := db.MessageInsert(ctx, tx, db.MessageInsertParams{
 		ID:                     msgID,
 		ConversationID:         conversationID,
 		ContactID:              contactID,
@@ -201,6 +201,10 @@ func (s *Service) ReceiveMessage(ctx context.Context, msg InboundMessage) error 
 	})
 	if err != nil {
 		return err
+	}
+
+	if !inserted {
+		return tx.Commit()
 	}
 
 	err = db.ConversationParticipantUpsert(ctx, tx, db.ConversationParticipantUpsertParams{

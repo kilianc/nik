@@ -6,6 +6,77 @@ import (
 	"time"
 )
 
+func TestMessageInsertReturnsFalseOnReplay(t *testing.T) {
+	ctx := context.Background()
+
+	conn, err := OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	contact, err := ContactUpsert(ctx, conn, ContactUpsertParams{
+		Platform:      "whatsapp",
+		ExternalID:    "test@s.whatsapp.net",
+		Name:          "Test",
+		Phone:         "test",
+		LastMessageAt: time.Now(),
+	})
+	if err != nil {
+		t.Fatalf("upsert contact: %v", err)
+	}
+
+	convID := seedConversation(t, ctx, conn, "whatsapp", "test-conv@s.whatsapp.net", "dm")
+	now := time.Now()
+
+	p := MessageInsertParams{
+		ID:                     "aaa-first",
+		ConversationID:         convID,
+		ContactID:              contact.ID,
+		Platform:               "whatsapp",
+		ExternalConversationID: "test-conv@s.whatsapp.net",
+		ExternalMessageID:      "ext-msg-replay-1",
+		ExternalSenderID:       "test@s.whatsapp.net",
+		SentAt:                 now,
+		Kind:                   "text",
+		Body:                   "hello",
+		ContextMentionedIDs:    "[]",
+	}
+
+	inserted, err := MessageInsert(ctx, conn, p)
+	if err != nil {
+		t.Fatalf("first insert: %v", err)
+	}
+	if !inserted {
+		t.Fatalf("expected first insert to return true")
+	}
+
+	p.ID = "bbb-replay"
+	p.Body = "updated body"
+	inserted, err = MessageInsert(ctx, conn, p)
+	if err != nil {
+		t.Fatalf("replay insert: %v", err)
+	}
+	if inserted {
+		t.Fatalf("expected replay insert to return false")
+	}
+
+	msg, err := MessageGet(ctx, conn, MessageGetParams{
+		Platform:          "whatsapp",
+		ExternalMessageID: "ext-msg-replay-1",
+	})
+	if err != nil {
+		t.Fatalf("get message: %v", err)
+	}
+
+	if msg.ID != "aaa-first" {
+		t.Fatalf("expected original id aaa-first, got %s", msg.ID)
+	}
+	if msg.Body != "hello" {
+		t.Fatalf("expected original body hello, got %s", msg.Body)
+	}
+}
+
 func TestMessageGetIncludesJoinedMediaFields(t *testing.T) {
 	ctx := context.Background()
 
