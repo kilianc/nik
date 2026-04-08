@@ -33,6 +33,9 @@ var ConversationUpsert string
 //go:embed conversation_get.sql
 var ConversationGet string
 
+//go:embed conversation_update.sql
+var ConversationUpdate string
+
 //go:embed conversation_mark_read.sql
 var ConversationMarkRead string
 

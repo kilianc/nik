@@ -27,6 +27,7 @@ type ConversationGetParams struct {
 	ID                     string
 	Platform               string
 	ExternalConversationID string
+	ContactID              string
 }
 
 type ConversationMarkReadParams struct {
@@ -136,12 +137,43 @@ func ConversationUpsert(ctx context.Context, db DBTX, p ConversationUpsertParams
 }
 
 func ConversationGet(ctx context.Context, db DBTX, p ConversationGetParams) (Conversation, error) {
-	if p.ID == "" && (p.Platform == "" || p.ExternalConversationID == "") {
+	if p.ID == "" && (p.Platform == "" || (p.ExternalConversationID == "" && p.ContactID == "")) {
 		return Conversation{}, fmt.Errorf("get conversation: no filter provided")
 	}
 
-	row := db.QueryRowContext(ctx, queries.ConversationGet, p.ID, p.Platform, p.ExternalConversationID)
+	row := db.QueryRowContext(ctx, queries.ConversationGet, p.ID, p.Platform, p.ExternalConversationID, p.ContactID)
 	return scanConversation(row)
+}
+
+type ConversationUpdateParams struct {
+	ID                     string
+	ExternalConversationID string
+	Title                  string
+	LastMessageAt          *time.Time
+}
+
+func ConversationUpdate(ctx context.Context, db DBTX, p ConversationUpdateParams) error {
+	title := any(nil)
+	if p.Title != "" {
+		title = p.Title
+	}
+
+	lastMessageAt := any(nil)
+	if p.LastMessageAt != nil {
+		lastMessageAt = *p.LastMessageAt
+	}
+
+	_, err := db.ExecContext(ctx, queries.ConversationUpdate,
+		p.ID,
+		p.ExternalConversationID,
+		title,
+		lastMessageAt,
+	)
+	if err != nil {
+		return fmt.Errorf("update conversation %s: %w", p.ID, err)
+	}
+
+	return nil
 }
 
 func ConversationMarkRead(ctx context.Context, db *sql.DB, p ConversationMarkReadParams) error {

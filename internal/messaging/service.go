@@ -111,15 +111,13 @@ func (s *Service) ReceiveMessage(ctx context.Context, msg InboundMessage) error 
 		return fmt.Errorf("resolve contact: empty contact id")
 	}
 
-	var dmRecipientID string
+	var dmContactID string
 	var dmTitle string
 	if !msg.IsGroup && msg.ExternalConversationID != "" {
 		recipient, err := db.ContactGet(ctx, s.db, msg.ExternalConversationID)
 		if err == nil {
 			dmTitle = recipient.Name
-			if recipient.ID != contactID {
-				dmRecipientID = recipient.ID
-			}
+			dmContactID = recipient.ID
 		}
 	}
 
@@ -134,25 +132,48 @@ func (s *Service) ReceiveMessage(ctx context.Context, msg InboundMessage) error 
 	}
 	defer tx.Rollback()
 
-	err = db.ConversationUpsert(ctx, tx, db.ConversationUpsertParams{
-		Platform:               msg.Platform,
-		ExternalConversationID: msg.ExternalConversationID,
-		Kind:                   inferConversationKind(msg),
-		Title:                  dmTitle,
-		LastMessageAt:          &sentAt,
-	})
-	if err != nil {
-		return fmt.Errorf("upsert message conversation: %w", err)
+	var conversationID string
+
+	if dmContactID != "" {
+		existing, lookupErr := db.ConversationGet(ctx, tx, db.ConversationGetParams{
+			Platform:  msg.Platform,
+			ContactID: dmContactID,
+		})
+		if lookupErr == nil {
+			conversationID = existing.ID
+			err = db.ConversationUpdate(ctx, tx, db.ConversationUpdateParams{
+				ID:                     existing.ID,
+				ExternalConversationID: msg.ExternalConversationID,
+				Title:                  dmTitle,
+				LastMessageAt:          &sentAt,
+			})
+			if err != nil {
+				return fmt.Errorf("update dm conversation: %w", err)
+			}
+		}
 	}
 
-	conversation, err := db.ConversationGet(ctx, tx, db.ConversationGetParams{
-		Platform:               msg.Platform,
-		ExternalConversationID: msg.ExternalConversationID,
-	})
-	if err != nil {
-		return err
+	if conversationID == "" {
+		err = db.ConversationUpsert(ctx, tx, db.ConversationUpsertParams{
+			Platform:               msg.Platform,
+			ExternalConversationID: msg.ExternalConversationID,
+			Kind:                   inferConversationKind(msg),
+			Title:                  dmTitle,
+			LastMessageAt:          &sentAt,
+		})
+		if err != nil {
+			return fmt.Errorf("upsert message conversation: %w", err)
+		}
+
+		conversation, lookupErr := db.ConversationGet(ctx, tx, db.ConversationGetParams{
+			Platform:               msg.Platform,
+			ExternalConversationID: msg.ExternalConversationID,
+		})
+		if lookupErr != nil {
+			return lookupErr
+		}
+		conversationID = conversation.ID
 	}
-	conversationID := conversation.ID
 
 	kind := msg.Kind
 	if kind == "" {
@@ -215,10 +236,10 @@ func (s *Service) ReceiveMessage(ctx context.Context, msg InboundMessage) error 
 		return err
 	}
 
-	if dmRecipientID != "" {
+	if dmContactID != "" && dmContactID != contactID {
 		err = db.ConversationParticipantUpsert(ctx, tx, db.ConversationParticipantUpsertParams{
 			ConversationID: conversationID,
-			ContactID:      dmRecipientID,
+			ContactID:      dmContactID,
 		})
 		if err != nil {
 			return err
