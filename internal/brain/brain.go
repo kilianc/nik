@@ -30,8 +30,9 @@ type Brain struct {
 	workerToolNames []string
 	now             func() time.Time
 
-	claimed *SyncSet
-	wg      sync.WaitGroup
+	claimed  *SyncSet
+	wg       sync.WaitGroup
+	readonly bool
 }
 
 func New(cfg *config.Config, llmClient *llm.Client, pr *prompt.Renderer) *Brain {
@@ -67,6 +68,10 @@ func (b *Brain) SetRecaller(fn func(ctx context.Context, stimulus string) string
 	b.recaller = fn
 }
 
+func (b *Brain) SetReadonly(v bool) {
+	b.readonly = v
+}
+
 const activationTimeout = 20 * time.Minute
 
 // Awake starts the main loop. Brain wakes up on each tick, perceives
@@ -76,7 +81,7 @@ func (b *Brain) Awake(ctx context.Context, pollInterval time.Duration) {
 		pollInterval = 2 * time.Second
 	}
 
-	slog.Info("brain awake", "pkg", "brain", "poll", pollInterval)
+	slog.Info("brain awake", "pkg", "brain", "poll", pollInterval, "readonly", b.readonly)
 
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
@@ -99,6 +104,10 @@ func (b *Brain) perceive(ctx context.Context) {
 	_, err := b.cfg.ReloadIfChanged()
 	if err != nil {
 		slog.Warn("config reload failed", "pkg", "brain", "error", err)
+	}
+
+	if b.readonly {
+		return
 	}
 
 	for _, r := range b.reflexes {

@@ -37,6 +37,7 @@ func main() {
 	home := flag.String("home", "", "workspace directory (default: current directory)")
 	wappLink := flag.Bool("force-wapp-link", false, "force WhatsApp QR pairing")
 	replay := flag.String("wapp-replay-history", "", "replay recorded history sync from file")
+	readonly := flag.Bool("readonly", false, "receive messages but skip reflexes and activations")
 	flag.Parse()
 
 	cfg, err := config.Load(*home)
@@ -68,13 +69,13 @@ func main() {
 	logger := slog.New(&niklog.MultiHandler{Handlers: []slog.Handler{fileHandler, stderrHandler, errHandler}})
 	slog.SetDefault(logger)
 
-	if err := run(cfg, *wappLink, *replay); err != nil {
+	if err := run(cfg, *wappLink, *replay, *readonly); err != nil {
 		slog.Error("startup", "error", err)
 		os.Exit(1)
 	}
 }
 
-func run(cfg *config.Config, wappLink bool, replay string) error {
+func run(cfg *config.Config, wappLink bool, replay string, readonly bool) error {
 	ascii := []string{
 		"oooo   oooo ooooo oooo   oooo",
 		" 8888o  88   888   888  o88",
@@ -255,6 +256,7 @@ func run(cfg *config.Config, wappLink bool, replay string) error {
 
 	b.SetWorkerToolNames(workerToolNames)
 	b.SetRecaller(recallSvc.Recall)
+	b.SetReadonly(readonly)
 
 	b.RegisterReflex(0, taskSvc.CheckStale)
 	b.RegisterReflex(0, alarmSvc.FireDueAlarms)
@@ -274,6 +276,17 @@ func run(cfg *config.Config, wappLink bool, replay string) error {
 	b.RegisterTools(skills.BuildTools(cfg)...)
 	b.RegisterTools(task.BuildTools(taskSvc, taskRunner)...)
 
+	go func() {
+		<-sig
+		slog.Info("shutting down, waiting for in-flight work (ctrl-c again to force)")
+		cancel()
+		go func() {
+			<-sig
+			slog.Warn("force exit")
+			os.Exit(1)
+		}()
+	}()
+
 	brainDone := make(chan struct{})
 	go func() {
 		b.Awake(ctx, 2*time.Second)
@@ -284,16 +297,6 @@ func run(cfg *config.Config, wappLink bool, replay string) error {
 	if err != nil {
 		return err
 	}
-
-	<-sig
-	slog.Info("shutting down, waiting for in-flight work (ctrl-c again to force)")
-	cancel()
-
-	go func() {
-		<-sig
-		slog.Warn("force exit")
-		os.Exit(1)
-	}()
 
 	<-brainDone
 	messagingSvc.StopPresence()

@@ -23,7 +23,7 @@ coverage: lint
 
 .PHONY: run
 run: build
-	cd $(NIK_HOME) && exec ../nik
+	cd $(NIK_HOME) && exec ../nik $(ARGS)
 
 .PHONY: run-loop
 run-loop:
