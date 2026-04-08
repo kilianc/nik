@@ -127,8 +127,8 @@ type MessageInsertParams struct {
 	IsViewOnce             bool
 }
 
-func MessageInsert(ctx context.Context, db DBTX, p MessageInsertParams) error {
-	_, err := db.ExecContext(ctx, queries.MessageInsert,
+func MessageInsert(ctx context.Context, db DBTX, p MessageInsertParams) (bool, error) {
+	res, err := db.ExecContext(ctx, queries.MessageInsert,
 		p.ID,
 		p.ConversationID,
 		p.ContactID,
@@ -153,10 +153,15 @@ func MessageInsert(ctx context.Context, db DBTX, p MessageInsertParams) error {
 		p.IsViewOnce,
 	)
 	if err != nil {
-		return fmt.Errorf("insert message %s/%s: %w", p.Platform, p.ExternalMessageID, err)
+		return false, fmt.Errorf("insert message %s/%s: %w", p.Platform, p.ExternalMessageID, err)
 	}
 
-	return nil
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("insert message %s/%s rows affected: %w", p.Platform, p.ExternalMessageID, err)
+	}
+
+	return n == 1, nil
 }
 
 func MessageUpdateBody(ctx context.Context, db *sql.DB, messageID, body string) error {

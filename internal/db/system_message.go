@@ -43,5 +43,6 @@ func SystemMessageInsert(ctx context.Context, db DBTX, p SystemMessageParams) er
 		params.ContextStanzaID = p.ContextStanzaID
 	}
 
-	return MessageInsert(ctx, db, params)
+	_, err = MessageInsert(ctx, db, params)
+	return err
 }
