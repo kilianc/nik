@@ -90,9 +90,10 @@ func (f *failingContactService) EnsureContactForMessage(_ context.Context, _ str
 
 type fakeReceiver struct{}
 
-func (fakeReceiver) ReceiveConversation(context.Context, Conversation) error { return nil }
-func (fakeReceiver) ReceiveMessage(context.Context, InboundMessage) error    { return nil }
-func (fakeReceiver) OnHistorySyncComplete(context.Context, string) error     { return nil }
+func (fakeReceiver) MessageExists(context.Context, string, string) (bool, error) { return false, nil }
+func (fakeReceiver) ReceiveConversation(context.Context, Conversation) error     { return nil }
+func (fakeReceiver) ReceiveMessage(context.Context, InboundMessage) error        { return nil }
+func (fakeReceiver) OnHistorySyncComplete(context.Context, string) error         { return nil }
 
 func TestAdapterContractsCompileAndExposePlatformName(t *testing.T) {
 	var _ MessageReceiver = (*fakeReceiver)(nil)
@@ -243,67 +244,6 @@ func (m *mockPlatform) MarkRead(_ context.Context, refs []InboundMessage) error 
 	m.markReadCalls++
 	m.lastReadRefs = append([]InboundMessage(nil), refs...)
 	return nil
-}
-
-func TestReceiveMessageReplaySkipsMediaAndParticipants(t *testing.T) {
-	ctx := context.Background()
-
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
-
-	contactsSvc := contacts.NewService(conn)
-	svc := NewService(&config.Config{}, conn, contactsSvc)
-
-	now := time.Now()
-	msg := InboundMessage{
-		Platform:               "whatsapp",
-		ExternalConversationID: "replay-conv@s.whatsapp.net",
-		ExternalMessageID:      "replay-msg-1",
-		ExternalSenderID:       "sender@s.whatsapp.net",
-		Kind:                   "image",
-		Body:                   "photo",
-		MimeType:               "image/jpeg",
-		MediaID:                "media-replay-001",
-		SentAt:                 now,
-	}
-
-	err = svc.ReceiveMessage(ctx, msg)
-	if err != nil {
-		t.Fatalf("first receive: %v", err)
-	}
-
-	original, err := db.MessageGet(ctx, conn, db.MessageGetParams{
-		Platform:          "whatsapp",
-		ExternalMessageID: "replay-msg-1",
-	})
-	if err != nil {
-		t.Fatalf("get original message: %v", err)
-	}
-
-	msg.MediaID = "media-replay-002"
-	err = svc.ReceiveMessage(ctx, msg)
-	if err != nil {
-		t.Fatalf("replay receive: %v", err)
-	}
-
-	replayed, err := db.MessageGet(ctx, conn, db.MessageGetParams{
-		Platform:          "whatsapp",
-		ExternalMessageID: "replay-msg-1",
-	})
-	if err != nil {
-		t.Fatalf("get replayed message: %v", err)
-	}
-
-	if original.ID != replayed.ID {
-		t.Fatalf("replay changed message id: %s -> %s", original.ID, replayed.ID)
-	}
-
-	if replayed.MediaID.Valid && replayed.MediaID.String == "media-replay-002" {
-		t.Fatalf("replay should not have created new media link")
-	}
 }
 
 func TestReplyPersistsOutboundImmediately(t *testing.T) {

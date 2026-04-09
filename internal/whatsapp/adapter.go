@@ -108,6 +108,12 @@ func (a *Adapter) handleMessage(evt *events.Message) error {
 		return nil
 	}
 
+	exists, err := a.receiver.MessageExists(context.Background(), "whatsapp", string(evt.Info.ID))
+	if err == nil && exists {
+		slog.Info("skip existing message", "pkg", "whatsapp", "msg_id", string(evt.Info.ID))
+		return nil
+	}
+
 	var editTargetMessageID string
 	var kind, body string
 
@@ -172,7 +178,7 @@ func (a *Adapter) handleMessage(evt *events.Message) error {
 		Kind:                   inferKind(evt.Info.IsGroup),
 		LastMessageAt:          evt.Info.Timestamp,
 	}
-	err := a.receiver.ReceiveConversation(context.Background(), conversation)
+	err = a.receiver.ReceiveConversation(context.Background(), conversation)
 	if err != nil {
 		return err
 	}
