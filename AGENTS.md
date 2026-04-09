@@ -183,6 +183,7 @@ EOF
 - never write a test whose only assertion is that a constructor stored a field — if it compiles, it works
 - never write a standalone test with a single assertion that logically belongs in an existing test — add it as a subtest or trailing check instead
 - every test must exercise a unique code path; if two tests differ only in data, they belong in a table
+- maximize coverage with the least test infra — before adding a new test, look for an existing test to augment; a new `Test*` function is a last resort, not the default
 
 ### Scripts and tools
 
