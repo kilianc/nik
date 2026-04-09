@@ -118,48 +118,17 @@ func TestActivationRoundInsert(t *testing.T) {
 	if count != 2 {
 		t.Fatalf("expected 2 rounds, got %d", count)
 	}
-}
 
-func TestActivationRoundGet(t *testing.T) {
-	ctx := context.Background()
-
-	conn, err := OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
-
-	convID := seedActivationConv(t, conn)
-	actID := id.V7()
-
-	err = ActivationInsert(ctx, conn, ActivationRow{
-		ID:             actID,
-		ConversationID: convID,
-		Model:          "test-model",
-		CreatedAt:      time.Now().UTC(),
-	})
-	if err != nil {
-		t.Fatalf("insert activation: %v", err)
-	}
-
-	roundID, err := ActivationRoundInsert(ctx, conn, ActivationRoundInsertParams{
-		ActivationID: actID,
-		Round:        0,
-	})
-	if err != nil {
-		t.Fatalf("insert round: %v", err)
-	}
-
-	got, err := ActivationRoundGet(ctx, conn, roundID)
+	fetched, err := ActivationRoundGet(ctx, conn, roundID)
 	if err != nil {
 		t.Fatalf("get round: %v", err)
 	}
 
-	if got.ActivationID != actID {
-		t.Fatalf("expected activation_id %q, got %q", actID, got.ActivationID)
+	if fetched.ActivationID != actID {
+		t.Fatalf("expected activation_id %q, got %q", actID, fetched.ActivationID)
 	}
-	if got.Round != 0 {
-		t.Fatalf("expected round 0, got %d", got.Round)
+	if fetched.Round != 0 {
+		t.Fatalf("expected round 0, got %d", fetched.Round)
 	}
 }
 

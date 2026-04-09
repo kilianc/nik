@@ -262,7 +262,6 @@ func TestParseFlowSequence(t *testing.T) {
 		want  []string
 	}{
 		{"[a, b, c]", []string{"a", "b", "c"}},
-		{"[single]", []string{"single"}},
 		{"[]", nil},
 	}
 

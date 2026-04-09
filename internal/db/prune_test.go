@@ -66,23 +66,22 @@ func TestPrune(t *testing.T) {
 
 	assertGone(t, conn, "message", old.systemMessageID)
 	assertExists(t, conn, "message", fresh.systemMessageID)
-}
 
-func TestPruneNoRows(t *testing.T) {
-	ctx := context.Background()
-	conn, err := OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
+	t.Run("no rows", func(t *testing.T) {
+		emptyConn, err := OpenInMemory()
+		if err != nil {
+			t.Fatalf("open in-memory db: %v", err)
+		}
+		defer emptyConn.Close()
 
-	n, err := Prune(ctx, conn, "2020-01-01T00:00:00.000Z")
-	if err != nil {
-		t.Fatalf("prune: %v", err)
-	}
-	if n != 0 {
-		t.Fatalf("expected 0 rows, got %d", n)
-	}
+		n, err := Prune(ctx, emptyConn, "2020-01-01T00:00:00.000Z")
+		if err != nil {
+			t.Fatalf("prune: %v", err)
+		}
+		if n != 0 {
+			t.Fatalf("expected 0 rows, got %d", n)
+		}
+	})
 }
 
 func TestSplitStatements(t *testing.T) {

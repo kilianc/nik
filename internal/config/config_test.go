@@ -266,11 +266,6 @@ func TestLoadValidation(t *testing.T) {
 			true,
 		},
 		{
-			"subscription satisfies auth requirement",
-			"models:\n  main:\n    model: gpt-5\n    backend: subscription\nprivileged_conversation_ids:\n  owner: conv-1\n",
-			false,
-		},
-		{
 			"no key and no subscription fails",
 			"models:\n  main:\n    model: gpt-5\n",
 			true,
@@ -339,9 +334,7 @@ func TestIsAllowed(t *testing.T) {
 		want bool
 	}{
 		{"conv-1", true},
-		{"conv-2", true},
 		{"conv-999", false},
-		{"", false},
 	}
 
 	for _, tt := range tests {

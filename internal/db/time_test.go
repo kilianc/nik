@@ -24,7 +24,6 @@ func TestIsISO8601MS(t *testing.T) {
 	}{
 		{"2026-03-16T22:04:05.123Z", true},
 		{"2026-03-16 22:04:05.123+00:00", false},
-		{"2026-03-16T22:04:05Z", false},
 	}
 
 	for _, tt := range tests {

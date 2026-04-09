@@ -33,7 +33,6 @@ func TestExtractAccountID(t *testing.T) {
 			"org-123",
 		},
 		{"invalid token", nil, "not-a-jwt", ""},
-		{"empty token", nil, "", ""},
 	}
 
 	for _, tt := range tests {

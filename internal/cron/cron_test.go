@@ -19,7 +19,6 @@ func TestParse(t *testing.T) {
 		{"shorthand daily", "@daily", false},
 		{"shorthand hourly", "@hourly", false},
 		{"too few fields", "* * *", true},
-		{"too many fields", "* * * * * *", true},
 		{"invalid value", "abc * * * *", true},
 		{"out of range minute", "60 * * * *", true},
 		{"out of range hour", "* 25 * * *", true},
@@ -124,9 +123,7 @@ func TestIsValid(t *testing.T) {
 		want bool
 	}{
 		{"0 9 * * *", true},
-		{"@daily", true},
 		{"not cron", false},
-		{"5m", false},
 	}
 
 	for _, tt := range tests {

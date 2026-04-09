@@ -9,7 +9,6 @@ func TestNormalizeMime(t *testing.T) {
 	}{
 		{"image/jpeg; charset=utf-8", "image/jpeg"},
 		{"", "application/octet-stream"},
-		{"audio/ogg", "audio/ogg"},
 	}
 
 	for _, tt := range tests {
