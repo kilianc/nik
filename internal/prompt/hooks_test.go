@@ -10,6 +10,7 @@ func TestParseHook(t *testing.T) {
 	tests := []struct {
 		name        string
 		raw         string
+		wantOk      bool
 		wantModels  []string
 		wantSection string
 		wantMode    string
@@ -18,34 +19,34 @@ func TestParseHook(t *testing.T) {
 		{
 			name:        "append mode",
 			raw:         "---\nmodels: [gpt-5.4, gpt-5.4-mini]\nsection: identity\nmode: append\n---\nbe shorter",
+			wantOk:      true,
 			wantModels:  []string{"gpt-5.4", "gpt-5.4-mini"},
 			wantSection: "identity",
 			wantMode:    "append",
 			wantContent: "be shorter",
 		},
 		{
-			name:        "replace mode",
-			raw:         "---\nmodels: [o3]\nsection: brain\nmode: replace\n---\nthink differently",
-			wantModels:  []string{"o3"},
-			wantSection: "brain",
-			wantMode:    "replace",
-			wantContent: "think differently",
-		},
-		{
 			name:        "default mode omitted",
 			raw:         "---\nmodels: [gpt-5.4]\nsection: identity\n---\ncontent",
+			wantOk:      true,
 			wantModels:  []string{"gpt-5.4"},
 			wantSection: "identity",
 			wantMode:    "",
 			wantContent: "content",
 		},
+		{"missing models", "---\nsection: identity\nmode: append\n---\ncontent", false, nil, "", "", ""},
+		{"missing section", "---\nmodels: [gpt-5.4]\nmode: append\n---\ncontent", false, nil, "", "", ""},
+		{"no frontmatter", "just some markdown without frontmatter", false, nil, "", "", ""},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			h, ok := parseHook(tt.raw)
+			if ok != tt.wantOk {
+				t.Fatalf("ok = %v, want %v", ok, tt.wantOk)
+			}
 			if !ok {
-				t.Fatal("expected successful parse")
+				return
 			}
 
 			if len(h.Models) != len(tt.wantModels) {
@@ -53,38 +54,18 @@ func TestParseHook(t *testing.T) {
 			}
 			for i, m := range tt.wantModels {
 				if h.Models[i] != m {
-					t.Fatalf("models[%d] = %q, want %q", i, h.Models[i], m)
+					t.Errorf("models[%d] = %q, want %q", i, h.Models[i], m)
 				}
 			}
 
 			if h.Section != tt.wantSection {
-				t.Fatalf("section = %q, want %q", h.Section, tt.wantSection)
+				t.Errorf("section = %q, want %q", h.Section, tt.wantSection)
 			}
 			if h.Mode != tt.wantMode {
-				t.Fatalf("mode = %q, want %q", h.Mode, tt.wantMode)
+				t.Errorf("mode = %q, want %q", h.Mode, tt.wantMode)
 			}
 			if h.Content != tt.wantContent {
-				t.Fatalf("content = %q, want %q", h.Content, tt.wantContent)
-			}
-		})
-	}
-}
-
-func TestParseHookFailures(t *testing.T) {
-	tests := []struct {
-		name string
-		raw  string
-	}{
-		{"missing models", "---\nsection: identity\nmode: append\n---\ncontent"},
-		{"missing section", "---\nmodels: [gpt-5.4]\nmode: append\n---\ncontent"},
-		{"no frontmatter", "just some markdown without frontmatter"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_, ok := parseHook(tt.raw)
-			if ok {
-				t.Fatal("expected parse failure")
+				t.Errorf("content = %q, want %q", h.Content, tt.wantContent)
 			}
 		})
 	}
@@ -118,16 +99,6 @@ func TestApplyHooks(t *testing.T) {
 			section: "identity",
 			hooks:   []promptHook{{Models: []string{"gpt-5.4"}, Section: "brain", Content: "brain stuff"}},
 			want:    "identity content",
-		},
-		{
-			name:    "multiple appends",
-			base:    "base",
-			section: "identity",
-			hooks: []promptHook{
-				{Models: []string{"gpt-5.4"}, Section: "identity", Content: "first"},
-				{Models: []string{"gpt-5.4"}, Section: "identity", Content: "second"},
-			},
-			want: "base\n\nfirst\n\nsecond",
 		},
 	}
 

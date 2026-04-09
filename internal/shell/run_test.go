@@ -9,29 +9,29 @@ import (
 )
 
 func TestRunCommandLocal(t *testing.T) {
-	dir := t.TempDir()
-	svc := &Service{cfg: &config.Config{Home: dir}}
-
-	stdout, stderr, err := svc.RunCommand(context.Background(), "echo hello", "")
-	if err != nil {
-		t.Fatalf("run command: %v (stderr: %s)", err, stderr)
+	tests := []struct {
+		name  string
+		cmd   string
+		stdin string
+		want  string
+	}{
+		{"echo", "echo hello", "", "hello"},
+		{"stdin passthrough", "cat", "input-data", "input-data"},
 	}
 
-	if got := strings.TrimSpace(stdout); got != "hello" {
-		t.Fatalf("expected stdout %q, got %q", "hello", got)
-	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			svc := &Service{cfg: &config.Config{Home: dir}}
 
-func TestRunCommandLocalPassesStdin(t *testing.T) {
-	dir := t.TempDir()
-	svc := &Service{cfg: &config.Config{Home: dir}}
+			stdout, stderr, err := svc.RunCommand(context.Background(), tt.cmd, tt.stdin)
+			if err != nil {
+				t.Fatalf("run command: %v (stderr: %s)", err, stderr)
+			}
 
-	stdout, _, err := svc.RunCommand(context.Background(), "cat", "input-data")
-	if err != nil {
-		t.Fatalf("run command: %v", err)
-	}
-
-	if got := strings.TrimSpace(stdout); got != "input-data" {
-		t.Fatalf("expected stdout %q, got %q", "input-data", got)
+			if got := strings.TrimSpace(stdout); got != tt.want {
+				t.Errorf("expected stdout %q, got %q", tt.want, got)
+			}
+		})
 	}
 }

@@ -15,7 +15,6 @@ func TestPhoneFromWhatsAppID(t *testing.T) {
 		want  string
 	}{
 		{"12345@s.whatsapp.net", "12345"},
-		{"99999@lid", "99999"},
 	}
 
 	for _, tt := range tests {

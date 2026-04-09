@@ -32,17 +32,17 @@ func TestToolError(t *testing.T) {
 			t.Errorf("expected 'missing item: 42', got %q", parsed["error"])
 		}
 	})
-}
 
-func TestToolResultMarshalsValue(t *testing.T) {
-	got := ToolResult(map[string]int{"count": 5})
+	t.Run("marshals value", func(t *testing.T) {
+		got := ToolResult(map[string]int{"count": 5})
 
-	var parsed map[string]int
-	err := json.Unmarshal([]byte(got), &parsed)
-	if err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if parsed["count"] != 5 {
-		t.Errorf("expected count=5, got %d", parsed["count"])
-	}
+		var parsed map[string]int
+		err := json.Unmarshal([]byte(got), &parsed)
+		if err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if parsed["count"] != 5 {
+			t.Errorf("expected count=5, got %d", parsed["count"])
+		}
+	})
 }

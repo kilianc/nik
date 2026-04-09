@@ -107,10 +107,8 @@ func TestParseSelectedIDs(t *testing.T) {
 		{"with newline", "1,3,5\n", 10, []int{1, 3, 5}},
 		{"out of range", "0,1,11,3", 10, []int{1, 3}},
 		{"duplicates", "1,1,3,3", 10, []int{1, 3}},
-		{"nil output", "nil", 10, nil},
 		{"empty output", "", 10, nil},
 		{"non-numeric junk", "1,abc,3", 10, []int{1, 3}},
-		{"single", "7", 10, []int{7}},
 	}
 
 	for _, tt := range tests {

@@ -66,6 +66,30 @@ func TestSkillEventInsertAndLatestPerName(t *testing.T) {
 	if byName["backup"].Kind != "added" {
 		t.Errorf("expected backup latest to be 'added', got %q", byName["backup"].Kind)
 	}
+
+	t.Run("removed has null hash", func(t *testing.T) {
+		_, err := SkillEventInsert(ctx, conn, SkillEventInsertParams{
+			Name: "removed_skill",
+			Kind: "removed",
+		})
+		if err != nil {
+			t.Fatalf("insert: %v", err)
+		}
+
+		latest, err = SkillEventLatestPerName(ctx, conn)
+		if err != nil {
+			t.Fatalf("latest: %v", err)
+		}
+
+		byName = map[string]SkillEvent{}
+		for _, e := range latest {
+			byName[e.Name] = e
+		}
+
+		if byName["removed_skill"].ContentHash.Valid {
+			t.Errorf("expected null content_hash for removed event, got %q", byName["removed_skill"].ContentHash.String)
+		}
+	})
 }
 
 func TestSkillEventListSince(t *testing.T) {
@@ -98,34 +122,5 @@ func TestSkillEventListSince(t *testing.T) {
 	}
 	if events[0].Name != "journal" {
 		t.Errorf("expected name 'journal', got %q", events[0].Name)
-	}
-}
-
-func TestSkillEventRemovedHasNullHash(t *testing.T) {
-	conn, err := OpenInMemory()
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	defer conn.Close()
-	ctx := context.Background()
-
-	_, err = SkillEventInsert(ctx, conn, SkillEventInsertParams{
-		Name: "backup",
-		Kind: "removed",
-	})
-	if err != nil {
-		t.Fatalf("insert: %v", err)
-	}
-
-	latest, err := SkillEventLatestPerName(ctx, conn)
-	if err != nil {
-		t.Fatalf("latest: %v", err)
-	}
-
-	if len(latest) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(latest))
-	}
-	if latest[0].ContentHash.Valid {
-		t.Errorf("expected null content_hash for removed event, got %q", latest[0].ContentHash.String)
 	}
 }

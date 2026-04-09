@@ -51,6 +51,11 @@ func TestSaveAndLoadMeta(t *testing.T) {
 	if !got.StartedAt.Equal(want.StartedAt) {
 		t.Fatalf("started_at: got %v, want %v", got.StartedAt, want.StartedAt)
 	}
+
+	_, err = svc.loadMeta("nonexistent-session-id")
+	if err == nil {
+		t.Fatal("expected error for missing session, got nil")
+	}
 }
 
 func TestSaveMetaValidation(t *testing.T) {
@@ -92,15 +97,5 @@ func TestSaveMetaValidation(t *testing.T) {
 		if err == nil {
 			t.Fatalf("%s: expected error, got nil", tc.name)
 		}
-	}
-}
-
-func TestLoadMetaMissingSession(t *testing.T) {
-	requireTmux(t)
-	svc := testService(t)
-
-	_, err := svc.loadMeta("nonexistent-session-id")
-	if err == nil {
-		t.Fatal("expected error for missing session, got nil")
 	}
 }
