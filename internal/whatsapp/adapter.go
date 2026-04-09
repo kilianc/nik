@@ -16,12 +16,16 @@ import (
 )
 
 type Adapter struct {
-	client   *Client
-	receiver messaging.MessageReceiver
+	client        *Client
+	receiver      messaging.MessageReceiver
+	groupSyncedAt map[string]time.Time
 }
 
 func NewAdapter(client *Client) *Adapter {
-	return &Adapter{client: client}
+	return &Adapter{
+		client:        client,
+		groupSyncedAt: make(map[string]time.Time),
+	}
 }
 
 func (a *Adapter) Platform() string {
@@ -300,8 +304,14 @@ func (a *Adapter) handleGroupInfo(evt *events.GroupInfo) error {
 	return a.syncGroupMetadata(context.Background(), normalizeJID(evt.JID.String()), evt.Timestamp)
 }
 
+const groupSyncInterval = time.Minute
+
 func (a *Adapter) syncGroupMetadata(ctx context.Context, conversationJID string, at time.Time) error {
 	if a.receiver == nil {
+		return nil
+	}
+
+	if last, ok := a.groupSyncedAt[conversationJID]; ok && time.Since(last) < groupSyncInterval {
 		return nil
 	}
 
@@ -348,7 +358,7 @@ func (a *Adapter) syncGroupMetadata(ctx context.Context, conversationJID string,
 		lastMessageAt = time.Now()
 	}
 
-	return a.receiver.ReceiveConversation(ctx, messaging.Conversation{
+	err = a.receiver.ReceiveConversation(ctx, messaging.Conversation{
 		Platform:               a.Platform(),
 		ExternalConversationID: conversationJID,
 		Kind:                   "group",
@@ -360,6 +370,12 @@ func (a *Adapter) syncGroupMetadata(ctx context.Context, conversationJID string,
 		ParticipantExternalIDs: participants,
 		LastMessageAt:          lastMessageAt,
 	})
+	if err != nil {
+		return err
+	}
+
+	a.groupSyncedAt[conversationJID] = time.Now()
+	return nil
 }
 
 func isUnknownEditType(editType string) bool {
