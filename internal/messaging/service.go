@@ -84,6 +84,10 @@ func (s *Service) ReceiveConversation(ctx context.Context, conv Conversation) er
 	return nil
 }
 
+func (s *Service) MessageExists(ctx context.Context, platform, externalMessageID string) (bool, error) {
+	return db.MessageExists(ctx, s.db, platform, externalMessageID)
+}
+
 func (s *Service) ReceiveMessage(ctx context.Context, msg InboundMessage) error {
 	sentAt := msg.SentAt
 	if sentAt.IsZero() {
@@ -196,7 +200,7 @@ func (s *Service) ReceiveMessage(ctx context.Context, msg InboundMessage) error 
 	}
 	slog.Info("receive inbound message", logAttrs...)
 
-	inserted, err := db.MessageInsert(ctx, tx, db.MessageInsertParams{
+	err = db.MessageInsert(ctx, tx, db.MessageInsertParams{
 		ID:                     msgID,
 		ConversationID:         conversationID,
 		ContactID:              contactID,
@@ -222,10 +226,6 @@ func (s *Service) ReceiveMessage(ctx context.Context, msg InboundMessage) error 
 	})
 	if err != nil {
 		return err
-	}
-
-	if !inserted {
-		return tx.Commit()
 	}
 
 	err = db.ConversationParticipantUpsert(ctx, tx, db.ConversationParticipantUpsertParams{

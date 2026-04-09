@@ -53,6 +53,17 @@ func scanMessage(s scanner) (Message, error) {
 	return m, nil
 }
 
+func MessageExists(ctx context.Context, db DBTX, platform, externalMessageID string) (bool, error) {
+	var exists bool
+
+	err := db.QueryRowContext(ctx, queries.MessageExists, platform, externalMessageID).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("message exists %s/%s: %w", platform, externalMessageID, err)
+	}
+
+	return exists, nil
+}
+
 type MessageGetParams struct {
 	ID                string
 	Platform          string
@@ -127,8 +138,8 @@ type MessageInsertParams struct {
 	IsViewOnce             bool
 }
 
-func MessageInsert(ctx context.Context, db DBTX, p MessageInsertParams) (bool, error) {
-	res, err := db.ExecContext(ctx, queries.MessageInsert,
+func MessageInsert(ctx context.Context, db DBTX, p MessageInsertParams) error {
+	_, err := db.ExecContext(ctx, queries.MessageInsert,
 		p.ID,
 		p.ConversationID,
 		p.ContactID,
@@ -153,15 +164,10 @@ func MessageInsert(ctx context.Context, db DBTX, p MessageInsertParams) (bool, e
 		p.IsViewOnce,
 	)
 	if err != nil {
-		return false, fmt.Errorf("insert message %s/%s: %w", p.Platform, p.ExternalMessageID, err)
+		return fmt.Errorf("insert message %s/%s: %w", p.Platform, p.ExternalMessageID, err)
 	}
 
-	n, err := res.RowsAffected()
-	if err != nil {
-		return false, fmt.Errorf("insert message %s/%s rows affected: %w", p.Platform, p.ExternalMessageID, err)
-	}
-
-	return n == 1, nil
+	return nil
 }
 
 func MessageUpdateBody(ctx context.Context, db *sql.DB, messageID, body string) error {

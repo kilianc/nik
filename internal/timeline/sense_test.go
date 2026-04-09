@@ -70,7 +70,7 @@ func insertMsg(t *testing.T, conn *sql.DB, convID string, id string, extMsgID st
 		t.Fatalf("get contact: %v", err)
 	}
 
-	_, err = db.MessageInsert(context.Background(), conn, db.MessageInsertParams{
+	err = db.MessageInsert(context.Background(), conn, db.MessageInsertParams{
 		ID: id, ConversationID: convID, ContactID: contact.ID,
 		Platform: "whatsapp", ExternalConversationID: "ext-conv@s.whatsapp.net",
 		ExternalMessageID: extMsgID, ExternalSenderID: "sender@s.whatsapp.net",

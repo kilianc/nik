@@ -53,6 +53,9 @@ var ConversationParticipantList string
 //go:embed message_insert.sql
 var MessageInsert string
 
+//go:embed message_exists.sql
+var MessageExists string
+
 //go:embed message_get.sql
 var MessageGet string
 

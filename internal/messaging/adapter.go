@@ -3,6 +3,7 @@ package messaging
 import "context"
 
 type MessageReceiver interface {
+	MessageExists(ctx context.Context, platform, externalMessageID string) (bool, error)
 	ReceiveConversation(ctx context.Context, conv Conversation) error
 	ReceiveMessage(ctx context.Context, msg InboundMessage) error
 	OnHistorySyncComplete(ctx context.Context, platform string) error
