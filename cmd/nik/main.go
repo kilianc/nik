@@ -134,6 +134,10 @@ func run(cfg *config.Config, wappLink bool, replay string, readonly bool) error 
 		return fmt.Errorf("create tmp dir: %w", err)
 	}
 
+	if wappLink {
+		_ = os.Remove(cfg.WappSessionDBPath())
+	}
+
 	whatsappClient, err := whatsapp.NewClient(cfg.WappSessionDBPath(), mediaPath)
 	if err != nil {
 		return err
