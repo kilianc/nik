@@ -61,12 +61,7 @@ func (c *Client) AddEventHandler(handler func(any)) {
 }
 
 func (c *Client) Connect(ctx context.Context, forceLink bool) error {
-	if forceLink {
-		_ = c.wm.Store.Delete(ctx)
-		c.wm.Store.ID = nil
-	}
-
-	if c.wm.Store.ID == nil {
+	if forceLink || c.wm.Store.ID == nil {
 		qrChan, err := c.wm.GetQRChannel(ctx)
 		if err != nil {
 			return fmt.Errorf("get qr channel: %w", err)
