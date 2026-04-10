@@ -41,13 +41,29 @@ type authFile struct {
 	ExpiresAt string `json:"expires_at,omitempty"`
 }
 
+func Load(path string) (*Auth, error) {
+	path, err := resolvePath(path)
+	if err != nil {
+		return nil, err
+	}
+
+	auth, err := load(path)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = auth.Token()
+	if err != nil {
+		return nil, fmt.Errorf("validate token: %w", err)
+	}
+
+	return auth, nil
+}
+
 func LoadOrLogin(path string) (*Auth, error) {
-	if path == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return nil, fmt.Errorf("get home dir: %w", err)
-		}
-		path = filepath.Join(home, ".codex", "auth.json")
+	path, err := resolvePath(path)
+	if err != nil {
+		return nil, err
 	}
 
 	auth, err := load(path)
@@ -63,6 +79,19 @@ func LoadOrLogin(path string) (*Auth, error) {
 	}
 
 	return auth, nil
+}
+
+func resolvePath(path string) (string, error) {
+	if path != "" {
+		return path, nil
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("get home dir: %w", err)
+	}
+
+	return filepath.Join(home, ".codex", "auth.json"), nil
 }
 
 func load(path string) (*Auth, error) {
