@@ -49,6 +49,31 @@ func TestEnsureContactForMessageValidatesInputs(t *testing.T) {
 	}
 }
 
+func TestEnsureContactLocal(t *testing.T) {
+	svc := NewService(nil)
+	now := time.Now()
+
+	t.Run("self returns nik contact", func(t *testing.T) {
+		id, err := svc.EnsureContactForMessage(context.Background(), "local", []string{NikContactID}, true, now)
+		if err != nil {
+			t.Fatalf("ensure self: %v", err)
+		}
+		if id != NikContactID {
+			t.Fatalf("expected %s, got %s", NikContactID, id)
+		}
+	})
+
+	t.Run("owner returns owner contact", func(t *testing.T) {
+		id, err := svc.EnsureContactForMessage(context.Background(), "local", []string{db.OwnerContactID}, false, now)
+		if err != nil {
+			t.Fatalf("ensure owner: %v", err)
+		}
+		if id != db.OwnerContactID {
+			t.Fatalf("expected %s, got %s", db.OwnerContactID, id)
+		}
+	})
+}
+
 func TestEnsureContactJIDLinking(t *testing.T) {
 	ctx := context.Background()
 

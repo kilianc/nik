@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS contact (
 -- chat threads (platform, kind, title, topic, participants)
 CREATE TABLE IF NOT EXISTS conversation (
   id                       TEXT PRIMARY KEY,
-  platform                 TEXT NOT NULL CHECK(platform IN ('whatsapp')),
+  platform                 TEXT NOT NULL CHECK(platform IN ('whatsapp', 'local')),
   external_conversation_id TEXT NOT NULL,
   kind                     TEXT NOT NULL DEFAULT 'dm' CHECK(kind IN ('dm', 'group')),
   title                    TEXT,
@@ -63,7 +63,7 @@ CREATE TABLE IF NOT EXISTS message (
   id                       TEXT PRIMARY KEY,
   conversation_id          TEXT NOT NULL REFERENCES conversation(id),
   contact_id               TEXT NOT NULL REFERENCES contact(id),
-  platform                 TEXT NOT NULL CHECK(platform IN ('whatsapp', 'system')),
+  platform                 TEXT NOT NULL CHECK(platform IN ('whatsapp', 'system', 'local')),
   external_conversation_id TEXT NOT NULL,
   external_message_id      TEXT NOT NULL,
   external_sender_id       TEXT NOT NULL,

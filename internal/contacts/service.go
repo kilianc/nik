@@ -93,6 +93,12 @@ func (s *Service) EnsureContactForMessage(ctx context.Context, platform string, 
 
 		return matched.ID, nil
 
+	case "local":
+		if isFromMe {
+			return NikContactID, nil
+		}
+		return db.OwnerContactID, nil
+
 	default:
 		if isFromMe {
 			return "", fmt.Errorf("self-contact upsert not implemented for platform %s", platform)
