@@ -35,6 +35,7 @@ type Conversation struct {
 	IsLocked               bool
 	OwnerExternalID        sql.NullString
 	ParticipantExternalIDs []string
+	Activity               []string
 	LastMessageAt          sql.NullTime
 	LastReadAt             sql.NullTime
 	CreatedAt              time.Time

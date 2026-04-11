@@ -42,6 +42,15 @@ var ConversationGet string
 //go:embed conversation_update.sql
 var ConversationUpdate string
 
+//go:embed conversation_activity_push.sql
+var ConversationActivityPush string
+
+//go:embed conversation_activity_pop.sql
+var ConversationActivityPop string
+
+//go:embed conversation_activity_reset.sql
+var ConversationActivityReset string
+
 //go:embed conversation_mark_read.sql
 var ConversationMarkRead string
 

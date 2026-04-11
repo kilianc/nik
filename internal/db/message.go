@@ -81,7 +81,7 @@ func MessageGet(ctx context.Context, db *sql.DB, p MessageGetParams) (Message, e
 
 type MessageListParams struct {
 	ConversationID string
-	BeforeID       string
+	AfterID        string
 	Limit          int
 }
 
@@ -90,7 +90,7 @@ func MessageList(ctx context.Context, db *sql.DB, p MessageListParams) ([]Messag
 		p.Limit = 20
 	}
 
-	rows, err := db.QueryContext(ctx, queries.MessageList, p.ConversationID, p.BeforeID, p.Limit)
+	rows, err := db.QueryContext(ctx, queries.MessageList, p.ConversationID, p.AfterID, p.Limit)
 	if err != nil {
 		return nil, fmt.Errorf("get messages by conversation %s: %w", p.ConversationID, err)
 	}

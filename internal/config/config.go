@@ -177,7 +177,7 @@ func Default(home string) *Config {
 		Home: home,
 		Models: ModelsConfig{
 			Main: ModelConfig{
-				Model:   "5.3-codex",
+				Model:   "gpt-5.3-codex",
 				Backend: "subscription",
 			},
 			Task: ModelConfig{

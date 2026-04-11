@@ -39,6 +39,7 @@ type ConversationMarkReadParams struct {
 func scanConversation(s scanner) (Conversation, error) {
 	var conv Conversation
 	var participantExternalIDs any
+	var activity any
 
 	err := s.Scan(
 		&conv.ID,
@@ -51,6 +52,7 @@ func scanConversation(s scanner) (Conversation, error) {
 		&conv.IsLocked,
 		&conv.OwnerExternalID,
 		&participantExternalIDs,
+		&activity,
 		&conv.LastMessageAt,
 		&conv.LastReadAt,
 		&conv.CreatedAt,
@@ -63,6 +65,11 @@ func scanConversation(s scanner) (Conversation, error) {
 	conv.ParticipantExternalIDs, err = scanStringSlice(participantExternalIDs)
 	if err != nil {
 		return Conversation{}, fmt.Errorf("scan participant_external_ids: %w", err)
+	}
+
+	conv.Activity, err = scanStringSlice(activity)
+	if err != nil {
+		return Conversation{}, fmt.Errorf("scan activity: %w", err)
 	}
 
 	return conv, nil

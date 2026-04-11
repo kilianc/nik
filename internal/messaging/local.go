@@ -19,11 +19,8 @@ func NewLocalAdapter(conn *sql.DB) *LocalAdapter {
 
 func (a *LocalAdapter) Platform() string { return "local" }
 
-func (a *LocalAdapter) Start(ctx context.Context, receiver MessageReceiver) error {
-	return receiver.OnHistorySyncComplete(ctx, "local")
-}
-
-func (a *LocalAdapter) Stop(_ context.Context) error { return nil }
+func (a *LocalAdapter) Start(_ context.Context, _ MessageReceiver) error { return nil }
+func (a *LocalAdapter) Stop(_ context.Context) error                     { return nil }
 
 func (a *LocalAdapter) Reply(_ context.Context, _ string, body string, _ *QuoteTarget) (OutboundMessage, error) {
 	return OutboundMessage{
@@ -61,11 +58,11 @@ func (a *LocalAdapter) React(_ context.Context, _, _, _, _ string) (OutboundMess
 func (a *LocalAdapter) SetPresence(_ context.Context, _ bool) error { return nil }
 
 func (a *LocalAdapter) StartTyping(ctx context.Context, _ string) error {
-	return db.SettingSet(ctx, a.conn, "local_chat_typing", "true")
+	return db.ConversationActivityPush(ctx, a.conn, db.LocalConversationID, "typing")
 }
 
 func (a *LocalAdapter) StopTyping(ctx context.Context, _ string) error {
-	return db.SettingSet(ctx, a.conn, "local_chat_typing", "false")
+	return db.ConversationActivityPop(ctx, a.conn, db.LocalConversationID, "typing")
 }
 
 func (a *LocalAdapter) MarkRead(_ context.Context, _ []InboundMessage) error { return nil }

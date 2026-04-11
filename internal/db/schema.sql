@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS conversation (
   is_locked                INTEGER NOT NULL DEFAULT 0,
   owner_external_id        TEXT,
   participant_external_ids TEXT NOT NULL DEFAULT '[]',
+  activity                 TEXT NOT NULL DEFAULT '[]',
   last_message_at          TIMESTAMP,
   last_read_at             TIMESTAMP,
   created_at               TIMESTAMP NOT NULL DEFAULT (NOW_ISO8601_MS()),
