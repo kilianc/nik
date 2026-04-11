@@ -54,12 +54,12 @@ func TestEnsureContactLocal(t *testing.T) {
 	now := time.Now()
 
 	t.Run("self returns nik contact", func(t *testing.T) {
-		id, err := svc.EnsureContactForMessage(context.Background(), "local", []string{NikContactID}, true, now)
+		id, err := svc.EnsureContactForMessage(context.Background(), "local", []string{db.NikContactID}, true, now)
 		if err != nil {
 			t.Fatalf("ensure self: %v", err)
 		}
-		if id != NikContactID {
-			t.Fatalf("expected %s, got %s", NikContactID, id)
+		if id != db.NikContactID {
+			t.Fatalf("expected %s, got %s", db.NikContactID, id)
 		}
 	})
 
@@ -129,11 +129,11 @@ func TestEnsureContactJIDLinking(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ensure self: %v", err)
 		}
-		if id != NikContactID {
+		if id != db.NikContactID {
 			t.Fatalf("expected nik contact id, got %s", id)
 		}
 
-		contact, err := db.ContactGet(ctx, conn, NikContactID)
+		contact, err := db.ContactGet(ctx, conn, db.NikContactID)
 		if err != nil {
 			t.Fatalf("get nik contact: %v", err)
 		}
