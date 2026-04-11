@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestWriteAndReadPID(t *testing.T) {
+func TestWriteAndCheckPID(t *testing.T) {
 	home := t.TempDir()
 
 	err := WritePID(home)
@@ -14,7 +14,7 @@ func TestWriteAndReadPID(t *testing.T) {
 		t.Fatalf("WritePID: %v", err)
 	}
 
-	pid, alive := ReadPID(home)
+	pid, alive := CheckPID(home)
 	if !alive {
 		t.Fatal("expected daemon to be alive")
 	}
@@ -23,20 +23,20 @@ func TestWriteAndReadPID(t *testing.T) {
 	}
 }
 
-func TestReadPIDMissingFile(t *testing.T) {
+func TestCheckPIDMissingFile(t *testing.T) {
 	home := t.TempDir()
 
-	_, alive := ReadPID(home)
+	_, alive := CheckPID(home)
 	if alive {
 		t.Fatal("expected not alive for missing PID file")
 	}
 }
 
-func TestReadPIDStaleProcess(t *testing.T) {
+func TestCheckPIDStaleProcess(t *testing.T) {
 	home := t.TempDir()
 	os.WriteFile(filepath.Join(home, "nik.pid"), []byte("999999999"), 0o644)
 
-	_, alive := ReadPID(home)
+	_, alive := CheckPID(home)
 	if alive {
 		t.Fatal("expected not alive for stale PID")
 	}
@@ -52,7 +52,7 @@ func TestRemovePID(t *testing.T) {
 
 	RemovePID(home)
 
-	_, alive := ReadPID(home)
+	_, alive := CheckPID(home)
 	if alive {
 		t.Fatal("expected not alive after RemovePID")
 	}

@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"os/user"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -16,6 +18,7 @@ import (
 	"github.com/kciuffolo/nik/internal/codex"
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/contacts"
+	"github.com/kciuffolo/nik/internal/daemonctl"
 	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/fs"
 	"github.com/kciuffolo/nik/internal/llm"
@@ -34,48 +37,29 @@ import (
 const version = "0.0.1"
 
 func main() {
-	home := flag.String("home", "", "workspace directory (default: current directory)")
-	wappLink := flag.Bool("force-wapp-link", false, "force WhatsApp QR pairing")
-	replay := flag.String("wapp-replay-history", "", "replay recorded history sync from file")
-	readonly := flag.Bool("readonly", false, "receive messages but skip reflexes and activations")
-	flag.Parse()
-
-	cfg, err := config.Load(*home)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+	subcmd := ""
+	if len(os.Args) > 1 && !strings.HasPrefix(os.Args[1], "-") {
+		subcmd = os.Args[1]
 	}
 
-	time.Local = cfg.TZ()
-
-	logFile, err := os.OpenFile(cfg.LogPath(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: open log file: %v\n", err)
-		os.Exit(1)
-	}
-	defer logFile.Close()
-
-	errLogFile, err := os.OpenFile(cfg.ErrLogPath(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: open error log file: %v\n", err)
-		os.Exit(1)
-	}
-	defer errLogFile.Close()
-
-	logOpts := &slog.HandlerOptions{Level: slog.LevelInfo}
-	fileHandler := slog.NewTextHandler(logFile, logOpts)
-	stderrHandler := &niklog.TruncHandler{Inner: slog.NewTextHandler(os.Stderr, logOpts)}
-	errHandler := slog.NewTextHandler(errLogFile, &slog.HandlerOptions{Level: slog.LevelWarn})
-	logger := slog.New(&niklog.MultiHandler{Handlers: []slog.Handler{fileHandler, stderrHandler, errHandler}})
-	slog.SetDefault(logger)
-
-	if err := run(cfg, *wappLink, *replay, *readonly); err != nil {
-		slog.Error("startup", "error", err)
-		os.Exit(1)
+	switch subcmd {
+	case "daemon":
+		runDaemon(os.Args[2:])
+	case "install":
+		runInstall(os.Args[2:])
+	case "replay":
+		runReplay(os.Args[2:])
+	default:
+		runDaemon(os.Args[1:])
 	}
 }
 
-func run(cfg *config.Config, wappLink bool, replay string, readonly bool) error {
+func runDaemon(args []string) {
+	flagSet := flag.NewFlagSet("daemon", flag.ExitOnError)
+	home := flagSet.String("home", "", "workspace directory")
+	readonly := flagSet.Bool("readonly", false, "receive messages but skip reflexes and activations")
+	flagSet.Parse(args)
+
 	ascii := []string{
 		"oooo   oooo ooooo oooo   oooo",
 		" 8888o  88   888   888  o88",
@@ -92,127 +76,206 @@ func run(cfg *config.Config, wappLink bool, replay string, readonly bool) error 
 	fmt.Println(motd)
 	fmt.Println()
 
+	h, err := resolveHome(*home)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if _, alive := daemonctl.CheckPID(h); alive {
+		fmt.Fprintln(os.Stderr, "error: another daemon is already running")
+		os.Exit(1)
+	}
+
+	err = daemonctl.WritePID(h)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: write pid file: %v\n", err)
+		os.Exit(1)
+	}
+	defer daemonctl.RemovePID(h)
+
+	logFile, err := os.OpenFile(filepath.Join(h, "nik.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: open log file: %v\n", err)
+		os.Exit(1)
+	}
+	defer logFile.Close()
+
+	errLogFile, err := os.OpenFile(filepath.Join(h, "nik.err.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: open error log file: %v\n", err)
+		os.Exit(1)
+	}
+	defer errLogFile.Close()
+
+	logOpts := &slog.HandlerOptions{Level: slog.LevelInfo}
+	fileHandler := slog.NewTextHandler(logFile, logOpts)
+	stderrHandler := &niklog.TruncHandler{Inner: slog.NewTextHandler(os.Stderr, logOpts)}
+	errHandler := slog.NewTextHandler(errLogFile, &slog.HandlerOptions{Level: slog.LevelWarn})
+	logger := slog.New(&niklog.MultiHandler{Handlers: []slog.Handler{fileHandler, stderrHandler, errHandler}})
+	slog.SetDefault(logger)
+
+	fatal := func(msg string, err error) {
+		slog.Error(msg, "error", err)
+		os.Exit(1)
+	}
+
+	idle := func(reason string) {
+		slog.Info("not ready, idling until restart", "reason", reason)
+		sig := make(chan os.Signal, 1)
+		signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+		<-sig
+	}
+
+	cfg, err := config.Load(h)
+	if err != nil {
+		idle(err.Error())
+		return
+	}
+
+	time.Local = cfg.TZ()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sig := make(chan os.Signal, 2)
-	signal.Notify(sig, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+	// database
 
 	conn, err := db.Open(cfg.DBPath(), cfg.TZ())
 	if err != nil {
-		return err
+		fatal("open database", err)
 	}
 	defer conn.Close()
 
 	err = db.SystemContactEnsure(ctx, conn)
 	if err != nil {
-		return fmt.Errorf("ensure system contact: %w", err)
+		fatal("ensure system contact", err)
 	}
 
+	err = db.NikContactEnsure(ctx, conn)
+	if err != nil {
+		fatal("ensure nik contact", err)
+	}
+
+	err = db.OwnerContactEnsure(ctx, conn)
+	if err != nil {
+		fatal("ensure owner contact", err)
+	}
+
+	err = db.LocalConversationEnsure(ctx, conn)
+	if err != nil {
+		fatal("ensure local conversation", err)
+	}
+
+	// read-only database connection for db_query tool
 	roConn, err := db.OpenReadOnly(cfg.DBPath(), cfg.TZ())
 	if err != nil {
-		return err
+		fatal("open read-only database", err)
 	}
 	defer roConn.Close()
 
 	slog.Info("database ready", "path", cfg.DBPath())
 
-	mediaPath := cfg.MediaPath()
+	// ensure dirs
 
-	err = os.MkdirAll(mediaPath, 0o755)
+	err = os.MkdirAll(cfg.MediaPath(), 0o755)
 	if err != nil {
-		return fmt.Errorf("create media dir: %w", err)
+		fatal("create media dir", err)
 	}
 
 	err = os.MkdirAll(cfg.DownloadsPath(), 0o755)
 	if err != nil {
-		return fmt.Errorf("create downloads dir: %w", err)
+		fatal("create downloads dir", err)
 	}
 
 	err = os.MkdirAll(cfg.TmpPath(), 0o755)
 	if err != nil {
-		return fmt.Errorf("create tmp dir: %w", err)
+		fatal("create tmp dir", err)
 	}
 
-	if wappLink {
-		_ = os.Remove(cfg.WappSessionDBPath())
-	}
-
-	whatsappClient, err := whatsapp.NewClient(cfg.WappSessionDBPath(), mediaPath)
-	if err != nil {
-		return err
-	}
-	defer whatsappClient.Close()
+	// adapters
 
 	contactsSvc := contacts.NewService(conn)
 	messagingSvc := messaging.NewService(cfg, conn, contactsSvc)
-	whatsappAdapter := whatsapp.NewAdapter(whatsappClient)
 
-	messagingSvc.RegisterPlatform(whatsappAdapter)
-	whatsappAdapter.Start(ctx, messagingSvc)
-
-	if replay != "" {
-		err = whatsappClient.ReplayHistorySync(replay)
-		if err != nil {
-			return fmt.Errorf("replay: %w", err)
-		}
-		slog.Info("replay finished, exiting")
-		return nil
+	// local adapter
+	localAdapter := messaging.NewLocalAdapter(conn)
+	messagingSvc.RegisterPlatform(localAdapter)
+	err = localAdapter.Start(ctx, messagingSvc)
+	if err != nil {
+		fatal("start local adapter", err)
 	}
 
-	var keyOpts []llm.ClientOption
+	slog.Info("local adapter active")
+
+	// whatsapp adapter
+	var whatsappClient *whatsapp.Client
+	if _, err := os.Stat(cfg.WappSessionDBPath()); err == nil {
+		whatsappClient, err = whatsapp.NewClient(cfg.WappSessionDBPath(), cfg.MediaPath())
+		if err != nil {
+			fatal("create whatsapp client", err)
+		}
+		defer whatsappClient.Close()
+
+		whatsappAdapter := whatsapp.NewAdapter(whatsappClient)
+		messagingSvc.RegisterPlatform(whatsappAdapter)
+		err = whatsappAdapter.Start(ctx, messagingSvc)
+		if err != nil {
+			fatal("start whatsapp adapter", err)
+		}
+	}
+
+	// llm clients
+
+	var sharedLLMOpts []llm.ClientOption
 	if cfg.OpenAIKey != "" {
-		keyOpts = append(keyOpts, llm.WithAPIKey(cfg.OpenAIKey))
+		sharedLLMOpts = append(sharedLLMOpts, llm.WithAPIKey(cfg.OpenAIKey))
 	}
 	if cfg.AnthropicKey != "" {
-		keyOpts = append(keyOpts, llm.WithAnthropicKey(cfg.AnthropicKey))
+		sharedLLMOpts = append(sharedLLMOpts, llm.WithAnthropicKey(cfg.AnthropicKey))
 	}
 
 	var codexAuth *codex.Auth
-	if cfg.Models.AnySubscription() {
-		codexAuth, err = codex.LoadOrLogin("")
+	if cfg.Models.NeedsCodexAuth() {
+		codexAuth, err = codex.Load("")
 		if err != nil {
-			return fmt.Errorf("codex auth: %w", err)
+			fatal("codex auth", err)
 		}
 		slog.Info("codex auth ready", "account_id", codexAuth.AccountID)
 	}
 
-	mainOpts := append([]llm.ClientOption{}, keyOpts...)
-	if cfg.Models.Main.IsSubscription() {
-		mainOpts = append(mainOpts, llm.WithCodex(codexAuth))
+	mainLLMOpts := append([]llm.ClientOption{}, sharedLLMOpts...)
+	if cfg.Models.Main.UsesCodexAuth() {
+		mainLLMOpts = append(mainLLMOpts, llm.WithCodex(codexAuth))
 	}
-	mainOpts = append(mainOpts, llm.WithReasoningEffort(&cfg.Models.Main.ReasoningEffort))
-	mainOpts = append(mainOpts, llm.WithVerbosity(&cfg.Models.Main.Verbosity))
-	llmClient := llm.NewClient(&cfg.Models.Main.Model, mainOpts...)
+	mainLLMOpts = append(mainLLMOpts, llm.WithReasoningEffort(&cfg.Models.Main.ReasoningEffort))
+	mainLLMOpts = append(mainLLMOpts, llm.WithVerbosity(&cfg.Models.Main.Verbosity))
+	llmClient := llm.NewClient(&cfg.Models.Main.Model, mainLLMOpts...)
 
 	var recallClient *llm.Client
-	if cfg.Models.Recall.Model != "" && (cfg.OpenAIKey != "" || cfg.AnthropicKey != "") {
-		recallOpts := []llm.ClientOption{
-			llm.WithReasoningEffort(&cfg.Models.Recall.ReasoningEffort),
-			llm.WithVerbosity(&cfg.Models.Recall.Verbosity),
-		}
-		if cfg.OpenAIKey != "" {
-			recallOpts = append(recallOpts, llm.WithAPIKey(cfg.OpenAIKey))
-		}
-		if cfg.AnthropicKey != "" {
-			recallOpts = append(recallOpts, llm.WithAnthropicKey(cfg.AnthropicKey))
-		}
-		recallClient = llm.NewClient(&cfg.Models.Recall.Model, recallOpts...)
+	if cfg.Models.Recall.Model != "" && len(sharedLLMOpts) > 0 {
+		recallLLMOpts := append([]llm.ClientOption{}, sharedLLMOpts...)
+		recallLLMOpts = append(recallLLMOpts, llm.WithReasoningEffort(&cfg.Models.Recall.ReasoningEffort))
+		recallLLMOpts = append(recallLLMOpts, llm.WithVerbosity(&cfg.Models.Recall.Verbosity))
+		recallClient = llm.NewClient(&cfg.Models.Recall.Model, recallLLMOpts...)
 		slog.Info("recall client ready", "model", cfg.Models.Recall.Model)
 	}
 
 	taskLLMClient := llmClient
 	if cfg.Models.Task.Model != "" {
-		taskOpts := append([]llm.ClientOption{}, keyOpts...)
-		if cfg.Models.Task.IsSubscription() {
-			taskOpts = append(taskOpts, llm.WithCodex(codexAuth))
+		taskLLMOpts := append([]llm.ClientOption{}, sharedLLMOpts...)
+		if cfg.Models.Task.UsesCodexAuth() {
+			taskLLMOpts = append(taskLLMOpts, llm.WithCodex(codexAuth))
 		}
-		taskOpts = append(taskOpts, llm.WithReasoningEffort(&cfg.Models.Task.ReasoningEffort))
-		taskOpts = append(taskOpts, llm.WithVerbosity(&cfg.Models.Task.Verbosity))
-		taskLLMClient = llm.NewClient(&cfg.Models.Task.Model, taskOpts...)
+		taskLLMOpts = append(taskLLMOpts, llm.WithReasoningEffort(&cfg.Models.Task.ReasoningEffort))
+		taskLLMOpts = append(taskLLMOpts, llm.WithVerbosity(&cfg.Models.Task.Verbosity))
+		taskLLMClient = llm.NewClient(&cfg.Models.Task.Model, taskLLMOpts...)
 		slog.Info("task client ready", "model", cfg.Models.Task.Model)
 	}
 
+	// services
+
+	pr := prompt.NewRenderer(cfg)
+	recorder := stats.NewRecorder(conn)
 	alarmSvc := alarms.New(cfg, conn)
 	recallSvc := recall.NewService(cfg, recallClient)
 	taskSvc := task.NewService(conn)
@@ -220,26 +283,11 @@ func run(cfg *config.Config, wappLink bool, replay string, readonly bool) error 
 
 	err = shellSvc.EnsureReady()
 	if err != nil {
-		return err
+		fatal("shell setup", err)
 	}
 	slog.Info("shell ready", "pkg", "shell", "docker", cfg.Shell.DockerImage != "")
 
-	var taskTools []llm.Tool
-	taskTools = append(taskTools, shellSvc.BuildTools()...)
-	taskTools = append(taskTools, llm.BuildTools(taskLLMClient, cfg.Home, nil)...)
-	taskTools = append(taskTools, db.BuildTools(roConn, conn, cfg.RetentionOrDefault)...)
-	taskTools = append(taskTools, fs.BuildTools(cfg.Home)...)
-
-	var workerToolNames []string
-	taskTools = append(taskTools, skills.BuildTools(cfg)...)
-
-	for _, t := range taskTools {
-		workerToolNames = append(workerToolNames, t.Def.Name)
-	}
-
-	recorder := stats.NewRecorder(conn)
-	pr := prompt.NewRenderer(cfg)
-
+	// TODO: this feels dangling here...
 	messagingSvc.SetSpeechFn(func(ctx context.Context, text string) (string, error) {
 		return llmClient.Speech(
 			ctx,
@@ -251,16 +299,31 @@ func run(cfg *config.Config, wappLink bool, replay string, readonly bool) error 
 		)
 	})
 
+	// task runner
+
+	var taskTools []llm.Tool
+	taskTools = append(taskTools, shellSvc.BuildTools()...)
+	taskTools = append(taskTools, llm.BuildTools(taskLLMClient, cfg.Home, nil)...)
+	taskTools = append(taskTools, db.BuildTools(roConn, conn, cfg.RetentionOrDefault)...)
+	taskTools = append(taskTools, fs.BuildTools(cfg.Home)...)
+	taskTools = append(taskTools, skills.BuildTools(cfg)...)
+
+	workerToolNames := make([]string, len(taskTools))
+	for i, t := range taskTools {
+		workerToolNames[i] = t.Def.Name
+	}
+
 	taskRunner := task.NewRunner(cfg, taskLLMClient, pr, taskSvc, taskTools)
 	taskRunner.SetRecorder(recorder)
+
+	// brain
 
 	b := brain.New(cfg, llmClient, pr)
 	b.SetDB(conn)
 	b.SetRecorder(recorder)
-
 	b.SetWorkerToolNames(workerToolNames)
 	b.SetRecaller(recallSvc.Recall)
-	b.SetReadonly(readonly)
+	b.SetReadonly(*readonly)
 
 	b.RegisterReflex(0, taskSvc.CheckStale)
 	b.RegisterReflex(0, alarmSvc.FireDueAlarms)
@@ -268,6 +331,7 @@ func run(cfg *config.Config, wappLink bool, replay string, readonly bool) error 
 	b.RegisterReflex(5*time.Minute, skills.SkillChangeReflex(cfg, conn))
 	b.RegisterReflex(5*time.Minute, skills.SkillCheckReflex(cfg, conn, llmClient.Generate, shellSvc.RunCommand))
 	b.RegisterReflex(10*time.Second, shellSvc.CheckSessions)
+
 	b.SetSensor(timeline.New(cfg, messagingSvc))
 
 	b.RegisterTools(config.BuildTools(cfg, conn)...)
@@ -279,6 +343,18 @@ func run(cfg *config.Config, wappLink bool, replay string, readonly bool) error 
 	b.RegisterTools(fs.BuildTools(cfg.Home)...)
 	b.RegisterTools(skills.BuildTools(cfg)...)
 	b.RegisterTools(task.BuildTools(taskSvc, taskRunner)...)
+
+	// start
+
+	if whatsappClient != nil {
+		err = whatsappClient.Connect(ctx, false)
+		if err != nil {
+			fatal("whatsapp connect", err)
+		}
+	}
+
+	sig := make(chan os.Signal, 2)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 
 	go func() {
 		<-sig
@@ -297,16 +373,37 @@ func run(cfg *config.Config, wappLink bool, replay string, readonly bool) error 
 		close(brainDone)
 	}()
 
-	err = whatsappClient.Connect(ctx, wappLink)
-	if err != nil {
-		return err
-	}
+	// shutdown
 
 	<-brainDone
 	messagingSvc.StopPresence()
 	taskRunner.Wait()
 	shellSvc.StopContainer()
 	slog.Info("shutdown complete")
+}
 
-	return nil
+func resolveHome(override string) (string, error) {
+	h := override
+	if h == "" {
+		h = os.Getenv("NIK_HOME")
+	}
+	if h == "" {
+		u, err := user.Current()
+		if err != nil {
+			return "", fmt.Errorf("get current user: %w", err)
+		}
+		h = filepath.Join(u.HomeDir, ".nik")
+	}
+
+	abs, err := filepath.Abs(h)
+	if err != nil {
+		return "", fmt.Errorf("resolve home path: %w", err)
+	}
+
+	err = os.MkdirAll(abs, 0o755)
+	if err != nil {
+		return "", fmt.Errorf("create home dir: %w", err)
+	}
+
+	return abs, nil
 }

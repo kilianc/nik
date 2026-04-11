@@ -22,7 +22,7 @@ type ModelConfig struct {
 	Backend         string `yaml:"backend"`
 }
 
-func (m ModelConfig) IsSubscription() bool {
+func (m ModelConfig) UsesCodexAuth() bool {
 	return m.Backend == "subscription"
 }
 
@@ -33,8 +33,8 @@ type ModelsConfig struct {
 	TTS    TTSConfig   `yaml:"tts"`
 }
 
-func (m ModelsConfig) AnySubscription() bool {
-	return m.Main.IsSubscription() || m.Task.IsSubscription() || m.Recall.IsSubscription()
+func (m ModelsConfig) NeedsCodexAuth() bool {
+	return m.Main.UsesCodexAuth() || m.Task.UsesCodexAuth() || m.Recall.UsesCodexAuth()
 }
 
 type TTSConfig struct {
@@ -509,7 +509,7 @@ func normalizeConfig(cfg *Config) {
 }
 
 func validateConfig(cfg Config) error {
-	if strings.TrimSpace(cfg.OpenAIKey) == "" && !cfg.Models.AnySubscription() && strings.TrimSpace(cfg.AnthropicKey) == "" {
+	if strings.TrimSpace(cfg.OpenAIKey) == "" && !cfg.Models.NeedsCodexAuth() && strings.TrimSpace(cfg.AnthropicKey) == "" {
 		return fmt.Errorf("missing required config key openai_key, anthropic_key, or set backend: subscription on a model")
 	}
 

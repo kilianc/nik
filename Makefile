@@ -23,7 +23,7 @@ coverage: lint
 
 .PHONY: run
 run: build
-	cd $(NIK_HOME) && exec ../nik $(ARGS)
+	exec ./nik daemon --home $(NIK_HOME)
 
 .PHONY: run-loop
 run-loop:
@@ -37,7 +37,7 @@ run-loop:
 
 .PHONY: run-replay
 run-replay: clean
-	cd $(NIK_HOME) && go run ../cmd/nik/main.go -wapp-replay-history wapp_history.pb64
+	go run ./cmd/nik/ replay --home $(NIK_HOME) wapp_history.pb64
 
 .PHONY: migrate
 migrate:
@@ -74,6 +74,14 @@ sqlite:
 .PHONY: workbench
 workbench:
 	@cd $(NIK_HOME) && CGO_ENABLED=1 go run ../cmd/workbench $(ARGS)
+
+GENESIS_HOME ?= ~/tmp/nik-genesis-test
+
+.PHONY: genesis
+genesis: build
+	@rm -rf $(GENESIS_HOME)
+	@mkdir -p $(GENESIS_HOME)
+	NIK_HOME=$(GENESIS_HOME) ./nik daemon --home $(GENESIS_HOME)
 
 .PHONY: shell-image
 shell-image:
