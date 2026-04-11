@@ -259,6 +259,14 @@ var ExperimentVariantRunSaveResult string
 //go:embed experiment_variant_run_update.sql
 var ExperimentVariantRunUpdate string
 
+// setting queries
+
+//go:embed setting_get.sql
+var SettingGet string
+
+//go:embed setting_set.sql
+var SettingSet string
+
 // prune queries
 
 //go:embed prune.sql
