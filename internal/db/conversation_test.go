@@ -226,6 +226,53 @@ func TestConversationUpdate(t *testing.T) {
 	}
 }
 
+func TestLocalConversationEnsure(t *testing.T) {
+	conn, err := OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	ctx := context.Background()
+
+	err = OwnerContactEnsure(ctx, conn)
+	if err != nil {
+		t.Fatalf("ensure owner contact: %v", err)
+	}
+
+	err = LocalConversationEnsure(ctx, conn)
+	if err != nil {
+		t.Fatalf("first ensure: %v", err)
+	}
+
+	err = LocalConversationEnsure(ctx, conn)
+	if err != nil {
+		t.Fatalf("second ensure (idempotent): %v", err)
+	}
+
+	conv, err := ConversationGet(ctx, conn, ConversationGetParams{ID: LocalConversationID})
+	if err != nil {
+		t.Fatalf("get conversation: %v", err)
+	}
+
+	if conv.Platform != "local" {
+		t.Errorf("expected platform local, got %q", conv.Platform)
+	}
+
+	participants, err := ConversationParticipantList(ctx, conn, LocalConversationID)
+	if err != nil {
+		t.Fatalf("list participants: %v", err)
+	}
+
+	if len(participants) != 1 {
+		t.Fatalf("expected 1 participant, got %d", len(participants))
+	}
+
+	if participants[0].ContactID != OwnerContactID {
+		t.Errorf("expected owner %s, got %s", OwnerContactID, participants[0].ContactID)
+	}
+}
+
 func TestConversationUpsertParticipantDeduplicatesByContactID(t *testing.T) {
 	ctx := context.Background()
 

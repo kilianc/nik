@@ -25,6 +25,12 @@ var ContactAddWhatsAppID string
 //go:embed contact_system_ensure.sql
 var ContactSystemEnsure string
 
+//go:embed contact_owner_ensure.sql
+var ContactOwnerEnsure string
+
+//go:embed contact_nik_ensure.sql
+var ContactNikEnsure string
+
 // conversation queries
 
 //go:embed conversation_upsert.sql
@@ -258,6 +264,11 @@ var ExperimentVariantRunSaveResult string
 
 //go:embed experiment_variant_run_update.sql
 var ExperimentVariantRunUpdate string
+
+// local conversation queries
+
+//go:embed conversation_local_ensure.sql
+var ConversationLocalEnsure string
 
 // setting queries
 

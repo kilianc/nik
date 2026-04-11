@@ -224,6 +224,20 @@ func ConversationParticipantUpsert(ctx context.Context, db DBTX, p ConversationP
 	return nil
 }
 
+const LocalConversationID = "00000000-0000-0000-0000-000000000003"
+
+func LocalConversationEnsure(ctx context.Context, db *sql.DB) error {
+	_, err := db.ExecContext(ctx, queries.ConversationLocalEnsure, LocalConversationID)
+	if err != nil {
+		return err
+	}
+
+	return ConversationParticipantUpsert(ctx, db, ConversationParticipantUpsertParams{
+		ConversationID: LocalConversationID,
+		ContactID:      OwnerContactID,
+	})
+}
+
 func ConversationParticipantList(ctx context.Context, db *sql.DB, conversationID string) ([]ConversationParticipant, error) {
 	rows, err := db.QueryContext(ctx, queries.ConversationParticipantList, conversationID)
 	if err != nil {
