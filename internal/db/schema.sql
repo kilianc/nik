@@ -303,6 +303,16 @@ CREATE TABLE IF NOT EXISTS skill_event (
   CHECK (IS_ISO8601_MS(created_at))
 );
 
+-- key-value state (genesis_completed_at, etc.)
+CREATE TABLE IF NOT EXISTS setting (
+  key        TEXT PRIMARY KEY,
+  value      TEXT NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT (NOW_ISO8601_MS()),
+  updated_at TIMESTAMP NOT NULL DEFAULT (NOW_ISO8601_MS()),
+  CHECK (IS_ISO8601_MS(created_at)),
+  CHECK (IS_ISO8601_MS(updated_at))
+);
+
 -- prompt workbench experiments (activation_round_id, status, desired_outcome)
 CREATE TABLE IF NOT EXISTS experiment (
   id                  TEXT PRIMARY KEY,

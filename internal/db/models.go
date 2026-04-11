@@ -180,6 +180,13 @@ type Skill struct {
 	UpdatedAt   time.Time      `json:"updated_at"`
 }
 
+type Setting struct {
+	Key       string
+	Value     string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
 type Experiment struct {
 	ID                string
 	ActivationRoundID string
