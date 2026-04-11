@@ -349,29 +349,29 @@ func TestIsAllowed(t *testing.T) {
 func TestSubscription(t *testing.T) {
 	t.Run("ModelConfig", func(t *testing.T) {
 		m := ModelConfig{Backend: "subscription"}
-		if !m.IsSubscription() {
-			t.Fatal("expected IsSubscription true")
+		if !m.UsesCodexAuth() {
+			t.Fatal("expected UsesCodexAuth true")
 		}
 
 		m.Backend = "api"
-		if m.IsSubscription() {
-			t.Fatal("expected IsSubscription false for api")
+		if m.UsesCodexAuth() {
+			t.Fatal("expected UsesCodexAuth false for api")
 		}
 
 		m.Backend = ""
-		if m.IsSubscription() {
-			t.Fatal("expected IsSubscription false for empty")
+		if m.UsesCodexAuth() {
+			t.Fatal("expected UsesCodexAuth false for empty")
 		}
 	})
 
-	t.Run("AnySubscription", func(t *testing.T) {
+	t.Run("NeedsCodexAuth", func(t *testing.T) {
 		m := ModelsConfig{}
-		if m.AnySubscription() {
+		if m.NeedsCodexAuth() {
 			t.Fatal("expected false when no backend set")
 		}
 
 		m.Task.Backend = "subscription"
-		if !m.AnySubscription() {
+		if !m.NeedsCodexAuth() {
 			t.Fatal("expected true when task is subscription")
 		}
 	})

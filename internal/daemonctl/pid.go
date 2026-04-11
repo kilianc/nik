@@ -21,7 +21,7 @@ func RemovePID(home string) {
 	os.Remove(pidPath(home))
 }
 
-func ReadPID(home string) (int, bool) {
+func CheckPID(home string) (int, bool) {
 	data, err := os.ReadFile(pidPath(home))
 	if err != nil {
 		return 0, false
@@ -41,7 +41,7 @@ func ReadPID(home string) (int, bool) {
 }
 
 func SignalDaemon(home string, sig os.Signal) error {
-	pid, alive := ReadPID(home)
+	pid, alive := CheckPID(home)
 	if !alive {
 		return fmt.Errorf("daemon not running")
 	}

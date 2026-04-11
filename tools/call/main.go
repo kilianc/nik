@@ -37,16 +37,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	var keyOpts []llm.ClientOption
+	var sharedLLMOpts []llm.ClientOption
 	if cfg.OpenAIKey != "" {
-		keyOpts = append(keyOpts, llm.WithAPIKey(cfg.OpenAIKey))
+		sharedLLMOpts = append(sharedLLMOpts, llm.WithAPIKey(cfg.OpenAIKey))
 	}
 	if cfg.AnthropicKey != "" {
-		keyOpts = append(keyOpts, llm.WithAnthropicKey(cfg.AnthropicKey))
+		sharedLLMOpts = append(sharedLLMOpts, llm.WithAnthropicKey(cfg.AnthropicKey))
 	}
 
 	var codexAuth *codex.Auth
-	if cfg.Models.AnySubscription() {
+	if cfg.Models.NeedsCodexAuth() {
 		var err error
 		codexAuth, err = codex.LoadOrLogin("")
 		if err != nil {
@@ -55,13 +55,13 @@ func main() {
 		}
 	}
 
-	mainOpts := append([]llm.ClientOption{}, keyOpts...)
-	if cfg.Models.Main.IsSubscription() {
-		mainOpts = append(mainOpts, llm.WithCodex(codexAuth))
+	mainLLMOpts := append([]llm.ClientOption{}, sharedLLMOpts...)
+	if cfg.Models.Main.UsesCodexAuth() {
+		mainLLMOpts = append(mainLLMOpts, llm.WithCodex(codexAuth))
 	}
-	mainOpts = append(mainOpts, llm.WithReasoningEffort(&cfg.Models.Main.ReasoningEffort))
-	mainOpts = append(mainOpts, llm.WithVerbosity(&cfg.Models.Main.Verbosity))
-	llmClient := llm.NewClient(&cfg.Models.Main.Model, mainOpts...)
+	mainLLMOpts = append(mainLLMOpts, llm.WithReasoningEffort(&cfg.Models.Main.ReasoningEffort))
+	mainLLMOpts = append(mainLLMOpts, llm.WithVerbosity(&cfg.Models.Main.Verbosity))
+	llmClient := llm.NewClient(&cfg.Models.Main.Model, mainLLMOpts...)
 
 	conn, err := db.Open(cfg.DBPath(), cfg.TZ())
 	if err != nil {
@@ -73,13 +73,13 @@ func main() {
 
 	taskLLMClient := llmClient
 	if cfg.Models.Task.Model != "" {
-		taskOpts := append([]llm.ClientOption{}, keyOpts...)
-		if cfg.Models.Task.IsSubscription() {
-			taskOpts = append(taskOpts, llm.WithCodex(codexAuth))
+		taskLLMOpts := append([]llm.ClientOption{}, sharedLLMOpts...)
+		if cfg.Models.Task.UsesCodexAuth() {
+			taskLLMOpts = append(taskLLMOpts, llm.WithCodex(codexAuth))
 		}
-		taskOpts = append(taskOpts, llm.WithReasoningEffort(&cfg.Models.Task.ReasoningEffort))
-		taskOpts = append(taskOpts, llm.WithVerbosity(&cfg.Models.Task.Verbosity))
-		taskLLMClient = llm.NewClient(&cfg.Models.Task.Model, taskOpts...)
+		taskLLMOpts = append(taskLLMOpts, llm.WithReasoningEffort(&cfg.Models.Task.ReasoningEffort))
+		taskLLMOpts = append(taskLLMOpts, llm.WithVerbosity(&cfg.Models.Task.Verbosity))
+		taskLLMClient = llm.NewClient(&cfg.Models.Task.Model, taskLLMOpts...)
 	}
 
 	tools := buildTools(cfg, llmClient, taskLLMClient, conn)
