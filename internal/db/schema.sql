@@ -63,7 +63,7 @@ CREATE TABLE IF NOT EXISTS message (
   id                       TEXT PRIMARY KEY,
   conversation_id          TEXT NOT NULL REFERENCES conversation(id),
   contact_id               TEXT NOT NULL REFERENCES contact(id),
-  platform                 TEXT NOT NULL CHECK(platform IN ('whatsapp', 'system', 'local')),
+  platform                 TEXT NOT NULL CHECK(platform IN ('whatsapp', 'local', 'system')),
   external_conversation_id TEXT NOT NULL,
   external_message_id      TEXT NOT NULL,
   external_sender_id       TEXT NOT NULL,
