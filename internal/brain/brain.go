@@ -25,6 +25,7 @@ type Brain struct {
 	toolExec        map[string]llm.ToolExecutor
 	privileged      map[string]bool
 	sensor          Sensor
+	activity        Activity
 	reflexes        []Reflex
 	recaller        func(ctx context.Context, stimulus string) string
 	workerToolNames []string
@@ -150,6 +151,11 @@ func (b *Brain) activate(ctx context.Context, output Stimulus) {
 
 	convID := output.Meta["conversation_id"]
 	defer b.claimed.Delete("conversation:" + convID)
+
+	if b.activity != nil {
+		b.activity.Busy(ctx, convID)
+		defer b.activity.Done(ctx, convID)
+	}
 
 	sources := output.Meta["sources"]
 	slog.Info("activation starting", "pkg", "brain", "conversation_id", convID, "sources", sources)

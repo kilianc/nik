@@ -49,8 +49,10 @@ func main() {
 		runInstall(os.Args[2:])
 	case "replay":
 		runReplay(os.Args[2:])
+	case "tui":
+		runTUI(os.Args[2:])
 	default:
-		runDaemon(os.Args[1:])
+		runTUI(os.Args[1:])
 	}
 }
 
@@ -198,13 +200,7 @@ func runDaemon(args []string) {
 	messagingSvc := messaging.NewService(cfg, conn, contactsSvc)
 
 	// local adapter
-	localAdapter := messaging.NewLocalAdapter(conn)
-	messagingSvc.RegisterPlatform(localAdapter)
-	err = localAdapter.Start(ctx, messagingSvc)
-	if err != nil {
-		fatal("start local adapter", err)
-	}
-
+	messagingSvc.RegisterPlatform(messaging.NewLocalAdapter(conn))
 	slog.Info("local adapter active")
 
 	// whatsapp adapter
@@ -321,6 +317,7 @@ func runDaemon(args []string) {
 	b := brain.New(cfg, llmClient, pr)
 	b.SetDB(conn)
 	b.SetRecorder(recorder)
+	b.SetActivity(messagingSvc)
 	b.SetWorkerToolNames(workerToolNames)
 	b.SetRecaller(recallSvc.Recall)
 	b.SetReadonly(*readonly)

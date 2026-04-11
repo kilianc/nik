@@ -10,6 +10,7 @@ SELECT
   is_locked,
   owner_external_id,
   participant_external_ids,
+  activity,
   last_message_at,
   last_read_at,
   created_at,

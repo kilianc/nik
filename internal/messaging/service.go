@@ -32,12 +32,15 @@ type Service struct {
 	replyDelay func(body string) time.Duration
 	speechFn   func(ctx context.Context, text string) (string, error)
 
-	presenceMu     sync.Mutex
-	presenceOnline bool
-	presenceTimer  *time.Timer
+	presenceMu       sync.Mutex
+	presenceOnline   bool
+	presencePlatform MessagingPlatform
+	presenceTimer    *time.Timer
 }
 
 func NewService(cfg *config.Config, conn *sql.DB, contacts ContactService) *Service {
+	db.ConversationActivityReset(context.Background(), conn)
+
 	return &Service{
 		cfg:        cfg,
 		db:         conn,
@@ -45,6 +48,15 @@ func NewService(cfg *config.Config, conn *sql.DB, contacts ContactService) *Serv
 		contacts:   contacts,
 		replyDelay: humanizedReplyDelay,
 	}
+}
+
+func (s *Service) Busy(ctx context.Context, convID string) {
+	db.ConversationActivityPush(ctx, s.db, convID, "thinking")
+}
+
+func (s *Service) Done(ctx context.Context, convID string) {
+	ctx = context.WithoutCancel(ctx)
+	db.ConversationActivityPop(ctx, s.db, convID, "thinking")
 }
 
 func (s *Service) SetSpeechFn(fn func(ctx context.Context, text string) (string, error)) {
@@ -622,6 +634,7 @@ func (s *Service) touchPresence(platform MessagingPlatform) {
 			return
 		}
 		s.presenceOnline = true
+		s.presencePlatform = platform
 	}
 
 	if s.presenceTimer != nil {
@@ -639,7 +652,7 @@ func (s *Service) presenceExpire() {
 	}
 
 	s.presenceOnline = false
-	err := s.SetPresence(context.Background(), "whatsapp", false)
+	err := s.presencePlatform.SetPresence(context.Background(), false)
 	if err != nil {
 		slog.Warn("set presence unavailable", "pkg", "messaging", "error", err)
 	}
@@ -659,7 +672,7 @@ func (s *Service) StopPresence() {
 	}
 
 	s.presenceOnline = false
-	err := s.SetPresence(context.Background(), "whatsapp", false)
+	err := s.presencePlatform.SetPresence(context.Background(), false)
 	if err != nil {
 		slog.Warn("set presence unavailable", "pkg", "messaging", "error", err)
 	}

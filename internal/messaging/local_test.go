@@ -2,6 +2,7 @@ package messaging
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/kciuffolo/nik/internal/db"
@@ -41,32 +42,48 @@ func TestLocalAdapterTyping(t *testing.T) {
 	}
 	defer conn.Close()
 
-	a := NewLocalAdapter(conn)
 	ctx := context.Background()
 
-	err = a.StartTyping(ctx, "conv-1")
+	err = db.NikContactEnsure(ctx, conn)
+	if err != nil {
+		t.Fatalf("ensure nik contact: %v", err)
+	}
+
+	err = db.OwnerContactEnsure(ctx, conn)
+	if err != nil {
+		t.Fatalf("ensure owner contact: %v", err)
+	}
+
+	err = db.LocalConversationEnsure(ctx, conn)
+	if err != nil {
+		t.Fatalf("ensure local conversation: %v", err)
+	}
+
+	a := NewLocalAdapter(conn)
+
+	err = a.StartTyping(ctx, db.LocalConversationID)
 	if err != nil {
 		t.Fatalf("start typing: %v", err)
 	}
 
-	s, err := db.SettingGet(ctx, conn, "local_chat_typing")
+	conv, err := db.ConversationGet(ctx, conn, db.ConversationGetParams{ID: db.LocalConversationID})
 	if err != nil {
-		t.Fatalf("get setting: %v", err)
+		t.Fatalf("get conversation: %v", err)
 	}
-	if s.Value != "true" {
-		t.Errorf("expected typing true, got %q", s.Value)
+	if !slices.Contains(conv.Activity, "typing") {
+		t.Errorf("expected activity to contain 'typing', got %v", conv.Activity)
 	}
 
-	err = a.StopTyping(ctx, "conv-1")
+	err = a.StopTyping(ctx, db.LocalConversationID)
 	if err != nil {
 		t.Fatalf("stop typing: %v", err)
 	}
 
-	s, err = db.SettingGet(ctx, conn, "local_chat_typing")
+	conv, err = db.ConversationGet(ctx, conn, db.ConversationGetParams{ID: db.LocalConversationID})
 	if err != nil {
-		t.Fatalf("get setting: %v", err)
+		t.Fatalf("get conversation: %v", err)
 	}
-	if s.Value != "false" {
-		t.Errorf("expected typing false, got %q", s.Value)
+	if len(conv.Activity) != 0 {
+		t.Errorf("expected empty activity, got %v", conv.Activity)
 	}
 }
