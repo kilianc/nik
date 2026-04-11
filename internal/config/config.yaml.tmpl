@@ -1,0 +1,79 @@
+# api keys
+openai_key: {{ .OpenAIKey }}
+{{- if .AnthropicKey }}
+anthropic_key: {{ .AnthropicKey }}
+{{- end }}
+
+# models
+models:
+  main:
+    model: {{ .Models.Main.Model }}
+{{- if .Models.Main.ReasoningEffort }}
+    reasoning_effort: {{ .Models.Main.ReasoningEffort }}  # none, minimal, low, medium, high, xhigh
+{{- end }}
+{{- if .Models.Main.Verbosity }}
+    verbosity: {{ .Models.Main.Verbosity }}               # low, medium, high
+{{- end }}
+{{- if .Models.Main.Backend }}
+    backend: {{ .Models.Main.Backend }}                    # api | subscription
+{{- end }}
+  task:
+{{- if .Models.Task.Model }}
+    model: {{ .Models.Task.Model }}
+{{- end }}
+{{- if .Models.Task.ReasoningEffort }}
+    reasoning_effort: {{ .Models.Task.ReasoningEffort }}
+{{- end }}
+{{- if .Models.Task.Verbosity }}
+    verbosity: {{ .Models.Task.Verbosity }}
+{{- end }}
+{{- if .Models.Task.Backend }}
+    backend: {{ .Models.Task.Backend }}                    # api | subscription
+{{- end }}
+  recall:
+{{- if .Models.Recall.Model }}
+    model: {{ .Models.Recall.Model }}
+{{- end }}
+{{- if .Models.Recall.ReasoningEffort }}
+    reasoning_effort: {{ .Models.Recall.ReasoningEffort }}
+{{- end }}
+{{- if .Models.Recall.Verbosity }}
+    verbosity: {{ .Models.Recall.Verbosity }}
+{{- end }}
+  tts:
+    model: {{ .Models.TTS.Model }}
+    voice: {{ .Models.TTS.Voice }}                        # alloy, ash, ballad, coral, echo, fable, onyx, nova, sage, shimmer
+    speed: {{ .Models.TTS.Speed }}                          # 0.25 – 4.0
+
+# task runner limits
+task:
+  max_rounds: {{ .Task.MaxRounds }}                        # max LLM rounds per task
+  timeout: {{ .Task.Timeout }}                              # max wall-clock time per task
+  profile: {{ .Task.Profile }}                             # "nik" = include identity/soul, anything else = generic
+
+# paths (relative to home dir)
+skills_dir: {{ .SkillsDirValue }}
+
+# conversations (label: uuid)
+privileged_conversation_ids:{{ convList .PrivilegedConversationIDs }}
+allow_conversation_ids:{{ convList .AllowConversationIDs }}
+
+# context
+max_history: {{ .MaxHistory }}
+system_message_max_age: {{ .SystemMessageMaxAge }}
+timezone: {{ .Timezone }}
+{{- if .Location }}
+location: {{ .Location }}
+{{- end }}
+
+# shell sandbox
+shell:
+{{- if .Shell.DockerImage }}
+  docker_image: {{ .Shell.DockerImage }}                   # empty = run commands on host via tmux
+{{- end }}
+
+# data retention
+retention: {{ .Retention }}                                 # prune old activations, tasks, system messages
+
+# content filters
+banned_words: {{ bannedWords .BannedWords }}

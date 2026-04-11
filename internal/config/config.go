@@ -1,14 +1,17 @@
 package config
 
 import (
+	_ "embed"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"text/template"
 	"time"
 
+	"github.com/kciuffolo/nik/internal/db"
 	"gopkg.in/yaml.v3"
 )
 
@@ -169,6 +172,38 @@ type Config struct {
 	BannedWords []string `yaml:"banned_words"`
 }
 
+func Default(home string) *Config {
+	return &Config{
+		Home: home,
+		Models: ModelsConfig{
+			Main: ModelConfig{
+				Model:   "5.3-codex",
+				Backend: "subscription",
+			},
+			Task: ModelConfig{
+				Backend: "api",
+			},
+			TTS: TTSConfig{
+				Model: "gpt-4o-mini-tts",
+				Voice: "ash",
+				Speed: 1.0,
+			},
+		},
+		Task: TaskConfig{
+			MaxRounds: 200,
+			Timeout:   60 * time.Minute,
+			Profile:   "nik",
+		},
+		SkillsDirValue:      "../skills",
+		MaxHistory:          100,
+		SystemMessageMaxAge: 2 * time.Hour,
+		Timezone:            "",
+		Location:            "",
+		Retention:           720 * time.Hour,
+		BannedWords:         []string{"goblin", "gremlin"},
+	}
+}
+
 func (c Config) RetentionOrDefault() time.Duration {
 	if c.Retention > 0 {
 		return c.Retention
@@ -289,13 +324,38 @@ func (c Config) IsPrivileged(id string) bool {
 	return c.PrivilegedConversationIDs.ContainsID(id)
 }
 
+//go:embed config.yaml.tmpl
+var configTplRaw string
+
+var configTmpl = template.Must(
+	template.New("config").Funcs(template.FuncMap{
+		"convList": func(cl ConversationList) string {
+			if len(cl) == 0 {
+				return " {}"
+			}
+			var b strings.Builder
+			for _, e := range cl {
+				fmt.Fprintf(&b, "\n  %s: %s", e.Label, e.ID)
+			}
+			return b.String()
+		},
+		"bannedWords": func(words []string) string {
+			if len(words) == 0 {
+				return "[]"
+			}
+			return "[" + strings.Join(words, ", ") + "]"
+		},
+	}).Parse(configTplRaw),
+)
+
 func (c *Config) Save(path string) error {
-	data, err := yaml.Marshal(c)
+	var buf strings.Builder
+	err := configTmpl.Execute(&buf, c)
 	if err != nil {
-		return fmt.Errorf("marshal config: %w", err)
+		return fmt.Errorf("render config: %w", err)
 	}
 
-	err = os.WriteFile(path, data, 0o644)
+	err = os.WriteFile(path, []byte(alignComments(buf.String(), 40)), 0o644)
 	if err != nil {
 		return fmt.Errorf("write config %s: %w", path, err)
 	}
@@ -303,7 +363,34 @@ func (c *Config) Save(path string) error {
 	return nil
 }
 
-func Load(home string) (*Config, error) {
+func alignComments(s string, minCol int) string {
+	lines := strings.Split(s, "\n")
+
+	col := minCol
+	for _, line := range lines {
+		idx := strings.Index(line, "  # ")
+		if idx < 0 {
+			continue
+		}
+		w := len(strings.TrimRight(line[:idx], " "))
+		if w+2 > col {
+			col = w + 2
+		}
+	}
+
+	for i, line := range lines {
+		idx := strings.Index(line, "  # ")
+		if idx < 0 {
+			continue
+		}
+		content := strings.TrimRight(line[:idx], " ")
+		comment := strings.TrimSpace(line[idx:])
+		lines[i] = content + strings.Repeat(" ", col-len(content)) + comment
+	}
+	return strings.Join(lines, "\n")
+}
+
+func Read(home string) (*Config, error) {
 	if home == "" {
 		var err error
 		home, err = os.Getwd()
@@ -337,12 +424,22 @@ func Load(home string) (*Config, error) {
 	}
 
 	normalizeConfig(&cfg)
-	err = validateConfig(cfg)
+
+	return &cfg, nil
+}
+
+func Load(home string) (*Config, error) {
+	cfg, err := Read(home)
 	if err != nil {
 		return nil, err
 	}
 
-	return &cfg, nil
+	err = validateConfig(*cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	return cfg, nil
 }
 
 func (c *Config) ReloadIfChanged() (bool, error) {
@@ -395,7 +492,15 @@ func (c *Config) reload() error {
 	return nil
 }
 
+func (c *Config) Normalize() {
+	normalizeConfig(c)
+}
+
 func normalizeConfig(cfg *Config) {
+	if !cfg.PrivilegedConversationIDs.ContainsID(db.LocalConversationID) {
+		cfg.PrivilegedConversationIDs.Append("local", db.LocalConversationID)
+	}
+
 	for _, e := range cfg.PrivilegedConversationIDs {
 		if !cfg.AllowConversationIDs.ContainsID(e.ID) {
 			cfg.AllowConversationIDs.Append(e.Label, e.ID)
@@ -425,10 +530,6 @@ func validateConfig(cfg Config) error {
 	err = validatePurposeModel("recall", cfg.Models.Recall)
 	if err != nil {
 		return err
-	}
-
-	if len(cfg.PrivilegedConversationIDs) == 0 {
-		return fmt.Errorf("missing required config key privileged_conversation_ids (at least one required)")
 	}
 
 	return nil

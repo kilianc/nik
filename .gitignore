@@ -14,7 +14,7 @@
 !internal/queries/*.sql
 
 # Track templates
-!*.tpl
+!*.tmpl
 
 # Track build
 !Makefile
