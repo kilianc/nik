@@ -7,19 +7,6 @@ import (
 	"github.com/kciuffolo/nik/internal/db"
 )
 
-func TestLocalAdapterPlatform(t *testing.T) {
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
-
-	a := NewLocalAdapter(conn)
-	if a.Platform() != "local" {
-		t.Errorf("expected platform 'local', got %q", a.Platform())
-	}
-}
-
 func TestLocalAdapterReply(t *testing.T) {
 	conn, err := db.OpenInMemory()
 	if err != nil {

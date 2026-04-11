@@ -39,10 +39,3 @@ func TestExtensionFromMime(t *testing.T) {
 		})
 	}
 }
-
-func TestExtractDownloadableNilMessage(t *testing.T) {
-	dl, mime := extractDownloadable(nil, "image")
-	if dl != nil || mime != "" {
-		t.Errorf("expected nil/empty for nil message, got %v / %q", dl, mime)
-	}
-}

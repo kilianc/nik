@@ -70,6 +70,12 @@ func TestMessageLineMediaUnavailable(t *testing.T) {
 			msg:         db.Message{ID: "msg-4", Kind: "text", Body: "hello", SentAt: time.Now()},
 			wantUnavail: false,
 		},
+		{
+			name:           "second precision timestamp",
+			msg:            db.Message{ID: "msg-5", Kind: "text", Body: "hello", SentAt: time.Date(2026, time.February, 28, 9, 32, 10, 0, time.UTC)},
+			wantUnavail:    false,
+			wantSubstrings: []string{"[09:32:10]"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -87,19 +93,5 @@ func TestMessageLineMediaUnavailable(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func TestMessageLineSecondPrecision(t *testing.T) {
-	msg := db.Message{
-		ID:     "msg-1",
-		Kind:   "text",
-		Body:   "hello",
-		SentAt: time.Date(2026, time.February, 28, 9, 32, 10, 0, time.UTC),
-	}
-
-	line := formatMessageLine(msg, "Alice")
-	if !strings.Contains(line, "[09:32:10]") {
-		t.Fatalf("expected second-precision timestamp, got %q", line)
 	}
 }

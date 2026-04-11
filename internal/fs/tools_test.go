@@ -52,6 +52,7 @@ func TestWriteFile(t *testing.T) {
 		{"overwrites existing", "write", "out.txt", "new", "old", "new"},
 		{"appends to existing", "append", "out.txt", " second", "first", "first second"},
 		{"append creates if missing", "append", "new.txt", "first", "", "first"},
+		{"nested relative path", "write", "sub/file.txt", "ok", "", "ok"},
 	}
 
 	for _, tt := range tests {
@@ -76,20 +77,19 @@ func TestWriteFile(t *testing.T) {
 			}
 		})
 	}
-}
 
-func TestRelativePath(t *testing.T) {
-	dir := t.TempDir()
-	args := `{"action":"write","path":"sub/file.txt","content":"ok"}`
-	call(t, dir, args)
+	t.Run("result includes bytes", func(t *testing.T) {
+		dir := t.TempDir()
+		result := call(t, dir, `{"action":"write","path":"sized.txt","content":"12345"}`)
 
-	data, err := os.ReadFile(filepath.Join(dir, "sub", "file.txt"))
-	if err != nil {
-		t.Fatalf("read: %v", err)
-	}
-	if string(data) != "ok" {
-		t.Errorf("content = %q, want %q", string(data), "ok")
-	}
+		var out map[string]any
+		json.Unmarshal([]byte(result), &out)
+
+		b, ok := out["bytes"].(float64)
+		if !ok || b != 5 {
+			t.Errorf("bytes = %v, want 5", out["bytes"])
+		}
+	})
 }
 
 func TestWriteFilePathSecurity(t *testing.T) {
@@ -150,21 +150,6 @@ func TestWriteFileValidation(t *testing.T) {
 	}
 }
 
-func TestResultIncludesBytes(t *testing.T) {
-	dir := t.TempDir()
-	args := `{"action":"write","path":"sized.txt","content":"12345"}`
-
-	result := call(t, dir, args)
-
-	var out map[string]any
-	json.Unmarshal([]byte(result), &out)
-
-	b, ok := out["bytes"].(float64)
-	if !ok || b != 5 {
-		t.Errorf("bytes = %v, want 5", out["bytes"])
-	}
-}
-
 func TestReadFile(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "hello.txt"), []byte("line1\nline2\nline3\n"), 0o644)
@@ -178,6 +163,17 @@ func TestReadFile(t *testing.T) {
 	json.Unmarshal([]byte(result), &out)
 	if tl, _ := out["total_lines"].(float64); tl != 3 {
 		t.Errorf("total_lines = %v, want 3", out["total_lines"])
+	}
+
+	notFound := callRead(t, dir, `{"path":"nope.txt"}`)
+	if !strings.Contains(notFound, "error") {
+		t.Fatalf("expected error for missing file, got %s", notFound)
+	}
+
+	os.WriteFile(filepath.Join(dir, "empty.txt"), []byte(""), 0o644)
+	emptyResult := callRead(t, dir, `{"path":"empty.txt"}`)
+	if !strings.Contains(emptyResult, "empty or no lines in range") {
+		t.Fatalf("expected empty message, got %s", emptyResult)
 	}
 }
 
@@ -272,14 +268,6 @@ func TestReadFileDefaultLimit(t *testing.T) {
 	}
 }
 
-func TestReadFileNotFound(t *testing.T) {
-	dir := t.TempDir()
-	result := callRead(t, dir, `{"path":"nope.txt"}`)
-	if !strings.Contains(result, "error") {
-		t.Fatalf("expected error for missing file, got %s", result)
-	}
-}
-
 func TestReadFilePathSecurity(t *testing.T) {
 	t.Run("traversal blocked", func(t *testing.T) {
 		dir := t.TempDir()
@@ -308,14 +296,4 @@ func TestReadFilePathSecurity(t *testing.T) {
 			t.Fatalf("expected error for symlink escape, got %s", result)
 		}
 	})
-}
-
-func TestReadFileEmpty(t *testing.T) {
-	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "empty.txt"), []byte(""), 0o644)
-
-	result := callRead(t, dir, `{"path":"empty.txt"}`)
-	if !strings.Contains(result, "empty or no lines in range") {
-		t.Fatalf("expected empty message, got %s", result)
-	}
 }

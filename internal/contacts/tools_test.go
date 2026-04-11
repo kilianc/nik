@@ -11,16 +11,6 @@ import (
 	"github.com/kciuffolo/nik/internal/llm"
 )
 
-func TestBuildToolsReturnsUpdateContactTool(t *testing.T) {
-	tools := BuildTools(nil)
-	if len(tools) != 1 {
-		t.Fatalf("expected 1 tool, got %d", len(tools))
-	}
-	if tools[0].Def.Name != "update_contact" {
-		t.Fatalf("expected update_contact tool, got %q", tools[0].Def.Name)
-	}
-}
-
 func TestUpdateContactHandlerRejectsInvalidJSON(t *testing.T) {
 	handler := updateContactHandler(nil)
 

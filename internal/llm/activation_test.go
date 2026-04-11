@@ -4,11 +4,11 @@ import (
 	"testing"
 )
 
-func TestActivationSetInput(t *testing.T) {
+func TestActivationDualModel(t *testing.T) {
 	models := []string{"gpt-5.4", "claude-opus-4-6"}
 
 	for _, m := range models {
-		t.Run(m, func(t *testing.T) {
+		t.Run(m+"/set_input", func(t *testing.T) {
 			model := m
 			client := &Client{model: &model}
 			s := NewActivation(client, NoopRecorder{}, "instructions", nil)
@@ -21,6 +21,72 @@ func TestActivationSetInput(t *testing.T) {
 			s.SetInput("updated")
 			if got := s.UserInput(); got != "updated" {
 				t.Fatalf("expected 'updated', got %q", got)
+			}
+		})
+
+		t.Run(m+"/conversation", func(t *testing.T) {
+			model := m
+			client := &Client{model: &model}
+			s := NewActivation(client, NoopRecorder{}, "instructions", nil)
+
+			s.SetInput("timeline")
+			s.AppendAssistantText("thinking")
+			s.AppendUserMessage("nudge")
+
+			call := ToolCall{CallID: "c1", Name: "done", Arguments: `{}`}
+			s.AddToolResult(call, "ok", false)
+
+			msgs := s.prov.conversation()
+			if len(msgs) < 3 {
+				t.Fatalf("expected at least 3 messages, got %d", len(msgs))
+			}
+			if msgs[0].Role != "user" || msgs[0].Content != "timeline" {
+				t.Fatalf("unexpected first message: %+v", msgs[0])
+			}
+
+			serialized := MarshalMessages(msgs)
+			if serialized == "[]" {
+				t.Fatal("expected non-empty serialized messages")
+			}
+		})
+
+		t.Run(m+"/load_history", func(t *testing.T) {
+			model := m
+			client := &Client{model: &model}
+			s := NewActivation(client, NoopRecorder{}, "instructions", nil)
+
+			messages := []Message{
+				{Role: "user", Content: "timeline"},
+				{Role: "assistant", Content: "thinking"},
+				{Role: "user", Content: "nudge"},
+			}
+			s.LoadHistory(messages)
+
+			input := s.FullInput()
+			if input == "" {
+				t.Fatalf("expected non-empty full input after LoadHistory")
+			}
+		})
+
+		t.Run(m+"/reset_conversation", func(t *testing.T) {
+			model := m
+			client := &Client{model: &model}
+			s := NewActivation(client, NoopRecorder{}, "instructions", nil)
+
+			s.SetInput("timeline v0")
+			call := ToolCall{CallID: "c1", Name: "test", Arguments: "{}"}
+			s.AddToolResult(call, "ok", false)
+
+			s.ResetConversation()
+
+			if got := s.UserInput(); got != "" {
+				t.Fatalf("expected empty user input after reset, got %q", got)
+			}
+
+			s.SetInput("timeline v1")
+
+			if got := s.UserInput(); got != "timeline v1" {
+				t.Fatalf("expected 'timeline v1' after re-set, got %q", got)
 			}
 		})
 	}
@@ -58,107 +124,6 @@ func TestActivationPrune(t *testing.T) {
 
 	if got := s.UserInput(); got != "test" {
 		t.Fatalf("expected first item to still be user message, got %q", got)
-	}
-}
-
-func TestActivationAppendMessages(t *testing.T) {
-	model := "gpt-5.4"
-	client := &Client{model: &model}
-	s := NewActivation(client, NoopRecorder{}, "instructions", nil)
-	s.SetInput("test")
-
-	s.AppendAssistantText("thinking")
-	s.AppendUserMessage("nudge")
-
-	input := s.FullInput()
-	if input == "" {
-		t.Fatalf("expected non-empty full input")
-	}
-
-	s.AppendAssistantText("")
-}
-
-func TestActivationConversation(t *testing.T) {
-	models := []string{"gpt-5.4", "claude-opus-4-6"}
-
-	for _, m := range models {
-		t.Run(m, func(t *testing.T) {
-			model := m
-			client := &Client{model: &model}
-			s := NewActivation(client, NoopRecorder{}, "instructions", nil)
-
-			s.SetInput("timeline")
-			s.AppendAssistantText("thinking")
-			s.AppendUserMessage("nudge")
-
-			call := ToolCall{CallID: "c1", Name: "done", Arguments: `{}`}
-			s.AddToolResult(call, "ok", false)
-
-			msgs := s.prov.conversation()
-			if len(msgs) < 3 {
-				t.Fatalf("expected at least 3 messages, got %d", len(msgs))
-			}
-			if msgs[0].Role != "user" || msgs[0].Content != "timeline" {
-				t.Fatalf("unexpected first message: %+v", msgs[0])
-			}
-
-			serialized := MarshalMessages(msgs)
-			if serialized == "[]" {
-				t.Fatal("expected non-empty serialized messages")
-			}
-		})
-	}
-}
-
-func TestActivationLoadHistory(t *testing.T) {
-	models := []string{"gpt-5.4", "claude-opus-4-6"}
-
-	for _, m := range models {
-		t.Run(m, func(t *testing.T) {
-			model := m
-			client := &Client{model: &model}
-			s := NewActivation(client, NoopRecorder{}, "instructions", nil)
-
-			messages := []Message{
-				{Role: "user", Content: "timeline"},
-				{Role: "assistant", Content: "thinking"},
-				{Role: "user", Content: "nudge"},
-			}
-			s.LoadHistory(messages)
-
-			input := s.FullInput()
-			if input == "" {
-				t.Fatalf("expected non-empty full input after LoadHistory")
-			}
-		})
-	}
-}
-
-func TestActivationResetConversation(t *testing.T) {
-	models := []string{"gpt-5.4", "claude-opus-4-6"}
-
-	for _, m := range models {
-		t.Run(m, func(t *testing.T) {
-			model := m
-			client := &Client{model: &model}
-			s := NewActivation(client, NoopRecorder{}, "instructions", nil)
-
-			s.SetInput("timeline v0")
-			call := ToolCall{CallID: "c1", Name: "test", Arguments: "{}"}
-			s.AddToolResult(call, "ok", false)
-
-			s.ResetConversation()
-
-			if got := s.UserInput(); got != "" {
-				t.Fatalf("expected empty user input after reset, got %q", got)
-			}
-
-			s.SetInput("timeline v1")
-
-			if got := s.UserInput(); got != "timeline v1" {
-				t.Fatalf("expected 'timeline v1' after re-set, got %q", got)
-			}
-		})
 	}
 }
 

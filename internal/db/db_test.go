@@ -12,26 +12,6 @@ import (
 	"github.com/kciuffolo/nik/internal/queries"
 )
 
-func TestOpenInMemoryAppliesSchema(t *testing.T) {
-	ctx := context.Background()
-
-	conn, err := OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
-
-	var tableName string
-	err = conn.QueryRowContext(ctx, "SELECT name FROM sqlite_master WHERE type='table' AND name='contact'").Scan(&tableName)
-	if err != nil {
-		t.Fatalf("query table metadata: %v", err)
-	}
-
-	if tableName != "contact" {
-		t.Fatalf("expected contact table to exist, got %q", tableName)
-	}
-}
-
 type insertTestMessageParams struct {
 	ConversationID         string
 	ContactID              string

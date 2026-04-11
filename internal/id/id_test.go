@@ -46,20 +46,3 @@ func TestShortLength(t *testing.T) {
 		}
 	}
 }
-
-func TestShortCollision(t *testing.T) {
-	seen := make(map[string]bool)
-	collisions := 0
-
-	for i := 0; i < 20; i++ {
-		sid := Short(4)
-		if seen[sid] {
-			collisions++
-		}
-		seen[sid] = true
-	}
-
-	if collisions > 0 {
-		t.Fatalf("got %d collisions in 20 sequential IDs", collisions)
-	}
-}

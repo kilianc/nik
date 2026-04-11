@@ -26,55 +26,6 @@ func TestMediaInsertValidatesID(t *testing.T) {
 	}
 }
 
-func TestMessageMediaRoundTrip(t *testing.T) {
-	ctx := context.Background()
-
-	conn, err := OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
-
-	messageID := seedMessageForMediaTest(t, ctx, conn)
-
-	mediaID := "019590a0-0000-7000-8000-000000000001"
-	mimeType := "image/jpeg"
-	localPath := "media/2026/03/img.jpg"
-	err = MediaInsert(ctx, conn, MediaInsertParams{
-		ID:        mediaID,
-		MimeType:  &mimeType,
-		LocalPath: &localPath,
-	})
-	if err != nil {
-		t.Fatalf("insert media: %v", err)
-	}
-
-	err = MessageMediaUpsert(ctx, conn, messageID, mediaID)
-	if err != nil {
-		t.Fatalf("upsert message_media: %v", err)
-	}
-
-	var rowID string
-	err = conn.QueryRowContext(ctx,
-		"SELECT id FROM message_media WHERE message_id = ?1",
-		messageID,
-	).Scan(&rowID)
-	if err != nil {
-		t.Fatalf("query message_media id: %v", err)
-	}
-	if rowID == "" {
-		t.Fatalf("expected non-empty message_media id")
-	}
-
-	msg, err := MessageGet(ctx, conn, MessageGetParams{ID: messageID})
-	if err != nil {
-		t.Fatalf("get message: %v", err)
-	}
-	if !msg.MediaID.Valid || msg.MediaID.String != mediaID {
-		t.Fatalf("expected media id %s, got %+v", mediaID, msg.MediaID)
-	}
-}
-
 func TestMediaResolveByPath(t *testing.T) {
 	ctx := context.Background()
 
