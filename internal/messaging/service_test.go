@@ -49,8 +49,8 @@ func TestReceiveMessageFromMeUsesNikContactID(t *testing.T) {
 		t.Fatalf("get message: %v", err)
 	}
 
-	if msg.ContactID != contacts.NikContactID {
-		t.Fatalf("expected contact id %s, got %s", contacts.NikContactID, msg.ContactID)
+	if msg.ContactID != db.NikContactID {
+		t.Fatalf("expected contact id %s, got %s", db.NikContactID, msg.ContactID)
 	}
 }
 
@@ -1084,7 +1084,7 @@ func TestConversationHeaderGaps(t *testing.T) {
 			continue
 		}
 
-		isNik := strings.Contains(line, contacts.NikContactID)
+		isNik := strings.Contains(line, db.NikContactID)
 		hasGaps := false
 		for j := i + 1; j < len(lines) && strings.HasPrefix(lines[j], "  "); j++ {
 			if strings.Contains(lines[j], "[needs:") {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/kciuffolo/nik/internal/contacts"
 	"github.com/kciuffolo/nik/internal/db"
 )
 
@@ -37,8 +36,8 @@ func TestLocalAdapterReply(t *testing.T) {
 	if out.ExternalMessageID == "" {
 		t.Error("expected non-empty external message id")
 	}
-	if out.ExternalSenderID != contacts.NikContactID {
-		t.Errorf("expected sender %s, got %s", contacts.NikContactID, out.ExternalSenderID)
+	if out.ExternalSenderID != db.NikContactID {
+		t.Errorf("expected sender %s, got %s", db.NikContactID, out.ExternalSenderID)
 	}
 	if out.Body != "hello" {
 		t.Errorf("expected body 'hello', got %q", out.Body)

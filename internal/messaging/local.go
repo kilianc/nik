@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/kciuffolo/nik/internal/contacts"
 	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/id"
 )
@@ -29,7 +28,7 @@ func (a *LocalAdapter) Stop(_ context.Context) error { return nil }
 func (a *LocalAdapter) Reply(_ context.Context, _ string, body string, _ *QuoteTarget) (OutboundMessage, error) {
 	return OutboundMessage{
 		ExternalMessageID: id.V7(),
-		ExternalSenderID:  contacts.NikContactID,
+		ExternalSenderID:  db.NikContactID,
 		SentAt:            time.Now(),
 		Kind:              "text",
 		Body:              body,
@@ -39,7 +38,7 @@ func (a *LocalAdapter) Reply(_ context.Context, _ string, body string, _ *QuoteT
 func (a *LocalAdapter) SendFile(_ context.Context, _ string, _ string, caption string) (OutboundMessage, error) {
 	return OutboundMessage{
 		ExternalMessageID: id.V7(),
-		ExternalSenderID:  contacts.NikContactID,
+		ExternalSenderID:  db.NikContactID,
 		SentAt:            time.Now(),
 		Kind:              "document",
 		Body:              caption,
@@ -49,7 +48,7 @@ func (a *LocalAdapter) SendFile(_ context.Context, _ string, _ string, caption s
 func (a *LocalAdapter) SendVoiceNote(_ context.Context, _ string, _ string) (OutboundMessage, error) {
 	return OutboundMessage{
 		ExternalMessageID: id.V7(),
-		ExternalSenderID:  contacts.NikContactID,
+		ExternalSenderID:  db.NikContactID,
 		SentAt:            time.Now(),
 		Kind:              "audio",
 	}, nil

@@ -13,14 +13,13 @@ func TestNikContactEnsure(t *testing.T) {
 	defer conn.Close()
 
 	ctx := context.Background()
-	nikID := "00000000-0000-7000-8000-000000000001"
 
-	err = NikContactEnsure(ctx, conn, nikID)
+	err = NikContactEnsure(ctx, conn)
 	if err != nil {
 		t.Fatalf("first ensure: %v", err)
 	}
 
-	contact, err := ContactGet(ctx, conn, nikID)
+	contact, err := ContactGet(ctx, conn, NikContactID)
 	if err != nil {
 		t.Fatalf("get nik contact: %v", err)
 	}
@@ -29,7 +28,7 @@ func TestNikContactEnsure(t *testing.T) {
 		t.Errorf("expected name nik, got %q", contact.Name)
 	}
 
-	err = NikContactEnsure(ctx, conn, nikID)
+	err = NikContactEnsure(ctx, conn)
 	if err != nil {
 		t.Fatalf("second ensure (idempotent): %v", err)
 	}

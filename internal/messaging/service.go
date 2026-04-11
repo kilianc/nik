@@ -14,7 +14,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/kciuffolo/nik/internal/config"
-	"github.com/kciuffolo/nik/internal/contacts"
 	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/id"
 )
@@ -821,7 +820,7 @@ func (s *Service) ConversationHeader(ctx context.Context, conv db.Conversation) 
 				session.Lines = append(session.Lines, fmt.Sprintf("  %s", detail))
 			}
 
-			if p.ContactID != contacts.NikContactID {
+			if p.ContactID != db.NikContactID {
 				if gaps := participantGaps(p); gaps != "" {
 					session.Lines = append(session.Lines, fmt.Sprintf("  %s", gaps))
 				}
@@ -839,7 +838,7 @@ func sessionTitle(conv db.Conversation, participants []db.ConversationParticipan
 
 	if conv.Kind == "dm" {
 		for _, p := range participants {
-			if p.ContactID == contacts.NikContactID {
+			if p.ContactID == db.NikContactID {
 				continue
 			}
 			name := participantName(p, "someone")
@@ -958,7 +957,7 @@ func (s *Service) contactLabel(ctx context.Context, contactID string) string {
 		return label
 	}
 
-	if contactID == contacts.NikContactID {
+	if contactID == db.NikContactID {
 		return "nik"
 	}
 
@@ -1013,7 +1012,7 @@ func participantName(p db.ConversationParticipant, fallback string) string {
 		return name
 	}
 
-	if p.ContactID == contacts.NikContactID {
+	if p.ContactID == db.NikContactID {
 		return "nik"
 	}
 

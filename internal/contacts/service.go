@@ -10,8 +10,6 @@ import (
 	"github.com/kciuffolo/nik/internal/db"
 )
 
-const NikContactID = "00000000-0000-7000-8000-000000000001"
-
 type Service struct {
 	db *sql.DB
 }
@@ -31,7 +29,7 @@ func (s *Service) EnsureContactForMessage(ctx context.Context, platform string, 
 	case "whatsapp":
 		if isFromMe {
 			existing, err := db.ContactGet(ctx, s.db, primaryID)
-			if err == nil && existing.ID != NikContactID {
+			if err == nil && existing.ID != db.NikContactID {
 				return "", fmt.Errorf("sender %s belongs to non-nik contact %s", primaryID, existing.ID)
 			}
 
@@ -39,7 +37,7 @@ func (s *Service) EnsureContactForMessage(ctx context.Context, platform string, 
 				Platform:      platform,
 				ExternalID:    primaryID,
 				IsSelf:        true,
-				SelfID:        NikContactID,
+				SelfID:        db.NikContactID,
 				LastMessageAt: at,
 			})
 			if err != nil {
@@ -95,7 +93,7 @@ func (s *Service) EnsureContactForMessage(ctx context.Context, platform string, 
 
 	case "local":
 		if isFromMe {
-			return NikContactID, nil
+			return db.NikContactID, nil
 		}
 		return db.OwnerContactID, nil
 
