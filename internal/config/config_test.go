@@ -187,8 +187,8 @@ allow_conversation_ids:
 			t.Fatalf("load: %v", err)
 		}
 
-		if len(cfg.AllowConversationIDs) != 2 {
-			t.Fatalf("expected 2 allow IDs after load, got %d", len(cfg.AllowConversationIDs))
+		if len(cfg.AllowConversationIDs) != 3 {
+			t.Fatalf("expected 3 allow IDs after load (conv1 + priv1 + local), got %d", len(cfg.AllowConversationIDs))
 		}
 
 		if cfg.PrivilegedIDs()[0] != "priv1" {
@@ -213,8 +213,8 @@ allow_conversation_ids:
 			t.Fatalf("reload: %v", err)
 		}
 
-		if len(cfg.AllowConversationIDs) != 3 {
-			t.Fatalf("expected 3 allow IDs after reload (conv1 + priv1 + priv2), got %d", len(cfg.AllowConversationIDs))
+		if len(cfg.AllowConversationIDs) != 4 {
+			t.Fatalf("expected 4 allow IDs after reload (conv1 + priv1 + priv2 + local), got %d", len(cfg.AllowConversationIDs))
 		}
 	})
 }
@@ -271,9 +271,9 @@ func TestLoadValidation(t *testing.T) {
 			true,
 		},
 		{
-			"missing privileged_conversation_ids",
+			"missing privileged_conversation_ids is ok",
 			"openai_key: sk-test\nmodels:\n  main:\n    model: gpt-5\n",
-			true,
+			false,
 		},
 	}
 
@@ -483,4 +483,86 @@ privileged_conversation_ids:
 			t.Fatalf("expected models.main.model gpt-5, got %q", cfg.Models.Main.Model)
 		}
 	})
+}
+
+func TestSaveRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	cfg := Default(dir)
+	cfg.OpenAIKey = "sk-proj-test"
+	cfg.Models.Main.Model = "gpt-5.4"
+	cfg.Models.Main.Backend = "subscription"
+	cfg.Shell.DockerImage = "nik-shell-ab12"
+	cfg.Timezone = "America/New_York"
+	cfg.Location = "New York, NY"
+	cfg.PrivilegedConversationIDs.Append("dms", "conv-priv-1")
+
+	path := filepath.Join(dir, "config.yaml")
+	err := cfg.Save(path)
+	if err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+
+	out := string(data)
+	for _, want := range []string{
+		"openai_key: sk-proj-test",
+		"model: gpt-5.4",
+		"backend: subscription",
+		"docker_image: nik-shell-ab12",
+		"timezone: America/New_York",
+		"location: New York, NY",
+		"dms: conv-priv-1",
+		"max_rounds: 200",
+		"timeout: 1h0m0s",
+		"retention: 720h0m0s",
+		"# api keys",
+		"# models",
+	} {
+		if !contains(out, want) {
+			t.Errorf("output missing %q", want)
+		}
+	}
+
+	for _, bad := range []string{
+		"anthropic_key:",
+	} {
+		if contains(out, bad) {
+			t.Errorf("output should not contain %q", bad)
+		}
+	}
+
+	loaded, err := Load(dir)
+	if err != nil {
+		t.Fatalf("reload saved config: %v", err)
+	}
+
+	if loaded.OpenAIKey != "sk-proj-test" {
+		t.Errorf("round-trip openai_key: got %q", loaded.OpenAIKey)
+	}
+	if loaded.Models.Main.Model != "gpt-5.4" {
+		t.Errorf("round-trip model: got %q", loaded.Models.Main.Model)
+	}
+	if loaded.Shell.DockerImage != "nik-shell-ab12" {
+		t.Errorf("round-trip docker_image: got %q", loaded.Shell.DockerImage)
+	}
+	if loaded.Timezone != "America/New_York" {
+		t.Errorf("round-trip timezone: got %q", loaded.Timezone)
+	}
+}
+
+func contains(s, sub string) bool {
+	return len(s) >= len(sub) && (s == sub || len(s) > 0 && containsStr(s, sub))
+}
+
+func containsStr(s, sub string) bool {
+	for i := 0; i <= len(s)-len(sub); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
 }
