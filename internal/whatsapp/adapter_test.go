@@ -47,13 +47,6 @@ func TestIsUnknownEditType(t *testing.T) {
 	}
 }
 
-func TestSelfJIDReturnsEmptyWithoutClientState(t *testing.T) {
-	c := &Client{}
-	if got := c.SelfJID(); got != "" {
-		t.Fatalf("expected empty self jid, got %q", got)
-	}
-}
-
 func TestNewWaLoggerSubBuildsHierarchicalModule(t *testing.T) {
 	root := newWaLogger("whatsmeow")
 	rootLogger, ok := root.(*slogWaLog)

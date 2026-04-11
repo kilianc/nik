@@ -35,33 +35,17 @@ func TestSettingSetAndGet(t *testing.T) {
 	if s.CreatedAt.IsZero() {
 		t.Error("expected non-zero created_at")
 	}
-}
 
-func TestSettingSetUpserts(t *testing.T) {
-	conn, err := OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
-
-	ctx := context.Background()
-
-	err = SettingSet(ctx, conn, "test_key", "value1")
-	if err != nil {
-		t.Fatalf("set setting: %v", err)
-	}
-
-	err = SettingSet(ctx, conn, "test_key", "value2")
+	err = SettingSet(ctx, conn, "genesis_completed_at", "2026-04-02T00:00:00.000Z")
 	if err != nil {
 		t.Fatalf("upsert setting: %v", err)
 	}
 
-	s, err := SettingGet(ctx, conn, "test_key")
+	s, err = SettingGet(ctx, conn, "genesis_completed_at")
 	if err != nil {
-		t.Fatalf("get setting: %v", err)
+		t.Fatalf("get setting after upsert: %v", err)
 	}
-
-	if s.Value != "value2" {
+	if s.Value != "2026-04-02T00:00:00.000Z" {
 		t.Errorf("expected value2 after upsert, got %s", s.Value)
 	}
 }

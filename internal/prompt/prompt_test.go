@@ -181,13 +181,9 @@ func TestNudgeRender(t *testing.T) {
 	if !strings.Contains(got, "attempt 2/5") {
 		t.Fatalf("expected attempt counter in output, got:\n%s", got)
 	}
-}
 
-func TestNudgeRawText(t *testing.T) {
-	r := NewRenderer(&config.Config{Home: t.TempDir()})
-
-	got := r.Nudge("task-01-nudge.md", nil)
-	if got == "" {
-		t.Fatal("expected non-empty nudge text")
+	raw := r.Nudge("task-01-nudge.md", nil)
+	if raw == "" {
+		t.Fatal("expected non-empty nudge text for raw template")
 	}
 }

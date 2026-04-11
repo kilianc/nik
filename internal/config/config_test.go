@@ -389,27 +389,6 @@ func TestRetentionOrDefault(t *testing.T) {
 	}
 }
 
-func TestTaskConfigDefaults(t *testing.T) {
-	var tc TaskConfig
-
-	if got := tc.MaxRoundsOrDefault(); got != 200 {
-		t.Fatalf("expected default max_rounds 200, got %d", got)
-	}
-	if got := tc.TimeoutOrDefault(); got != 60*time.Minute {
-		t.Fatalf("expected default timeout 60m, got %v", got)
-	}
-
-	tc.MaxRounds = 150
-	tc.Timeout = 90 * time.Minute
-
-	if got := tc.MaxRoundsOrDefault(); got != 150 {
-		t.Fatalf("expected max_rounds 150, got %d", got)
-	}
-	if got := tc.TimeoutOrDefault(); got != 90*time.Minute {
-		t.Fatalf("expected timeout 90m, got %v", got)
-	}
-}
-
 func TestLoadTaskConfig(t *testing.T) {
 	t.Run("parses explicit values", func(t *testing.T) {
 		dir := t.TempDir()

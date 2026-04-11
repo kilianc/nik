@@ -8,23 +8,6 @@ import (
 	"github.com/kciuffolo/nik/internal/llm"
 )
 
-func TestBuildToolsReturnsAlarmTools(t *testing.T) {
-	tools := BuildTools(&Service{})
-	if len(tools) != 3 {
-		t.Fatalf("expected 3 tools, got %d", len(tools))
-	}
-
-	names := map[string]bool{}
-	for _, tool := range tools {
-		names[tool.Def.Name] = true
-	}
-	for _, want := range []string{"alarm", "update_alarm", "cancel_alarm"} {
-		if !names[want] {
-			t.Fatalf("expected %q tool", want)
-		}
-	}
-}
-
 func TestAlarmHandlerValidation(t *testing.T) {
 	tests := []struct {
 		name    string

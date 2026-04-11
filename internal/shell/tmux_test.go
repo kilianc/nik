@@ -77,28 +77,50 @@ func TestEnvVars(t *testing.T) {
 	}
 }
 
-func TestFastCommand(t *testing.T) {
+func TestStareExitedCommand(t *testing.T) {
 	requireTmux(t)
 	svc := testService(t)
 
-	id := "test-fast"
-	defer svc.cleanup(t, id)
-
-	err := svc.newSession(id, "echo hello-nik", "")
-	if err != nil {
-		t.Fatalf("newSession: %v", err)
+	tests := []struct {
+		name       string
+		command    string
+		stareMax   int
+		wantCode   int
+		wantOutput string
+		maxElapsed time.Duration
+	}{
+		{"echo", "echo hello-nik", 5, 0, "hello-nik", 0},
+		{"exit code", "exit 42", 5, 42, "", 0},
+		{"instant return", "echo done", 30, 0, "done", 3 * time.Second},
 	}
 
-	output, alive, code := svc.stare(context.Background(), id, 5)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			id := "test-stare-exit-" + tt.name
+			defer svc.cleanup(t, id)
 
-	if alive {
-		t.Fatal("expected command to have exited")
-	}
-	if code != 0 {
-		t.Fatalf("expected exit code 0, got %d", code)
-	}
-	if !strings.Contains(output, "hello-nik") {
-		t.Fatalf("expected output to contain 'hello-nik', got: %s", output)
+			err := svc.newSession(id, tt.command, "")
+			if err != nil {
+				t.Fatalf("newSession: %v", err)
+			}
+
+			start := time.Now()
+			output, alive, code := svc.stare(context.Background(), id, tt.stareMax)
+			elapsed := time.Since(start)
+
+			if alive {
+				t.Errorf("expected command to have exited")
+			}
+			if code != tt.wantCode {
+				t.Errorf("expected exit code %d, got %d", tt.wantCode, code)
+			}
+			if tt.wantOutput != "" && !strings.Contains(output, tt.wantOutput) {
+				t.Errorf("expected output to contain %q, got: %s", tt.wantOutput, output)
+			}
+			if tt.maxElapsed > 0 && elapsed > tt.maxElapsed {
+				t.Errorf("expected completion within %v, took %v", tt.maxElapsed, elapsed)
+			}
+		})
 	}
 }
 
@@ -212,28 +234,6 @@ func TestOutputTruncation(t *testing.T) {
 	}
 }
 
-func TestExitCode(t *testing.T) {
-	requireTmux(t)
-	svc := testService(t)
-
-	id := "test-exit"
-	defer svc.cleanup(t, id)
-
-	err := svc.newSession(id, "exit 42", "")
-	if err != nil {
-		t.Fatalf("newSession: %v", err)
-	}
-
-	_, alive, code := svc.stare(context.Background(), id, 5)
-
-	if alive {
-		t.Fatal("expected command to have exited")
-	}
-	if code != 42 {
-		t.Fatalf("expected exit code 42, got %d", code)
-	}
-}
-
 func TestStareMissingSession(t *testing.T) {
 	requireTmux(t)
 	svc := testService(t)
@@ -253,36 +253,6 @@ func TestStareMissingSession(t *testing.T) {
 	_, alive, _ := svc.stare(context.Background(), id, 2)
 	if alive {
 		t.Fatal("stare reported alive for a killed session")
-	}
-}
-
-func TestWaitForInstantReturn(t *testing.T) {
-	requireTmux(t)
-	svc := testService(t)
-
-	id := "test-waitfor-instant"
-	defer svc.cleanup(t, id)
-
-	err := svc.newSession(id, "echo done", "")
-	if err != nil {
-		t.Fatalf("newSession: %v", err)
-	}
-
-	start := time.Now()
-	output, alive, code := svc.stare(context.Background(), id, 30)
-	elapsed := time.Since(start)
-
-	if alive {
-		t.Fatal("expected command to have exited")
-	}
-	if code != 0 {
-		t.Fatalf("expected exit code 0, got %d", code)
-	}
-	if !strings.Contains(output, "done") {
-		t.Fatalf("expected output to contain 'done', got: %s", output)
-	}
-	if elapsed > 3*time.Second {
-		t.Fatalf("wait-for should have returned near-instantly, took %v", elapsed)
 	}
 }
 

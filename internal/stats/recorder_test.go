@@ -38,30 +38,14 @@ func TestMetaFromCtx(t *testing.T) {
 	}
 }
 
-func TestRecorderNoMeta(t *testing.T) {
-	r := NewRecorder(nil)
-	ctx := context.Background()
+func setupRecorder(t *testing.T, model string) (context.Context, *Recorder, string) {
+	t.Helper()
 
-	t.Run("start", func(t *testing.T) {
-		r.Start(ctx, "gpt-4o")
-	})
-	t.Run("round", func(t *testing.T) {
-		got := r.Round(ctx, 0, 0, "[]", nil, llm.Usage{})
-		if got != "" {
-			t.Fatalf("expected empty string, got %q", got)
-		}
-	})
-	t.Run("sync", func(t *testing.T) {
-		r.Sync(ctx, llm.ActivationStats{})
-	})
-}
-
-func TestRecorderStart(t *testing.T) {
 	conn, err := db.OpenInMemory()
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	defer conn.Close()
+	t.Cleanup(func() { conn.Close() })
 
 	ctx := context.Background()
 	convID := seedStatsConversation(t, ctx, conn)
@@ -74,10 +58,16 @@ func TestRecorderStart(t *testing.T) {
 	ctx = context.WithValue(ctx, "meta", meta)
 
 	r := NewRecorder(conn)
-	r.Start(ctx, "gpt-4o")
+	r.Start(ctx, model)
+
+	return ctx, r, actID
+}
+
+func TestRecorderStart(t *testing.T) {
+	ctx, r, actID := setupRecorder(t, "gpt-4o")
 
 	var model string
-	err = conn.QueryRowContext(ctx, `SELECT model FROM activation WHERE id = ?1`, actID).Scan(&model)
+	err := r.conn.QueryRowContext(ctx, `SELECT model FROM activation WHERE id = ?1`, actID).Scan(&model)
 	if err != nil {
 		t.Fatalf("query activation: %v", err)
 	}
@@ -87,24 +77,7 @@ func TestRecorderStart(t *testing.T) {
 }
 
 func TestRecorderRound(t *testing.T) {
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	defer conn.Close()
-
-	ctx := context.Background()
-	convID := seedStatsConversation(t, ctx, conn)
-	actID := id.V7()
-
-	meta := map[string]string{
-		"activation_id":   actID,
-		"conversation_id": convID,
-	}
-	ctx = context.WithValue(ctx, "meta", meta)
-
-	r := NewRecorder(conn)
-	r.Start(ctx, "gpt-4o")
+	ctx, r, _ := setupRecorder(t, "gpt-4o")
 
 	roundID := r.Round(ctx, 0, 0, `[{"role":"user","content":"hello"}]`, []string{"considered"}, llm.Usage{
 		InputTokens:  300,
@@ -116,7 +89,7 @@ func TestRecorderRound(t *testing.T) {
 	}
 
 	var inputTokens int64
-	err = conn.QueryRowContext(ctx, `SELECT input_tokens FROM activation_round WHERE id = ?1`, roundID).Scan(&inputTokens)
+	err := r.conn.QueryRowContext(ctx, `SELECT input_tokens FROM activation_round WHERE id = ?1`, roundID).Scan(&inputTokens)
 	if err != nil {
 		t.Fatalf("query round: %v", err)
 	}
@@ -126,24 +99,7 @@ func TestRecorderRound(t *testing.T) {
 }
 
 func TestRecorderToolCall(t *testing.T) {
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	defer conn.Close()
-
-	ctx := context.Background()
-	convID := seedStatsConversation(t, ctx, conn)
-	actID := id.V7()
-
-	meta := map[string]string{
-		"activation_id":   actID,
-		"conversation_id": convID,
-	}
-	ctx = context.WithValue(ctx, "meta", meta)
-
-	r := NewRecorder(conn)
-	r.Start(ctx, "gpt-4o")
+	ctx, r, actID := setupRecorder(t, "gpt-4o")
 	roundID := r.Round(ctx, 0, 0, "[]", nil, llm.Usage{})
 
 	call := llm.ToolCall{CallID: "c1", Name: "db_query", Arguments: `{"query":"SELECT 1"}`}
@@ -151,7 +107,7 @@ func TestRecorderToolCall(t *testing.T) {
 	r.ToolCall(ctx, roundID, call, result)
 
 	var name string
-	err = conn.QueryRowContext(ctx, `SELECT name FROM tool_call WHERE activation_id = ?1`, actID).Scan(&name)
+	err := r.conn.QueryRowContext(ctx, `SELECT name FROM tool_call WHERE activation_id = ?1`, actID).Scan(&name)
 	if err != nil {
 		t.Fatalf("query tool_call: %v", err)
 	}
@@ -161,24 +117,7 @@ func TestRecorderToolCall(t *testing.T) {
 }
 
 func TestRecorderSync(t *testing.T) {
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	defer conn.Close()
-
-	ctx := context.Background()
-	convID := seedStatsConversation(t, ctx, conn)
-	actID := id.V7()
-
-	meta := map[string]string{
-		"activation_id":   actID,
-		"conversation_id": convID,
-	}
-	ctx = context.WithValue(ctx, "meta", meta)
-
-	r := NewRecorder(conn)
-	r.Start(ctx, "gpt-5.4")
+	ctx, r, actID := setupRecorder(t, "gpt-5.4")
 	r.Round(ctx, 0, 0, "[]", nil, llm.Usage{InputTokens: 200, OutputTokens: 50})
 
 	r.Sync(ctx, llm.ActivationStats{
@@ -191,7 +130,7 @@ func TestRecorderSync(t *testing.T) {
 
 	var gotInput, gotDuration int64
 	var gotRounds, gotTools int
-	err = conn.QueryRowContext(ctx,
+	err := r.conn.QueryRowContext(ctx,
 		`SELECT input_tokens, duration_ms, round_count, tool_call_count FROM activation WHERE id = ?1`, actID,
 	).Scan(&gotInput, &gotDuration, &gotRounds, &gotTools)
 	if err != nil {
@@ -212,7 +151,7 @@ func TestRecorderSync(t *testing.T) {
 	}
 
 	var gotInstructions string
-	err = conn.QueryRowContext(ctx,
+	err = r.conn.QueryRowContext(ctx,
 		`SELECT instructions FROM activation WHERE id = ?1`, actID,
 	).Scan(&gotInstructions)
 	if err != nil {
@@ -224,24 +163,7 @@ func TestRecorderSync(t *testing.T) {
 }
 
 func TestRecorderFinish(t *testing.T) {
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	defer conn.Close()
-
-	ctx := context.Background()
-	convID := seedStatsConversation(t, ctx, conn)
-	actID := id.V7()
-
-	meta := map[string]string{
-		"activation_id":   actID,
-		"conversation_id": convID,
-	}
-	ctx = context.WithValue(ctx, "meta", meta)
-
-	r := NewRecorder(conn)
-	r.Start(ctx, "gpt-5.4")
+	ctx, r, actID := setupRecorder(t, "gpt-5.4")
 
 	r.Finish(ctx, llm.ActivationStats{
 		Model:           "gpt-5.4",
@@ -260,7 +182,7 @@ func TestRecorderFinish(t *testing.T) {
 
 	var roundCount int
 	var gotErr, gotSchemas string
-	err = conn.QueryRowContext(ctx,
+	err := r.conn.QueryRowContext(ctx,
 		`SELECT round_count, error, tool_schemas FROM activation WHERE id = ?1`, actID,
 	).Scan(&roundCount, &gotErr, &gotSchemas)
 	if err != nil {

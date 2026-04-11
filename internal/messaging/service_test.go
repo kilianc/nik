@@ -1497,7 +1497,7 @@ func sendInboundMessageForReadTest(
 	}
 }
 
-func TestTouchPresenceSetsAvailableOnFirstSend(t *testing.T) {
+func TestTouchPresence(t *testing.T) {
 	ctx := context.Background()
 	conn, err := db.OpenInMemory()
 	if err != nil {
@@ -1524,64 +1524,41 @@ func TestTouchPresenceSetsAvailableOnFirstSend(t *testing.T) {
 
 	convID := seedConversation(t, ctx, svc, "whatsapp", "chat@s.whatsapp.net", "dm")
 
-	err = svc.Reply(ctx, convID, "hi", nil)
-	if err != nil {
-		t.Fatalf("reply: %v", err)
-	}
-
-	if platform.setPresenceCalls != 1 {
-		t.Fatalf("expected 1 SetPresence call, got %d", platform.setPresenceCalls)
-	}
-	if !platform.lastPresenceOnline {
-		t.Fatalf("expected presence to be online")
-	}
-}
-
-func TestTouchPresenceDebounces(t *testing.T) {
-	ctx := context.Background()
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
-	defer conn.Close()
-
-	contactsSvc := contacts.NewService(conn)
-	svc := NewService(&config.Config{}, conn, contactsSvc)
-
-	now := time.Now()
-	platform := &mockPlatform{
-		platform: "whatsapp",
-		outbound: OutboundMessage{
-			ExternalSenderID: "nik@s.whatsapp.net",
-			SentAt:           now,
-			Kind:             "text",
-			Body:             "hi",
-		},
-	}
-	svc.RegisterPlatform(platform)
-	svc.replyDelay = func(_ string) time.Duration { return 0 }
-
-	convID := seedConversation(t, ctx, svc, "whatsapp", "chat@s.whatsapp.net", "dm")
-
-	for i := 0; i < 3; i++ {
-		platform.outbound.ExternalMessageID = fmt.Sprintf("reply-%d", i+1)
+	t.Run("sets available on first send", func(t *testing.T) {
 		err = svc.Reply(ctx, convID, "hi", nil)
 		if err != nil {
-			t.Fatalf("reply %d: %v", i+1, err)
+			t.Fatalf("reply: %v", err)
 		}
-	}
 
-	if platform.setPresenceCalls != 1 {
-		t.Fatalf("expected 1 SetPresence call (debounced), got %d", platform.setPresenceCalls)
-	}
+		if platform.setPresenceCalls != 1 {
+			t.Fatalf("expected 1 SetPresence call, got %d", platform.setPresenceCalls)
+		}
+		if !platform.lastPresenceOnline {
+			t.Fatalf("expected presence to be online")
+		}
+	})
 
-	svc.StopPresence()
-	if platform.setPresenceCalls != 2 {
-		t.Fatalf("expected 2 SetPresence calls after StopPresence, got %d", platform.setPresenceCalls)
-	}
-	if platform.lastPresenceOnline {
-		t.Fatalf("expected presence to be offline after StopPresence")
-	}
+	t.Run("debounces and stops", func(t *testing.T) {
+		for i := 1; i < 3; i++ {
+			platform.outbound.ExternalMessageID = fmt.Sprintf("reply-%d", i+1)
+			err = svc.Reply(ctx, convID, "hi", nil)
+			if err != nil {
+				t.Fatalf("reply %d: %v", i+1, err)
+			}
+		}
+
+		if platform.setPresenceCalls != 1 {
+			t.Fatalf("expected 1 SetPresence call (debounced), got %d", platform.setPresenceCalls)
+		}
+
+		svc.StopPresence()
+		if platform.setPresenceCalls != 2 {
+			t.Fatalf("expected 2 SetPresence calls after StopPresence, got %d", platform.setPresenceCalls)
+		}
+		if platform.lastPresenceOnline {
+			t.Fatalf("expected presence to be offline after StopPresence")
+		}
+	})
 }
 
 func validString(s string) sql.NullString {

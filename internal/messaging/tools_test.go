@@ -72,17 +72,6 @@ func TestSendToolDefSchema(t *testing.T) {
 	if voiceProp["type"] != "boolean" {
 		t.Fatalf("expected voice type boolean, got %v", voiceProp["type"])
 	}
-}
-
-func TestSendToolDefHasQuoteFields(t *testing.T) {
-	props, ok := sendToolDef.Parameters["properties"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected properties map")
-	}
-
-	msgsProp := props["messages"].(map[string]any)
-	items := msgsProp["items"].(map[string]any)
-	itemProps := items["properties"].(map[string]any)
 
 	for _, field := range []string{"quote_text", "quote_time"} {
 		prop, ok := itemProps[field].(map[string]any)
@@ -94,10 +83,10 @@ func TestSendToolDefHasQuoteFields(t *testing.T) {
 		}
 	}
 
-	required := items["required"].([]string)
+	itemRequired := items["required"].([]string)
 	hasQuoteText := false
 	hasQuoteTime := false
-	for _, r := range required {
+	for _, r := range itemRequired {
 		if r == "quote_text" {
 			hasQuoteText = true
 		}
@@ -329,20 +318,16 @@ func TestReactHandlerValidation(t *testing.T) {
 			}
 		})
 	}
-}
 
-func TestToolDefsHaveTextAndTimeParams(t *testing.T) {
 	props, ok := reactToolDef.Parameters["properties"].(map[string]any)
 	if !ok {
-		t.Fatalf("expected properties map")
+		t.Fatalf("expected properties map in react tool def")
 	}
-
 	for _, param := range []string{"text", "time"} {
 		if _, ok := props[param]; !ok {
-			t.Fatalf("expected %q parameter", param)
+			t.Fatalf("expected %q parameter in react tool def", param)
 		}
 	}
-
 	required := reactToolDef.Parameters["required"].([]string)
 	hasTime := false
 	for _, r := range required {
@@ -351,6 +336,6 @@ func TestToolDefsHaveTextAndTimeParams(t *testing.T) {
 		}
 	}
 	if !hasTime {
-		t.Fatalf("expected 'time' in required list")
+		t.Fatalf("expected 'time' in required list of react tool def")
 	}
 }

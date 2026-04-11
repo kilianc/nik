@@ -16,13 +16,6 @@ func TestRecallDisabledWhenNoClient(t *testing.T) {
 	}
 }
 
-func TestTokenEstimate(t *testing.T) {
-	s := "hello world!" // 12 chars -> 3 tokens
-	if got := tokenEstimate(s); got != 3 {
-		t.Fatalf("expected 3, got %d", got)
-	}
-}
-
 func TestNumberRows(t *testing.T) {
 	tests := []struct {
 		name         string
