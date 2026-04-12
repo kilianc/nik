@@ -178,6 +178,10 @@ func TestIsTransient(t *testing.T) {
 		{"dns no such host", fmt.Errorf(`Post "https://api.openai.com/v1/responses": dial tcp: lookup api.openai.com: no such host`), true},
 		{"raw http2 INTERNAL_ERROR", fmt.Errorf("round 29: stream error: stream ID 93; INTERNAL_ERROR; received from peer"), true},
 		{"wrapped tls error", fmt.Errorf("complete round 4: %w", fmt.Errorf("remote error: tls: bad record MAC")), true},
+
+		{"response failed server_error", fmt.Errorf("response failed: server_error: An error occurred"), true},
+		{"response failed rate_limit", fmt.Errorf("response failed: rate_limit_exceeded: Rate limit reached"), true},
+		{"response failed invalid_prompt not transient", fmt.Errorf("response failed: invalid_prompt: bad input"), false},
 	}
 
 	for _, tt := range tests {

@@ -23,6 +23,7 @@ type providerResult struct {
 	reasoningSummaries []string
 	reasoningEffort    string
 	incomplete         bool
+	incompleteReason   string
 	usage              Usage
 	rawJSON            string
 }

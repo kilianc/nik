@@ -226,7 +226,11 @@ func (b *Brain) think(ctx context.Context, getInput func() string) (_ string, _ 
 		}
 
 		if result.Incomplete {
-			return "", act.Usage(), fmt.Errorf("response incomplete in round %d", act.RoundNumber()-1)
+			reason := result.IncompleteReason
+			if reason == "" {
+				reason = "unknown"
+			}
+			return "", act.Usage(), fmt.Errorf("response incomplete in round %d: %s", act.RoundNumber()-1, reason)
 		}
 
 		if len(result.ToolCalls) == 0 {

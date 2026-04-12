@@ -192,6 +192,7 @@ func (p *openaiProvider) complete(ctx context.Context) (*providerResult, error) 
 		usage:              usage,
 		rawJSON:            resp.RawJSON(),
 		incomplete:         resp.Status == responses.ResponseStatusIncomplete,
+		incompleteReason:   resp.IncompleteDetails.Reason,
 	}
 
 	if !result.incomplete {
@@ -292,6 +293,13 @@ func completeStreaming(ctx context.Context, client *openai.Client, params respon
 	var accumulated []responses.ResponseOutputItemUnion
 	for stream.Next() {
 		evt := stream.Current()
+		if failed := evt.AsResponseFailed(); failed.Type == "response.failed" {
+			r := failed.Response
+			return nil, fmt.Errorf("response failed: %s: %s", r.Error.Code, r.Error.Message)
+		}
+		if incomplete := evt.AsResponseIncomplete(); incomplete.Type == "response.incomplete" {
+			final = &incomplete.Response
+		}
 		if done := evt.AsResponseOutputItemDone(); done.Type == "response.output_item.done" {
 			accumulated = append(accumulated, done.Item)
 		}
