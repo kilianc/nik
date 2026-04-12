@@ -2,6 +2,9 @@ package tui
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +20,11 @@ type stubSender struct {
 func (s *stubSender) Send(_ context.Context, body string) error {
 	s.lastBody = body
 	return nil
+}
+
+func stripAnsi(s string) string {
+	re := regexp.MustCompile(`\x1b\[[0-9;]*m`)
+	return re.ReplaceAllString(s, "")
 }
 
 func TestChatModelRendersEmptyState(t *testing.T) {
@@ -68,9 +76,11 @@ func TestChatActivityThinking(t *testing.T) {
 	c := newChatModel(conn, nil)
 	c, _ = c.Update(newMessagesMsg{activity: []string{"thinking"}})
 
-	view := c.View()
-	if !strings.Contains(view, "thinking") {
-		t.Error("expected thinking indicator in view")
+	if len(c.activity) == 0 {
+		t.Error("expected activity to be set")
+	}
+	if c.activity[0] != "thinking" {
+		t.Errorf("expected thinking activity, got %q", c.activity[0])
 	}
 }
 
@@ -84,8 +94,8 @@ func TestChatWindowResize(t *testing.T) {
 	c := newChatModel(conn, nil)
 	c, _ = c.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 
-	if c.width != 50 {
-		t.Errorf("expected width 50 (half of 100), got %d", c.width)
+	if c.width != 100 {
+		t.Errorf("expected width 100, got %d", c.width)
 	}
 }
 
@@ -132,10 +142,12 @@ func TestChatViewIncludesMessages(t *testing.T) {
 	defer conn.Close()
 
 	c := newChatModel(conn, nil)
-	c.width = 80
-	c.messages = []db.Message{
-		{ID: "1", Body: "hello world", Kind: "text", ContactID: db.OwnerContactID, SentAt: time.Date(2026, 1, 1, 12, 0, 0, 0, time.Local)},
-	}
+	c, _ = c.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
+	c, _ = c.Update(newMessagesMsg{
+		messages: []db.Message{
+			{ID: "1", Body: "hello world", Kind: "text", ContactID: db.OwnerContactID, SentAt: time.Date(2026, 1, 1, 12, 0, 0, 0, time.Local)},
+		},
+	})
 
 	view := c.View()
 	if !strings.Contains(view, "hello world") {
@@ -146,7 +158,7 @@ func TestChatViewIncludesMessages(t *testing.T) {
 	}
 }
 
-func TestRenderMessages(t *testing.T) {
+func TestRenderConversation_ContainsMessages(t *testing.T) {
 	base := time.Date(2026, 1, 1, 12, 0, 0, 0, time.Local)
 
 	msgs := []db.Message{
@@ -154,7 +166,7 @@ func TestRenderMessages(t *testing.T) {
 		{ID: "2", Body: "hi there", Kind: "text", ContactID: db.SystemContactID, IsFromMe: true, SentAt: base.Add(time.Minute)},
 	}
 
-	out := renderMessages(msgs, 80)
+	out := stripAnsi(renderConversation(msgs, 80, 0, -1))
 
 	if !strings.Contains(out, "hello") {
 		t.Error("expected hello in output")
@@ -170,7 +182,7 @@ func TestRenderMessages(t *testing.T) {
 	}
 }
 
-func TestRenderMessagesGroupsSameSender(t *testing.T) {
+func TestRenderConversation_GroupsSameSender(t *testing.T) {
 	base := time.Date(2026, 1, 1, 12, 0, 0, 0, time.Local)
 
 	msgs := []db.Message{
@@ -179,7 +191,7 @@ func TestRenderMessagesGroupsSameSender(t *testing.T) {
 		{ID: "3", Body: "third", Kind: "text", ContactID: db.OwnerContactID, SentAt: base.Add(time.Minute)},
 	}
 
-	out := renderMessages(msgs, 80)
+	out := stripAnsi(renderConversation(msgs, 80, 0, -1))
 
 	count := strings.Count(out, "you")
 	if count != 1 {
@@ -187,7 +199,7 @@ func TestRenderMessagesGroupsSameSender(t *testing.T) {
 	}
 }
 
-func TestRenderMessagesSenderChange(t *testing.T) {
+func TestRenderConversation_SenderChange(t *testing.T) {
 	base := time.Date(2026, 1, 1, 12, 0, 0, 0, time.Local)
 
 	msgs := []db.Message{
@@ -195,13 +207,13 @@ func TestRenderMessagesSenderChange(t *testing.T) {
 		{ID: "2", Body: "sup", Kind: "text", ContactID: db.SystemContactID, IsFromMe: true, SentAt: base.Add(time.Minute)},
 	}
 
-	out := renderMessages(msgs, 80)
+	out := renderConversation(msgs, 80, 0, -1)
 	lines := strings.Split(out, "\n")
 
 	foundBlank := false
 	for i, line := range lines {
-		if strings.TrimSpace(line) == "" && i > 0 {
-			rest := strings.Join(lines[i+1:], "\n")
+		if strings.TrimSpace(stripAnsi(line)) == "" && i > 0 {
+			rest := stripAnsi(strings.Join(lines[i+1:], "\n"))
 			if strings.Contains(rest, "nik") {
 				foundBlank = true
 				break
@@ -214,7 +226,7 @@ func TestRenderMessagesSenderChange(t *testing.T) {
 	}
 }
 
-func TestRenderMessagesDateSeparator(t *testing.T) {
+func TestRenderConversation_DateSeparator(t *testing.T) {
 	yesterday := time.Now().Local().AddDate(0, 0, -1)
 	yesterday = time.Date(yesterday.Year(), yesterday.Month(), yesterday.Day(), 23, 0, 0, 0, time.Local)
 	today := time.Now().Local()
@@ -225,7 +237,7 @@ func TestRenderMessagesDateSeparator(t *testing.T) {
 		{ID: "2", Body: "new", Kind: "text", ContactID: db.OwnerContactID, SentAt: today},
 	}
 
-	out := renderMessages(msgs, 80)
+	out := stripAnsi(renderConversation(msgs, 80, 0, -1))
 
 	if !strings.Contains(out, "Yesterday") {
 		t.Error("expected Yesterday separator")
@@ -235,7 +247,7 @@ func TestRenderMessagesDateSeparator(t *testing.T) {
 	}
 }
 
-func TestRenderMessagesBigGap(t *testing.T) {
+func TestRenderConversation_BigGap(t *testing.T) {
 	base := time.Date(2026, 1, 1, 12, 0, 0, 0, time.Local)
 
 	msgs := []db.Message{
@@ -243,10 +255,388 @@ func TestRenderMessagesBigGap(t *testing.T) {
 		{ID: "2", Body: "after gap", Kind: "text", ContactID: db.OwnerContactID, SentAt: base.Add(10 * time.Minute)},
 	}
 
-	out := renderMessages(msgs, 80)
+	out := stripAnsi(renderConversation(msgs, 80, 0, -1))
 
 	count := strings.Count(out, "you")
 	if count != 2 {
 		t.Errorf("expected 'you' twice (gap breaks grouping), got %d", count)
+	}
+}
+
+func TestBubble_ContainsBody(t *testing.T) {
+	out := stripAnsi(bubble("hello world", true, 80))
+	if !strings.Contains(out, "hello world") {
+		t.Error("expected body in bubble")
+	}
+}
+
+func TestBubble_RightAlignedForYou(t *testing.T) {
+	out := bubble("test", false, 80)
+	lines := strings.Split(out, "\n")
+	for _, l := range lines {
+		stripped := stripAnsi(l)
+		if strings.TrimSpace(stripped) != "" && !strings.HasPrefix(stripped, " ") {
+			t.Errorf("expected right-aligned you bubble to have leading spaces, got %q", stripped)
+		}
+	}
+}
+
+func TestBubble_LeftAlignedForNik(t *testing.T) {
+	out := bubble("test", true, 80)
+	lines := strings.Split(out, "\n")
+	first := stripAnsi(lines[0])
+	if strings.HasPrefix(first, "  ") {
+		t.Errorf("nik bubble should be left-aligned, got %q", first)
+	}
+}
+
+func TestGhostBubble_Content(t *testing.T) {
+	out := stripAnsi(ghostBubble(0))
+	if !strings.Contains(out, "typing") {
+		t.Error("expected typing in ghost bubble")
+	}
+}
+
+func TestRenderToolLine_Running(t *testing.T) {
+	out := stripAnsi(renderToolLine(0, "search_contacts", toolRunning, "finding kilian", 80))
+	if !strings.Contains(out, "search_contacts") {
+		t.Errorf("should contain tool name, got %q", out)
+	}
+	if !strings.Contains(out, "finding kilian") {
+		t.Errorf("should contain reason, got %q", out)
+	}
+	if strings.Contains(out, "✓") {
+		t.Error("running tool should not have checkmark")
+	}
+}
+
+func TestRenderToolLine_Done(t *testing.T) {
+	out := stripAnsi(renderToolLine(0, "search_contacts", toolDone, "finding kilian", 80))
+	if !strings.Contains(out, "✓") {
+		t.Error("done tool should have checkmark")
+	}
+}
+
+func TestRenderToolLine_Error(t *testing.T) {
+	out := stripAnsi(renderToolLine(0, "db_query", toolError, "check data", 80))
+	if !strings.Contains(out, "✗") {
+		t.Error("error tool should have ✗ indicator")
+	}
+	if strings.Contains(out, "✓") {
+		t.Error("error tool should not have checkmark")
+	}
+}
+
+func TestRenderToolLine_NoReason(t *testing.T) {
+	out := stripAnsi(renderToolLine(0, "db_query", toolDone, "", 80))
+	if !strings.Contains(out, "db_query") {
+		t.Errorf("should contain tool name, got %q", out)
+	}
+	if strings.Contains(out, "—") {
+		t.Error("should not show separator when reason is empty")
+	}
+}
+
+func TestParseToolCallStart(t *testing.T) {
+	tests := []struct {
+		body       string
+		wantName   string
+		wantReason string
+	}{
+		{
+			`{"name":"message_send","input":"{\"reason\":\"reply to user\"}"}`,
+			"message_send", "reply to user",
+		},
+		{
+			`{"name":"db_query","input":"{\"reason\":\"check status\"}"}`,
+			"db_query", "check status",
+		},
+		{`{"name":"done","input":"{}"}`, "done", ""},
+		{`{}`, "", ""},
+		{`invalid`, "", ""},
+	}
+	for _, tt := range tests {
+		name, reason := parseToolCallStart(tt.body)
+		if name != tt.wantName {
+			t.Errorf("parseToolCallStart(%q) name = %q, want %q", tt.body, name, tt.wantName)
+		}
+		if reason != tt.wantReason {
+			t.Errorf("parseToolCallStart(%q) reason = %q, want %q", tt.body, reason, tt.wantReason)
+		}
+	}
+}
+
+func TestResolveToolCallState(t *testing.T) {
+	tests := []struct {
+		name   string
+		paired *db.Message
+		want   toolState
+	}{
+		{"nil paired", nil, toolRunning},
+		{"done", &db.Message{Body: `{"output":"{\"sent\":true}"}`}, toolDone},
+		{"error", &db.Message{Body: `{"output":"{\"error\":\"table not found\"}"}`}, toolError},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := resolveToolCallState(tt.paired)
+			if got != tt.want {
+				t.Errorf("resolveToolCallState() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRenderConversation_ToolCalls(t *testing.T) {
+	base := time.Date(2026, 1, 1, 12, 0, 0, 0, time.Local)
+
+	msgs := []db.Message{
+		{ID: "1", Body: "do something", Kind: "text", ContactID: db.OwnerContactID, SentAt: base},
+		{ID: "start-1", Body: `{"name":"db_query","input":"{\"reason\":\"check data\"}","round":1}`, Kind: "tool_call_start", ContactID: db.SystemContactID, IsFromMe: true, Platform: "system", SentAt: base.Add(time.Second)},
+		{ID: "call-1", Body: `{"name":"db_query","input":"{\"reason\":\"check data\"}","output":"1","round":1}`, Kind: "tool_call", ContactID: db.SystemContactID, IsFromMe: true, Platform: "system", SentAt: base.Add(time.Second), ContextStanzaID: sql.NullString{Valid: true, String: "start-1"}},
+		{ID: "start-2", Body: `{"name":"message_send","input":"{\"reason\":\"reply to user\"}","round":1}`, Kind: "tool_call_start", ContactID: db.SystemContactID, IsFromMe: true, Platform: "system", SentAt: base.Add(2 * time.Second)},
+		{ID: "call-2", Body: `{"name":"message_send","input":"{\"reason\":\"reply to user\"}","output":"ok","round":1}`, Kind: "tool_call", ContactID: db.SystemContactID, IsFromMe: true, Platform: "system", SentAt: base.Add(2 * time.Second), ContextStanzaID: sql.NullString{Valid: true, String: "start-2"}},
+		{ID: "4", Body: "here you go", Kind: "text", ContactID: db.SystemContactID, IsFromMe: true, SentAt: base.Add(3 * time.Second)},
+	}
+
+	out := stripAnsi(renderConversation(msgs, 80, 0, -1))
+
+	if !strings.Contains(out, "db_query") {
+		t.Error("expected db_query tool call in output")
+	}
+	if !strings.Contains(out, "message_send") {
+		t.Error("expected message_send tool call in output")
+	}
+	if !strings.Contains(out, "check data") {
+		t.Error("expected reason 'check data' in output")
+	}
+	if !strings.Contains(out, "reply to user") {
+		t.Error("expected reason 'reply to user' in output")
+	}
+	if !strings.Contains(out, "✓") {
+		t.Error("expected checkmarks for completed tool calls")
+	}
+	if !strings.Contains(out, "╭") {
+		t.Error("expected tool rail cap")
+	}
+	if !strings.Contains(out, "╰") {
+		t.Error("expected tool rail closing cap")
+	}
+}
+
+func TestRenderConversation_DoneToolCallFiltered(t *testing.T) {
+	base := time.Date(2026, 1, 1, 12, 0, 0, 0, time.Local)
+
+	msgs := []db.Message{
+		{ID: "start-done", Body: `{"name":"done","input":"{\"reason\":\"nothing to do\"}"}`, Kind: "tool_call_start", ContactID: db.SystemContactID, IsFromMe: true, Platform: "system", SentAt: base},
+	}
+
+	out := stripAnsi(renderConversation(msgs, 80, 0, -1))
+
+	if strings.Contains(out, "nothing to do") {
+		t.Error("done tool call starts should be filtered out")
+	}
+}
+
+func TestRenderConversation_InProgressToolCall(t *testing.T) {
+	base := time.Date(2026, 1, 1, 12, 0, 0, 0, time.Local)
+
+	msgs := []db.Message{
+		{ID: "start-1", Body: `{"name":"db_query","input":"{\"reason\":\"fetching rows\"}"}`, Kind: "tool_call_start", ContactID: db.SystemContactID, IsFromMe: true, Platform: "system", SentAt: base},
+	}
+
+	out := stripAnsi(renderConversation(msgs, 80, 5, -1))
+
+	if !strings.Contains(out, "db_query") {
+		t.Error("expected in-progress tool call name")
+	}
+	if !strings.Contains(out, "fetching rows") {
+		t.Error("expected reason for in-progress tool call")
+	}
+	if strings.Contains(out, "✓") {
+		t.Error("in-progress tool call should not have checkmark")
+	}
+}
+
+func TestSameGroup(t *testing.T) {
+	base := time.Date(2026, 1, 1, 12, 0, 0, 0, time.Local)
+
+	tests := []struct {
+		name string
+		a, b entry
+		want bool
+	}{
+		{
+			"same sender close time",
+			entry{lt: base, isNik: true},
+			entry{lt: base.Add(time.Minute), isNik: true},
+			true,
+		},
+		{
+			"different sender",
+			entry{lt: base, isNik: true},
+			entry{lt: base.Add(time.Minute), isNik: false},
+			false,
+		},
+		{
+			"gap over 5min",
+			entry{lt: base, isNik: true},
+			entry{lt: base.Add(6 * time.Minute), isNik: true},
+			false,
+		},
+		{
+			"exactly 5min",
+			entry{lt: base, isNik: true},
+			entry{lt: base.Add(5 * time.Minute), isNik: true},
+			true,
+		},
+		{
+			"different date",
+			entry{lt: time.Date(2026, 1, 1, 23, 59, 0, 0, time.Local), isNik: true},
+			entry{lt: time.Date(2026, 1, 2, 0, 1, 0, 0, time.Local), isNik: true},
+			false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := sameGroup(tt.a, tt.b)
+			if got != tt.want {
+				t.Errorf("sameGroup() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRenderConversation_ToolCallsSplitByTimeGap(t *testing.T) {
+	base := time.Date(2026, 1, 1, 11, 14, 0, 0, time.Local)
+
+	msgs := []db.Message{
+		{ID: "start-1", Body: `{"name":"task_cancel","input":"{\"reason\":\"stop current task\"}","round":1}`, Kind: "tool_call_start", ContactID: db.SystemContactID, IsFromMe: true, Platform: "system", SentAt: base},
+		{ID: "call-1", Body: `{"name":"task_cancel","input":"{}","output":"{\"ok\":true}","round":1}`, Kind: "tool_call", ContactID: db.SystemContactID, IsFromMe: true, Platform: "system", SentAt: base, ContextStanzaID: sql.NullString{Valid: true, String: "start-1"}},
+		{ID: "start-2", Body: `{"name":"load_skill","input":"{\"reason\":\"skill reflex fired\"}","round":1}`, Kind: "tool_call_start", ContactID: db.SystemContactID, IsFromMe: true, Platform: "system", SentAt: base.Add(46 * time.Minute)},
+		{ID: "call-2", Body: `{"name":"load_skill","input":"{}","output":"{\"ok\":true}","round":1}`, Kind: "tool_call", ContactID: db.SystemContactID, IsFromMe: true, Platform: "system", SentAt: base.Add(46 * time.Minute), ContextStanzaID: sql.NullString{Valid: true, String: "start-2"}},
+	}
+
+	out := stripAnsi(renderConversation(msgs, 80, 0, -1))
+
+	openCount := strings.Count(out, "╭")
+	closeCount := strings.Count(out, "╰")
+	if openCount != 2 {
+		t.Errorf("expected 2 rail opens, got %d\n%s", openCount, out)
+	}
+	if closeCount != 2 {
+		t.Errorf("expected 2 rail closes, got %d\n%s", closeCount, out)
+	}
+
+	if !strings.Contains(out, "task_cancel") {
+		t.Error("expected task_cancel in output")
+	}
+	if !strings.Contains(out, "load_skill") {
+		t.Error("expected load_skill in output")
+	}
+}
+
+func TestThinkTickEnergy(t *testing.T) {
+	conn, err := db.OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	c := newChatModel(conn, nil)
+	c.activity = []string{"thinking"}
+
+	c, _ = c.Update(thinkTickMsg(time.Now()))
+
+	if c.thinkEnergy <= 0 {
+		t.Errorf("expected energy > 0 after think tick, got %f", c.thinkEnergy)
+	}
+	if c.thinkTick != 1 {
+		t.Errorf("expected thinkTick 1, got %d", c.thinkTick)
+	}
+}
+
+func TestChatMessagesCapped(t *testing.T) {
+	conn, err := db.OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	c := newChatModel(conn, nil)
+	c, _ = c.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
+
+	var msgs []db.Message
+	for i := 0; i < 600; i++ {
+		msgs = append(msgs, db.Message{
+			ID:        fmt.Sprintf("msg-%d", i),
+			Body:      fmt.Sprintf("message %d", i),
+			Kind:      "text",
+			ContactID: db.OwnerContactID,
+			SentAt:    time.Date(2026, 1, 1, 0, 0, i, 0, time.UTC),
+		})
+	}
+
+	c, _ = c.Update(newMessagesMsg{messages: msgs})
+
+	if len(c.messages) != 500 {
+		t.Errorf("expected 500 messages after cap, got %d", len(c.messages))
+	}
+	if c.messages[0].ID != "msg-100" {
+		t.Errorf("expected oldest kept message msg-100, got %q", c.messages[0].ID)
+	}
+	if c.lastID != "msg-599" {
+		t.Errorf("expected lastID msg-599, got %q", c.lastID)
+	}
+}
+
+func TestChatConvCacheDirtyOnNewMessages(t *testing.T) {
+	conn, err := db.OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	c := newChatModel(conn, nil)
+	c, _ = c.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
+
+	initial := c.convCache
+
+	c, _ = c.Update(newMessagesMsg{
+		messages: []db.Message{
+			{ID: "1", Body: "hello", Kind: "text", ContactID: db.OwnerContactID, SentAt: time.Date(2026, 1, 1, 12, 0, 0, 0, time.Local)},
+		},
+	})
+
+	if c.convCache == initial {
+		t.Error("expected convCache to change after new messages")
+	}
+	if !strings.Contains(c.convCache, "hello") {
+		t.Error("expected convCache to contain message text")
+	}
+}
+
+func TestChatConvCacheStableOnThinkTick(t *testing.T) {
+	conn, err := db.OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	c := newChatModel(conn, nil)
+	c, _ = c.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
+	c, _ = c.Update(newMessagesMsg{
+		messages: []db.Message{
+			{ID: "1", Body: "hello", Kind: "text", ContactID: db.OwnerContactID, SentAt: time.Date(2026, 1, 1, 12, 0, 0, 0, time.Local)},
+		},
+		activity: []string{"thinking"},
+	})
+
+	cached := c.convCache
+
+	c, _ = c.Update(thinkTickMsg(time.Now()))
+	c, _ = c.Update(thinkTickMsg(time.Now()))
+
+	if c.convCache != cached {
+		t.Error("expected convCache to remain stable across think ticks")
 	}
 }
