@@ -78,7 +78,7 @@ func (s *Service) Create(ctx context.Context, p createParams) (db.Task, error) {
 		kind = "task_retry"
 	}
 
-	err = db.SystemMessageInsert(ctx, tx, db.SystemMessageParams{
+	_, err = db.SystemMessageInsert(ctx, tx, db.SystemMessageParams{
 		ConversationID: p.ConversationID,
 		Kind:           kind,
 		Body:           t,
@@ -149,7 +149,7 @@ func (s *Service) Cancel(ctx context.Context, taskID, reason string) error {
 		return fmt.Errorf("get task for cancel message: %w", err)
 	}
 
-	err = db.SystemMessageInsert(ctx, tx, db.SystemMessageParams{
+	_, err = db.SystemMessageInsert(ctx, tx, db.SystemMessageParams{
 		ConversationID: t.ConversationID,
 		Kind:           "task_cancelled",
 		Body:           t,
@@ -205,7 +205,7 @@ func (s *Service) InsertReport(ctx context.Context, taskID, status, content stri
 		return err
 	}
 
-	err = db.SystemMessageInsert(ctx, tx, db.SystemMessageParams{
+	_, err = db.SystemMessageInsert(ctx, tx, db.SystemMessageParams{
 		ConversationID: t.ConversationID,
 		Kind:           "task_report",
 		Body: db.TaskReport{

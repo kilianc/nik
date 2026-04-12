@@ -49,7 +49,7 @@ func (s *Service) CreateAlarm(ctx context.Context, originContactID, originConver
 		return nil, fmt.Errorf("create alarm: %w", err)
 	}
 
-	err = db.SystemMessageInsert(ctx, tx, db.SystemMessageParams{
+	_, err = db.SystemMessageInsert(ctx, tx, db.SystemMessageParams{
 		ConversationID: originConversationID,
 		Kind:           "alarm_created",
 		Body:           alarm,
@@ -150,7 +150,7 @@ func (s *Service) Update(ctx context.Context, alarmID string, p UpdateParams) er
 	}
 
 	if a.OriginConversationID.Valid {
-		err = db.SystemMessageInsert(ctx, tx, db.SystemMessageParams{
+		_, err = db.SystemMessageInsert(ctx, tx, db.SystemMessageParams{
 			ConversationID: a.OriginConversationID.String,
 			Kind:           "alarm_updated",
 			Body:           AlarmUpdated{Alarm: a, Note: p.Note},
@@ -197,7 +197,7 @@ func (s *Service) healStaleAlarms(ctx context.Context) {
 			continue
 		}
 
-		err = db.SystemMessageInsert(ctx, s.db, db.SystemMessageParams{
+		_, err = db.SystemMessageInsert(ctx, s.db, db.SystemMessageParams{
 			ConversationID: a.OriginConversationID.String,
 			Kind:           "alarm_stale",
 			Body:           a,

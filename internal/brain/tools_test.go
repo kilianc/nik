@@ -2,10 +2,14 @@ package brain
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/kciuffolo/nik/internal/config"
+	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/llm"
 	"github.com/kciuffolo/nik/internal/prompt"
 )
@@ -92,5 +96,102 @@ func TestToolExecutorBlocksPrivilegedInUnprivilegedContext(t *testing.T) {
 	}
 	if !strings.Contains(result, `"ok"`) {
 		t.Fatalf("expected ok result, got %s", result)
+	}
+}
+
+func seedConversation(t *testing.T, conn *sql.DB) string {
+	t.Helper()
+	ctx := context.Background()
+	now := time.Now()
+	err := db.ConversationUpsert(ctx, conn, db.ConversationUpsertParams{
+		Platform:               "local",
+		ExternalConversationID: "test-conv",
+		Kind:                   "dm",
+		LastMessageAt:          &now,
+	})
+	if err != nil {
+		t.Fatalf("seed conversation: %v", err)
+	}
+	conv, err := db.ConversationGet(ctx, conn, db.ConversationGetParams{
+		Platform:               "local",
+		ExternalConversationID: "test-conv",
+	})
+	if err != nil {
+		t.Fatalf("get conversation: %v", err)
+	}
+	return conv.ID
+}
+
+func TestInsertToolCallStartAndToolCallMessages(t *testing.T) {
+	conn, err := db.OpenInMemory()
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer conn.Close()
+
+	ctx := context.Background()
+
+	err = db.SystemContactEnsure(ctx, conn)
+	if err != nil {
+		t.Fatalf("ensure system contact: %v", err)
+	}
+
+	convID := seedConversation(t, conn)
+	cfg := &config.Config{Home: t.TempDir()}
+	b := New(cfg, nil, prompt.NewRenderer(cfg))
+	b.conn = conn
+
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	calls := []llm.ToolCall{
+		{Name: "shell", Arguments: `{"action":"run"}`},
+		{Name: "db_query", Arguments: `{"reason":"check"}`},
+	}
+
+	startIDs := b.insertToolCallStartMessages(ctx, convID, 1, calls, now)
+	if len(startIDs) != 2 {
+		t.Fatalf("expected 2 start IDs, got %d", len(startIDs))
+	}
+	for i, id := range startIDs {
+		if id == "" {
+			t.Errorf("start ID %d is empty", i)
+		}
+	}
+
+	results := []llm.ExecResult{
+		{Output: `{"exit_code":0}`},
+		{Output: `{"rows":[]}`},
+	}
+	b.insertToolCallMessages(ctx, convID, 1, startIDs, calls, results, now)
+
+	// verify tool_call messages link back via context_stanza_id
+	for i, startID := range startIDs {
+		var stanzaID sql.NullString
+		var body string
+		err = conn.QueryRowContext(ctx,
+			`SELECT context_stanza_id, body FROM message WHERE kind = 'tool_call' AND context_stanza_id = ?1`,
+			startID,
+		).Scan(&stanzaID, &body)
+		if err != nil {
+			t.Fatalf("query tool_call for start %d: %v", i, err)
+		}
+
+		var tc ToolCallBody
+		json.Unmarshal([]byte(body), &tc)
+		if tc.Name != calls[i].Name {
+			t.Errorf("tool_call %d name = %q, want %q", i, tc.Name, calls[i].Name)
+		}
+		if tc.Output != results[i].Output {
+			t.Errorf("tool_call %d output = %q, want %q", i, tc.Output, results[i].Output)
+		}
+	}
+}
+
+func TestInsertToolCallStartNilConn(t *testing.T) {
+	cfg := &config.Config{Home: t.TempDir()}
+	b := New(cfg, nil, prompt.NewRenderer(cfg))
+
+	ids := b.insertToolCallStartMessages(context.Background(), "conv", 1, []llm.ToolCall{{Name: "x"}}, time.Now())
+	if ids != nil {
+		t.Errorf("expected nil IDs with nil conn, got %v", ids)
 	}
 }

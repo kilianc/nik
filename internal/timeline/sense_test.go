@@ -253,7 +253,7 @@ func TestCheckIgnoresDoneToolCall(t *testing.T) {
 		t.Fatalf("set last_read_at: %v", err)
 	}
 
-	err = db.SystemMessageInsert(ctx, conn, db.SystemMessageParams{
+	_, err = db.SystemMessageInsert(ctx, conn, db.SystemMessageParams{
 		ConversationID: convID,
 		Kind:           "tool_call",
 		Body:           map[string]string{"name": "done", "input": `{"reason":"all done"}`, "output": `{"ok":true}`},
@@ -289,7 +289,7 @@ func TestToolCallAppearsInTimeline(t *testing.T) {
 		t.Fatalf("ensure system contact: %v", err)
 	}
 
-	err = db.SystemMessageInsert(ctx, conn, db.SystemMessageParams{
+	_, err = db.SystemMessageInsert(ctx, conn, db.SystemMessageParams{
 		ConversationID: convID,
 		Kind:           "tool_call",
 		Body:           map[string]string{"name": "message_send", "input": `{"body":"hi"}`, "output": `{"sent":1}`},
@@ -351,7 +351,7 @@ func TestRenderUsesSystemMessagesOnly(t *testing.T) {
 		t.Fatalf("ensure system contact: %v", err)
 	}
 
-	err = db.SystemMessageInsert(ctx, conn, db.SystemMessageParams{
+	_, err = db.SystemMessageInsert(ctx, conn, db.SystemMessageParams{
 		ConversationID: convID,
 		Kind:           "task_report",
 		Body: db.TaskReport{
@@ -407,7 +407,7 @@ func TestSystemMessagesTrimmedByAge(t *testing.T) {
 
 	insertMsg(t, conn, convID, "msg-old-human", "ext-old-human", "text", "old chat", now.Add(-2*time.Hour))
 
-	err = db.SystemMessageInsert(ctx, conn, db.SystemMessageParams{
+	_, err = db.SystemMessageInsert(ctx, conn, db.SystemMessageParams{
 		ConversationID: convID,
 		Kind:           "task_report",
 		Body: db.TaskReport{
@@ -422,7 +422,7 @@ func TestSystemMessagesTrimmedByAge(t *testing.T) {
 		t.Fatalf("insert old system message: %v", err)
 	}
 
-	err = db.SystemMessageInsert(ctx, conn, db.SystemMessageParams{
+	_, err = db.SystemMessageInsert(ctx, conn, db.SystemMessageParams{
 		ConversationID: convID,
 		Kind:           "alarm_fired",
 		Body:           db.Alarm{ID: "eeee-ffff-0000-1111", Goal: "recent alarm"},
@@ -558,7 +558,7 @@ func TestPeekSkipsSystemMessages(t *testing.T) {
 	now := time.Date(2026, 3, 14, 10, 0, 0, 0, time.UTC)
 	insertMsg(t, conn, convID, "msg-human", "ext-human", "text", "hey nik", now)
 
-	err = db.SystemMessageInsert(ctx, conn, db.SystemMessageParams{
+	_, err = db.SystemMessageInsert(ctx, conn, db.SystemMessageParams{
 		ConversationID: convID,
 		Kind:           "task_report",
 		Body: db.TaskReport{

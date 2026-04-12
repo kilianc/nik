@@ -11,6 +11,12 @@ import (
 	"github.com/kciuffolo/nik/internal/llm"
 )
 
+type ToolCallStartBody struct {
+	Name  string `json:"name"`
+	Input string `json:"input"`
+	Round int    `json:"round"`
+}
+
 type ToolCallBody struct {
 	Name   string `json:"name"`
 	Input  string `json:"input"`
@@ -109,7 +115,35 @@ func (b *Brain) isPrivilegedContext(meta map[string]string) bool {
 	return b.cfg.IsPrivileged(meta["conversation_id"])
 }
 
-func (b *Brain) insertToolCallMessages(ctx context.Context, convID string, round int, calls []llm.ToolCall, results []llm.ExecResult, sentAt time.Time) {
+func (b *Brain) insertToolCallStartMessages(ctx context.Context, convID string, round int, calls []llm.ToolCall, sentAt time.Time) []string {
+	if b.conn == nil {
+		return nil
+	}
+
+	ids := make([]string, len(calls))
+	for i, call := range calls {
+		body := ToolCallStartBody{
+			Name:  call.Name,
+			Input: call.Arguments,
+			Round: round,
+		}
+
+		msgID, err := db.SystemMessageInsert(ctx, b.conn, db.SystemMessageParams{
+			ConversationID: convID,
+			Kind:           "tool_call_start",
+			Body:           body,
+			SentAt:         sentAt,
+		})
+		if err != nil {
+			slog.Warn("insert tool call start", "pkg", "brain", "tool", call.Name, "error", err)
+			continue
+		}
+		ids[i] = msgID
+	}
+	return ids
+}
+
+func (b *Brain) insertToolCallMessages(ctx context.Context, convID string, round int, startIDs []string, calls []llm.ToolCall, results []llm.ExecResult, sentAt time.Time) {
 	if b.conn == nil {
 		return
 	}
@@ -122,11 +156,17 @@ func (b *Brain) insertToolCallMessages(ctx context.Context, convID string, round
 			Round:  round,
 		}
 
-		err := db.SystemMessageInsert(ctx, b.conn, db.SystemMessageParams{
-			ConversationID: convID,
-			Kind:           "tool_call",
-			Body:           body,
-			SentAt:         sentAt,
+		var stanzaID string
+		if startIDs != nil && i < len(startIDs) {
+			stanzaID = startIDs[i]
+		}
+
+		_, err := db.SystemMessageInsert(ctx, b.conn, db.SystemMessageParams{
+			ConversationID:  convID,
+			Kind:            "tool_call",
+			Body:            body,
+			SentAt:          sentAt,
+			ContextStanzaID: stanzaID,
 		})
 		if err != nil {
 			slog.Warn("insert tool call message", "pkg", "brain", "tool", call.Name, "error", err)

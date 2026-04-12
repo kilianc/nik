@@ -23,7 +23,7 @@ func TestSystemMessageInsertWritesSystemRow(t *testing.T) {
 	convID := seedConversation(t, ctx, conn, "whatsapp", "system-msg@s.whatsapp.net", "dm")
 	sentAt := time.Now().UTC().Truncate(time.Second)
 
-	err = SystemMessageInsert(ctx, conn, SystemMessageParams{
+	_, err = SystemMessageInsert(ctx, conn, SystemMessageParams{
 		ConversationID: convID,
 		Kind:           "task_report",
 		Body: map[string]any{

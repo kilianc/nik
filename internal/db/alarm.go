@@ -171,7 +171,7 @@ func AlarmFire(ctx context.Context, conn *sql.DB, a Alarm, now time.Time) (Alarm
 	a.LastOccurrenceNote = sql.NullString{}
 
 	if a.OriginConversationID.Valid {
-		err = SystemMessageInsert(ctx, tx, SystemMessageParams{
+		_, err = SystemMessageInsert(ctx, tx, SystemMessageParams{
 			ConversationID: a.OriginConversationID.String,
 			Kind:           "alarm_fired",
 			Body:           a,

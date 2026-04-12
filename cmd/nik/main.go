@@ -42,6 +42,8 @@ func main() {
 		subcmd = os.Args[1]
 	}
 
+	known := []string{"daemon", "install", "replay", "tui"}
+
 	switch subcmd {
 	case "daemon":
 		runDaemon(os.Args[2:])
@@ -51,8 +53,12 @@ func main() {
 		runReplay(os.Args[2:])
 	case "tui":
 		runTUI(os.Args[2:])
-	default:
+	case "":
 		runTUI(os.Args[1:])
+	default:
+		fmt.Fprintf(os.Stderr, "unknown command %q\n", subcmd)
+		fmt.Fprintf(os.Stderr, "available commands: %s\n", strings.Join(known, ", "))
+		os.Exit(1)
 	}
 }
 
@@ -166,6 +172,11 @@ func runDaemon(args []string) {
 	err = db.LocalConversationEnsure(ctx, conn)
 	if err != nil {
 		fatal("ensure local conversation", err)
+	}
+
+	err = db.ToolCallStartRecover(ctx, conn)
+	if err != nil {
+		slog.Warn("recover orphaned tool call starts", "error", err)
 	}
 
 	// read-only database connection for db_query tool
