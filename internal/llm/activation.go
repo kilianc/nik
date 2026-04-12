@@ -45,6 +45,7 @@ type RoundResult struct {
 	ToolCalls          []ToolCall
 	ReasoningSummaries []string
 	Incomplete         bool
+	IncompleteReason   string
 	RoundUsage         Usage
 }
 
@@ -185,10 +186,24 @@ func (s *Activation) Round(ctx context.Context) (*RoundResult, error) {
 		RoundUsage:         pr.usage,
 	}
 
+	msgs := MarshalMessages(s.prov.conversation())
+
 	if pr.incomplete {
 		result.Incomplete = true
+		result.IncompleteReason = pr.incompleteReason
+
+		s.lastRoundID = s.recorder.Round(ctx, s.round, s.attempt, msgs, pr.reasoningSummaries, pr.usage)
 		s.attempt = 0
 		s.round++
+
+		s.recorder.Sync(ctx, ActivationStats{
+			Model:         *s.client.model,
+			Usage:         s.total,
+			Rounds:        s.rounds,
+			ToolCallCount: len(s.history),
+			DurationMS:    time.Since(s.startTime).Milliseconds(),
+		})
+
 		return result, nil
 	}
 
@@ -203,8 +218,6 @@ func (s *Activation) Round(ctx context.Context) (*RoundResult, error) {
 		}
 		s.prevSig = sig
 	}
-
-	msgs := MarshalMessages(s.prov.conversation())
 
 	s.lastRoundID = s.recorder.Round(ctx, s.round, s.attempt, msgs, pr.reasoningSummaries, pr.usage)
 	s.attempt = 0

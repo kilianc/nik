@@ -153,7 +153,11 @@ func (r *Runner) runLoop(ctx context.Context, t db.Task, act *llm.Activation, ex
 		}
 
 		if result.Incomplete {
-			return fmt.Errorf("response incomplete in round %d", act.RoundNumber()-1)
+			reason := result.IncompleteReason
+			if reason == "" {
+				reason = "unknown"
+			}
+			return fmt.Errorf("response incomplete in round %d: %s", act.RoundNumber()-1, reason)
 		}
 
 		if len(result.ToolCalls) == 0 {

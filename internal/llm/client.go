@@ -270,6 +270,8 @@ var transientNetworkSubstrings = []string{
 	"tls: protocol is shutdown",
 	"no such host",
 	"INTERNAL_ERROR",
+	"response failed: server_error",
+	"response failed: rate_limit_exceeded",
 }
 
 func IsTransient(err error) bool {
