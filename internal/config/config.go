@@ -177,11 +177,16 @@ func Default(home string) *Config {
 		Home: home,
 		Models: ModelsConfig{
 			Main: ModelConfig{
-				Model:   "gpt-5.3-codex",
-				Backend: "subscription",
+				Model:           "gpt-5.3-codex",
+				ReasoningEffort: "high",
+				Backend:         "subscription",
 			},
 			Task: ModelConfig{
-				Backend: "api",
+				ReasoningEffort: "xhigh",
+				Backend:         "api",
+			},
+			Recall: ModelConfig{
+				ReasoningEffort: "minimal",
 			},
 			TTS: TTSConfig{
 				Model: "gpt-4o-mini-tts",
@@ -537,7 +542,7 @@ func validateConfig(cfg Config) error {
 
 func validatePurposeModel(purpose string, modelCfg ModelConfig) error {
 	if !isValidReasoningEffort(modelCfg.ReasoningEffort) {
-		return fmt.Errorf("invalid models.%s.reasoning_effort %q (none, minimal, low, medium, high, xhigh, or empty)", purpose, modelCfg.ReasoningEffort)
+		return fmt.Errorf("missing models.%s.reasoning_effort (none, minimal, low, medium, high, xhigh)", purpose)
 	}
 
 	if !isValidVerbosity(modelCfg.Verbosity) {
@@ -562,7 +567,7 @@ func isValidBackend(value string) bool {
 
 func isValidReasoningEffort(value string) bool {
 	switch value {
-	case "", "none", "minimal", "low", "medium", "high", "xhigh":
+	case "none", "minimal", "low", "medium", "high", "xhigh":
 		return true
 	default:
 		return false

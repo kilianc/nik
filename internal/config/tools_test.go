@@ -48,10 +48,15 @@ func TestConfigSetSupportsPurposeModelFields(t *testing.T) {
 		OpenAIKey: "sk-test",
 		Models: ModelsConfig{
 			Main: ModelConfig{
-				Model: "gpt-5",
+				Model:           "gpt-5",
+				ReasoningEffort: "high",
+			},
+			Task: ModelConfig{
+				ReasoningEffort: "xhigh",
 			},
 			Recall: ModelConfig{
-				Model: "gpt-4.1-nano",
+				Model:           "gpt-4.1-nano",
+				ReasoningEffort: "minimal",
 			},
 		},
 		PrivilegedConversationIDs: ConversationList{{Label: "owner", ID: "conv-1"}},
@@ -74,7 +79,9 @@ func TestConfigSetSupportsTaskModelFields(t *testing.T) {
 		Home:      t.TempDir(),
 		OpenAIKey: "sk-test",
 		Models: ModelsConfig{
-			Main: ModelConfig{Model: "gpt-5"},
+			Main:   ModelConfig{Model: "gpt-5", ReasoningEffort: "high"},
+			Task:   ModelConfig{ReasoningEffort: "xhigh"},
+			Recall: ModelConfig{ReasoningEffort: "minimal"},
 		},
 		PrivilegedConversationIDs: ConversationList{{Label: "owner", ID: "conv-1"}},
 	}
@@ -235,9 +242,13 @@ func TestConfigGetTask(t *testing.T) {
 func TestConfigSetTaskFields(t *testing.T) {
 	t.Run("max_rounds", func(t *testing.T) {
 		cfg := &Config{
-			Home:                      t.TempDir(),
-			OpenAIKey:                 "sk-test",
-			Models:                    ModelsConfig{Main: ModelConfig{Model: "gpt-5"}},
+			Home:      t.TempDir(),
+			OpenAIKey: "sk-test",
+			Models: ModelsConfig{
+				Main:   ModelConfig{Model: "gpt-5", ReasoningEffort: "high"},
+				Task:   ModelConfig{ReasoningEffort: "xhigh"},
+				Recall: ModelConfig{ReasoningEffort: "minimal"},
+			},
 			PrivilegedConversationIDs: ConversationList{{Label: "owner", ID: "conv-1"}},
 		}
 
@@ -265,9 +276,13 @@ func TestConfigSetTaskFields(t *testing.T) {
 
 	t.Run("timeout", func(t *testing.T) {
 		cfg := &Config{
-			Home:                      t.TempDir(),
-			OpenAIKey:                 "sk-test",
-			Models:                    ModelsConfig{Main: ModelConfig{Model: "gpt-5"}},
+			Home:      t.TempDir(),
+			OpenAIKey: "sk-test",
+			Models: ModelsConfig{
+				Main:   ModelConfig{Model: "gpt-5", ReasoningEffort: "high"},
+				Task:   ModelConfig{ReasoningEffort: "xhigh"},
+				Recall: ModelConfig{ReasoningEffort: "minimal"},
+			},
 			PrivilegedConversationIDs: ConversationList{{Label: "owner", ID: "conv-1"}},
 		}
 

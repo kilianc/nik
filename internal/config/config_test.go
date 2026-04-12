@@ -54,6 +54,10 @@ models:
     model: gpt-4
     reasoning_effort: low
     verbosity: medium
+  task:
+    reasoning_effort: xhigh
+  recall:
+    reasoning_effort: minimal
 privileged_conversation_ids:
   owner: conv-1
 timezone: UTC
@@ -77,6 +81,10 @@ models:
     model: gpt-5
     reasoning_effort: high
     verbosity: low
+  task:
+    reasoning_effort: xhigh
+  recall:
+    reasoning_effort: minimal
 privileged_conversation_ids:
   owner: conv-1
 timezone: America/Chicago
@@ -113,6 +121,11 @@ openai_key: sk-test
 models:
   main:
     model: gpt-4
+    reasoning_effort: high
+  task:
+    reasoning_effort: xhigh
+  recall:
+    reasoning_effort: minimal
 privileged_conversation_ids:
   owner: conv-1
 `)
@@ -138,6 +151,11 @@ openai_key: sk-test
 models:
   main:
     model: gpt-4
+    reasoning_effort: high
+  task:
+    reasoning_effort: xhigh
+  recall:
+    reasoning_effort: minimal
 privileged_conversation_ids:
   owner: conv-1
 `)
@@ -155,6 +173,11 @@ openai_key: sk-test
 models:
   main:
     model: gpt-5
+    reasoning_effort: high
+  task:
+    reasoning_effort: xhigh
+  recall:
+    reasoning_effort: minimal
 privileged_conversation_ids:
   owner: conv-1
 `)
@@ -176,6 +199,11 @@ openai_key: sk-test
 models:
   main:
     model: gpt-4
+    reasoning_effort: high
+  task:
+    reasoning_effort: xhigh
+  recall:
+    reasoning_effort: minimal
 privileged_conversation_ids:
   priv: priv1
 allow_conversation_ids:
@@ -201,6 +229,11 @@ openai_key: sk-test
 models:
   main:
     model: gpt-4
+    reasoning_effort: high
+  task:
+    reasoning_effort: xhigh
+  recall:
+    reasoning_effort: minimal
 privileged_conversation_ids:
   priv: priv1
   priv2: priv2
@@ -227,52 +260,52 @@ func TestLoadValidation(t *testing.T) {
 	}{
 		{
 			"missing main model",
-			"openai_key: sk-test\nmodels:\n  main:\n    model: \"\"\n",
+			"openai_key: sk-test\nmodels:\n  main:\n    model: \"\"\n    reasoning_effort: high\n  task:\n    reasoning_effort: xhigh\n  recall:\n    reasoning_effort: minimal\n",
 			true,
 		},
 		{
 			"invalid main reasoning_effort",
-			"openai_key: sk-test\nmodels:\n  main:\n    model: gpt-5\n    reasoning_effort: turbo\n",
+			"openai_key: sk-test\nmodels:\n  main:\n    model: gpt-5\n    reasoning_effort: turbo\n  task:\n    reasoning_effort: xhigh\n  recall:\n    reasoning_effort: minimal\n",
 			true,
 		},
 		{
 			"invalid task reasoning_effort",
-			"openai_key: sk-test\nmodels:\n  main:\n    model: gpt-5\n  task:\n    reasoning_effort: turbo\n",
+			"openai_key: sk-test\nmodels:\n  main:\n    model: gpt-5\n    reasoning_effort: high\n  task:\n    reasoning_effort: turbo\n  recall:\n    reasoning_effort: minimal\n",
 			true,
 		},
 		{
 			"empty backend is valid",
-			"openai_key: sk-test\nmodels:\n  main:\n    model: gpt-5\n    backend: \"\"\nprivileged_conversation_ids:\n  owner: conv-1\n",
+			"openai_key: sk-test\nmodels:\n  main:\n    model: gpt-5\n    reasoning_effort: high\n    backend: \"\"\n  task:\n    reasoning_effort: xhigh\n  recall:\n    reasoning_effort: minimal\nprivileged_conversation_ids:\n  owner: conv-1\n",
 			false,
 		},
 		{
 			"api backend is valid",
-			"openai_key: sk-test\nmodels:\n  main:\n    model: gpt-5\n    backend: api\nprivileged_conversation_ids:\n  owner: conv-1\n",
+			"openai_key: sk-test\nmodels:\n  main:\n    model: gpt-5\n    reasoning_effort: high\n    backend: api\n  task:\n    reasoning_effort: xhigh\n  recall:\n    reasoning_effort: minimal\nprivileged_conversation_ids:\n  owner: conv-1\n",
 			false,
 		},
 		{
 			"subscription backend is valid",
-			"models:\n  main:\n    model: gpt-5\n    backend: subscription\nprivileged_conversation_ids:\n  owner: conv-1\n",
+			"models:\n  main:\n    model: gpt-5\n    reasoning_effort: high\n    backend: subscription\n  task:\n    reasoning_effort: xhigh\n  recall:\n    reasoning_effort: minimal\nprivileged_conversation_ids:\n  owner: conv-1\n",
 			false,
 		},
 		{
 			"invalid backend rejected",
-			"openai_key: sk-test\nmodels:\n  main:\n    model: gpt-5\n    backend: cloud\n",
+			"openai_key: sk-test\nmodels:\n  main:\n    model: gpt-5\n    reasoning_effort: high\n    backend: cloud\n  task:\n    reasoning_effort: xhigh\n  recall:\n    reasoning_effort: minimal\n",
 			true,
 		},
 		{
 			"invalid task backend rejected",
-			"openai_key: sk-test\nmodels:\n  main:\n    model: gpt-5\n  task:\n    backend: cloud\n",
+			"openai_key: sk-test\nmodels:\n  main:\n    model: gpt-5\n    reasoning_effort: high\n  task:\n    reasoning_effort: xhigh\n    backend: cloud\n  recall:\n    reasoning_effort: minimal\n",
 			true,
 		},
 		{
 			"no key and no subscription fails",
-			"models:\n  main:\n    model: gpt-5\n",
+			"models:\n  main:\n    model: gpt-5\n    reasoning_effort: high\n  task:\n    reasoning_effort: xhigh\n  recall:\n    reasoning_effort: minimal\n",
 			true,
 		},
 		{
 			"missing privileged_conversation_ids is ok",
-			"openai_key: sk-test\nmodels:\n  main:\n    model: gpt-5\n",
+			"openai_key: sk-test\nmodels:\n  main:\n    model: gpt-5\n    reasoning_effort: high\n  task:\n    reasoning_effort: xhigh\n  recall:\n    reasoning_effort: minimal\n",
 			false,
 		},
 	}
@@ -300,10 +333,13 @@ openai_key: sk-test
 models:
   main:
     model: gpt-5
+    reasoning_effort: high
   task:
     model: gpt-4.1-mini
     reasoning_effort: low
     verbosity: medium
+  recall:
+    reasoning_effort: minimal
 privileged_conversation_ids:
   owner: conv-1
 `)
@@ -397,6 +433,11 @@ openai_key: sk-test
 models:
   main:
     model: gpt-5
+    reasoning_effort: high
+  task:
+    reasoning_effort: xhigh
+  recall:
+    reasoning_effort: minimal
 privileged_conversation_ids:
   owner: conv-1
 task:
@@ -424,6 +465,11 @@ openai_key: sk-test
 models:
   main:
     model: gpt-5
+    reasoning_effort: high
+  task:
+    reasoning_effort: xhigh
+  recall:
+    reasoning_effort: minimal
 privileged_conversation_ids:
   owner: conv-1
 `)
@@ -449,6 +495,11 @@ exa_api_key: exa-old-key
 models:
   main:
     model: gpt-5
+    reasoning_effort: high
+  task:
+    reasoning_effort: xhigh
+  recall:
+    reasoning_effort: minimal
 privileged_conversation_ids:
   owner: conv-1
 `)
@@ -490,6 +541,7 @@ func TestSaveRoundTrip(t *testing.T) {
 	for _, want := range []string{
 		"openai_key: sk-proj-test",
 		"model: gpt-5.4",
+		"reasoning_effort: high",
 		"backend: subscription",
 		"docker_image: nik-shell-ab12",
 		"timezone: America/New_York",
