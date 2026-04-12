@@ -165,7 +165,7 @@ func configSet(cfg *Config, field, value string) (string, error) {
 		cfg.Models.Main.Model = value
 	case "models.main.reasoning_effort":
 		if !isValidReasoningEffort(value) {
-			return llm.ToolErrorf("invalid models.main.reasoning_effort %q (none, minimal, low, medium, high, xhigh, or empty)", value), nil
+			return llm.ToolErrorf("invalid models.main.reasoning_effort %q (none, minimal, low, medium, high, xhigh)", value), nil
 		}
 		cfg.Models.Main.ReasoningEffort = value
 	case "models.main.verbosity":
@@ -177,7 +177,7 @@ func configSet(cfg *Config, field, value string) (string, error) {
 		cfg.Models.Task.Model = value
 	case "models.task.reasoning_effort":
 		if !isValidReasoningEffort(value) {
-			return llm.ToolErrorf("invalid models.task.reasoning_effort %q (none, minimal, low, medium, high, xhigh, or empty)", value), nil
+			return llm.ToolErrorf("invalid models.task.reasoning_effort %q (none, minimal, low, medium, high, xhigh)", value), nil
 		}
 		cfg.Models.Task.ReasoningEffort = value
 	case "models.task.verbosity":
@@ -189,7 +189,7 @@ func configSet(cfg *Config, field, value string) (string, error) {
 		cfg.Models.Recall.Model = value
 	case "models.recall.reasoning_effort":
 		if !isValidReasoningEffort(value) {
-			return llm.ToolErrorf("invalid models.recall.reasoning_effort %q (none, minimal, low, medium, high, xhigh, or empty)", value), nil
+			return llm.ToolErrorf("invalid models.recall.reasoning_effort %q (none, minimal, low, medium, high, xhigh)", value), nil
 		}
 		cfg.Models.Recall.ReasoningEffort = value
 	case "models.recall.verbosity":

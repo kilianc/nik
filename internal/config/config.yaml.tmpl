@@ -8,9 +8,7 @@ anthropic_key: {{ .AnthropicKey }}
 models:
   main:
     model: {{ .Models.Main.Model }}
-{{- if .Models.Main.ReasoningEffort }}
     reasoning_effort: {{ .Models.Main.ReasoningEffort }}  # none, minimal, low, medium, high, xhigh
-{{- end }}
 {{- if .Models.Main.Verbosity }}
     verbosity: {{ .Models.Main.Verbosity }}               # low, medium, high
 {{- end }}
@@ -21,9 +19,7 @@ models:
 {{- if .Models.Task.Model }}
     model: {{ .Models.Task.Model }}
 {{- end }}
-{{- if .Models.Task.ReasoningEffort }}
     reasoning_effort: {{ .Models.Task.ReasoningEffort }}
-{{- end }}
 {{- if .Models.Task.Verbosity }}
     verbosity: {{ .Models.Task.Verbosity }}
 {{- end }}
@@ -34,9 +30,7 @@ models:
 {{- if .Models.Recall.Model }}
     model: {{ .Models.Recall.Model }}
 {{- end }}
-{{- if .Models.Recall.ReasoningEffort }}
     reasoning_effort: {{ .Models.Recall.ReasoningEffort }}
-{{- end }}
 {{- if .Models.Recall.Verbosity }}
     verbosity: {{ .Models.Recall.Verbosity }}
 {{- end }}
