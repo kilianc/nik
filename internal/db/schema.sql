@@ -78,6 +78,7 @@ CREATE TABLE IF NOT EXISTS message (
     'skill_added', 'skill_removed', 'skill_changed',
     'trigger', 'media_processed',
     'skill_reflex_fired',
+    'tool_call_start',
     'tool_call'
   )),
   body                     TEXT NOT NULL DEFAULT '',

@@ -56,7 +56,7 @@ func main() {
 	}
 	defer conn.Close()
 
-	err = db.SystemMessageInsert(context.Background(), conn, db.SystemMessageParams{
+	_, err = db.SystemMessageInsert(context.Background(), conn, db.SystemMessageParams{
 		ConversationID: convID,
 		Kind:           "trigger",
 		Body:           map[string]string{"skill": skillName},

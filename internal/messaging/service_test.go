@@ -677,7 +677,7 @@ func TestMarkReadCapsAtReadUpTo(t *testing.T) {
 		t.Fatalf("ensure system contact: %v", err)
 	}
 
-	err = db.SystemMessageInsert(ctx, conn, db.SystemMessageParams{
+	_, err = db.SystemMessageInsert(ctx, conn, db.SystemMessageParams{
 		ConversationID: conversationID,
 		Kind:           "task_report",
 		Body: map[string]any{

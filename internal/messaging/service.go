@@ -1079,13 +1079,14 @@ func (s *Service) PersistMediaResult(ctx context.Context, localPath, text string
 		return err
 	}
 
-	return db.SystemMessageInsert(ctx, s.db, db.SystemMessageParams{
+	_, err = db.SystemMessageInsert(ctx, s.db, db.SystemMessageParams{
 		ConversationID:  res.ConversationID,
 		Kind:            "media_processed",
 		Body:            struct{ FilePath string }{localPath},
 		ContextStanzaID: res.MessageID,
 		SentAt:          now,
 	})
+	return err
 }
 
 func (s *Service) DB() *sql.DB { return s.db }

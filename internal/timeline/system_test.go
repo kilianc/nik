@@ -273,3 +273,17 @@ func TestRenderSystemMessage(t *testing.T) {
 		})
 	}
 }
+
+func TestToolCallStartSkipped(t *testing.T) {
+	msg := db.Message{
+		Kind:     "tool_call_start",
+		Platform: "system",
+		Body:     `{"name":"shell","input":"{}","round":1}`,
+		SentAt:   time.Now(),
+	}
+
+	e := messageEntry(msg, "", nil)
+	if e.text != "" || e.from != "" {
+		t.Errorf("tool_call_start should produce empty entry, got from=%q text=%q", e.from, e.text)
+	}
+}

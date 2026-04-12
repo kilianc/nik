@@ -219,7 +219,11 @@ func (t *Timeline) buildEntries(msgs []db.Message, senderLabels map[string]strin
 	var entries []entry
 
 	for _, msg := range msgs {
-		entries = append(entries, messageEntry(msg, senderLabels[msg.ID], t.msgSvc.DB()))
+		e := messageEntry(msg, senderLabels[msg.ID], t.msgSvc.DB())
+		if e.text == "" && e.from == "" {
+			continue
+		}
+		entries = append(entries, e)
 	}
 
 	return entries
@@ -258,6 +262,9 @@ func renderEntries(entries []entry) []string {
 
 func messageEntry(msg db.Message, sender string, database *sql.DB) entry {
 	if msg.Platform == "system" {
+		if msg.Kind == "tool_call_start" {
+			return entry{}
+		}
 		if msg.Kind == "media_processed" {
 			return renderMediaProcessed(msg, database)
 		}

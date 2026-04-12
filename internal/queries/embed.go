@@ -274,6 +274,11 @@ var ExperimentVariantRunSaveResult string
 //go:embed experiment_variant_run_update.sql
 var ExperimentVariantRunUpdate string
 
+// tool call start queries
+
+//go:embed tool_call_start_orphaned.sql
+var ToolCallStartOrphaned string
+
 // local conversation queries
 
 //go:embed conversation_local_ensure.sql
