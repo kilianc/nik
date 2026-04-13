@@ -275,7 +275,7 @@ FROM conversation c
 JOIN conversation_participant cp ON cp.conversation_id = c.id
 JOIN contact ct ON ct.id = cp.contact_id
 WHERE c.kind = 'dm'
-  AND ct.id != '00000000-0000-7000-8000-000000000001'
+  AND ct.id != '00000000-0000-0000-0000-000000000002'
 ORDER BY c.last_message_at DESC
 LIMIT 20
 ```
