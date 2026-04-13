@@ -75,6 +75,7 @@ type Message struct {
 	ContextMentionedIDs    []string
 	IsEphemeral            bool
 	IsViewOnce             bool
+	IsRedacted             bool
 	MediaID                sql.NullString
 	MediaLocalPath         sql.NullString
 	MediaDescribeText      sql.NullString

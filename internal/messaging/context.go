@@ -12,6 +12,10 @@ type ConversationHeader struct {
 }
 
 func FormatMessageText(msg db.Message) string {
+	if msg.IsRedacted {
+		return "[message redacted]"
+	}
+
 	text := strings.TrimSpace(msg.Body)
 
 	if msg.Kind == "reaction" {

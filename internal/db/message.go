@@ -35,6 +35,7 @@ func scanMessage(s scanner) (Message, error) {
 		&mentioned,
 		&m.IsEphemeral,
 		&m.IsViewOnce,
+		&m.IsRedacted,
 		&m.MediaID,
 		&m.MediaLocalPath,
 		&m.MediaDescribeText,

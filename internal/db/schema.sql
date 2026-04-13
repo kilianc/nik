@@ -92,6 +92,7 @@ CREATE TABLE IF NOT EXISTS message (
   context_mentioned_ids    TEXT NOT NULL DEFAULT '[]',
   is_ephemeral             INTEGER NOT NULL DEFAULT 0,
   is_view_once             INTEGER NOT NULL DEFAULT 0,
+  is_redacted              INTEGER NOT NULL DEFAULT 0,
   sent_at                  TIMESTAMP NOT NULL,
   created_at               TIMESTAMP NOT NULL DEFAULT (NOW_ISO8601_MS()),
   CHECK (IS_ISO8601_MS(sent_at)),
