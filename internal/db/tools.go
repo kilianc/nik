@@ -125,6 +125,7 @@ func queryHandler(conn *sql.DB) llm.ToolExecutor {
 			for i, col := range cols {
 				row[col] = normalizeValue(vals[i])
 			}
+			applyRedaction(row)
 
 			results = append(results, row)
 
@@ -242,6 +243,30 @@ func normalizeValue(v any) any {
 		return out
 	default:
 		return v
+	}
+}
+
+func applyRedaction(row map[string]any) {
+	v, ok := row["is_redacted"]
+	if !ok {
+		return
+	}
+
+	switch r := v.(type) {
+	case int64:
+		if r == 0 {
+			return
+		}
+	case float64:
+		if r == 0 {
+			return
+		}
+	default:
+		return
+	}
+
+	if _, has := row["body"]; has {
+		row["body"] = "[message redacted]"
 	}
 }
 

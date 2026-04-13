@@ -594,3 +594,22 @@ func TestPeekSkipsSystemMessages(t *testing.T) {
 		t.Fatalf("expected peek to not advance last_read_at, got %v", conv.LastReadAt.Time)
 	}
 }
+
+func TestTargetSnippetRedacted(t *testing.T) {
+	msg := db.Message{
+		Body:       "secret recipe content",
+		IsRedacted: true,
+		SentAt:     time.Now(),
+	}
+
+	got := targetSnippet(msg, "Penelope")
+	if got != "[message redacted]" {
+		t.Fatalf("expected [message redacted], got %q", got)
+	}
+
+	msg.IsRedacted = false
+	got = targetSnippet(msg, "Penelope")
+	if !strings.Contains(got, "secret recipe content") {
+		t.Fatalf("non-redacted snippet should contain body, got %q", got)
+	}
+}

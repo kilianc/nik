@@ -190,6 +190,111 @@ func TestPruneHandler(t *testing.T) {
 	}
 }
 
+func TestQueryHandlerRedactsMessageBody(t *testing.T) {
+	ctx := context.Background()
+
+	conn, err := OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	contact, err := ContactUpsert(ctx, conn, ContactUpsertParams{
+		Platform:      "whatsapp",
+		ExternalID:    "redact@s.whatsapp.net",
+		Name:          "Redact Test",
+		Phone:         "redact",
+		LastMessageAt: time.Now(),
+	})
+	if err != nil {
+		t.Fatalf("upsert contact: %v", err)
+	}
+
+	convID := seedConversation(t, ctx, conn, "whatsapp", "redact@s.whatsapp.net", "dm")
+
+	insertTestMessage(t, ctx, conn, insertTestMessageParams{
+		ConversationID:         convID,
+		ContactID:              contact.ID,
+		Platform:               "whatsapp",
+		ExternalConversationID: "redact@s.whatsapp.net",
+		ExternalMessageID:      "msg-redact-1",
+		ExternalSenderID:       "redact@s.whatsapp.net",
+		Kind:                   "text",
+		Body:                   "secret recipe content",
+	})
+
+	_, err = conn.ExecContext(ctx, "UPDATE message SET is_redacted = 1 WHERE external_message_id = 'msg-redact-1'")
+	if err != nil {
+		t.Fatalf("set is_redacted: %v", err)
+	}
+
+	handler := queryHandler(conn)
+
+	t.Run("masks body when is_redacted is selected", func(t *testing.T) {
+		call := llm.ToolCall{
+			Name:      "db_query",
+			Arguments: `{"query":"SELECT body, is_redacted FROM message WHERE external_message_id = 'msg-redact-1'"}`,
+		}
+
+		out, err := handler(ctx, call)
+		if err != nil {
+			t.Fatalf("query handler: %v", err)
+		}
+
+		var result struct {
+			Rows []map[string]any `json:"rows"`
+		}
+		err = json.Unmarshal([]byte(out), &result)
+		if err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+
+		if len(result.Rows) != 1 {
+			t.Fatalf("expected 1 row, got %d", len(result.Rows))
+		}
+
+		body, ok := result.Rows[0]["body"].(string)
+		if !ok {
+			t.Fatalf("expected body to be string, got %T", result.Rows[0]["body"])
+		}
+		if body != "[message redacted]" {
+			t.Fatalf("expected [message redacted], got %q", body)
+		}
+	})
+
+	t.Run("returns body when is_redacted not in select", func(t *testing.T) {
+		call := llm.ToolCall{
+			Name:      "db_query",
+			Arguments: `{"query":"SELECT body FROM message WHERE external_message_id = 'msg-redact-1'"}`,
+		}
+
+		out, err := handler(ctx, call)
+		if err != nil {
+			t.Fatalf("query handler: %v", err)
+		}
+
+		var result struct {
+			Rows []map[string]any `json:"rows"`
+		}
+		err = json.Unmarshal([]byte(out), &result)
+		if err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+
+		if len(result.Rows) != 1 {
+			t.Fatalf("expected 1 row, got %d", len(result.Rows))
+		}
+
+		body, ok := result.Rows[0]["body"].(string)
+		if !ok {
+			t.Fatalf("expected body to be string, got %T", result.Rows[0]["body"])
+		}
+		if body != "secret recipe content" {
+			t.Fatalf("expected original body, got %q", body)
+		}
+	})
+}
+
 func stringsOfLen(n int) string {
 	buf := make([]byte, n)
 	for i := range buf {

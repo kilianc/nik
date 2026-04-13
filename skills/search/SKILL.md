@@ -45,6 +45,14 @@ SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name;
   columns. Use `json_each()` to unnest them.
 - All primary keys are UUIDv7 stored as TEXT.
 
+### Redacted messages
+
+Some messages have `is_redacted = 1`. Their body contains content that must not be sent to the API (e.g. copyrighted text that triggers content filters). When querying message bodies, always filter them out:
+
+```sql
+SELECT body FROM message WHERE conversation_id = ?1 AND is_redacted = 0;
+```
+
 ### Searching contacts
 
 Use `jaro_winkler_similarity` for fuzzy name lookups:

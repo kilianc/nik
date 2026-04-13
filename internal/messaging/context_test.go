@@ -41,6 +41,28 @@ func TestMessageLineIncludesMediaAndEditContext(t *testing.T) {
 	}
 }
 
+func TestFormatMessageTextRedacted(t *testing.T) {
+	msg := db.Message{
+		ID:             "msg-r1",
+		Kind:           "text",
+		Body:           "secret recipe content",
+		IsRedacted:     true,
+		MediaLocalPath: sql.NullString{Valid: true, String: "media/x.jpg"},
+		SentAt:         time.Now(),
+	}
+
+	got := FormatMessageText(msg)
+	if got != "[message redacted]" {
+		t.Fatalf("expected [message redacted], got %q", got)
+	}
+
+	msg.IsRedacted = false
+	got = FormatMessageText(msg)
+	if !strings.Contains(got, "secret recipe content") {
+		t.Fatalf("non-redacted message should contain body, got %q", got)
+	}
+}
+
 func TestMessageLineMediaUnavailable(t *testing.T) {
 	tests := []struct {
 		name           string

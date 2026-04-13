@@ -261,6 +261,14 @@ func renderEntries(entries []entry) []string {
 }
 
 func messageEntry(msg db.Message, sender string, database *sql.DB) entry {
+	if msg.IsRedacted {
+		return entry{
+			at:   msg.SentAt,
+			from: "system",
+			text: "[message redacted]",
+		}
+	}
+
 	if msg.Platform == "system" {
 		if msg.Kind == "tool_call_start" {
 			return entry{}
@@ -323,6 +331,10 @@ func messageEntry(msg db.Message, sender string, database *sql.DB) entry {
 const targetSnippetTruncateLen = 200
 
 func targetSnippet(msg db.Message, sender string) string {
+	if msg.IsRedacted {
+		return "[message redacted]"
+	}
+
 	ts := msg.SentAt.Format("15:04:05")
 	body := strings.TrimSpace(msg.Body)
 

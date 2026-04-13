@@ -31,6 +31,7 @@ SELECT
   m.context_mentioned_ids,
   m.is_ephemeral,
   m.is_view_once,
+  m.is_redacted,
   mm.media_id,
   media.local_path,
   media.describe_text,

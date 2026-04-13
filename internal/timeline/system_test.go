@@ -287,3 +287,36 @@ func TestToolCallStartSkipped(t *testing.T) {
 		t.Errorf("tool_call_start should produce empty entry, got from=%q text=%q", e.from, e.text)
 	}
 }
+
+func TestMessageEntryRedacted(t *testing.T) {
+	tests := []struct {
+		name     string
+		platform string
+		kind     string
+	}{
+		{"system tool_call", "system", "tool_call"},
+		{"system tool_call_start", "system", "tool_call_start"},
+		{"system task_report", "system", "task_report"},
+		{"user text", "whatsapp", "text"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			msg := db.Message{
+				Platform:   tt.platform,
+				Kind:       tt.kind,
+				Body:       "secret content that must not appear",
+				IsRedacted: true,
+				SentAt:     time.Now(),
+			}
+
+			e := messageEntry(msg, "Alice", nil)
+			if e.text != "[message redacted]" {
+				t.Errorf("expected [message redacted], got %q", e.text)
+			}
+			if e.from != "system" {
+				t.Errorf("expected from=system, got %q", e.from)
+			}
+		})
+	}
+}
