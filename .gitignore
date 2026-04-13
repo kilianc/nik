@@ -26,7 +26,7 @@
 !AGENTS.md
 !config.example.yaml
 
-# Track deploy files
+# Track scripts and service files
 !*.sh
 !*.service
 !*.timer

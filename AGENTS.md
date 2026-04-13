@@ -69,6 +69,7 @@ Entry points: `cmd/nik/main.go`, `cmd/workbench/main.go`
 
 | Package | Purpose |
 |---------|---------|
+| `bin/` | local build outputs produced by `make`, git-ignored |
 | `cmd/nik/` | daemon entry point — config, DB, WhatsApp client wiring, signal handling |
 | `cmd/workbench/` | workbench CLI entry point — config, DB, OpenAI client wiring, subcommand dispatch |
 | `internal/config/` | `Config` struct + `Load(home)` from `config.yaml` in home dir |
@@ -100,7 +101,7 @@ Entry points: `cmd/nik/main.go`, `cmd/workbench/main.go`
 ## Debugging
 
 - **read `docs/BRAIN.md` before any debugging or root cause analysis** — it explains the timeline, read marker, continuous steering, self-reactivation, and known issues. Assumptions about how the loop works without reading it first are the #1 source of wrong diagnoses.
-- never run `make run` on your own, ask me to do it if you need me to
+- never run `make run-daemon` on your own, ask me to do it if you need me to
 - never send signals to nik's process (kill, SIGQUIT, SIGTERM, etc.) -- if nik needs a restart, ask me
 - do not override GOPROXY, I need a VPN when it fails, tell me to connect to it and wait
 - run SQL against the live DB with `make sqlite ARGS="-db nik.db"` — never use the system `sqlite3` CLI (it lacks custom functions and defaults foreign keys off)
@@ -262,8 +263,6 @@ Wiring steps:
 1. Define `var myToolDef = llm.ToolDef{...}` and `func executeMyTool(ctx, deps, call)` in the domain package
 2. Add to the package's `BuildTools()` return list
 3. Wire in `main.go`
-4. Register in `tools/call/main.go` so the tool is available for CLI testing
-5. Update `tools/call/README.md` to reflect the new tool
 
 ### LLM tool schemas
 
@@ -339,6 +338,8 @@ Before applying any migration to the live DB:
 ## Candidates
 
 - rename `howto/` to `recipes/` — the old name implied tutorial content; the actual artifacts are operational procedures, diagnostic runbooks, and learned workflows. "Recipes" matches the skill's own language and doesn't carry DevOps connotations like "runbooks." Applied 2026-04-02.
+- when the plan marks something as out of scope, the agent must never perform that action during execution — stop and ask the user how to proceed instead of unilaterally resolving blockers. "Out of scope" means "not your call."
+- when changing repo layout or build artifact locations, update the canonical project structure table and any docs/examples that mention the old layout in the same change.
 
 ## Fin
 

@@ -28,7 +28,7 @@ Default output file is `wapp_history.pb64`.
 The output file can be replayed through nik's full message processing pipeline:
 
 ```
-make run-replay
+make run-replay ARGS=wapp_history.pb64
 ```
 
-This runs `nik -replay wapp_history.pb64` against a clean DB, useful for debugging ingestion logic without re-triggering a WhatsApp sync.
+This runs the `replay` subcommand against a clean DB, useful for debugging ingestion logic without re-triggering a WhatsApp sync.
