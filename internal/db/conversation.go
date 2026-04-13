@@ -231,7 +231,7 @@ func ConversationParticipantUpsert(ctx context.Context, db DBTX, p ConversationP
 	return nil
 }
 
-const LocalConversationID = "00000000-0000-0000-0000-000000000003"
+const LocalConversationID = "00000000-0000-0000-0000-000000000001"
 
 func LocalConversationEnsure(ctx context.Context, db *sql.DB) error {
 	_, err := db.ExecContext(ctx, queries.ConversationLocalEnsure, LocalConversationID)
