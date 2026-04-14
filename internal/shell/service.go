@@ -12,8 +12,6 @@ import (
 
 const staleThreshold = 30 * time.Minute
 
-const containerName = "nik-shell"
-
 type Service struct {
 	cfg       *config.Config
 	conn      *sql.DB
@@ -23,6 +21,8 @@ type Service struct {
 func NewService(cfg *config.Config, conn *sql.DB) *Service {
 	return &Service{cfg: cfg, conn: conn}
 }
+
+func (s *Service) containerName() string { return s.cfg.Shell.DockerImage }
 
 func (s *Service) dockerImage() string { return s.cfg.Shell.DockerImage }
 
