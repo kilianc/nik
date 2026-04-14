@@ -94,7 +94,7 @@ func (s *Service) ensureReady() error {
 	img := s.dockerImage()
 
 	if img != "" && s.container == "" {
-		s.container = containerName
+		s.container = s.containerName()
 	} else if img == "" && s.container != "" {
 		s.StopContainer()
 		s.container = ""
