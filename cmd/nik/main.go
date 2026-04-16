@@ -297,7 +297,8 @@ func runDaemon(args []string) {
 	alarmSvc := alarms.New(cfg, conn)
 	recallSvc := recall.NewService(cfg, recallClient)
 	taskSvc := task.NewService(conn)
-	shellSvc := shell.NewService(cfg, conn)
+	nikBin, _ := os.Executable()
+	shellSvc := shell.NewService(cfg, conn, nikBin)
 
 	err = shellSvc.EnsureReady()
 	if err != nil {

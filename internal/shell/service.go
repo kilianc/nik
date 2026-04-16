@@ -3,7 +3,10 @@ package shell
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log/slog"
+	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/kciuffolo/nik/internal/config"
@@ -12,14 +15,29 @@ import (
 
 const staleThreshold = 30 * time.Minute
 
+const containerNikBin = "/usr/local/bin/nik"
+
 type Service struct {
 	cfg       *config.Config
 	conn      *sql.DB
 	container string
+	nikBin    string
 }
 
-func NewService(cfg *config.Config, conn *sql.DB) *Service {
-	return &Service{cfg: cfg, conn: conn}
+func NewService(cfg *config.Config, conn *sql.DB, nikBin string) *Service {
+	return &Service{cfg: cfg, conn: conn, nikBin: nikBin}
+}
+
+func (s *Service) nikBinDir() string {
+	if s.container != "" {
+		return filepath.Dir(containerNikBin)
+	}
+	return filepath.Dir(s.nikBin)
+}
+
+func (s *Service) nikBinLinux() string {
+	return filepath.Join(filepath.Dir(s.nikBin),
+		fmt.Sprintf("nik-linux-%s", runtime.GOARCH))
 }
 
 func (s *Service) containerName() string { return s.cfg.Shell.DockerImage }

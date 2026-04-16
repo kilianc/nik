@@ -1,7 +1,7 @@
 ---
 name: secrets
 summary: >
-  Secure credential access via a user-chosen secret store. Load this skill
+  Secure credential access via an encrypted local store. Load this skill
   when you need API keys, tokens, or other credentials for a service.
 tools: [shell]
 preload: true
@@ -9,22 +9,20 @@ preload: true
 
 # Secrets
 
-All secret access goes through a single adapter script at `./secrets/cli`. The adapter wraps whatever secret store the user chose during setup. You write the adapter yourself, tailored to their tool.
+All secret access goes through a single adapter script at `./secrets/cli`. By default it delegates to the built-in encrypted store (`nik secrets`). The user can swap it for an external provider if they choose.
 
-Do not assume which provider is behind the adapter. Do not reference provider-specific paths, CLIs, or URI schemes anywhere -- not in messages, task plans, or reports. If the conversation timeline mentions old providers or helpers, ignore it; only the current adapter matters.
+Do not assume which provider is behind the adapter. Do not reference provider-specific paths, CLIs, or URI schemes anywhere -- not in messages, task plans, or reports.
 
 ## Contract
 
 ```
 ./secrets/cli read <name>            # print secret value to stdout
-./secrets/cli write <name> <value>   # store or update a secret (optional)
-./secrets/cli delete <name>          # remove a secret (optional)
+./secrets/cli write <name> <value>   # store or update a secret
+./secrets/cli delete <name>          # remove a secret
 ./secrets/cli list                   # print secret names, one per line
 ```
 
-`read` and `list` are required. `write` and `delete` are optional -- many password managers grant read-only access to service accounts or CLI tokens. If write is unavailable, ask the user to add or remove secrets through their own tool.
-
-`list` returns strings to pass to `read` to retrieve values. It never prints the values themselves.
+`list` returns names to pass to `read`. It never prints values. External providers may not support `write` or `delete` -- if either fails, ask the user to manage the secret through their own tool.
 
 ## Using secrets safely
 
@@ -40,16 +38,14 @@ API_KEY="$(./secrets/cli read some_api_key)" some_command
 
 ## Missing secrets
 
-When a `read` fails, don't immediately ask the user to add it. First run `./secrets/cli list` and scan the output for plausible matches -- the user may have stored the secret under a different name (different separators, prefixes, abbreviations, or word order). If a likely match exists, use it.
+When a `read` fails, first run `./secrets/cli list` and scan the output for plausible matches -- the user may have stored the secret under a different name (different separators, prefixes, abbreviations, or word order). If a likely match exists, use it.
 
-If nothing in the list looks related, the cache may be stale. Run `./secrets/cli flush` to invalidate it, then `./secrets/cli list` again to rebuild with fresh data. Scan the new output the same way.
-
-If multiple candidates look plausible, ask the user which one is correct. Only when nothing matches after the flush, ask the user to add it under the expected name. The user manages secrets through their own tool -- don't tell them to run secrets commands.
+If multiple candidates look plausible, ask the user which one is correct. Only when nothing matches, ask the user to add it under the expected name.
 
 ## Install
 
-If `./secrets/cli` doesn't exist or fails, **stop and talk to the user.** Do not guess, do not pick a provider, do not write an adapter without their input.
+If `./secrets/cli` doesn't exist, copy the default adapter from `skills/secrets/cli.sh`, make it executable, and verify with `./secrets/cli list`.
 
-If the user has no external password manager and wants to use nik's built-in encrypted secrets store, write the adapter to delegate to `nik secrets`. Secrets are encrypted at rest with nacl/secretbox.
+## Switching providers
 
-For external providers (1Password, Bitwarden, etc.), read `skills/secrets/adapter-template.sh` for the reference adapter implementation and follow the setup steps there.
+If the user wants to use an external password manager (1Password, Bitwarden, etc.) instead of the built-in store, rewrite `./secrets/cli` to delegate to their tool's CLI while preserving the contract above.

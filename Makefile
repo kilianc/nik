@@ -4,9 +4,42 @@ NIK_HOME ?= workspace
 BIN_DIR ?= bin
 
 .PHONY: build
-build:
+build: build-linux-$(shell go env GOARCH)
 	@mkdir -p $(BIN_DIR)
 	CGO_ENABLED=1 go build -o $(BIN_DIR)/nik ./cmd/nik/
+
+.PHONY: build-linux-amd64
+build-linux-amd64:
+	@mkdir -p $(BIN_DIR)
+	@docker run --rm --platform linux/amd64 -v $(CURDIR):/src -w /src \
+	  -v nik-gomod-cache:/go/pkg/mod \
+	  -v nik-build-cache-amd64:/root/.cache/go-build \
+	  -e CGO_ENABLED=1 -e CGO_CFLAGS=-w \
+	  golang:1.25 \
+	  go build -o $(BIN_DIR)/nik-linux-amd64 ./cmd/nik/
+
+.PHONY: build-linux-arm64
+build-linux-arm64:
+	@mkdir -p $(BIN_DIR)
+	@docker run --rm --platform linux/arm64 -v $(CURDIR):/src -w /src \
+	  -v nik-gomod-cache:/go/pkg/mod \
+	  -v nik-build-cache-arm64:/root/.cache/go-build \
+	  -e CGO_ENABLED=1 -e CGO_CFLAGS=-w \
+	  golang:1.25 \
+	  go build -o $(BIN_DIR)/nik-linux-arm64 ./cmd/nik/
+
+.PHONY: build-darwin-amd64
+build-darwin-amd64:
+	@mkdir -p $(BIN_DIR)
+	CGO_ENABLED=1 GOARCH=amd64 go build -o $(BIN_DIR)/nik-darwin-amd64 ./cmd/nik/
+
+.PHONY: build-darwin-arm64
+build-darwin-arm64:
+	@mkdir -p $(BIN_DIR)
+	CGO_ENABLED=1 GOARCH=arm64 go build -o $(BIN_DIR)/nik-darwin-arm64 ./cmd/nik/
+
+.PHONY: build-all
+build-all: build-linux-amd64 build-linux-arm64 build-darwin-amd64 build-darwin-arm64
 
 .PHONY: lint
 lint:
