@@ -18,7 +18,7 @@ For JS-heavy pages that need rendering or interaction, use the browser tooling a
 
 Search the web using the Exa API.
 
-Get the Exa API key from the vault and pass it as the `x-api-key` header:
+Get the Exa API key from the secrets adapter and pass it as the `x-api-key` header:
 
 ```
 curl -s https://api.exa.ai/search \
@@ -74,7 +74,7 @@ Tips:
 
 Fetch tweet data via X API v2.
 
-Get the X/Twitter bearer token from the vault and pass it as the Authorization header:
+Get the X/Twitter bearer token from the secrets adapter and pass it as the Authorization header:
 
 ```
 curl -s "https://api.twitter.com/2/tweets?ids=<ID>&tweet.fields=created_at,author_id,public_metrics&expansions=author_id,attachments.media_keys&user.fields=username,name&media.fields=type,url,preview_image_url" \
@@ -86,6 +86,6 @@ Extract the tweet ID from any x.com or twitter.com URL (the long numeric string 
 
 ## Install
 
-Message the user to store these in the vault:
+Message the user to store these in the secrets store:
 - `exa_api_key` -- Exa search API key
 - `x_bearer_token` -- X/Twitter API v2 bearer token (needed for tweet fetching)

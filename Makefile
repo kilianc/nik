@@ -42,6 +42,10 @@ run-replay: build
 run-tui: build
 	./$(BIN_DIR)/nik tui --home $(NIK_HOME)
 
+.PHONY: secrets
+secrets: build
+	./$(BIN_DIR)/nik secrets --home $(NIK_HOME) $(ARGS)
+
 .PHONY: migrate
 migrate:
 	@go run ./tools/migrate -db $(NIK_HOME)/nik.db $(ARGS)

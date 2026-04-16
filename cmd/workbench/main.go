@@ -14,6 +14,7 @@ import (
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/llm"
+	"github.com/kciuffolo/nik/internal/secrets"
 	"github.com/kciuffolo/nik/internal/workbench"
 )
 
@@ -134,10 +135,14 @@ func main() {
 		auth, err := codex.LoadOrLogin("")
 		if err == nil {
 			clientOpts = append(clientOpts, llm.WithCodex(auth))
-		} else if cfg.OpenAIKey != "" {
-			clientOpts = append(clientOpts, llm.WithAPIKey(cfg.OpenAIKey))
 		} else {
-			fatal("codex auth failed and no OpenAI key configured: %v", err)
+			store := secrets.New(cfg.Home)
+			openaiKey, _ := store.Get("openai_key")
+			if openaiKey != "" {
+				clientOpts = append(clientOpts, llm.WithAPIKey(openaiKey))
+			} else {
+				fatal("codex auth failed and no openai_key in secrets store: %v", err)
+			}
 		}
 
 		v, err := db.ExperimentVariantGet(ctx, conn, *experimentVariantID)

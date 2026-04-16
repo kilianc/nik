@@ -10,7 +10,7 @@ import (
 func TestConfigSetRejectsReadOnlyAndUnknownFields(t *testing.T) {
 	cfg := &Config{}
 
-	out, err := configSet(cfg, "openai_key", "secret")
+	out, err := configSet(cfg, "privileged_conversation_ids", "secret")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -44,8 +44,7 @@ func TestAllowlistRemoveGuardsLastEntry(t *testing.T) {
 
 func TestConfigSetSupportsPurposeModelFields(t *testing.T) {
 	cfg := &Config{
-		Home:      t.TempDir(),
-		OpenAIKey: "sk-test",
+		Home: t.TempDir(),
 		Models: ModelsConfig{
 			Main: ModelConfig{
 				Model:           "gpt-5",
@@ -76,8 +75,7 @@ func TestConfigSetSupportsPurposeModelFields(t *testing.T) {
 
 func TestConfigSetSupportsTaskModelFields(t *testing.T) {
 	cfg := &Config{
-		Home:      t.TempDir(),
-		OpenAIKey: "sk-test",
+		Home: t.TempDir(),
 		Models: ModelsConfig{
 			Main:   ModelConfig{Model: "gpt-5", ReasoningEffort: "high"},
 			Task:   ModelConfig{ReasoningEffort: "xhigh"},
@@ -130,8 +128,7 @@ func TestConfigSetSupportsTaskModelFields(t *testing.T) {
 
 func TestConfigSetRejectsInvalidPurposeModelFields(t *testing.T) {
 	cfg := &Config{
-		Home:      t.TempDir(),
-		OpenAIKey: "sk-test",
+		Home: t.TempDir(),
 		Models: ModelsConfig{
 			Main: ModelConfig{
 				Model: "gpt-5",
@@ -242,8 +239,7 @@ func TestConfigGetTask(t *testing.T) {
 func TestConfigSetTaskFields(t *testing.T) {
 	t.Run("max_rounds", func(t *testing.T) {
 		cfg := &Config{
-			Home:      t.TempDir(),
-			OpenAIKey: "sk-test",
+			Home: t.TempDir(),
 			Models: ModelsConfig{
 				Main:   ModelConfig{Model: "gpt-5", ReasoningEffort: "high"},
 				Task:   ModelConfig{ReasoningEffort: "xhigh"},
@@ -276,8 +272,7 @@ func TestConfigSetTaskFields(t *testing.T) {
 
 	t.Run("timeout", func(t *testing.T) {
 		cfg := &Config{
-			Home:      t.TempDir(),
-			OpenAIKey: "sk-test",
+			Home: t.TempDir(),
 			Models: ModelsConfig{
 				Main:   ModelConfig{Model: "gpt-5", ReasoningEffort: "high"},
 				Task:   ModelConfig{ReasoningEffort: "xhigh"},

@@ -152,8 +152,6 @@ type Config struct {
 	Home        string    `yaml:"-"`
 	lastModTime time.Time `yaml:"-"`
 
-	OpenAIKey      string       `yaml:"openai_key"`
-	AnthropicKey   string       `yaml:"anthropic_key"`
 	Models         ModelsConfig `yaml:"models"`
 	Task           TaskConfig   `yaml:"task"`
 	Shell          ShellConfig  `yaml:"shell"`
@@ -514,10 +512,6 @@ func normalizeConfig(cfg *Config) {
 }
 
 func validateConfig(cfg Config) error {
-	if strings.TrimSpace(cfg.OpenAIKey) == "" && !cfg.Models.NeedsCodexAuth() && strings.TrimSpace(cfg.AnthropicKey) == "" {
-		return fmt.Errorf("missing required config key openai_key, anthropic_key, or set backend: subscription on a model")
-	}
-
 	if strings.TrimSpace(cfg.Models.Main.Model) == "" {
 		return fmt.Errorf("missing required config key models.main.model")
 	}

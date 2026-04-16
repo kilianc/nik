@@ -26,6 +26,7 @@ import (
 	"github.com/kciuffolo/nik/internal/messaging"
 	"github.com/kciuffolo/nik/internal/prompt"
 	"github.com/kciuffolo/nik/internal/recall"
+	"github.com/kciuffolo/nik/internal/secrets"
 	"github.com/kciuffolo/nik/internal/shell"
 	"github.com/kciuffolo/nik/internal/skills"
 	"github.com/kciuffolo/nik/internal/stats"
@@ -42,7 +43,7 @@ func main() {
 		subcmd = os.Args[1]
 	}
 
-	known := []string{"daemon", "install", "replay", "tui"}
+	known := []string{"daemon", "install", "replay", "secrets", "tui"}
 
 	switch subcmd {
 	case "daemon":
@@ -51,6 +52,8 @@ func main() {
 		runInstall(os.Args[2:])
 	case "replay":
 		runReplay(os.Args[2:])
+	case "secrets":
+		runSecrets(os.Args[2:])
 	case "tui":
 		runTUI(os.Args[2:])
 	case "":
@@ -233,12 +236,20 @@ func runDaemon(args []string) {
 
 	// llm clients
 
+	secretStore := secrets.New(h)
+	openaiKey, _ := secretStore.Get("openai_key")
+	anthropicKey, _ := secretStore.Get("anthropic_key")
+
 	var sharedLLMOpts []llm.ClientOption
-	if cfg.OpenAIKey != "" {
-		sharedLLMOpts = append(sharedLLMOpts, llm.WithAPIKey(cfg.OpenAIKey))
+	if openaiKey != "" {
+		sharedLLMOpts = append(sharedLLMOpts, llm.WithAPIKey(openaiKey))
 	}
-	if cfg.AnthropicKey != "" {
-		sharedLLMOpts = append(sharedLLMOpts, llm.WithAnthropicKey(cfg.AnthropicKey))
+	if anthropicKey != "" {
+		sharedLLMOpts = append(sharedLLMOpts, llm.WithAnthropicKey(anthropicKey))
+	}
+
+	if openaiKey == "" && anthropicKey == "" && !cfg.Models.NeedsCodexAuth() {
+		fatal("auth", fmt.Errorf("no openai_key or anthropic_key in secrets store and no codex subscription configured"))
 	}
 
 	var codexAuth *codex.Auth

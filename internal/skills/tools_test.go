@@ -295,15 +295,15 @@ func TestHandleLoad(t *testing.T) {
 
 	t.Run("accepts valid name", func(t *testing.T) {
 		dir := t.TempDir()
-		skillDir := filepath.Join(dir, "vault")
+		skillDir := filepath.Join(dir, "secrets")
 		os.MkdirAll(skillDir, 0o755)
-		os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# Vault"), 0o644)
+		os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# Secrets"), 0o644)
 
-		out, err := handleLoad([]string{dir}, "vault")
+		out, err := handleLoad([]string{dir}, "secrets")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if !strings.Contains(out, "# Vault") {
+		if !strings.Contains(out, "# Secrets") {
 			t.Fatalf("expected skill content, got %q", out)
 		}
 	})
