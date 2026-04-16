@@ -3,6 +3,7 @@ package shell
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -75,6 +76,12 @@ func (s *Service) newSession(id, command, cwd string) error {
 	if err != nil {
 		return fmt.Errorf("set history-limit %s: %w", id, err)
 	}
+
+	basePath := os.Getenv("PATH")
+	if s.container != "" {
+		basePath = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+	}
+	s.setEnv(id, "PATH", s.nikBinDir()+":"+basePath)
 
 	if command != "" {
 		ch := name + "-done"

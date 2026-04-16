@@ -21,7 +21,7 @@ func requireTmux(t *testing.T) {
 
 func testService(t *testing.T) *Service {
 	t.Helper()
-	return NewService(&config.Config{Home: t.TempDir()}, nil)
+	return NewService(&config.Config{Home: t.TempDir()}, nil, "")
 }
 
 func (s *Service) cleanup(t *testing.T, id string) {

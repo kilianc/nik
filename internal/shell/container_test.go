@@ -11,7 +11,7 @@ import (
 func TestSeedDockerfile(t *testing.T) {
 	t.Run("creates default when missing", func(t *testing.T) {
 		home := t.TempDir()
-		svc := NewService(&config.Config{Home: home, Shell: config.ShellConfig{DockerImage: "nik-shell"}}, nil)
+		svc := NewService(&config.Config{Home: home, Shell: config.ShellConfig{DockerImage: "nik-shell"}}, nil, "")
 
 		err := svc.seedDockerfile()
 		if err != nil {
@@ -30,7 +30,7 @@ func TestSeedDockerfile(t *testing.T) {
 
 	t.Run("does not overwrite existing", func(t *testing.T) {
 		home := t.TempDir()
-		svc := NewService(&config.Config{Home: home, Shell: config.ShellConfig{DockerImage: "nik-shell"}}, nil)
+		svc := NewService(&config.Config{Home: home, Shell: config.ShellConfig{DockerImage: "nik-shell"}}, nil, "")
 
 		custom := "FROM ubuntu:24.04\n"
 		err := os.WriteFile(filepath.Join(home, "Dockerfile"), []byte(custom), 0o644)
@@ -59,7 +59,7 @@ func TestFactoryResetOverwritesDockerfile(t *testing.T) {
 	svc := NewService(&config.Config{
 		Home:  home,
 		Shell: config.ShellConfig{DockerImage: "nik-shell-test"},
-	}, nil)
+	}, nil, "")
 	svc.container = "nik-shell-test"
 
 	custom := "FROM ubuntu:24.04\nRUN apt-get install -y python3\n"

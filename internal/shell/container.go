@@ -147,6 +147,7 @@ func (s *Service) startContainer() error {
 		"-v", s.cfg.Home + ":/workspace",
 		"-v", s.cfg.Home + "/nik.db:/workspace/nik.db:ro",
 	}
+	args = append(args, "-v", s.nikBinLinux()+":"+containerNikBin+":ro")
 	wappDB := filepath.Join(s.cfg.Home, "wapp_session.db")
 	if _, err := os.Stat(wappDB); err == nil {
 		args = append(args, "-v", wappDB+":/workspace/wapp_session.db:ro")

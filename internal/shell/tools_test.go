@@ -9,7 +9,7 @@ import (
 )
 
 func TestHandleRunValidatesRequiredFields(t *testing.T) {
-	svc := NewService(&config.Config{Home: t.TempDir()}, nil)
+	svc := NewService(&config.Config{Home: t.TempDir()}, nil, "")
 	out, err := svc.handleRun(context.Background(), shellArgs{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
