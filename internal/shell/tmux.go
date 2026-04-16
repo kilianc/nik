@@ -82,6 +82,7 @@ func (s *Service) newSession(id, command, cwd string) error {
 		basePath = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 	}
 	s.setEnv(id, "PATH", s.nikBinDir()+":"+basePath)
+	s.setEnv(id, "NIK_HOME", s.workdir())
 
 	if command != "" {
 		ch := name + "-done"
