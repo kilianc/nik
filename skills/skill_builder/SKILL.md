@@ -104,15 +104,15 @@ go vet .
 go run main.go --help   # or a no-op subcommand to verify it compiles
 ```
 
-## Credentials via vault
+## Credentials via secrets
 
-When a skill needs API keys or secrets, fetch them from the vault at runtime. Never hardcode secrets.
+When a skill needs API keys or secrets, fetch them from the secrets adapter at runtime. Never hardcode secrets.
 
 ```
-SECRET=$(./vault/cli read <name>)
+SECRET=$(./secrets/cli read <name>)
 ```
 
-If the vault adapter doesn't exist yet, load the `vault` skill (`load_skill vault`) and follow the setup instructions. If a secret is missing, ask the user to add it to their password manager.
+If the secrets adapter doesn't exist yet, load the `secrets` skill (`load_skill secrets`) and follow the setup instructions. If a secret is missing, ask the user to add it to their password manager.
 
 ## Checklist
 
@@ -120,7 +120,7 @@ Before considering a skill done:
 
 1. `SKILL.md` has valid frontmatter and loads via `load_skill`
 2. Go programs (if any) pass `gofmt`, `go vet`, run with `go run`
-3. No hardcoded secrets -- credentials come from the vault
+3. No hardcoded secrets -- credentials come from the secrets adapter
 4. Output is JSON, errors use `{"error": "..."}` pattern
 5. Instructions are concise enough for an agent to follow in one read
 6. Skill covers a coherent capability domain, not a single narrow tool

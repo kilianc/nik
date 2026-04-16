@@ -48,7 +48,6 @@ func TestReloadIfChanged(t *testing.T) {
 	t.Run("picks up new values", func(t *testing.T) {
 		dir := t.TempDir()
 		writeTestConfig(t, dir, `
-openai_key: sk-test
 models:
   main:
     model: gpt-4
@@ -75,7 +74,6 @@ max_history: 50
 
 		time.Sleep(50 * time.Millisecond)
 		writeTestConfig(t, dir, `
-openai_key: sk-test
 models:
   main:
     model: gpt-5
@@ -117,7 +115,6 @@ location: Chicago
 	t.Run("no-op when unmodified", func(t *testing.T) {
 		dir := t.TempDir()
 		writeTestConfig(t, dir, `
-openai_key: sk-test
 models:
   main:
     model: gpt-4
@@ -147,7 +144,6 @@ privileged_conversation_ids:
 	t.Run("preserves pointer", func(t *testing.T) {
 		dir := t.TempDir()
 		writeTestConfig(t, dir, `
-openai_key: sk-test
 models:
   main:
     model: gpt-4
@@ -169,7 +165,6 @@ privileged_conversation_ids:
 
 		time.Sleep(50 * time.Millisecond)
 		writeTestConfig(t, dir, `
-openai_key: sk-test
 models:
   main:
     model: gpt-5
@@ -195,7 +190,6 @@ privileged_conversation_ids:
 	t.Run("merges privileged into allow", func(t *testing.T) {
 		dir := t.TempDir()
 		writeTestConfig(t, dir, `
-openai_key: sk-test
 models:
   main:
     model: gpt-4
@@ -225,7 +219,6 @@ allow_conversation_ids:
 
 		time.Sleep(50 * time.Millisecond)
 		writeTestConfig(t, dir, `
-openai_key: sk-test
 models:
   main:
     model: gpt-4
@@ -260,27 +253,27 @@ func TestLoadValidation(t *testing.T) {
 	}{
 		{
 			"missing main model",
-			"openai_key: sk-test\nmodels:\n  main:\n    model: \"\"\n    reasoning_effort: high\n  task:\n    reasoning_effort: xhigh\n  recall:\n    reasoning_effort: minimal\n",
+			"models:\n  main:\n    model: \"\"\n    reasoning_effort: high\n  task:\n    reasoning_effort: xhigh\n  recall:\n    reasoning_effort: minimal\n",
 			true,
 		},
 		{
 			"invalid main reasoning_effort",
-			"openai_key: sk-test\nmodels:\n  main:\n    model: gpt-5\n    reasoning_effort: turbo\n  task:\n    reasoning_effort: xhigh\n  recall:\n    reasoning_effort: minimal\n",
+			"models:\n  main:\n    model: gpt-5\n    reasoning_effort: turbo\n  task:\n    reasoning_effort: xhigh\n  recall:\n    reasoning_effort: minimal\n",
 			true,
 		},
 		{
 			"invalid task reasoning_effort",
-			"openai_key: sk-test\nmodels:\n  main:\n    model: gpt-5\n    reasoning_effort: high\n  task:\n    reasoning_effort: turbo\n  recall:\n    reasoning_effort: minimal\n",
+			"models:\n  main:\n    model: gpt-5\n    reasoning_effort: high\n  task:\n    reasoning_effort: turbo\n  recall:\n    reasoning_effort: minimal\n",
 			true,
 		},
 		{
 			"empty backend is valid",
-			"openai_key: sk-test\nmodels:\n  main:\n    model: gpt-5\n    reasoning_effort: high\n    backend: \"\"\n  task:\n    reasoning_effort: xhigh\n  recall:\n    reasoning_effort: minimal\nprivileged_conversation_ids:\n  owner: conv-1\n",
+			"models:\n  main:\n    model: gpt-5\n    reasoning_effort: high\n    backend: \"\"\n  task:\n    reasoning_effort: xhigh\n  recall:\n    reasoning_effort: minimal\nprivileged_conversation_ids:\n  owner: conv-1\n",
 			false,
 		},
 		{
 			"api backend is valid",
-			"openai_key: sk-test\nmodels:\n  main:\n    model: gpt-5\n    reasoning_effort: high\n    backend: api\n  task:\n    reasoning_effort: xhigh\n  recall:\n    reasoning_effort: minimal\nprivileged_conversation_ids:\n  owner: conv-1\n",
+			"models:\n  main:\n    model: gpt-5\n    reasoning_effort: high\n    backend: api\n  task:\n    reasoning_effort: xhigh\n  recall:\n    reasoning_effort: minimal\nprivileged_conversation_ids:\n  owner: conv-1\n",
 			false,
 		},
 		{
@@ -290,22 +283,17 @@ func TestLoadValidation(t *testing.T) {
 		},
 		{
 			"invalid backend rejected",
-			"openai_key: sk-test\nmodels:\n  main:\n    model: gpt-5\n    reasoning_effort: high\n    backend: cloud\n  task:\n    reasoning_effort: xhigh\n  recall:\n    reasoning_effort: minimal\n",
+			"models:\n  main:\n    model: gpt-5\n    reasoning_effort: high\n    backend: cloud\n  task:\n    reasoning_effort: xhigh\n  recall:\n    reasoning_effort: minimal\n",
 			true,
 		},
 		{
 			"invalid task backend rejected",
-			"openai_key: sk-test\nmodels:\n  main:\n    model: gpt-5\n    reasoning_effort: high\n  task:\n    reasoning_effort: xhigh\n    backend: cloud\n  recall:\n    reasoning_effort: minimal\n",
-			true,
-		},
-		{
-			"no key and no subscription fails",
-			"models:\n  main:\n    model: gpt-5\n    reasoning_effort: high\n  task:\n    reasoning_effort: xhigh\n  recall:\n    reasoning_effort: minimal\n",
+			"models:\n  main:\n    model: gpt-5\n    reasoning_effort: high\n  task:\n    reasoning_effort: xhigh\n    backend: cloud\n  recall:\n    reasoning_effort: minimal\n",
 			true,
 		},
 		{
 			"missing privileged_conversation_ids is ok",
-			"openai_key: sk-test\nmodels:\n  main:\n    model: gpt-5\n    reasoning_effort: high\n  task:\n    reasoning_effort: xhigh\n  recall:\n    reasoning_effort: minimal\n",
+			"models:\n  main:\n    model: gpt-5\n    reasoning_effort: high\n  task:\n    reasoning_effort: xhigh\n  recall:\n    reasoning_effort: minimal\n",
 			false,
 		},
 	}
@@ -329,7 +317,6 @@ func TestLoadValidation(t *testing.T) {
 func TestLoadAcceptsTaskModel(t *testing.T) {
 	dir := t.TempDir()
 	writeTestConfig(t, dir, `
-openai_key: sk-test
 models:
   main:
     model: gpt-5
@@ -429,7 +416,6 @@ func TestLoadTaskConfig(t *testing.T) {
 	t.Run("parses explicit values", func(t *testing.T) {
 		dir := t.TempDir()
 		writeTestConfig(t, dir, `
-openai_key: sk-test
 models:
   main:
     model: gpt-5
@@ -461,7 +447,6 @@ task:
 	t.Run("omitted uses defaults", func(t *testing.T) {
 		dir := t.TempDir()
 		writeTestConfig(t, dir, `
-openai_key: sk-test
 models:
   main:
     model: gpt-5
@@ -490,7 +475,6 @@ privileged_conversation_ids:
 	t.Run("ignores legacy exa_api_key", func(t *testing.T) {
 		dir := t.TempDir()
 		writeTestConfig(t, dir, `
-openai_key: sk-test
 exa_api_key: exa-old-key
 models:
   main:
@@ -518,7 +502,6 @@ privileged_conversation_ids:
 func TestSaveRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	cfg := Default(dir)
-	cfg.OpenAIKey = "sk-proj-test"
 	cfg.Models.Main.Model = "gpt-5.4"
 	cfg.Models.Main.Backend = "subscription"
 	cfg.Shell.DockerImage = "nik-shell-ab12"
@@ -539,7 +522,6 @@ func TestSaveRoundTrip(t *testing.T) {
 
 	out := string(data)
 	for _, want := range []string{
-		"openai_key: sk-proj-test",
 		"model: gpt-5.4",
 		"reasoning_effort: high",
 		"backend: subscription",
@@ -550,7 +532,6 @@ func TestSaveRoundTrip(t *testing.T) {
 		"max_rounds: 200",
 		"timeout: 1h0m0s",
 		"retention: 720h0m0s",
-		"# api keys",
 		"# models",
 	} {
 		if !contains(out, want) {
@@ -559,6 +540,7 @@ func TestSaveRoundTrip(t *testing.T) {
 	}
 
 	for _, bad := range []string{
+		"openai_key:",
 		"anthropic_key:",
 	} {
 		if contains(out, bad) {
@@ -571,9 +553,6 @@ func TestSaveRoundTrip(t *testing.T) {
 		t.Fatalf("reload saved config: %v", err)
 	}
 
-	if loaded.OpenAIKey != "sk-proj-test" {
-		t.Errorf("round-trip openai_key: got %q", loaded.OpenAIKey)
-	}
 	if loaded.Models.Main.Model != "gpt-5.4" {
 		t.Errorf("round-trip model: got %q", loaded.Models.Main.Model)
 	}

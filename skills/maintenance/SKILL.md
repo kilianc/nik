@@ -1,6 +1,6 @@
 ---
 name: maintenance
-summary: "Nightly health check: prune, verify skills/auth/vault, check errors and integrity."
+summary: "Nightly health check: prune, verify skills/auth/secrets, check errors and integrity."
 tools: [db_prune, db_query, shell, alarm, load_skill, read_file, message_send]
 diagnostic_skip: true
 reflex:
@@ -21,10 +21,10 @@ Record DB size before and after. Call `db_prune` (no arguments). Record `rows_de
 Call `load_skill` action `list`. For each skill that is not `diagnostic_skip` and has an install section, call `load_skill` to read it. Verify only what the `## Install` section declares:
 
 - **Binaries**: `command -v <name>`. PASS if found, FAIL if declared but missing. If the shell runs in Docker, also check the Dockerfile includes the install step — a binary present at runtime but absent from the Dockerfile will be lost on rebuild.
-- **Vault credentials**: `./vault/cli get <key>` for each key the install section references. PASS if exits 0, FAIL otherwise.
+- **Secrets credentials**: `./secrets/cli read <key>` for each key the install section references. PASS if exits 0, FAIL otherwise.
 - **Auth**: if the install section describes an auth check command, run it.
 
-Never speculatively probe CLIs or invent health checks. If vault itself fails, mark all vault-dependent checks as BLOCKED and skip them.
+Never speculatively probe CLIs or invent health checks. If the secrets adapter itself fails, mark all secrets-dependent checks as BLOCKED and skip them.
 
 Record PASS / FAIL / SKIP / BLOCKED per skill.
 

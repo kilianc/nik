@@ -63,7 +63,7 @@ Recipes are living documents. They get sharper with use, not stale with age.
 
 After completing work where you discovered something non-obvious — a failure mode, a workaround, a constraint that contradicts docs — write a recipe. The litmus test: "Would I get this wrong next time without this note?" If yes, write it. If no, don't.
 
-A recipe is the exact tool calls, shell commands, vault keys, and endpoints a worker replays. Record what worked, what to skip, and any steps that collapse now that the answer is known. The next run should be shorter, faster, more effective than the current one.
+A recipe is the exact tool calls, shell commands, secret names, and endpoints a worker replays. Record what worked, what to skip, and any steps that collapse now that the answer is known. The next run should be shorter, faster, more effective than the current one.
 
 Use a short descriptive slug for the filename: `calendar-write-guard.md`, `exa-research-methodology.md`. Set `consulted: 0`, `last_consulted: ~`, `created` and `updated` to today.
 

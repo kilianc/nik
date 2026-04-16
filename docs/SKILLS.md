@@ -16,7 +16,7 @@ skills/<name>/
   check_something.sh  # optional — reflex check script
 ```
 
-The `SKILL.md` is the documentation, the instructions, and the machine contract all in one file. Skills with Go code are self-contained modules — their `go.mod`, `go.sum`, and source files live inside the skill folder so they can be built and run independently. For the full authoring guide (Go companions, vault credentials, checklist), load the `skill_builder` skill.
+The `SKILL.md` is the documentation, the instructions, and the machine contract all in one file. Skills with Go code are self-contained modules — their `go.mod`, `go.sum`, and source files live inside the skill folder so they can be built and run independently. For the full authoring guide (Go companions, secrets credentials, checklist), load the `skill_builder` skill.
 
 ## SKILL.md format
 
@@ -80,7 +80,7 @@ How it works:
 4. Content appears under "Preloaded Skills" in the system prompt.
 5. Preloaded skills are omitted from the "Available Skills" index to avoid duplication.
 
-Currently preloaded: **messaging** and **vault**. Use sparingly — every preloaded skill costs tokens on every activation.
+Currently preloaded: **messaging** and **secrets**. Use sparingly — every preloaded skill costs tokens on every activation.
 
 ## How skills appear in the prompt
 
@@ -149,13 +149,13 @@ This means a workspace skill can completely replace a built-in skill just by usi
 | seeds | extract forward-looking opportunities from conversations | |
 | shell | run commands in persistent tmux sessions, optionally in Docker (owner-only) | |
 | skill_builder | how to create, scaffold, or extend workspace skills | |
-| vault | secure credential access via a user-chosen secret store | yes |
+| secrets | secure credential access via a user-chosen secret store | yes |
 | web | search the web, fetch URLs, and read tweets | |
 
 Workspace skills are not listed here — they are runtime artifacts, not git-tracked, and vary per deployment.
 
 ### Creating a workspace skill
 
-The [`skill_builder`](../skills/skill_builder/SKILL.md) built-in skill is nik's authoring guide. It covers folder layout, Go companion conventions, vault credential patterns, and a pre-flight checklist. Nik knows how to use it — you can ask nik to create a new skill, extend an existing one, or fix a broken one, and it will load `skill_builder` and follow the guide.
+The [`skill_builder`](../skills/skill_builder/SKILL.md) built-in skill is nik's authoring guide. It covers folder layout, Go companion conventions, secrets credential patterns, and a pre-flight checklist. Nik knows how to use it — you can ask nik to create a new skill, extend an existing one, or fix a broken one, and it will load `skill_builder` and follow the guide.
 
 Nik writes workspace skills autonomously when it recognizes a recurring pattern that would benefit from a dedicated capability. You can also ask nik to write one: describe the capability you want, and nik will scaffold the folder, write the `SKILL.md`, add Go companions if needed, and wire up reflexes and install steps.

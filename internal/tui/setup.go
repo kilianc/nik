@@ -18,6 +18,7 @@ import (
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/daemonctl"
 	"github.com/kciuffolo/nik/internal/id"
+	"github.com/kciuffolo/nik/internal/secrets"
 )
 
 type setupStep int
@@ -74,8 +75,8 @@ func newSetupModel(cfg *config.Config) setupModel {
 	apiKey.Placeholder = "sk-..."
 	apiKey.EchoMode = textinput.EchoPassword
 	apiKey.Width = 60
-	if cfg.OpenAIKey != "" {
-		apiKey.SetValue(cfg.OpenAIKey)
+	if existing, err := secrets.New(cfg.Home).Get("openai_key"); err == nil {
+		apiKey.SetValue(existing)
 	}
 
 	defaultCursor := 0
@@ -234,8 +235,15 @@ func resolveTimezoneCmd(apiKey, input string) tea.Cmd {
 	}
 }
 
-func writeConfigCmd(cfg *config.Config) tea.Cmd {
+func writeConfigCmd(cfg *config.Config, apiKey string) tea.Cmd {
 	return func() tea.Msg {
+		if apiKey != "" {
+			err := secrets.New(cfg.Home).Set("openai_key", apiKey)
+			if err != nil {
+				return configWrittenMsg{err: err}
+			}
+		}
+
 		cfg.Normalize()
 		err := cfg.Save(cfg.ConfigPath())
 		return configWrittenMsg{err: err}
@@ -486,11 +494,10 @@ func (m setupModel) updateTimezone(msg tea.Msg) (setupModel, tea.Cmd) {
 
 		_, err := time.LoadLocation(val)
 		if err == nil {
-			m.cfg.OpenAIKey = m.apiKeyIn.Value()
 			m.cfg.Timezone = val
 			m.resolvedTZ = ""
 			m.step = stepWriting
-			return m, writeConfigCmd(m.cfg)
+			return m, writeConfigCmd(m.cfg, m.apiKeyIn.Value())
 		}
 
 		m.step = stepTZResolving

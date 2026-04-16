@@ -118,7 +118,6 @@ func configGet(cfg *Config) (string, error) {
 
 var readOnlyFields = map[string]bool{
 	"privileged_conversation_ids": true,
-	"openai_key":                  true,
 }
 
 func configSet(cfg *Config, field, value string) (string, error) {
