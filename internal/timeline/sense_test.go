@@ -258,6 +258,21 @@ func TestCheckSkipsNikOnlyNew(t *testing.T) {
 			wantStim: 0,
 		},
 		{
+			name: "tool_call_start only",
+			seed: func(t *testing.T, conn *sql.DB, convID string, after time.Time) {
+				_, err := db.SystemMessageInsert(context.Background(), conn, db.SystemMessageParams{
+					ConversationID: convID,
+					Kind:           "tool_call_start",
+					Body:           map[string]any{"name": "shell_run", "input": "{}", "round": 0},
+					SentAt:         after,
+				})
+				if err != nil {
+					t.Fatalf("insert tool_call_start: %v", err)
+				}
+			},
+			wantStim: 0,
+		},
+		{
 			name: "outbound plus tool_call",
 			seed: func(t *testing.T, conn *sql.DB, convID string, after time.Time) {
 				insertOutbound(t, conn, convID, "out-2", "hi", after)

@@ -172,7 +172,7 @@ func (t *Timeline) check(ctx context.Context, convID string) (brain.Stimulus, bo
 // trip that would only end in done.
 func isNikAuthored(msg db.Message) bool {
 	if msg.Platform == "system" {
-		return msg.Kind == "tool_call"
+		return msg.Kind == "tool_call" || msg.Kind == "tool_call_start"
 	}
 	return msg.IsFromMe
 }
