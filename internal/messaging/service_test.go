@@ -987,7 +987,7 @@ func TestParticipantGaps(t *testing.T) {
 		{
 			name: "all fields empty",
 			p:    db.ConversationParticipant{},
-			want: "[needs: name, timezone, location, one_liner]",
+			want: "[contact needs: name, timezone, location, one_liner]",
 		},
 		{
 			name: "all fields populated",
@@ -1004,7 +1004,7 @@ func TestParticipantGaps(t *testing.T) {
 			p: db.ConversationParticipant{
 				ContactName: validString("Bob"),
 			},
-			want: "[needs: timezone, location, one_liner]",
+			want: "[contact needs: timezone, location, one_liner]",
 		},
 		{
 			name: "whitespace-only fields treated as empty",
@@ -1012,7 +1012,7 @@ func TestParticipantGaps(t *testing.T) {
 				ContactName: validString("  "),
 				Timezone:    validString("  "),
 			},
-			want: "[needs: name, timezone, location, one_liner]",
+			want: "[contact needs: name, timezone, location, one_liner]",
 		},
 	}
 
@@ -1087,7 +1087,7 @@ func TestConversationHeaderGaps(t *testing.T) {
 		isNik := strings.Contains(line, db.NikContactID)
 		hasGaps := false
 		for j := i + 1; j < len(lines) && strings.HasPrefix(lines[j], "  "); j++ {
-			if strings.Contains(lines[j], "[needs:") {
+			if strings.Contains(lines[j], "[contact needs:") {
 				hasGaps = true
 			}
 		}
