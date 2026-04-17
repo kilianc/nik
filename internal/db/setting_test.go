@@ -2,8 +2,6 @@ package db
 
 import (
 	"context"
-	"database/sql"
-	"strings"
 	"testing"
 )
 
@@ -25,7 +23,9 @@ func TestSettingSetAndGet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get setting: %v", err)
 	}
-
+	if s == nil {
+		t.Fatal("expected non-nil setting")
+	}
 	if s.Key != "genesis_completed_at" {
 		t.Errorf("expected key genesis_completed_at, got %s", s.Key)
 	}
@@ -59,11 +59,11 @@ func TestSettingGetNotFound(t *testing.T) {
 
 	ctx := context.Background()
 
-	_, err = SettingGet(ctx, conn, "nonexistent")
-	if err == nil {
-		t.Fatal("expected error for nonexistent setting")
+	s, err := SettingGet(ctx, conn, "nonexistent")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(err.Error(), sql.ErrNoRows.Error()) {
-		t.Errorf("expected sql.ErrNoRows wrapped, got %v", err)
+	if s != nil {
+		t.Fatal("expected nil for nonexistent setting")
 	}
 }

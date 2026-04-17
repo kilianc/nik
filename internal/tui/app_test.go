@@ -16,7 +16,7 @@ func TestNewAppSetup(t *testing.T) {
 	defer conn.Close()
 
 	cfg := &config.Config{Home: t.TempDir()}
-	app := NewApp(cfg, conn, nil, true)
+	app := NewApp(cfg, conn, nil, true, Options{})
 
 	if app.view != viewSetup {
 		t.Errorf("expected setup view, got %d", app.view)
@@ -31,7 +31,7 @@ func TestNewAppChat(t *testing.T) {
 	defer conn.Close()
 
 	cfg := &config.Config{Home: t.TempDir()}
-	app := NewApp(cfg, conn, nil, false)
+	app := NewApp(cfg, conn, nil, false, Options{})
 
 	if app.view != viewChat {
 		t.Errorf("expected chat view, got %d", app.view)
@@ -46,7 +46,7 @@ func TestAppViewRendersSetup(t *testing.T) {
 	defer conn.Close()
 
 	cfg := &config.Config{Home: t.TempDir()}
-	app := NewApp(cfg, conn, nil, true)
+	app := NewApp(cfg, conn, nil, true, Options{})
 
 	output := app.View()
 	if output == "" {
@@ -62,7 +62,7 @@ func TestAppWindowSizeMsg(t *testing.T) {
 	defer conn.Close()
 
 	cfg := &config.Config{Home: t.TempDir()}
-	app := NewApp(cfg, conn, nil, true)
+	app := NewApp(cfg, conn, nil, true, Options{})
 
 	model, _ := app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	updated := model.(App)

@@ -24,7 +24,8 @@ func TestBuildBrainDataToolSplit(t *testing.T) {
 		{Name: "done"},
 	}
 
-	data := BuildBrainData(cfg, workerNames, toolDefs)
+	r := NewRenderer(cfg)
+	data := r.BuildBrainData(workerNames, toolDefs)
 
 	if len(data.WorkerTools) != 2 {
 		t.Fatalf("expected 2 worker tools, got %d", len(data.WorkerTools))

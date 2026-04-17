@@ -86,12 +86,15 @@ type DenseDir struct {
 	Count int
 }
 
-func BuildBrainData(cfg *config.Config, workerToolNames []string, toolDefs []llm.ToolDef) BrainData {
+func (r *Renderer) BuildBrainData(workerToolNames []string, toolDefs []llm.ToolDef) BrainData {
+	cfg := r.cfg
+
 	data := BrainData{
 		Model:       cfg.Models.Main.Model,
 		BannedWords: cfg.BannedWords,
-		TableList:   db.TableList(),
 	}
+
+	data.TableList = db.TableList()
 
 	if len(workerToolNames) > 0 {
 		workerSet := make(map[string]bool, len(workerToolNames))

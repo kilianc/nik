@@ -21,24 +21,26 @@ const (
 )
 
 type Runner struct {
-	cfg      *config.Config
-	llm      *llm.Client
-	pr       *prompt.Renderer
-	recorder llm.ActivationRecorder
-	svc      *Service
-	tools    []llm.Tool
-	cancels  sync.Map
-	wg       sync.WaitGroup
+	cfg        *config.Config
+	llm        *llm.Client
+	pr         *prompt.Renderer
+	recorder   llm.ActivationRecorder
+	svc        *Service
+	tools      []llm.Tool
+	privileged map[string]bool
+	cancels    sync.Map
+	wg         sync.WaitGroup
 }
 
 func NewRunner(cfg *config.Config, llmClient *llm.Client, pr *prompt.Renderer, svc *Service, tools []llm.Tool) *Runner {
 	return &Runner{
-		cfg:      cfg,
-		llm:      llmClient,
-		pr:       pr,
-		recorder: llm.NoopRecorder{},
-		svc:      svc,
-		tools:    tools,
+		cfg:        cfg,
+		llm:        llmClient,
+		pr:         pr,
+		recorder:   llm.NoopRecorder{},
+		svc:        svc,
+		tools:      tools,
+		privileged: make(map[string]bool),
 	}
 }
 
@@ -46,7 +48,12 @@ func (r *Runner) SetRecorder(rec llm.ActivationRecorder) {
 	r.recorder = rec
 }
 
-func (r *Runner) Wait() { r.wg.Wait() }
+func (r *Runner) Wait() {
+	if r == nil {
+		return
+	}
+	r.wg.Wait()
+}
 
 func (r *Runner) Run(ctx context.Context, t db.Task) {
 	defer r.wg.Done()
@@ -66,7 +73,7 @@ func (r *Runner) Run(ctx context.Context, t db.Task) {
 
 	tools := r.tools
 	if !r.cfg.IsPrivileged(t.ConversationID) {
-		tools = filterUnprivileged(tools)
+		tools = r.filterUnprivileged(tools)
 	}
 
 	workerTools := BuildWorkerTools(r.svc, t.ID)
@@ -211,10 +218,16 @@ func (r *Runner) Cancel(taskID string) bool {
 	return true
 }
 
-func filterUnprivileged(tools []llm.Tool) []llm.Tool {
+func (r *Runner) Privileged(names ...string) {
+	for _, name := range names {
+		r.privileged[name] = true
+	}
+}
+
+func (r *Runner) filterUnprivileged(tools []llm.Tool) []llm.Tool {
 	var out []llm.Tool
 	for _, t := range tools {
-		if !t.Privileged {
+		if !r.privileged[t.Def.Name] {
 			out = append(out, t)
 		}
 	}

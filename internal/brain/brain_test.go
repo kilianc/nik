@@ -28,15 +28,11 @@ func TestNewInitializesInternalState(t *testing.T) {
 	if b.claimed == nil {
 		t.Fatalf("expected sync set to be initialized")
 	}
-	if len(b.toolDefs) != 1 || b.toolDefs[0].Name != doneToolName {
-		t.Fatalf("expected only done tool on startup, got %d tools", len(b.toolDefs))
+	if len(b.toolDefs) != 0 {
+		t.Fatalf("expected 0 tools on startup, got %d", len(b.toolDefs))
 	}
 	if b.sensor != nil {
 		t.Fatalf("expected sensor to be nil on startup")
-	}
-
-	if _, ok := b.toolExec[doneToolName]; !ok {
-		t.Fatal("expected done tool executor to be auto-registered")
 	}
 }
 
@@ -116,6 +112,7 @@ func TestThinkExitsImmediatelyOnDone(t *testing.T) {
 
 	cfg := &config.Config{Home: tmpDir}
 	b := New(cfg, client, prompt.NewRenderer(cfg))
+	b.RegisterTool(llm.Tool{Def: DoneToolDef, Handler: DoneHandler()})
 	b.now = func() time.Time { return time.Date(2026, 3, 27, 0, 0, 0, 0, time.UTC) }
 
 	var getInputCalls atomic.Int32

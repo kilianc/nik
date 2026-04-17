@@ -40,21 +40,21 @@ func TestToolsForContextFiltersPrivilegedTools(t *testing.T) {
 		Handler: handler,
 	})
 	b.RegisterTool(llm.Tool{
-		Def:        llm.ToolDef{Name: "private_tool"},
-		Handler:    handler,
-		Privileged: true,
+		Def:     llm.ToolDef{Name: "private_tool"},
+		Handler: handler,
 	})
+	b.Privileged("private_tool")
 
 	nonOwnerCtx := context.WithValue(context.Background(), "meta", map[string]string{"conversation_id": "other"})
 	nonOwnerTools := b.toolsForContext(nonOwnerCtx)
-	if len(nonOwnerTools) != 2 {
-		t.Fatalf("expected done + public tool for non-owner context, got %d tools", len(nonOwnerTools))
+	if len(nonOwnerTools) != 1 {
+		t.Fatalf("expected public tool only for non-owner context, got %d tools", len(nonOwnerTools))
 	}
 
 	ownerCtx := context.WithValue(context.Background(), "meta", map[string]string{"conversation_id": "owner-conv"})
 	ownerTools := b.toolsForContext(ownerCtx)
-	if len(ownerTools) != 3 {
-		t.Fatalf("expected done + public + private tools for owner context, got %d tools", len(ownerTools))
+	if len(ownerTools) != 2 {
+		t.Fatalf("expected public + private tools for owner context, got %d tools", len(ownerTools))
 	}
 }
 
@@ -68,8 +68,8 @@ func TestToolExecutorBlocksPrivilegedInUnprivilegedContext(t *testing.T) {
 			called = true
 			return `{"ok":true}`, nil
 		},
-		Privileged: true,
 	})
+	b.Privileged("secret_tool")
 
 	executor := b.toolExecutor()
 	call := llm.ToolCall{Name: "secret_tool", Arguments: "{}"}
@@ -183,6 +183,28 @@ func TestInsertToolCallStartAndToolCallMessages(t *testing.T) {
 		if tc.Output != results[i].Output {
 			t.Errorf("tool_call %d output = %q, want %q", i, tc.Output, results[i].Output)
 		}
+	}
+}
+
+func TestIsDone(t *testing.T) {
+	tests := []struct {
+		name  string
+		calls []llm.ToolCall
+		want  bool
+	}{
+		{"done tool", []llm.ToolCall{{Name: "done"}}, true},
+		{"done among others", []llm.ToolCall{{Name: "message_send"}, {Name: "done"}}, true},
+		{"no done tool", []llm.ToolCall{{Name: "message_send"}}, false},
+		{"empty", []llm.ToolCall{}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isDone(tt.calls)
+			if got != tt.want {
+				t.Fatalf("isDone() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 

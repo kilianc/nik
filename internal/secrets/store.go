@@ -26,8 +26,8 @@ type Store struct {
 
 func New(home string) *Store {
 	return &Store{
-		keyPath:  filepath.Join(home, ".secrets.key"),
-		dataPath: filepath.Join(home, "secrets.enc"),
+		keyPath:  filepath.Join(home, "secrets", "secrets.key"),
+		dataPath: filepath.Join(home, "secrets", "secrets.enc"),
 	}
 }
 
@@ -229,4 +229,24 @@ func validateName(name string) error {
 	}
 
 	return nil
+}
+
+func EnsureAdapter(home, skillsDir string) {
+	dst := filepath.Join(home, "secrets", "cli")
+	if _, err := os.Stat(dst); err == nil {
+		return
+	}
+
+	src := filepath.Join(skillsDir, "secrets", "cli.sh")
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return
+	}
+
+	err = os.MkdirAll(filepath.Dir(dst), 0o755)
+	if err != nil {
+		return
+	}
+
+	os.WriteFile(dst, data, 0o755)
 }

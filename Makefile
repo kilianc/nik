@@ -73,7 +73,7 @@ run-replay: build
 
 .PHONY: run-tui
 run-tui: build
-	./$(BIN_DIR)/nik tui --home $(NIK_HOME)
+	./$(BIN_DIR)/nik tui --home $(NIK_HOME) $(ARGS)
 
 .PHONY: secrets
 secrets: build

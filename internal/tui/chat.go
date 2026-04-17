@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/kciuffolo/nik/internal/db"
+	"github.com/kciuffolo/nik/internal/genesis"
 	"github.com/kciuffolo/nik/internal/id"
 	"github.com/kciuffolo/nik/internal/messaging"
 )
@@ -60,9 +62,13 @@ type chatModel struct {
 	convCache   string
 	convDirty   bool
 	wasTyping   bool
+	cachedFrame int
+	showSystem  bool
+	inputLocked bool
+	genesisSeed string
 }
 
-func newChatModel(conn *sql.DB, sender MessageSender) chatModel {
+func newChatModel(conn *sql.DB, sender MessageSender, opts Options) chatModel {
 	ti := textinput.New()
 	ti.Placeholder = "message..."
 	ti.Prompt = "❯ "
@@ -71,9 +77,10 @@ func newChatModel(conn *sql.DB, sender MessageSender) chatModel {
 	ti.Focus()
 
 	return chatModel{
-		input:  ti,
-		conn:   conn,
-		sender: sender,
+		input:      ti,
+		conn:       conn,
+		sender:     sender,
+		showSystem: opts.ShowSystem,
 	}
 }
 
@@ -153,12 +160,18 @@ func (m chatModel) Update(msg tea.Msg) (chatModel, tea.Cmd) {
 		case "ctrl+c":
 			return m, tea.Quit
 		case "enter":
+			if m.inputLocked {
+				return m, nil
+			}
 			text := strings.TrimSpace(m.input.Value())
 			if text == "" {
 				return m, nil
 			}
 			m.input.Reset()
 			return m, sendMessageCmd(m.sender, text)
+		}
+		if m.inputLocked {
+			return m, nil
 		}
 
 	case pollTickMsg:
@@ -175,6 +188,7 @@ func (m chatModel) Update(msg tea.Msg) (chatModel, tea.Cmd) {
 			if len(m.messages) > maxMessages {
 				m.messages = m.messages[len(m.messages)-maxMessages:]
 			}
+			m.genesisSeed = currentGenesisSeed(m.messages)
 		}
 
 		wasIdle := len(m.activity) == 0
@@ -184,6 +198,17 @@ func (m chatModel) Update(msg tea.Msg) (chatModel, tea.Cmd) {
 		if typing != m.wasTyping {
 			m.convDirty = true
 			m.wasTyping = typing
+		}
+
+		locked := computeInputLocked(m.genesisSeed, m.activity)
+		if locked != m.inputLocked {
+			m.inputLocked = locked
+			m.convDirty = true
+			if locked {
+				m.input.Blur()
+			} else {
+				cmds = append(cmds, m.input.Focus())
+			}
 		}
 
 		if wasIdle && len(m.activity) > 0 {
@@ -211,6 +236,11 @@ func (m chatModel) Update(msg tea.Msg) (chatModel, tea.Cmd) {
 		active := len(m.activity) > 0
 
 		if active {
+			frame := m.thinkTick / 4
+			if frame != m.cachedFrame {
+				m.cachedFrame = frame
+				m.refreshConvCache()
+			}
 			if m.thinkEnergy < 1.0 {
 				m.thinkEnergy += easeInRate * (1.0 - m.thinkEnergy + 0.05)
 				if m.thinkEnergy > 1.0 {
@@ -255,7 +285,7 @@ func (m *chatModel) refreshConvCache() {
 	}
 
 	var b strings.Builder
-	b.WriteString(renderConversation(m.messages, w, m.thinkTick, typingTick))
+	b.WriteString(renderConversation(m.messages, w, m.thinkTick, typingTick, m.showSystem))
 
 	if m.err != nil {
 		b.WriteString(errorStyle.Render(m.err.Error()) + "\n")
@@ -273,13 +303,21 @@ func (m chatModel) View() string {
 	b.WriteString(m.convCache)
 
 	b.WriteString(strings.Repeat("\n", 4))
+	switch {
+	case m.inputLocked:
+		m.input.Placeholder = "waiting for nik to finish..."
+	case m.genesisSeed == "first_contact":
+		m.input.Placeholder = "introduce yourself to nik"
+	default:
+		m.input.Placeholder = "message..."
+	}
 	b.WriteString(m.input.View() + "\n")
 	b.WriteString(thinkMorph(m.thinkTick, m.thinkEnergy, w) + "\n")
 
 	return lipgloss.NewStyle().PaddingLeft(pad).PaddingRight(pad).Render(b.String())
 }
 
-func bubble(body string, isNik bool, width int) string {
+func bubble(body string, isNik bool, isSystem bool, width int, reactions []string) string {
 	maxW := width*3/4 - 4
 	if maxW < 20 {
 		maxW = 20
@@ -287,7 +325,9 @@ func bubble(body string, isNik bool, width int) string {
 
 	border := youBorder
 	text := msgText
-	if isNik {
+	if isSystem {
+		border = systemBorder
+	} else if isNik {
 		border = nikBorder
 	}
 
@@ -306,8 +346,23 @@ func bubble(body string, isNik bool, width int) string {
 		}
 	}
 
+	var reactStr string
+	if len(reactions) > 0 {
+		reactStr = " " + strings.Join(reactions, " ") + " "
+		if minW := lipgloss.Width(reactStr) - 1; boxW < minW {
+			boxW = minW
+		}
+	}
+
 	top := border.Render("╭" + strings.Repeat("─", boxW+2) + "╮")
-	bot := border.Render("╰" + strings.Repeat("─", boxW+2) + "╯")
+
+	var bot string
+	if reactStr != "" {
+		dashes := boxW + 2 - lipgloss.Width(reactStr)
+		bot = border.Render("╰"+strings.Repeat("─", dashes)) + reactStr + border.Render("╯")
+	} else {
+		bot = border.Render("╰" + strings.Repeat("─", boxW+2) + "╯")
+	}
 
 	var out []string
 	out = append(out, top)
@@ -390,12 +445,13 @@ func renderToolLine(tick int, toolName string, state toolState, reason string, w
 	return base + toolDimStyle.Render(sep+reason)
 }
 
-func renderConversation(msgs []db.Message, width int, tick int, nikTypingTick int) string {
+func renderConversation(msgs []db.Message, width int, tick int, nikTypingTick int, showSystem bool) string {
 	var b strings.Builder
 	var prevSender string
 	var prevDate string
 
-	// build pairing map: tool_call_start ID → tool_call message
+	reactionMap := collectReactions(msgs)
+
 	pairedToolCalls := make(map[string]*db.Message)
 	for i := range msgs {
 		m := &msgs[i]
@@ -416,7 +472,7 @@ func renderConversation(msgs []db.Message, width int, tick int, nikTypingTick in
 
 		if m.Kind == "tool_call_start" {
 			name, reason := parseToolCallStart(m.Body)
-			if name == "" || name == "done" {
+			if name == "" || name == "done" || name == "message_send" {
 				continue
 			}
 
@@ -440,22 +496,24 @@ func renderConversation(msgs []db.Message, width int, tick int, nikTypingTick in
 		if strings.TrimSpace(m.Body) == "" {
 			continue
 		}
-		if m.Platform == "system" {
-			continue
-		}
-
 		lt := m.SentAt.Local()
 		if m.SentAt.IsZero() {
 			lt = time.Now().Local()
 		}
 
+		if m.Platform == "system" && !showSystem {
+			continue
+		}
+
 		isNik := m.IsFromMe || m.ContactID == db.SystemContactID
 
 		entries = append(entries, entry{
-			lt:       lt,
-			isNik:    isNik,
-			body:     m.Body,
-			platform: m.Platform,
+			lt:            lt,
+			isNik:         isNik,
+			body:          m.Body,
+			platform:      m.Platform,
+			externalMsgID: m.ExternalMessageID,
+			reactions:     reactionMap[m.ExternalMessageID],
 		})
 	}
 
@@ -481,7 +539,11 @@ func renderConversation(msgs []db.Message, width int, tick int, nikTypingTick in
 			}
 			b.WriteString(renderToolLine(tick, e.toolName, e.toolState, e.body, width) + "\n")
 		} else {
-			b.WriteString(bubble(e.body, e.isNik, width) + "\n")
+			body := e.body
+			if e.platform == "system" {
+				body = dimText.Render("system ›") + " " + body
+			}
+			b.WriteString(bubble(body, e.isNik, e.platform == "system", width, e.reactions) + "\n")
 		}
 
 		isLast := i == len(entries)-1
@@ -552,12 +614,14 @@ func isVisibleKind(kind string) bool {
 }
 
 type entry struct {
-	lt        time.Time
-	isNik     bool
-	body      string
-	toolName  string
-	toolState toolState
-	platform  string
+	lt            time.Time
+	isNik         bool
+	body          string
+	toolName      string
+	toolState     toolState
+	platform      string
+	externalMsgID string
+	reactions     []string
 }
 
 func sameGroup(a, b entry) bool {
@@ -603,6 +667,83 @@ func parseToolCallStart(body string) (name, reason string) {
 	json.Unmarshal([]byte(tc.Input), &inp)
 
 	return tc.Name, inp.Reason
+}
+
+func collectReactions(msgs []db.Message) map[string][]string {
+	extIDs := make(map[string]bool)
+	for i := range msgs {
+		if msgs[i].Kind != "reaction" && msgs[i].ExternalMessageID != "" {
+			extIDs[msgs[i].ExternalMessageID] = true
+		}
+	}
+
+	type rkey struct{ target, contact string }
+	latest := make(map[rkey]string)
+	var order []rkey
+
+	for i := range msgs {
+		m := &msgs[i]
+		if m.Kind != "reaction" || !m.ContextStanzaID.Valid {
+			continue
+		}
+		target := m.ContextStanzaID.String
+		if !extIDs[target] {
+			continue
+		}
+		k := rkey{target, m.ContactID}
+		if _, ok := latest[k]; !ok {
+			order = append(order, k)
+		}
+		latest[k] = m.Body
+	}
+
+	byTarget := make(map[string][]string)
+	for _, k := range order {
+		if emoji := latest[k]; emoji != "" {
+			byTarget[k.target] = append(byTarget[k.target], emoji)
+		}
+	}
+
+	for target, emojis := range byTarget {
+		counts := make(map[string]int)
+		var unique []string
+		for _, e := range emojis {
+			if counts[e] == 0 {
+				unique = append(unique, e)
+			}
+			counts[e]++
+		}
+
+		var deduped []string
+		for _, e := range unique {
+			if counts[e] > 1 {
+				deduped = append(deduped, e+strconv.Itoa(counts[e]))
+			} else {
+				deduped = append(deduped, e)
+			}
+		}
+		byTarget[target] = deduped
+	}
+
+	return byTarget
+}
+
+func currentGenesisSeed(msgs []db.Message) string {
+	for i := len(msgs) - 1; i >= 0; i-- {
+		ext := msgs[i].ExternalMessageID
+		if msgs[i].Platform != "system" || !strings.HasPrefix(ext, "genesis:") {
+			continue
+		}
+		return strings.TrimPrefix(ext, "genesis:")
+	}
+	return ""
+}
+
+func computeInputLocked(seed string, activity []string) bool {
+	if seed == "" || !genesis.IsInteractive(seed) {
+		return true
+	}
+	return len(activity) > 0
 }
 
 func resolveToolCallState(paired *db.Message) toolState {

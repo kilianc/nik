@@ -20,6 +20,7 @@ func runTUI(args []string) {
 	flagSet := flag.NewFlagSet("nik", flag.ExitOnError)
 	home := flagSet.String("home", "", "workspace directory")
 	forceSetup := flagSet.Bool("force-setup", false, "run setup even if config exists")
+	showSystem := flagSet.Bool("show-system", false, "show system messages in chat")
 	flagSet.Parse(args)
 
 	h, err := resolveHome(*home)
@@ -72,7 +73,9 @@ func runTUI(args []string) {
 
 	messagingSvc.RegisterPlatform(messaging.NewLocalAdapter(conn))
 
-	err = tui.Run(cfg, conn, tui.NewLocalSender(messagingSvc), setup)
+	err = tui.Run(cfg, conn, tui.NewLocalSender(messagingSvc), setup, tui.Options{
+		ShowSystem: *showSystem,
+	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)

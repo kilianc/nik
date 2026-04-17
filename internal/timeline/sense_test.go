@@ -608,6 +608,50 @@ func TestSystemMessagesTrimmedByAge(t *testing.T) {
 	}
 }
 
+// regression: a system seed inserted right before nik's first reply used to
+// fall into a dead zone created by message_list.sql's human_window lower
+// bound (MIN(sent_at) anchored to the first reply). the bound now only
+// applies when the window is full, so unpaged seeds stay visible.
+func TestSystemSeedSurvivesFirstReply(t *testing.T) {
+	conn, convID := setupTestDB(t)
+	ctx := context.Background()
+
+	err := db.SystemContactEnsure(ctx, conn)
+	if err != nil {
+		t.Fatalf("ensure system contact: %v", err)
+	}
+
+	now := time.Now().UTC()
+
+	_, err = db.SystemMessageInsert(ctx, conn, db.SystemMessageParams{
+		ConversationID: convID,
+		Kind:           "text",
+		Body:           "GENESIS SEED",
+		SentAt:         now.Add(-10 * time.Second),
+	})
+	if err != nil {
+		t.Fatalf("insert system seed: %v", err)
+	}
+
+	insertOutbound(t, conn, convID, "reply-1", "first reply", now)
+
+	cfg := &config.Config{
+		MaxHistory:          10,
+		SystemMessageMaxAge: 1 * time.Hour,
+	}
+	msgSvc := messaging.NewService(cfg, conn, contacts.NewService(conn))
+	tl := New(cfg, msgSvc)
+
+	out := tl.Read(ctx, convID)
+
+	if !strings.Contains(out, "GENESIS SEED") {
+		t.Fatalf("expected system seed to remain visible after nik's first reply, got %q", out)
+	}
+	if !strings.Contains(out, "first reply") {
+		t.Fatalf("expected nik's reply in output, got %q", out)
+	}
+}
+
 func TestMessageEntryMentions(t *testing.T) {
 	tests := []struct {
 		name         string

@@ -21,6 +21,7 @@ import (
 	"github.com/kciuffolo/nik/internal/daemonctl"
 	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/fs"
+	"github.com/kciuffolo/nik/internal/genesis"
 	"github.com/kciuffolo/nik/internal/llm"
 	niklog "github.com/kciuffolo/nik/internal/log"
 	"github.com/kciuffolo/nik/internal/messaging"
@@ -208,6 +209,8 @@ func runDaemon(args []string) {
 		fatal("create tmp dir", err)
 	}
 
+	secrets.EnsureAdapter(cfg.Home, cfg.SkillsPath())
+
 	// adapters
 
 	contactsSvc := contacts.NewService(conn)
@@ -293,6 +296,7 @@ func runDaemon(args []string) {
 	// services
 
 	pr := prompt.NewRenderer(cfg)
+
 	recorder := stats.NewRecorder(conn)
 	alarmSvc := alarms.New(cfg, conn)
 	recallSvc := recall.NewService(cfg, recallClient)
@@ -306,7 +310,6 @@ func runDaemon(args []string) {
 	}
 	slog.Info("shell ready", "pkg", "shell", "docker", cfg.Shell.DockerImage != "")
 
-	// TODO: this feels dangling here...
 	messagingSvc.SetSpeechFn(func(ctx context.Context, text string) (string, error) {
 		return llmClient.Speech(
 			ctx,
@@ -345,15 +348,35 @@ func runDaemon(args []string) {
 	b.SetRecaller(recallSvc.Recall)
 	b.SetReadonly(*readonly)
 
-	b.RegisterReflex(0, taskSvc.CheckStale)
-	b.RegisterReflex(0, alarmSvc.FireDueAlarms)
-	b.RegisterReflex(30*time.Minute, alarmSvc.StaleAlarmReflex())
-	b.RegisterReflex(5*time.Minute, skills.SkillChangeReflex(cfg, conn))
-	b.RegisterReflex(5*time.Minute, skills.SkillCheckReflex(cfg, conn, llmClient.Generate, shellSvc.RunCommand))
-	b.RegisterReflex(10*time.Second, shellSvc.CheckSessions)
-
 	b.SetSensor(timeline.New(cfg, messagingSvc))
 
+	// reflexes: operational always, skill reflexes post-genesis only
+
+	b.RegisterReflex(0, taskSvc.CheckStale)
+	b.RegisterReflex(0, alarmSvc.FireDueAlarms)
+	b.RegisterReflex(10*time.Second, shellSvc.CheckSessions)
+	b.RegisterReflex(30*time.Minute, alarmSvc.StaleAlarmReflex())
+
+	genesisCompletedAt, err := db.SettingGet(ctx, conn, "genesis_completed_at")
+	if err != nil {
+		fatal("check genesis setting", err)
+	}
+
+	if genesisCompletedAt == nil {
+		b.RegisterReflex(0, genesis.Reflex(conn))
+		slog.Info("genesis mode active", "pkg", "main")
+	} else {
+		b.RegisterReflex(5*time.Minute, skills.SkillChangeReflex(cfg, conn))
+		b.RegisterReflex(5*time.Minute, skills.SkillCheckReflex(cfg, conn, llmClient.Generate, shellSvc.RunCommand))
+	}
+
+	// tools: shell only during genesis; post-genesis nik delegates to tasks
+
+	b.RegisterTool(llm.Tool{Def: brain.DoneToolDef, Handler: brain.DoneHandler()})
+	b.RegisterTool(llm.Tool{
+		Def:     daemonctl.RestartToolDef,
+		Handler: daemonctl.RestartHandler(),
+	})
 	b.RegisterTools(config.BuildTools(cfg, conn)...)
 	b.RegisterTools(contacts.BuildTools(conn)...)
 	b.RegisterTools(messaging.BuildTools(messagingSvc)...)
@@ -363,6 +386,24 @@ func runDaemon(args []string) {
 	b.RegisterTools(fs.BuildTools(cfg.Home)...)
 	b.RegisterTools(skills.BuildTools(cfg)...)
 	b.RegisterTools(task.BuildTools(taskSvc, taskRunner)...)
+
+	if genesisCompletedAt == nil {
+		b.RegisterTools(shellSvc.BuildTools()...)
+	}
+
+	privilegedTools := []string{
+		"config",
+		"shell",
+		"shell-rebuild",
+		"shell-factory-reset",
+		"db_query",
+		"db_prune",
+		"read_file",
+		"write_file",
+	}
+
+	b.Privileged(privilegedTools...)
+	taskRunner.Privileged(privilegedTools...)
 
 	// start
 

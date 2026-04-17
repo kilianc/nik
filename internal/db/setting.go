@@ -2,12 +2,14 @@ package db
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/kciuffolo/nik/internal/queries"
 )
 
-func SettingGet(ctx context.Context, db DBTX, key string) (Setting, error) {
+func SettingGet(ctx context.Context, db DBTX, key string) (*Setting, error) {
 	row := db.QueryRowContext(ctx, queries.SettingGet, key)
 
 	var s Setting
@@ -17,11 +19,14 @@ func SettingGet(ctx context.Context, db DBTX, key string) (Setting, error) {
 		&s.CreatedAt,
 		&s.UpdatedAt,
 	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
 	if err != nil {
-		return Setting{}, fmt.Errorf("get setting %s: %w", key, err)
+		return nil, fmt.Errorf("get setting %s: %w", key, err)
 	}
 
-	return s, nil
+	return &s, nil
 }
 
 func SettingSet(ctx context.Context, db DBTX, key, value string) error {

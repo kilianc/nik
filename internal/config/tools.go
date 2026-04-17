@@ -42,11 +42,7 @@ var configDef = llm.ToolDef{
 
 func BuildTools(cfg *Config, conn *sql.DB) []llm.Tool {
 	return []llm.Tool{
-		{
-			Def:        configDef,
-			Handler:    configHandler(cfg, conn),
-			Privileged: true,
-		},
+		{Def: configDef, Handler: configHandler(cfg, conn)},
 	}
 }
 

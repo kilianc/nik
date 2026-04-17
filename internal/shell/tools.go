@@ -82,9 +82,9 @@ type shellArgs struct {
 
 func (s *Service) BuildTools() []llm.Tool {
 	return []llm.Tool{
-		{Def: shellToolDef, Handler: s.shellHandler(), Privileged: true},
-		{Def: shellRebuildDef, Handler: s.rebuildHandler(), Privileged: true},
-		{Def: shellFactoryResetDef, Handler: s.factoryResetHandler(), Privileged: true},
+		{Def: shellToolDef, Handler: s.shellHandler()},
+		{Def: shellRebuildDef, Handler: s.rebuildHandler()},
+		{Def: shellFactoryResetDef, Handler: s.factoryResetHandler()},
 	}
 }
 

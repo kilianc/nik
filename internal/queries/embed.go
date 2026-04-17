@@ -284,6 +284,9 @@ var ToolCallStartOrphaned string
 //go:embed conversation_local_ensure.sql
 var ConversationLocalEnsure string
 
+//go:embed genesis_nudge_ensure.sql
+var GenesisNudgeEnsure string
+
 // setting queries
 
 //go:embed setting_get.sql

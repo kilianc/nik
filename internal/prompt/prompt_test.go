@@ -76,6 +76,18 @@ func TestBrainRender(t *testing.T) {
 	}
 }
 
+func TestBrainRenderSections(t *testing.T) {
+	r := NewRenderer(&config.Config{Home: t.TempDir()})
+
+	got := r.Brain(BrainData{})
+
+	for _, want := range []string{"Wave 1: Perceive", "Tables (nik.db)", "Plans must be self-contained", "task_spawn"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in output, got:\n%s", want, got)
+		}
+	}
+}
+
 func TestBrainRenderNoSoul(t *testing.T) {
 	r := NewRenderer(&config.Config{Home: t.TempDir()})
 

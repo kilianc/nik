@@ -49,18 +49,20 @@ func TestFilterUnprivileged(t *testing.T) {
 	handler := func(context.Context, llm.ToolCall) (string, error) { return "", nil }
 
 	tests := []struct {
-		name  string
-		tools []llm.Tool
-		want  int
+		name       string
+		tools      []llm.Tool
+		privileged []string
+		want       int
 	}{
 		{
 			"mixed",
 			[]llm.Tool{
-				{Def: llm.ToolDef{Name: "shell"}, Handler: handler, Privileged: true},
-				{Def: llm.ToolDef{Name: "db_query"}, Handler: handler, Privileged: true},
+				{Def: llm.ToolDef{Name: "shell"}, Handler: handler},
+				{Def: llm.ToolDef{Name: "db_query"}, Handler: handler},
 				{Def: llm.ToolDef{Name: "describe_media"}, Handler: handler},
 				{Def: llm.ToolDef{Name: "load_skill"}, Handler: handler},
 			},
+			[]string{"shell", "db_query"},
 			2,
 		},
 		{
@@ -69,19 +71,22 @@ func TestFilterUnprivileged(t *testing.T) {
 				{Def: llm.ToolDef{Name: "describe_media"}, Handler: handler},
 				{Def: llm.ToolDef{Name: "load_skill"}, Handler: handler},
 			},
+			nil,
 			2,
 		},
-		{"nil", nil, 0},
+		{"nil", nil, nil, 0},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := filterUnprivileged(tt.tools)
+			r := &Runner{privileged: make(map[string]bool)}
+			r.Privileged(tt.privileged...)
+			got := r.filterUnprivileged(tt.tools)
 			if len(got) != tt.want {
 				t.Fatalf("expected %d tools, got %d", tt.want, len(got))
 			}
 			for _, tool := range got {
-				if tool.Privileged {
+				if r.privileged[tool.Def.Name] {
 					t.Fatalf("privileged tool %q should have been filtered", tool.Def.Name)
 				}
 			}
