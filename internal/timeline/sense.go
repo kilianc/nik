@@ -142,17 +142,18 @@ func (t *Timeline) check(ctx context.Context, convID string) (brain.Stimulus, bo
 		readLine = conv.LastReadAt.Time
 	}
 
-	senderLabels := t.msgSvc.SenderLabels(ctx, msgs)
-	entries := t.buildEntries(msgs, senderLabels)
-
-	hasNew := false
-	for _, e := range entries {
-		if readLine.IsZero() || e.at.After(readLine) {
-			hasNew = true
-			break
+	hasActionable := false
+	for _, m := range msgs {
+		if !readLine.IsZero() && !m.SentAt.After(readLine) {
+			continue
 		}
+		if isNikAuthored(m) {
+			continue
+		}
+		hasActionable = true
+		break
 	}
-	if !hasNew {
+	if !hasActionable {
 		return brain.Stimulus{}, false, nil
 	}
 
@@ -162,6 +163,18 @@ func (t *Timeline) check(ctx context.Context, convID string) (brain.Stimulus, bo
 	}
 
 	return brain.Stimulus{Meta: meta}, true, nil
+}
+
+// isNikAuthored reports whether msg was produced by nik itself during an
+// activation (outbound message echoes and tool_call records). These entries
+// carry nothing new for the model -- it already saw the output when it chose
+// to act. Skipping activation on nik-only new entries saves a wasted round
+// trip that would only end in done.
+func isNikAuthored(msg db.Message) bool {
+	if msg.Platform == "system" {
+		return msg.Kind == "tool_call"
+	}
+	return msg.IsFromMe
 }
 
 func (t *Timeline) markRead(ctx context.Context, convID string, msgs []db.Message) {
