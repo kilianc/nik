@@ -237,6 +237,147 @@ func TestMessageEntryPlainText(t *testing.T) {
 	}
 }
 
+func TestCheckSkipsNikOnlyNew(t *testing.T) {
+	tests := []struct {
+		name     string
+		seed     func(t *testing.T, conn *sql.DB, convID string, after time.Time)
+		wantStim int
+	}{
+		{
+			name: "outbound only",
+			seed: func(t *testing.T, conn *sql.DB, convID string, after time.Time) {
+				insertOutbound(t, conn, convID, "out-1", "hi", after)
+			},
+			wantStim: 0,
+		},
+		{
+			name: "tool_call only",
+			seed: func(t *testing.T, conn *sql.DB, convID string, after time.Time) {
+				insertToolCall(t, conn, convID, "message_send", after)
+			},
+			wantStim: 0,
+		},
+		{
+			name: "outbound plus tool_call",
+			seed: func(t *testing.T, conn *sql.DB, convID string, after time.Time) {
+				insertOutbound(t, conn, convID, "out-2", "hi", after)
+				insertToolCall(t, conn, convID, "message_send", after.Add(time.Millisecond))
+			},
+			wantStim: 0,
+		},
+		{
+			name: "outbound plus inbound",
+			seed: func(t *testing.T, conn *sql.DB, convID string, after time.Time) {
+				insertOutbound(t, conn, convID, "out-3", "hi", after)
+				insertMsg(t, conn, convID, "in-1", "ext-in-1", "text", "hello back", after.Add(time.Millisecond))
+			},
+			wantStim: 1,
+		},
+		{
+			name: "tool_call plus alarm_fired",
+			seed: func(t *testing.T, conn *sql.DB, convID string, after time.Time) {
+				insertToolCall(t, conn, convID, "create_alarm", after)
+				_, err := db.SystemMessageInsert(context.Background(), conn, db.SystemMessageParams{
+					ConversationID: convID,
+					Kind:           "alarm_fired",
+					Body:           db.Alarm{ID: "alarm-1", Goal: "wake up"},
+					SentAt:         after.Add(time.Millisecond),
+				})
+				if err != nil {
+					t.Fatalf("insert alarm_fired: %v", err)
+				}
+			},
+			wantStim: 1,
+		},
+		{
+			name: "outbound plus task_report",
+			seed: func(t *testing.T, conn *sql.DB, convID string, after time.Time) {
+				insertOutbound(t, conn, convID, "out-4", "hi", after)
+				_, err := db.SystemMessageInsert(context.Background(), conn, db.SystemMessageParams{
+					ConversationID: convID,
+					Kind:           "task_report",
+					Body: db.TaskReport{
+						TaskID:  "aaaa-bbbb-cccc-dddd",
+						Goal:    "ship it",
+						Status:  "completed",
+						Content: "done",
+					},
+					SentAt: after.Add(time.Millisecond),
+				})
+				if err != nil {
+					t.Fatalf("insert task_report: %v", err)
+				}
+			},
+			wantStim: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			conn, convID := setupTestDB(t)
+			ctx := context.Background()
+
+			err := db.SystemContactEnsure(ctx, conn)
+			if err != nil {
+				t.Fatalf("ensure system contact: %v", err)
+			}
+
+			now := time.Now().UTC()
+			readAt := now.Add(-time.Minute).Format("2006-01-02T15:04:05.000Z")
+			_, err = conn.ExecContext(ctx, "UPDATE conversation SET last_read_at = ? WHERE id = ?", readAt, convID)
+			if err != nil {
+				t.Fatalf("set last_read_at: %v", err)
+			}
+
+			tt.seed(t, conn, convID, now)
+
+			cfg := &config.Config{
+				MaxHistory:           10,
+				AllowConversationIDs: config.ConversationList{{Label: "test", ID: convID}},
+			}
+			msgSvc := messaging.NewService(cfg, conn, contacts.NewService(conn))
+			tl := New(cfg, msgSvc)
+
+			stimuli, err := tl.Check(ctx)
+			if err != nil {
+				t.Fatalf("check: %v", err)
+			}
+			if len(stimuli) != tt.wantStim {
+				t.Fatalf("want %d stimuli, got %d", tt.wantStim, len(stimuli))
+			}
+		})
+	}
+}
+
+func insertOutbound(t *testing.T, conn *sql.DB, convID string, id string, body string, sentAt time.Time) {
+	t.Helper()
+
+	err := db.MessageInsert(context.Background(), conn, db.MessageInsertParams{
+		ID: id, ConversationID: convID, ContactID: db.SystemContactID,
+		Platform: "whatsapp", ExternalConversationID: "ext-conv@s.whatsapp.net",
+		ExternalMessageID: "ext-" + id, ExternalSenderID: db.SystemContactID,
+		SentAt: sentAt, IsFromMe: true, Kind: "text", Body: body,
+		ContextMentionedIDs: "[]",
+	})
+	if err != nil {
+		t.Fatalf("insert outbound %s: %v", id, err)
+	}
+}
+
+func insertToolCall(t *testing.T, conn *sql.DB, convID string, name string, sentAt time.Time) {
+	t.Helper()
+
+	_, err := db.SystemMessageInsert(context.Background(), conn, db.SystemMessageParams{
+		ConversationID: convID,
+		Kind:           "tool_call",
+		Body:           map[string]string{"name": name, "input": "{}", "output": `{"ok":true}`},
+		SentAt:         sentAt,
+	})
+	if err != nil {
+		t.Fatalf("insert tool_call %s: %v", name, err)
+	}
+}
+
 func TestCheckIgnoresDoneToolCall(t *testing.T) {
 	conn, convID := setupTestDB(t)
 	ctx := context.Background()
