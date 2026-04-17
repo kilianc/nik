@@ -2,7 +2,7 @@
 name: contacts
 summary: >
   Your address book. Search and update contact profiles as you learn about people.
-  Load when you see [needs: ...] gaps on a participant or learn something new about someone.
+  Load when you see [contact needs: ...] gaps on a participant or learn something new about someone.
 tools: [update_contact]
 ---
 

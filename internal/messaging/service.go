@@ -908,7 +908,7 @@ func participantGaps(p db.ConversationParticipant) string {
 		return ""
 	}
 
-	return "[needs: " + strings.Join(missing, ", ") + "]"
+	return "[contact needs: " + strings.Join(missing, ", ") + "]"
 }
 
 func nonEmpty(ss ...string) []string {
