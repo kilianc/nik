@@ -24,10 +24,10 @@ type ToolCallBody struct {
 	Round  int    `json:"round"`
 }
 
-const doneToolName = "done"
+const DoneToolName = "done"
 
-var doneToolDef = llm.ToolDef{
-	Name:        doneToolName,
+var DoneToolDef = llm.ToolDef{
+	Name:        DoneToolName,
 	Description: "Signal that you are done with this activation. Do all your work first -- messages, reactions, tasks, lookups -- then call done to declare completion.",
 	Parameters: map[string]any{
 		"type":                 "object",
@@ -37,7 +37,7 @@ var doneToolDef = llm.ToolDef{
 	},
 }
 
-func doneHandler() llm.ToolExecutor {
+func DoneHandler() llm.ToolExecutor {
 	return func(ctx context.Context, call llm.ToolCall) (string, error) {
 		var args struct {
 			Reason string `json:"reason"`
@@ -66,15 +66,17 @@ func (b *Brain) RegisterTool(t llm.Tool) {
 
 	b.toolDefs = append(b.toolDefs, t.Def)
 	b.toolExec[t.Def.Name] = t.Handler
-	if t.Privileged {
-		b.privileged[t.Def.Name] = true
-		slog.Info("registered privileged tool", "pkg", "brain", "tool", t.Def.Name)
-	}
 }
 
 func (b *Brain) RegisterTools(ts ...llm.Tool) {
 	for _, t := range ts {
 		b.RegisterTool(t)
+	}
+}
+
+func (b *Brain) Privileged(names ...string) {
+	for _, name := range names {
+		b.privileged[name] = true
 	}
 }
 
@@ -101,10 +103,7 @@ func (b *Brain) toolsForContext(ctx context.Context) []llm.ToolDef {
 	slog.Debug("tools for context",
 		"pkg", "brain",
 		"conversation_id", meta["conversation_id"],
-		"privileged_conversation_ids", b.cfg.PrivilegedConversationIDs,
 		"is_privileged", isPrivileged,
-		"total_registered", len(b.toolDefs),
-		"privileged_registered", len(b.privileged),
 		"tools_sent", len(defs),
 	)
 

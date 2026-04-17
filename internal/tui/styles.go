@@ -49,6 +49,7 @@ var (
 	youLabel            lipgloss.Style
 	nikBorder           lipgloss.Style
 	youBorder           lipgloss.Style
+	systemBorder        lipgloss.Style
 	msgText             lipgloss.Style
 	dimText             lipgloss.Style
 	sepText             lipgloss.Style
@@ -81,6 +82,7 @@ func init() {
 	youLabel = lipgloss.NewStyle().Foreground(youAccent).Bold(true).Italic(true)
 	nikBorder = lipgloss.NewStyle().Foreground(nikAccent)
 	youBorder = lipgloss.NewStyle().Foreground(youAccent)
+	systemBorder = lipgloss.NewStyle().Foreground(th.dim)
 	msgText = lipgloss.NewStyle()
 	dimText = lipgloss.NewStyle().Foreground(th.dim).Italic(true)
 	sepText = lipgloss.NewStyle().Foreground(th.sep)

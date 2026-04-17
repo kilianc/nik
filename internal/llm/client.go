@@ -181,9 +181,8 @@ type ToolCall struct {
 type ToolExecutor func(ctx context.Context, call ToolCall) (string, error)
 
 type Tool struct {
-	Def        ToolDef
-	Handler    ToolExecutor
-	Privileged bool
+	Def     ToolDef
+	Handler ToolExecutor
 }
 
 func SplitTools(tools []Tool) ([]ToolDef, ToolExecutor) {

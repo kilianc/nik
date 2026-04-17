@@ -33,6 +33,26 @@ var queryToolDef = llm.ToolDef{
 	},
 }
 
+var settingSetToolDef = llm.ToolDef{
+	Name:        "setting_set",
+	Description: "Write a key-value pair to nik's settings table. Use for persistent configuration flags.",
+	Parameters: map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"key": map[string]any{
+				"type":        "string",
+				"description": "Setting key.",
+			},
+			"value": map[string]any{
+				"type":        "string",
+				"description": "Setting value.",
+			},
+		},
+		"required":             []string{"key", "value"},
+		"additionalProperties": false,
+	},
+}
+
 var pruneToolDef = llm.ToolDef{
 	Name:        "db_prune",
 	Description: "Delete activations, tasks, and all dependents older than the configured retention period. Returns count of deleted rows. Use to reclaim disk space.",
@@ -46,16 +66,33 @@ var pruneToolDef = llm.ToolDef{
 
 func BuildTools(roConn *sql.DB, rwConn *sql.DB, retention func() time.Duration) []llm.Tool {
 	return []llm.Tool{
-		{
-			Def:        queryToolDef,
-			Handler:    queryHandler(roConn),
-			Privileged: true,
-		},
-		{
-			Def:        pruneToolDef,
-			Handler:    pruneHandler(rwConn, retention),
-			Privileged: true,
-		},
+		{Def: queryToolDef, Handler: queryHandler(roConn)},
+		{Def: pruneToolDef, Handler: pruneHandler(rwConn, retention)},
+		{Def: settingSetToolDef, Handler: settingSetHandler(rwConn)},
+	}
+}
+
+func settingSetHandler(conn *sql.DB) llm.ToolExecutor {
+	return func(ctx context.Context, call llm.ToolCall) (string, error) {
+		var args struct {
+			Key   string `json:"key"`
+			Value string `json:"value"`
+		}
+
+		err := json.Unmarshal([]byte(call.Arguments), &args)
+		if err != nil {
+			return llm.ToolError(err), nil
+		}
+		if args.Key == "" {
+			return `{"error":"empty key"}`, nil
+		}
+
+		err = SettingSet(ctx, conn, args.Key, args.Value)
+		if err != nil {
+			return llm.ToolError(err), nil
+		}
+
+		return fmt.Sprintf(`{"ok":true,"key":%q}`, args.Key), nil
 	}
 }
 

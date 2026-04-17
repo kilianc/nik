@@ -608,6 +608,7 @@ func (s *Service) React(ctx context.Context, messageID string, emoji string) err
 		ExternalSenderID:       outbound.ExternalSenderID,
 		Kind:                   "reaction",
 		Body:                   emoji,
+		ContextStanzaID:        msg.ExternalMessageID,
 		SentAt:                 sentAt,
 		IsFromMe:               true,
 		IsGroup:                conv.Kind == "group",

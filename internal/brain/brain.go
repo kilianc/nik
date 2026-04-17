@@ -37,7 +37,7 @@ type Brain struct {
 }
 
 func New(cfg *config.Config, llmClient *llm.Client, pr *prompt.Renderer) *Brain {
-	b := &Brain{
+	return &Brain{
 		cfg:        cfg,
 		llm:        llmClient,
 		pr:         pr,
@@ -47,10 +47,6 @@ func New(cfg *config.Config, llmClient *llm.Client, pr *prompt.Renderer) *Brain 
 		now:        time.Now,
 		claimed:    NewSyncSet(),
 	}
-
-	b.RegisterTool(llm.Tool{Def: doneToolDef, Handler: doneHandler()})
-
-	return b
 }
 
 func (b *Brain) SetDB(conn *sql.DB) {
@@ -203,7 +199,8 @@ func (b *Brain) think(ctx context.Context, getInput func() string) (_ string, _ 
 	tools := b.toolsForContext(ctx)
 	executor := b.toolExecutor()
 
-	instructions := b.pr.Brain(prompt.BuildBrainData(b.cfg, b.workerToolNames, b.toolDefs))
+	bd := b.pr.BuildBrainData(b.workerToolNames, b.toolDefs)
+	instructions := b.pr.Brain(bd)
 
 	actID := id.V7()
 	meta["activation_id"] = actID
@@ -280,7 +277,7 @@ func (b *Brain) think(ctx context.Context, getInput func() string) (_ string, _ 
 
 func isDone(calls []llm.ToolCall) bool {
 	for _, call := range calls {
-		if call.Name == doneToolName {
+		if call.Name == DoneToolName {
 			return true
 		}
 	}

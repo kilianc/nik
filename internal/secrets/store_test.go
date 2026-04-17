@@ -158,7 +158,7 @@ func TestKeyAutoGeneration(t *testing.T) {
 	dir := t.TempDir()
 	s := New(dir)
 
-	keyPath := filepath.Join(dir, ".secrets.key")
+	keyPath := filepath.Join(dir, "secrets", "secrets.key")
 	if _, err := os.Stat(keyPath); !os.IsNotExist(err) {
 		t.Fatal("key file should not exist before first write")
 	}
@@ -191,7 +191,7 @@ func TestEncryptionRoundTrip(t *testing.T) {
 		t.Fatalf("set: %v", err)
 	}
 
-	raw, err := os.ReadFile(filepath.Join(dir, "secrets.enc"))
+	raw, err := os.ReadFile(filepath.Join(dir, "secrets", "secrets.enc"))
 	if err != nil {
 		t.Fatalf("read enc file: %v", err)
 	}
@@ -283,7 +283,7 @@ func TestDataFilePermissions(t *testing.T) {
 		t.Fatalf("set: %v", err)
 	}
 
-	info, err := os.Stat(filepath.Join(dir, "secrets.enc"))
+	info, err := os.Stat(filepath.Join(dir, "secrets", "secrets.enc"))
 	if err != nil {
 		t.Fatalf("stat: %v", err)
 	}
@@ -291,4 +291,80 @@ func TestDataFilePermissions(t *testing.T) {
 	if info.Mode().Perm() != 0o600 {
 		t.Fatalf("data file perms: expected 0600, got %o", info.Mode().Perm())
 	}
+}
+
+func TestEnsureAdapter(t *testing.T) {
+	t.Run("copies adapter when missing", func(t *testing.T) {
+		home := t.TempDir()
+		skillsDir := t.TempDir()
+
+		err := os.MkdirAll(filepath.Join(skillsDir, "secrets"), 0o755)
+		if err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+
+		err = os.WriteFile(filepath.Join(skillsDir, "secrets", "cli.sh"), []byte("#!/bin/sh\necho ok"), 0o644)
+		if err != nil {
+			t.Fatalf("write source: %v", err)
+		}
+
+		EnsureAdapter(home, skillsDir)
+
+		dst := filepath.Join(home, "secrets", "cli")
+		info, err := os.Stat(dst)
+		if err != nil {
+			t.Fatalf("adapter not created: %v", err)
+		}
+
+		if info.Mode().Perm()&0o111 == 0 {
+			t.Fatalf("adapter not executable: %o", info.Mode().Perm())
+		}
+
+		data, err := os.ReadFile(dst)
+		if err != nil {
+			t.Fatalf("read adapter: %v", err)
+		}
+
+		if string(data) != "#!/bin/sh\necho ok" {
+			t.Fatalf("adapter content mismatch: %q", data)
+		}
+	})
+
+	t.Run("skips when adapter exists", func(t *testing.T) {
+		home := t.TempDir()
+		skillsDir := t.TempDir()
+
+		err := os.MkdirAll(filepath.Join(home, "secrets"), 0o755)
+		if err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+
+		err = os.WriteFile(filepath.Join(home, "secrets", "cli"), []byte("custom"), 0o755)
+		if err != nil {
+			t.Fatalf("write existing: %v", err)
+		}
+
+		EnsureAdapter(home, skillsDir)
+
+		data, err := os.ReadFile(filepath.Join(home, "secrets", "cli"))
+		if err != nil {
+			t.Fatalf("read: %v", err)
+		}
+
+		if string(data) != "custom" {
+			t.Fatal("existing adapter was overwritten")
+		}
+	})
+
+	t.Run("no-op when source missing", func(t *testing.T) {
+		home := t.TempDir()
+		skillsDir := t.TempDir()
+
+		EnsureAdapter(home, skillsDir)
+
+		_, err := os.Stat(filepath.Join(home, "secrets", "cli"))
+		if err == nil {
+			t.Fatal("adapter should not exist when source is missing")
+		}
+	})
 }

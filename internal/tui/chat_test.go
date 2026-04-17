@@ -34,7 +34,7 @@ func TestChatModelRendersEmptyState(t *testing.T) {
 	}
 	defer conn.Close()
 
-	c := newChatModel(conn, nil)
+	c := newChatModel(conn, nil, Options{})
 
 	view := c.View()
 	if !strings.Contains(view, "❯") {
@@ -49,7 +49,7 @@ func TestChatNewMessagesMsg(t *testing.T) {
 	}
 	defer conn.Close()
 
-	c := newChatModel(conn, nil)
+	c := newChatModel(conn, nil, Options{})
 
 	msgs := []db.Message{
 		{ID: "msg-1", Body: "hello", Kind: "text", ContactID: db.OwnerContactID, SentAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)},
@@ -73,7 +73,7 @@ func TestChatActivityThinking(t *testing.T) {
 	}
 	defer conn.Close()
 
-	c := newChatModel(conn, nil)
+	c := newChatModel(conn, nil, Options{})
 	c, _ = c.Update(newMessagesMsg{activity: []string{"thinking"}})
 
 	if len(c.activity) == 0 {
@@ -91,7 +91,7 @@ func TestChatWindowResize(t *testing.T) {
 	}
 	defer conn.Close()
 
-	c := newChatModel(conn, nil)
+	c := newChatModel(conn, nil, Options{})
 	c, _ = c.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 
 	if c.width != 100 {
@@ -123,7 +123,7 @@ func TestChatEmptyPollSchedulesNext(t *testing.T) {
 	}
 	defer conn.Close()
 
-	c := newChatModel(conn, nil)
+	c := newChatModel(conn, nil, Options{})
 	c, cmd := c.Update(newMessagesMsg{})
 
 	if cmd == nil {
@@ -141,7 +141,7 @@ func TestChatViewIncludesMessages(t *testing.T) {
 	}
 	defer conn.Close()
 
-	c := newChatModel(conn, nil)
+	c := newChatModel(conn, nil, Options{})
 	c, _ = c.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
 	c, _ = c.Update(newMessagesMsg{
 		messages: []db.Message{
@@ -166,7 +166,7 @@ func TestRenderConversation_ContainsMessages(t *testing.T) {
 		{ID: "2", Body: "hi there", Kind: "text", ContactID: db.SystemContactID, IsFromMe: true, SentAt: base.Add(time.Minute)},
 	}
 
-	out := stripAnsi(renderConversation(msgs, 80, 0, -1))
+	out := stripAnsi(renderConversation(msgs, 80, 0, -1, false))
 
 	if !strings.Contains(out, "hello") {
 		t.Error("expected hello in output")
@@ -191,7 +191,7 @@ func TestRenderConversation_GroupsSameSender(t *testing.T) {
 		{ID: "3", Body: "third", Kind: "text", ContactID: db.OwnerContactID, SentAt: base.Add(time.Minute)},
 	}
 
-	out := stripAnsi(renderConversation(msgs, 80, 0, -1))
+	out := stripAnsi(renderConversation(msgs, 80, 0, -1, false))
 
 	count := strings.Count(out, "you")
 	if count != 1 {
@@ -207,7 +207,7 @@ func TestRenderConversation_SenderChange(t *testing.T) {
 		{ID: "2", Body: "sup", Kind: "text", ContactID: db.SystemContactID, IsFromMe: true, SentAt: base.Add(time.Minute)},
 	}
 
-	out := renderConversation(msgs, 80, 0, -1)
+	out := renderConversation(msgs, 80, 0, -1, false)
 	lines := strings.Split(out, "\n")
 
 	foundBlank := false
@@ -237,7 +237,7 @@ func TestRenderConversation_DateSeparator(t *testing.T) {
 		{ID: "2", Body: "new", Kind: "text", ContactID: db.OwnerContactID, SentAt: today},
 	}
 
-	out := stripAnsi(renderConversation(msgs, 80, 0, -1))
+	out := stripAnsi(renderConversation(msgs, 80, 0, -1, false))
 
 	if !strings.Contains(out, "Yesterday") {
 		t.Error("expected Yesterday separator")
@@ -255,7 +255,7 @@ func TestRenderConversation_BigGap(t *testing.T) {
 		{ID: "2", Body: "after gap", Kind: "text", ContactID: db.OwnerContactID, SentAt: base.Add(10 * time.Minute)},
 	}
 
-	out := stripAnsi(renderConversation(msgs, 80, 0, -1))
+	out := stripAnsi(renderConversation(msgs, 80, 0, -1, false))
 
 	count := strings.Count(out, "you")
 	if count != 2 {
@@ -264,14 +264,14 @@ func TestRenderConversation_BigGap(t *testing.T) {
 }
 
 func TestBubble_ContainsBody(t *testing.T) {
-	out := stripAnsi(bubble("hello world", true, 80))
+	out := stripAnsi(bubble("hello world", true, false, 80, nil))
 	if !strings.Contains(out, "hello world") {
 		t.Error("expected body in bubble")
 	}
 }
 
 func TestBubble_RightAlignedForYou(t *testing.T) {
-	out := bubble("test", false, 80)
+	out := bubble("test", false, false, 80, nil)
 	lines := strings.Split(out, "\n")
 	for _, l := range lines {
 		stripped := stripAnsi(l)
@@ -282,7 +282,7 @@ func TestBubble_RightAlignedForYou(t *testing.T) {
 }
 
 func TestBubble_LeftAlignedForNik(t *testing.T) {
-	out := bubble("test", true, 80)
+	out := bubble("test", true, false, 80, nil)
 	lines := strings.Split(out, "\n")
 	first := stripAnsi(lines[0])
 	if strings.HasPrefix(first, "  ") {
@@ -398,19 +398,19 @@ func TestRenderConversation_ToolCalls(t *testing.T) {
 		{ID: "4", Body: "here you go", Kind: "text", ContactID: db.SystemContactID, IsFromMe: true, SentAt: base.Add(3 * time.Second)},
 	}
 
-	out := stripAnsi(renderConversation(msgs, 80, 0, -1))
+	out := stripAnsi(renderConversation(msgs, 80, 0, -1, false))
 
 	if !strings.Contains(out, "db_query") {
 		t.Error("expected db_query tool call in output")
 	}
-	if !strings.Contains(out, "message_send") {
-		t.Error("expected message_send tool call in output")
+	if strings.Contains(out, "message_send") {
+		t.Error("message_send tool call should be filtered from output")
 	}
 	if !strings.Contains(out, "check data") {
 		t.Error("expected reason 'check data' in output")
 	}
-	if !strings.Contains(out, "reply to user") {
-		t.Error("expected reason 'reply to user' in output")
+	if strings.Contains(out, "reply to user") {
+		t.Error("message_send reason 'reply to user' should be filtered from output")
 	}
 	if !strings.Contains(out, "✓") {
 		t.Error("expected checkmarks for completed tool calls")
@@ -430,7 +430,7 @@ func TestRenderConversation_DoneToolCallFiltered(t *testing.T) {
 		{ID: "start-done", Body: `{"name":"done","input":"{\"reason\":\"nothing to do\"}"}`, Kind: "tool_call_start", ContactID: db.SystemContactID, IsFromMe: true, Platform: "system", SentAt: base},
 	}
 
-	out := stripAnsi(renderConversation(msgs, 80, 0, -1))
+	out := stripAnsi(renderConversation(msgs, 80, 0, -1, false))
 
 	if strings.Contains(out, "nothing to do") {
 		t.Error("done tool call starts should be filtered out")
@@ -444,7 +444,7 @@ func TestRenderConversation_InProgressToolCall(t *testing.T) {
 		{ID: "start-1", Body: `{"name":"db_query","input":"{\"reason\":\"fetching rows\"}"}`, Kind: "tool_call_start", ContactID: db.SystemContactID, IsFromMe: true, Platform: "system", SentAt: base},
 	}
 
-	out := stripAnsi(renderConversation(msgs, 80, 5, -1))
+	out := stripAnsi(renderConversation(msgs, 80, 5, -1, false))
 
 	if !strings.Contains(out, "db_query") {
 		t.Error("expected in-progress tool call name")
@@ -516,7 +516,7 @@ func TestRenderConversation_ToolCallsSplitByTimeGap(t *testing.T) {
 		{ID: "call-2", Body: `{"name":"load_skill","input":"{}","output":"{\"ok\":true}","round":1}`, Kind: "tool_call", ContactID: db.SystemContactID, IsFromMe: true, Platform: "system", SentAt: base.Add(46 * time.Minute), ContextStanzaID: sql.NullString{Valid: true, String: "start-2"}},
 	}
 
-	out := stripAnsi(renderConversation(msgs, 80, 0, -1))
+	out := stripAnsi(renderConversation(msgs, 80, 0, -1, false))
 
 	openCount := strings.Count(out, "╭")
 	closeCount := strings.Count(out, "╰")
@@ -542,7 +542,7 @@ func TestThinkTickEnergy(t *testing.T) {
 	}
 	defer conn.Close()
 
-	c := newChatModel(conn, nil)
+	c := newChatModel(conn, nil, Options{})
 	c.activity = []string{"thinking"}
 
 	c, _ = c.Update(thinkTickMsg(time.Now()))
@@ -562,7 +562,7 @@ func TestChatMessagesCapped(t *testing.T) {
 	}
 	defer conn.Close()
 
-	c := newChatModel(conn, nil)
+	c := newChatModel(conn, nil, Options{})
 	c, _ = c.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
 
 	var msgs []db.Message
@@ -596,7 +596,7 @@ func TestChatConvCacheDirtyOnNewMessages(t *testing.T) {
 	}
 	defer conn.Close()
 
-	c := newChatModel(conn, nil)
+	c := newChatModel(conn, nil, Options{})
 	c, _ = c.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
 
 	initial := c.convCache
@@ -622,7 +622,7 @@ func TestChatConvCacheStableOnThinkTick(t *testing.T) {
 	}
 	defer conn.Close()
 
-	c := newChatModel(conn, nil)
+	c := newChatModel(conn, nil, Options{})
 	c, _ = c.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
 	c, _ = c.Update(newMessagesMsg{
 		messages: []db.Message{
@@ -639,4 +639,163 @@ func TestChatConvCacheStableOnThinkTick(t *testing.T) {
 	if c.convCache != cached {
 		t.Error("expected convCache to remain stable across think ticks")
 	}
+}
+
+func TestBubble_WithReactions(t *testing.T) {
+	tests := []struct {
+		name      string
+		body      string
+		reactions []string
+	}{
+		{"single", "hello world", []string{"👍"}},
+		{"multiple", "sounds good", []string{"👍", "❤️", "🔥"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out := stripAnsi(bubble(tt.body, true, false, 80, tt.reactions))
+			lines := strings.Split(out, "\n")
+			lastLine := lines[len(lines)-1]
+
+			if !strings.Contains(out, tt.body) {
+				t.Errorf("expected body %q in bubble", tt.body)
+			}
+			for _, emoji := range tt.reactions {
+				if !strings.Contains(out, emoji) {
+					t.Errorf("expected %s in bubble output", emoji)
+				}
+				if !strings.Contains(lastLine, emoji) {
+					t.Errorf("expected %s in bottom border, got %q", emoji, lastLine)
+				}
+			}
+			if !strings.Contains(lastLine, "╰") || !strings.Contains(lastLine, "╯") {
+				t.Errorf("expected bottom border characters, got %q", lastLine)
+			}
+		})
+	}
+}
+
+func TestBubble_ShortTextWidensForReaction(t *testing.T) {
+	withReaction := stripAnsi(bubble("hi", true, false, 80, []string{"👍"}))
+	without := stripAnsi(bubble("hi", true, false, 80, nil))
+
+	withLines := strings.Split(withReaction, "\n")
+	withoutLines := strings.Split(without, "\n")
+
+	if len(withLines[0]) <= len(withoutLines[0]) {
+		t.Error("expected bubble with reaction to be at least as wide as without")
+	}
+}
+
+func TestRenderConversation_Reactions(t *testing.T) {
+	base := time.Date(2026, 1, 1, 12, 0, 0, 0, time.Local)
+
+	msgs := []db.Message{
+		{ID: "1", ExternalMessageID: "ext-1", Body: "hello", Kind: "text", ContactID: db.OwnerContactID, SentAt: base},
+		{ID: "2", ExternalMessageID: "ext-2", Body: "hi there", Kind: "text", ContactID: db.SystemContactID, IsFromMe: true, SentAt: base.Add(time.Minute)},
+		{ID: "3", ExternalMessageID: "ext-3", Body: "👍", Kind: "reaction", ContactID: db.SystemContactID, IsFromMe: true, SentAt: base.Add(2 * time.Minute), ContextStanzaID: sql.NullString{Valid: true, String: "ext-1"}},
+		{ID: "4", ExternalMessageID: "ext-4", Body: "❤️", Kind: "reaction", ContactID: db.OwnerContactID, SentAt: base.Add(3 * time.Minute), ContextStanzaID: sql.NullString{Valid: true, String: "ext-2"}},
+	}
+
+	out := stripAnsi(renderConversation(msgs, 80, 0, -1, false))
+
+	if !strings.Contains(out, "hello") {
+		t.Error("expected hello in output")
+	}
+	if !strings.Contains(out, "👍") {
+		t.Error("expected 👍 reaction in output")
+	}
+	if !strings.Contains(out, "❤️") {
+		t.Error("expected ❤️ reaction in output")
+	}
+}
+
+func TestRenderConversation_ReactionRemoval(t *testing.T) {
+	base := time.Date(2026, 1, 1, 12, 0, 0, 0, time.Local)
+
+	msgs := []db.Message{
+		{ID: "1", ExternalMessageID: "ext-1", Body: "hello", Kind: "text", ContactID: db.OwnerContactID, SentAt: base},
+		{ID: "2", ExternalMessageID: "ext-2", Body: "👍", Kind: "reaction", ContactID: db.SystemContactID, IsFromMe: true, SentAt: base.Add(time.Minute), ContextStanzaID: sql.NullString{Valid: true, String: "ext-1"}},
+		{ID: "3", ExternalMessageID: "ext-3", Body: "", Kind: "reaction", ContactID: db.SystemContactID, IsFromMe: true, SentAt: base.Add(2 * time.Minute), ContextStanzaID: sql.NullString{Valid: true, String: "ext-1"}},
+	}
+
+	out := stripAnsi(renderConversation(msgs, 80, 0, -1, false))
+
+	if !strings.Contains(out, "hello") {
+		t.Error("expected hello in output")
+	}
+	if strings.Contains(out, "👍") {
+		t.Error("expected 👍 to be removed after empty-body reaction")
+	}
+}
+
+func TestCollectReactions(t *testing.T) {
+	t.Run("basic", func(t *testing.T) {
+		msgs := []db.Message{
+			{ID: "1", ExternalMessageID: "ext-1", Kind: "text"},
+			{ID: "2", ExternalMessageID: "ext-2", Kind: "reaction", Body: "👍", ContactID: "c1", ContextStanzaID: sql.NullString{Valid: true, String: "ext-1"}},
+		}
+
+		got := collectReactions(msgs)
+		emojis := got["ext-1"]
+		if len(emojis) != 1 || emojis[0] != "👍" {
+			t.Errorf("expected [👍], got %v", emojis)
+		}
+	})
+
+	t.Run("removal", func(t *testing.T) {
+		msgs := []db.Message{
+			{ID: "1", ExternalMessageID: "ext-1", Kind: "text"},
+			{ID: "2", ExternalMessageID: "ext-2", Kind: "reaction", Body: "👍", ContactID: "c1", ContextStanzaID: sql.NullString{Valid: true, String: "ext-1"}},
+			{ID: "3", ExternalMessageID: "ext-3", Kind: "reaction", Body: "", ContactID: "c1", ContextStanzaID: sql.NullString{Valid: true, String: "ext-1"}},
+		}
+
+		got := collectReactions(msgs)
+		if len(got["ext-1"]) != 0 {
+			t.Errorf("expected no reactions after removal, got %v", got["ext-1"])
+		}
+	})
+
+	t.Run("multiple senders", func(t *testing.T) {
+		msgs := []db.Message{
+			{ID: "1", ExternalMessageID: "ext-1", Kind: "text"},
+			{ID: "2", ExternalMessageID: "ext-2", Kind: "reaction", Body: "👍", ContactID: "c1", ContextStanzaID: sql.NullString{Valid: true, String: "ext-1"}},
+			{ID: "3", ExternalMessageID: "ext-3", Kind: "reaction", Body: "❤️", ContactID: "c2", ContextStanzaID: sql.NullString{Valid: true, String: "ext-1"}},
+		}
+
+		got := collectReactions(msgs)
+		emojis := got["ext-1"]
+		if len(emojis) != 2 {
+			t.Fatalf("expected 2 reactions, got %v", emojis)
+		}
+		if emojis[0] != "👍" || emojis[1] != "❤️" {
+			t.Errorf("expected [👍 ❤️], got %v", emojis)
+		}
+	})
+
+	t.Run("duplicate emoji gets count", func(t *testing.T) {
+		msgs := []db.Message{
+			{ID: "1", ExternalMessageID: "ext-1", Kind: "text"},
+			{ID: "2", ExternalMessageID: "ext-2", Kind: "reaction", Body: "👍", ContactID: "c1", ContextStanzaID: sql.NullString{Valid: true, String: "ext-1"}},
+			{ID: "3", ExternalMessageID: "ext-3", Kind: "reaction", Body: "👍", ContactID: "c2", ContextStanzaID: sql.NullString{Valid: true, String: "ext-1"}},
+		}
+
+		got := collectReactions(msgs)
+		emojis := got["ext-1"]
+		if len(emojis) != 1 || emojis[0] != "👍2" {
+			t.Errorf("expected [👍2], got %v", emojis)
+		}
+	})
+
+	t.Run("orphan reaction ignored", func(t *testing.T) {
+		msgs := []db.Message{
+			{ID: "1", ExternalMessageID: "ext-1", Kind: "text"},
+			{ID: "2", ExternalMessageID: "ext-2", Kind: "reaction", Body: "👍", ContactID: "c1", ContextStanzaID: sql.NullString{Valid: true, String: "ext-unknown"}},
+		}
+
+		got := collectReactions(msgs)
+		if len(got) != 0 {
+			t.Errorf("expected no reactions for orphan, got %v", got)
+		}
+	})
 }

@@ -2,6 +2,8 @@ package tui
 
 import (
 	"bytes"
+	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,6 +19,7 @@ import (
 	"github.com/kciuffolo/nik/internal/codex"
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/daemonctl"
+	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/id"
 	"github.com/kciuffolo/nik/internal/secrets"
 )
@@ -30,10 +33,12 @@ const (
 	stepCodexDone
 	stepAPIKey
 	stepAPIKeyValidating
+	stepExaKey
+	stepExaKeyValidating
 	stepModel
 	stepDocker
 	stepTimezone
-	stepTZResolving
+	stepLocationResolving
 	stepWriting
 	stepDone
 	stepWaitDaemon
@@ -42,14 +47,15 @@ const (
 type setupModel struct {
 	step       setupStep
 	apiKeyIn   textinput.Model
+	exaKeyIn   textinput.Model
 	timezoneIn textinput.Model
 	spinner    spinner.Model
 	err        error
 	cfg        *config.Config
+	conn       *sql.DB
 
 	authCursor      int
 	hasSubscription bool
-	resolvedTZ      string
 	models          []string
 	modelCursor     int
 	dockerCursor    int
@@ -70,13 +76,21 @@ var defaultModels = []string{
 	"claude-opus-4-20250514",
 }
 
-func newSetupModel(cfg *config.Config) setupModel {
+func newSetupModel(cfg *config.Config, conn *sql.DB) setupModel {
 	apiKey := textinput.New()
 	apiKey.Placeholder = "sk-..."
 	apiKey.EchoMode = textinput.EchoPassword
 	apiKey.Width = 60
 	if existing, err := secrets.New(cfg.Home).Get("openai_key"); err == nil {
 		apiKey.SetValue(existing)
+	}
+
+	exaKey := textinput.New()
+	exaKey.Placeholder = "exa-..."
+	exaKey.EchoMode = textinput.EchoPassword
+	exaKey.Width = 60
+	if existing, err := secrets.New(cfg.Home).Get("exa_api_key"); err == nil {
+		exaKey.SetValue(existing)
 	}
 
 	defaultCursor := 0
@@ -105,9 +119,11 @@ func newSetupModel(cfg *config.Config) setupModel {
 	return setupModel{
 		step:        stepWelcome,
 		apiKeyIn:    apiKey,
+		exaKeyIn:    exaKey,
 		timezoneIn:  tzIn,
 		spinner:     sp,
 		cfg:         cfg,
+		conn:        conn,
 		models:      defaultModels,
 		modelCursor: defaultCursor,
 	}
@@ -118,10 +134,12 @@ type codexLoginMsg struct {
 }
 
 type apiKeyValidatedMsg struct{ err error }
+type exaKeyValidatedMsg struct{ err error }
 type configWrittenMsg struct{ err error }
 
-type tzResolvedMsg struct {
+type locationResolvedMsg struct {
 	timezone string
+	location string
 	err      error
 }
 
@@ -168,23 +186,71 @@ func validateAPIKeyCmd(key string) tea.Cmd {
 	}
 }
 
-func resolveTimezoneCmd(apiKey, input string) tea.Cmd {
+func validateExaKeyCmd(key string) tea.Cmd {
 	return func() tea.Msg {
-		body := map[string]interface{}{
-			"model":             "gpt-4.1-nano",
-			"instructions":      "Reply with only the IANA timezone string for the given location. Example: America/New_York. Nothing else.",
+		body := `{"query":"test","type":"auto","numResults":1}`
+		req, err := http.NewRequest("POST", "https://api.exa.ai/search", strings.NewReader(body))
+		if err != nil {
+			return exaKeyValidatedMsg{err: err}
+		}
+
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("x-api-key", key)
+
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			return exaKeyValidatedMsg{err: fmt.Errorf("connect to Exa: %w", err)}
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			return exaKeyValidatedMsg{err: fmt.Errorf("invalid Exa API key (%d)", resp.StatusCode)}
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			return exaKeyValidatedMsg{err: fmt.Errorf("unexpected status %d", resp.StatusCode)}
+		}
+
+		return exaKeyValidatedMsg{}
+	}
+}
+
+func resolveLocationCmd(apiKey, input string) tea.Cmd {
+	return func() tea.Msg {
+		body := map[string]any{
+			"model": "gpt-4.1-nano",
+			"instructions": "You map a place description to an IANA timezone and a canonical human-friendly location label. " +
+				"Set confident=false if the input isn't a real place you recognize (gibberish, a person's name, 'my house', etc.).",
 			"input":             input,
-			"max_output_tokens": 30,
+			"max_output_tokens": 80,
+			"text": map[string]any{
+				"format": map[string]any{
+					"type":   "json_schema",
+					"name":   "location",
+					"strict": true,
+					"schema": map[string]any{
+						"type":                 "object",
+						"additionalProperties": false,
+						"required":             []string{"timezone", "location", "confident"},
+						"properties": map[string]any{
+							"timezone":  map[string]any{"type": "string", "description": "IANA timezone, e.g. Europe/Rome. Empty string if not confident."},
+							"location":  map[string]any{"type": "string", "description": "Canonical 'City, Country' or 'City, State' label. Empty string if not confident."},
+							"confident": map[string]any{"type": "boolean"},
+						},
+					},
+				},
+			},
 		}
 
 		data, err := json.Marshal(body)
 		if err != nil {
-			return tzResolvedMsg{err: err}
+			return locationResolvedMsg{err: err}
 		}
 
 		req, err := http.NewRequest("POST", "https://api.openai.com/v1/responses", bytes.NewReader(data))
 		if err != nil {
-			return tzResolvedMsg{err: err}
+			return locationResolvedMsg{err: err}
 		}
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 		req.Header.Set("Content-Type", "application/json")
@@ -192,17 +258,17 @@ func resolveTimezoneCmd(apiKey, input string) tea.Cmd {
 		client := &http.Client{Timeout: 10 * time.Second}
 		resp, err := client.Do(req)
 		if err != nil {
-			return tzResolvedMsg{err: fmt.Errorf("connect to OpenAI: %w", err)}
+			return locationResolvedMsg{err: fmt.Errorf("connect to OpenAI: %w", err)}
 		}
 		defer resp.Body.Close()
 
 		respBody, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return tzResolvedMsg{err: err}
+			return locationResolvedMsg{err: err}
 		}
 
 		if resp.StatusCode != http.StatusOK {
-			return tzResolvedMsg{err: fmt.Errorf("OpenAI API error (%d): %s", resp.StatusCode, respBody)}
+			return locationResolvedMsg{err: fmt.Errorf("OpenAI API error (%d): %s", resp.StatusCode, respBody)}
 		}
 
 		var result struct {
@@ -215,30 +281,58 @@ func resolveTimezoneCmd(apiKey, input string) tea.Cmd {
 
 		err = json.Unmarshal(respBody, &result)
 		if err != nil {
-			return tzResolvedMsg{err: err}
+			return locationResolvedMsg{err: err}
 		}
 
-		var tz string
+		var payload string
 		if len(result.Output) > 0 && len(result.Output[0].Content) > 0 {
-			tz = strings.TrimSpace(result.Output[0].Content[0].Text)
+			payload = result.Output[0].Content[0].Text
 		}
-		if tz == "" {
-			return tzResolvedMsg{err: fmt.Errorf("no response from model")}
+		if strings.TrimSpace(payload) == "" {
+			return locationResolvedMsg{err: fmt.Errorf("no response from model")}
 		}
 
-		_, err = time.LoadLocation(tz)
+		var parsed struct {
+			Timezone  string `json:"timezone"`
+			Location  string `json:"location"`
+			Confident bool   `json:"confident"`
+		}
+		err = json.Unmarshal([]byte(payload), &parsed)
 		if err != nil {
-			return tzResolvedMsg{err: fmt.Errorf("could not determine timezone for %q", input)}
+			return locationResolvedMsg{err: fmt.Errorf("parse model response: %w", err)}
 		}
 
-		return tzResolvedMsg{timezone: tz}
+		if !parsed.Confident {
+			return locationResolvedMsg{err: fmt.Errorf("could not find a place for %q, try a city and country", input)}
+		}
+
+		_, err = time.LoadLocation(parsed.Timezone)
+		if err != nil {
+			return locationResolvedMsg{err: fmt.Errorf("model returned an invalid timezone %q", parsed.Timezone)}
+		}
+
+		location := strings.TrimSpace(parsed.Location)
+		if location == "" {
+			return locationResolvedMsg{err: fmt.Errorf("model returned an empty location")}
+		}
+
+		return locationResolvedMsg{timezone: parsed.Timezone, location: location}
 	}
 }
 
-func writeConfigCmd(cfg *config.Config, apiKey string) tea.Cmd {
+func writeSetupCmd(cfg *config.Config, conn *sql.DB, apiKey, exaKey string) tea.Cmd {
 	return func() tea.Msg {
+		store := secrets.New(cfg.Home)
+
 		if apiKey != "" {
-			err := secrets.New(cfg.Home).Set("openai_key", apiKey)
+			err := store.Set("openai_key", apiKey)
+			if err != nil {
+				return configWrittenMsg{err: err}
+			}
+		}
+
+		if exaKey != "" {
+			err := store.Set("exa_api_key", exaKey)
 			if err != nil {
 				return configWrittenMsg{err: err}
 			}
@@ -246,7 +340,25 @@ func writeConfigCmd(cfg *config.Config, apiKey string) tea.Cmd {
 
 		cfg.Normalize()
 		err := cfg.Save(cfg.ConfigPath())
-		return configWrittenMsg{err: err}
+		if err != nil {
+			return configWrittenMsg{err: err}
+		}
+
+		if conn != nil {
+			ctx := context.Background()
+			for _, cid := range []string{db.OwnerContactID, db.NikContactID} {
+				err = db.ContactUpdate(ctx, conn, db.ContactUpdateParams{ID: cid, Field: "timezone", Value: cfg.Timezone})
+				if err != nil {
+					return configWrittenMsg{err: fmt.Errorf("write timezone to %s: %w", cid, err)}
+				}
+				err = db.ContactUpdate(ctx, conn, db.ContactUpdateParams{ID: cid, Field: "location", Value: cfg.Location})
+				if err != nil {
+					return configWrittenMsg{err: fmt.Errorf("write location to %s: %w", cid, err)}
+				}
+			}
+		}
+
+		return configWrittenMsg{}
 	}
 }
 
@@ -292,23 +404,33 @@ func (m setupModel) Update(msg tea.Msg) (setupModel, tea.Cmd) {
 			return m, textinput.Blink
 		}
 		m.err = nil
+		m.step = stepExaKey
+		m.exaKeyIn.Focus()
+		return m, textinput.Blink
+
+	case exaKeyValidatedMsg:
+		if msg.err != nil {
+			m.err = msg.err
+			m.step = stepExaKey
+			m.exaKeyIn.Focus()
+			return m, textinput.Blink
+		}
+		m.err = nil
 		m.step = stepModel
 		return m, nil
 
-	case tzResolvedMsg:
+	case locationResolvedMsg:
 		if msg.err != nil {
 			m.err = msg.err
-			m.resolvedTZ = ""
 			m.step = stepTimezone
 			m.timezoneIn.Focus()
 			return m, textinput.Blink
 		}
 		m.err = nil
-		m.resolvedTZ = msg.timezone
-		m.timezoneIn.SetValue(msg.timezone)
-		m.step = stepTimezone
-		m.timezoneIn.Focus()
-		return m, textinput.Blink
+		m.cfg.Timezone = msg.timezone
+		m.cfg.Location = msg.location
+		m.step = stepWriting
+		return m, writeSetupCmd(m.cfg, m.conn, m.apiKeyIn.Value(), m.exaKeyIn.Value())
 
 	case configWrittenMsg:
 		if msg.err != nil {
@@ -347,13 +469,17 @@ func (m setupModel) Update(msg tea.Msg) (setupModel, tea.Cmd) {
 		return m.updateAPIKey(msg)
 	case stepAPIKeyValidating:
 		return m.updateSpinner(msg)
+	case stepExaKey:
+		return m.updateExaKey(msg)
+	case stepExaKeyValidating:
+		return m.updateSpinner(msg)
 	case stepModel:
 		return m.updateModel(msg)
 	case stepDocker:
 		return m.updateDocker(msg)
 	case stepTimezone:
 		return m.updateTimezone(msg)
-	case stepTZResolving:
+	case stepLocationResolving:
 		return m.updateSpinner(msg)
 	case stepDone:
 		return m.updateDone(msg)
@@ -431,6 +557,23 @@ func (m setupModel) updateAPIKey(msg tea.Msg) (setupModel, tea.Cmd) {
 	return m, cmd
 }
 
+func (m setupModel) updateExaKey(msg tea.Msg) (setupModel, tea.Cmd) {
+	if key, ok := msg.(tea.KeyMsg); ok && key.String() == "enter" {
+		val := m.exaKeyIn.Value()
+		if val == "" {
+			m.err = fmt.Errorf("Exa API key is required")
+			return m, nil
+		}
+		m.step = stepExaKeyValidating
+		m.err = nil
+		return m, validateExaKeyCmd(val)
+	}
+
+	var cmd tea.Cmd
+	m.exaKeyIn, cmd = m.exaKeyIn.Update(msg)
+	return m, cmd
+}
+
 func (m setupModel) updateSpinner(msg tea.Msg) (setupModel, tea.Cmd) {
 	var cmd tea.Cmd
 	m.spinner, cmd = m.spinner.Update(msg)
@@ -488,22 +631,13 @@ func (m setupModel) updateTimezone(msg tea.Msg) (setupModel, tea.Cmd) {
 	if key, ok := msg.(tea.KeyMsg); ok && key.String() == "enter" {
 		val := strings.TrimSpace(m.timezoneIn.Value())
 		if val == "" {
-			m.err = fmt.Errorf("timezone is required")
+			m.err = fmt.Errorf("please tell nik where you live")
 			return m, nil
 		}
 
-		_, err := time.LoadLocation(val)
-		if err == nil {
-			m.cfg.Timezone = val
-			m.resolvedTZ = ""
-			m.step = stepWriting
-			return m, writeConfigCmd(m.cfg, m.apiKeyIn.Value())
-		}
-
-		m.step = stepTZResolving
+		m.step = stepLocationResolving
 		m.err = nil
-		m.resolvedTZ = ""
-		return m, resolveTimezoneCmd(m.apiKeyIn.Value(), val)
+		return m, resolveLocationCmd(m.apiKeyIn.Value(), val)
 	}
 
 	var cmd tea.Cmd
@@ -543,14 +677,18 @@ func (m setupModel) View() string {
 		return m.viewAPIKey(banner)
 	case stepAPIKeyValidating:
 		return banner + m.spinner.View() + " validating API key..."
+	case stepExaKey:
+		return m.viewExaKey(banner)
+	case stepExaKeyValidating:
+		return banner + m.spinner.View() + " validating Exa key..."
 	case stepModel:
 		return m.viewModel(banner)
 	case stepDocker:
 		return m.viewDocker(banner)
 	case stepTimezone:
 		return m.viewTimezone(banner)
-	case stepTZResolving:
-		return banner + m.spinner.View() + " finding your timezone..."
+	case stepLocationResolving:
+		return banner + m.spinner.View() + " finding where you are..."
 	case stepWriting:
 		return banner + m.spinner.View() + " writing config..."
 	case stepDone:
@@ -641,6 +779,22 @@ func (m setupModel) viewAPIKey(banner string) string {
 	return s
 }
 
+func (m setupModel) viewExaKey(banner string) string {
+	s := banner
+	s += labelStyle.Render("Exa API Key") + "\n\n"
+	s += hintStyle.Render("nik uses Exa to search the web. This powers research,") + "\n"
+	s += hintStyle.Render("fact-checking, and staying up to date on current events.") + "\n\n"
+	s += hintStyle.Render("Exa has a free tier with 1000 searches/month, more than") + "\n"
+	s += hintStyle.Render("enough for personal use. Sign up at dashboard.exa.ai and") + "\n"
+	s += hintStyle.Render("create an API key under your account settings.") + "\n\n"
+	s += m.exaKeyIn.View() + "\n"
+	if m.err != nil {
+		s += errorStyle.Render(m.err.Error()) + "\n"
+	}
+	s += dimStyle.Render("\npress enter to validate")
+	return s
+}
+
 func (m setupModel) viewModel(banner string) string {
 	s := banner
 	s += labelStyle.Render("Choose a model") + "\n"
@@ -692,26 +846,13 @@ func (m setupModel) viewTimezone(banner string) string {
 	s += hintStyle.Render("nik uses this for scheduling, alarms, and understanding") + "\n"
 	s += hintStyle.Render("things like \"tomorrow morning\" or \"next Friday\".") + "\n\n"
 
-	s += m.timezoneIn.View()
-
-	if m.timezoneIn.Value() != "" && m.resolvedTZ == "" {
-		_, err := time.LoadLocation(m.timezoneIn.Value())
-		if err == nil {
-			s += dimStyle.Render("  (detected from your system)")
-		}
-	}
-
-	if m.resolvedTZ != "" {
-		s += successStyle.Render("  (resolved)")
-	}
-
-	s += "\n"
+	s += m.timezoneIn.View() + "\n"
 
 	if m.err != nil {
 		s += errorStyle.Render(m.err.Error()) + "\n"
 	}
 
-	s += dimStyle.Render("\npress enter to accept, or type your city and nik will find it")
+	s += dimStyle.Render("\ntype your city and country (e.g. \"Rome, Italy\"), then press enter")
 	return s
 }
 
@@ -723,13 +864,15 @@ func (m setupModel) viewDone(banner string) string {
 		s += "  OpenAI account    " + successStyle.Render("connected") + "\n"
 	}
 	s += "  API key           " + successStyle.Render("validated") + "\n"
+	s += "  Exa key           " + successStyle.Render("validated") + "\n"
 	s += "  Model             " + m.cfg.Models.Main.Model + "\n"
 	if m.cfg.Shell.DockerImage != "" {
 		s += "  Shell sandbox     " + m.cfg.Shell.DockerImage + "\n"
 	} else {
 		s += "  Shell sandbox     " + dimStyle.Render("host (no Docker)") + "\n"
 	}
-	s += "  Timezone          " + m.cfg.Timezone + "\n\n"
+	s += "  Timezone          " + m.cfg.Timezone + "\n"
+	s += "  Location          " + m.cfg.Location + "\n\n"
 	s += dimStyle.Render("config.yaml written to "+m.cfg.ConfigPath()) + "\n"
 	s += dimStyle.Render("You can always edit it and nik will pick up changes live.") + "\n\n"
 

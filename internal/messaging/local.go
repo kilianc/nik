@@ -51,8 +51,14 @@ func (a *LocalAdapter) SendVoiceNote(_ context.Context, _ string, _ string) (Out
 	}, nil
 }
 
-func (a *LocalAdapter) React(_ context.Context, _, _, _, _ string) (OutboundMessage, error) {
-	return OutboundMessage{}, nil
+func (a *LocalAdapter) React(_ context.Context, _, _, _, emoji string) (OutboundMessage, error) {
+	return OutboundMessage{
+		ExternalMessageID: id.V7(),
+		ExternalSenderID:  db.NikContactID,
+		SentAt:            time.Now(),
+		Kind:              "reaction",
+		Body:              emoji,
+	}, nil
 }
 
 func (a *LocalAdapter) SetPresence(_ context.Context, _ bool) error { return nil }

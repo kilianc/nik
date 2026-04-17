@@ -84,16 +84,8 @@ type writeFileArgs struct {
 
 func BuildTools(home string) []llm.Tool {
 	return []llm.Tool{
-		{
-			Def:        readFileDef,
-			Handler:    readFileHandler(home),
-			Privileged: true,
-		},
-		{
-			Def:        writeFileDef,
-			Handler:    writeFileHandler(home),
-			Privileged: true,
-		},
+		{Def: readFileDef, Handler: readFileHandler(home)},
+		{Def: writeFileDef, Handler: writeFileHandler(home)},
 	}
 }
 

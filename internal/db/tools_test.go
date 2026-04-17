@@ -295,6 +295,57 @@ func TestQueryHandlerRedactsMessageBody(t *testing.T) {
 	})
 }
 
+func TestSettingSetHandler(t *testing.T) {
+	ctx := context.Background()
+
+	conn, err := OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	handler := settingSetHandler(conn)
+
+	t.Run("sets value", func(t *testing.T) {
+		call := llm.ToolCall{
+			Name:      "setting_set",
+			Arguments: `{"key":"genesis_completed_at","value":"2026-04-01T12:00:00.000Z"}`,
+		}
+		out, err := handler(ctx, call)
+		if err != nil {
+			t.Fatalf("handler: %v", err)
+		}
+		if !strings.Contains(out, `"ok":true`) {
+			t.Fatalf("expected ok, got %s", out)
+		}
+
+		s, err := SettingGet(ctx, conn, "genesis_completed_at")
+		if err != nil {
+			t.Fatalf("get setting: %v", err)
+		}
+		if s == nil {
+			t.Fatal("expected non-nil setting")
+		}
+		if s.Value != "2026-04-01T12:00:00.000Z" {
+			t.Fatalf("expected value, got %s", s.Value)
+		}
+	})
+
+	t.Run("rejects empty key", func(t *testing.T) {
+		call := llm.ToolCall{
+			Name:      "setting_set",
+			Arguments: `{"key":"","value":"x"}`,
+		}
+		out, err := handler(ctx, call)
+		if err != nil {
+			t.Fatalf("handler: %v", err)
+		}
+		if !strings.Contains(out, "empty key") {
+			t.Fatalf("expected empty key error, got %s", out)
+		}
+	})
+}
+
 func stringsOfLen(n int) string {
 	buf := make([]byte, n)
 	for i := range buf {
