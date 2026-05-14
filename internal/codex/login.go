@@ -12,9 +12,13 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
+	"runtime"
 	"strings"
 	"time"
 )
+
+const redirectURI = "http://localhost:1455/auth/callback"
 
 type tokenResponse struct {
 	AccessToken  string `json:"access_token"`
@@ -23,7 +27,13 @@ type tokenResponse struct {
 	IDToken      string `json:"id_token"`
 }
 
-func login(savePath string) (*Auth, error) {
+type AuthRequest struct {
+	AuthURL  string
+	verifier string
+	state    string
+}
+
+func PrepareLogin() (*AuthRequest, error) {
 	verifier, challenge, err := generatePKCE()
 	if err != nil {
 		return nil, fmt.Errorf("generate PKCE: %w", err)
@@ -33,8 +43,6 @@ func login(savePath string) (*Auth, error) {
 	if err != nil {
 		return nil, fmt.Errorf("generate state: %w", err)
 	}
-
-	redirectURI := "http://localhost:1455/auth/callback"
 
 	params := url.Values{
 		"response_type":         {"code"},
@@ -46,12 +54,48 @@ func login(savePath string) (*Auth, error) {
 		"state":                 {state},
 	}
 
-	authURL := issuer + "/oauth/authorize?" + params.Encode()
+	return &AuthRequest{
+		AuthURL:  issuer + "/oauth/authorize?" + params.Encode(),
+		verifier: verifier,
+		state:    state,
+	}, nil
+}
+
+func (r *AuthRequest) Complete(input, savePath string) (*Auth, error) {
+	path, err := resolvePath(savePath)
+	if err != nil {
+		return nil, err
+	}
+
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return nil, fmt.Errorf("empty input, login cancelled")
+	}
+
+	code := extractCode(input, r.state)
+	if code == "" {
+		code = input
+	}
+
+	return exchangeCode(code, r.verifier, redirectURI, path)
+}
+
+func login(savePath string) (*Auth, error) {
+	req, err := PrepareLogin()
+	if err != nil {
+		return nil, err
+	}
 
 	fmt.Println()
-	fmt.Println("Codex login required. Open this URL in your browser:")
+	fmt.Println("Codex login required.")
 	fmt.Println()
-	fmt.Println("  " + authURL)
+	if OpenBrowser(req.AuthURL) {
+		fmt.Println("Opened your browser. If nothing happened, visit:")
+	} else {
+		fmt.Println("Open this URL in your browser:")
+	}
+	fmt.Println()
+	fmt.Println("  " + req.AuthURL)
 	fmt.Println()
 	fmt.Println("After signing in, paste the redirect URL here:")
 	fmt.Print("> ")
@@ -62,23 +106,12 @@ func login(savePath string) (*Auth, error) {
 		return nil, fmt.Errorf("read input: %w", err)
 	}
 
-	input = strings.TrimSpace(input)
-	if input == "" {
-		return nil, fmt.Errorf("empty input, login cancelled")
-	}
-
-	code := extractCode(input, state)
-	if code == "" {
-		code = input
-	}
-
-	auth, err := exchangeCode(code, verifier, redirectURI, savePath)
+	auth, err := req.Complete(input, savePath)
 	if err != nil {
 		return nil, err
 	}
 
 	fmt.Printf("Logged in (account: %s)\n\n", auth.AccountID)
-
 	return auth, nil
 }
 
@@ -227,4 +260,20 @@ func generateState() (string, error) {
 	}
 
 	return hex.EncodeToString(buf), nil
+}
+
+func OpenBrowser(target string) bool {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", target)
+	case "linux":
+		if os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == "" {
+			return false
+		}
+		cmd = exec.Command("xdg-open", target)
+	default:
+		return false
+	}
+	return cmd.Start() == nil
 }
