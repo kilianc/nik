@@ -12,6 +12,7 @@ require (
 	github.com/mdp/qrterminal/v3 v3.2.1
 	github.com/openai/openai-go/v3 v3.30.0
 	go.mau.fi/whatsmeow v0.0.0-20260219150138-7ae702b1eed4
+	golang.org/x/crypto v0.48.0
 	golang.org/x/sync v0.19.0
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v3 v3.0.1
@@ -53,7 +54,6 @@ require (
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	go.mau.fi/libsignal v0.2.1 // indirect
 	go.mau.fi/util v0.9.6 // indirect
-	golang.org/x/crypto v0.48.0 // indirect
 	golang.org/x/exp v0.0.0-20260212183809-81e46e3db34a // indirect
 	golang.org/x/net v0.50.0 // indirect
 	golang.org/x/sys v0.41.0 // indirect

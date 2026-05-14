@@ -31,6 +31,15 @@ func TestStylesNotNil(t *testing.T) {
 		{"checkStyle", checkStyle.Render("test")},
 		{"errorIndicatorStyle", errorIndicatorStyle.Render("test")},
 		{"spinnerColor", spinnerColor.Render("test")},
+		{"headerBrandStyle", headerBrandStyle.Render("test")},
+		{"headerMetaStyle", headerMetaStyle.Render("test")},
+		{"headerModelStyle", headerModelStyle.Render("test")},
+		{"headerPathStyle", headerPathStyle.Render("test")},
+		{"headerDividerStyle", headerDividerStyle.Render("test")},
+		{"statusOKStyle", statusOKStyle.Render("test")},
+		{"statusOKLabelStyle", statusOKLabelStyle.Render("test")},
+		{"statusDownStyle", statusDownStyle.Render("test")},
+		{"thinkingStyle", thinkingStyle.Render("test")},
 	}
 
 	for _, tt := range styles {
@@ -42,12 +51,17 @@ func TestStylesNotNil(t *testing.T) {
 	}
 }
 
-func TestNikAt(t *testing.T) {
-	for _, v := range []float64{0.0, 0.5, 1.0} {
-		c := nikAt(v)
-		s := string(c)
-		if !strings.HasPrefix(s, "#") || len(s) != 7 {
-			t.Errorf("nikAt(%v) = %q, want #rrggbb hex", v, s)
+func TestThemeAccessors(t *testing.T) {
+	accessors := map[string]func(float64) lipgloss.Color{
+		"mainAt":      mainAt,
+		"secondaryAt": secondaryAt,
+	}
+	for name, fn := range accessors {
+		for _, v := range []float64{0.0, 0.5, 1.0} {
+			s := string(fn(v))
+			if !strings.HasPrefix(s, "#") || len(s) != 7 {
+				t.Errorf("%s(%v) = %q, want #rrggbb hex", name, v, s)
+			}
 		}
 	}
 }
@@ -67,7 +81,7 @@ func TestMorphPalettePopulated(t *testing.T) {
 		if s == "" {
 			t.Errorf("morphPalette[%d] is empty", i)
 		}
-		if !strings.Contains(s, "━") {
+		if !strings.Contains(s, "─") {
 			t.Errorf("morphPalette[%d] missing dash glyph", i)
 		}
 	}
