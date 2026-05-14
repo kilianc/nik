@@ -12,9 +12,19 @@ case "$ARCH" in
   aarch64) ARCH="arm64" ;;
 esac
 
-echo "Downloading nik (${OS}/${ARCH})..."
-curl -fsSL "https://github.com/kciuffolo/nik/releases/${VERSION}/download/nik-${OS}-${ARCH}" \
-  -o /tmp/nik
+case "$OS" in
+  darwin|linux) ;;
+  *) echo "unsupported OS: $OS (supported: darwin, linux)" >&2; exit 1 ;;
+esac
+
+if [ "$VERSION" = "latest" ]; then
+  URL="https://github.com/kciuffolo/nik/releases/latest/download/nik-${OS}-${ARCH}"
+else
+  URL="https://github.com/kciuffolo/nik/releases/download/${VERSION}/nik-${OS}-${ARCH}"
+fi
+
+echo "Downloading nik (${OS}/${ARCH}) from ${URL}..."
+curl -fsSL "$URL" -o /tmp/nik
 chmod +x /tmp/nik
 sudo mv /tmp/nik "${INSTALL_DIR}/nik"
 

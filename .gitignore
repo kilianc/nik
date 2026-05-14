@@ -31,6 +31,10 @@
 !*.service
 !*.timer
 
+# Track GitHub Actions workflows
+!.github/workflows/*.yaml
+!.github/workflows/*.yml
+
 # Always ignore
 .cursor/
 TODO.md
