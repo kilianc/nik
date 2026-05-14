@@ -362,6 +362,10 @@ func runDaemon(args []string) {
 		fatal("check genesis setting", err)
 	}
 
+	if _, err := db.GenesisStartedAtEnsure(ctx, conn); err != nil {
+		slog.Warn("stamp genesis_started_at", "pkg", "main", "error", err)
+	}
+
 	if genesisCompletedAt == nil {
 		b.RegisterReflex(0, genesis.Reflex(conn))
 		slog.Info("genesis mode active", "pkg", "main")
