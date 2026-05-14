@@ -17,6 +17,11 @@ case "$OS" in
   *) echo "unsupported OS: $OS (supported: darwin, linux)" >&2; exit 1 ;;
 esac
 
+if [ "$OS" = "darwin" ] && [ "$ARCH" = "amd64" ]; then
+  echo "Intel Macs aren't published as binaries. Build from source: https://github.com/kilianc/nik#from-source" >&2
+  exit 1
+fi
+
 if [ "$VERSION" = "latest" ]; then
   URL="https://github.com/kilianc/nik/releases/latest/download/nik-${OS}-${ARCH}"
 else
