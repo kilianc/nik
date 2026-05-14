@@ -18,9 +18,9 @@ case "$OS" in
 esac
 
 if [ "$VERSION" = "latest" ]; then
-  URL="https://github.com/kciuffolo/nik/releases/latest/download/nik-${OS}-${ARCH}"
+  URL="https://github.com/kilianc/nik/releases/latest/download/nik-${OS}-${ARCH}"
 else
-  URL="https://github.com/kciuffolo/nik/releases/download/${VERSION}/nik-${OS}-${ARCH}"
+  URL="https://github.com/kilianc/nik/releases/download/${VERSION}/nik-${OS}-${ARCH}"
 fi
 
 echo "Downloading nik (${OS}/${ARCH}) from ${URL}..."

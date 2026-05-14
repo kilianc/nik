@@ -9,7 +9,7 @@ Supported platforms: macOS (Intel + Apple Silicon), Linux (amd64 + arm64).
 ### Quick install
 
 ```sh
-curl -fsSL https://github.com/kciuffolo/nik/releases/latest/download/install.sh | sh
+curl -fsSL https://github.com/kilianc/nik/releases/latest/download/install.sh | sh
 ```
 
 This downloads the matching `nik` binary into `/usr/local/bin`, runs `nik install --home ~/.nik` to register a launchd (macOS) or systemd (Linux) service, and starts the daemon. On first run, `nik` will print a QR code in the terminal for WhatsApp pairing.
@@ -24,7 +24,7 @@ Override defaults via environment variables:
 
 ### Manual install
 
-1. Download the binary for your platform from the [releases page](https://github.com/kciuffolo/nik/releases/latest): `nik-darwin-arm64`, `nik-darwin-amd64`, `nik-linux-arm64`, or `nik-linux-amd64`.
+1. Download the binary for your platform from the [releases page](https://github.com/kilianc/nik/releases/latest): `nik-darwin-arm64`, `nik-darwin-amd64`, `nik-linux-arm64`, or `nik-linux-amd64`.
 2. Make it executable and move it onto your `$PATH`:
    ```sh
    chmod +x nik-*-*
@@ -40,7 +40,7 @@ Override defaults via environment variables:
 Requires Go 1.25+ and a C toolchain (CGO is on for `mattn/go-sqlite3`).
 
 ```sh
-git clone https://github.com/kciuffolo/nik.git
+git clone https://github.com/kilianc/nik.git
 cd nik
 make build              # produces ./bin/nik
 ./bin/nik install --home ~/.nik
