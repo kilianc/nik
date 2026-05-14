@@ -36,6 +36,7 @@
 !.github/workflows/*.yml
 
 # Always ignore
+.claude/
 .cursor/
 TODO.md
 workspace/

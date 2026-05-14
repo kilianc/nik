@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/kciuffolo/nik/internal/codex"
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/db"
 )
@@ -82,6 +83,79 @@ func TestSetupCodexLoginSuccess(t *testing.T) {
 	}
 	if !w.hasSubscription {
 		t.Error("expected hasSubscription to be true")
+	}
+}
+
+func TestSetupCodexAuthReadyFocusesPaste(t *testing.T) {
+	w := newTestSetup(t)
+	w.step = stepCodexLogin
+	req := &codex.AuthRequest{AuthURL: "https://auth.openai.com/oauth/authorize?x=1"}
+
+	w, _ = w.Update(codexAuthReadyMsg{req: req, browserOpened: true})
+
+	if w.codexAuthReq != req {
+		t.Error("expected codexAuthReq to be stored on the model")
+	}
+	if !w.codexBrowserOpened {
+		t.Error("expected codexBrowserOpened to be true")
+	}
+	if !w.codexPasteIn.Focused() {
+		t.Error("expected paste input to be focused")
+	}
+	if w.err != nil {
+		t.Errorf("expected no error, got %v", w.err)
+	}
+}
+
+func TestSetupCodexPasteEmptyShowsError(t *testing.T) {
+	w := newTestSetup(t)
+	w.step = stepCodexLogin
+	w.codexAuthReq = &codex.AuthRequest{AuthURL: "https://example.com"}
+	w.codexPasteIn.Focus()
+
+	w, cmd := w.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	if w.err == nil {
+		t.Error("expected error for empty paste")
+	}
+	if cmd != nil {
+		t.Error("expected no cmd when paste is empty")
+	}
+}
+
+func TestSetupCodexPasteFiresComplete(t *testing.T) {
+	w := newTestSetup(t)
+	w.step = stepCodexLogin
+	w.codexAuthReq = &codex.AuthRequest{AuthURL: "https://example.com"}
+	w.codexPasteIn.Focus()
+	w.codexPasteIn.SetValue("http://localhost:1455/auth/callback?code=abc&state=xyz")
+
+	w, cmd := w.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	if cmd == nil {
+		t.Fatal("expected complete-login cmd")
+	}
+	if w.err != nil {
+		t.Errorf("expected no error, got %v", w.err)
+	}
+}
+
+func TestSetupCodexEscCancels(t *testing.T) {
+	w := newTestSetup(t)
+	w.step = stepCodexLogin
+	w.codexAuthReq = &codex.AuthRequest{AuthURL: "https://example.com"}
+	w.err = errTest
+
+	w, _ = w.Update(tea.KeyMsg{Type: tea.KeyEsc})
+
+	if w.step != stepAuthChoice {
+		t.Errorf("expected step stepAuthChoice after esc, got %d", w.step)
+	}
+	if w.codexAuthReq != nil {
+		t.Error("expected codexAuthReq to be cleared")
+	}
+	if w.err != nil {
+		t.Error("expected error to be cleared")
 	}
 }
 
@@ -260,6 +334,7 @@ func TestSetupViewExaKey(t *testing.T) {
 
 func TestSetupModelSelection(t *testing.T) {
 	w := newTestSetup(t)
+	w.models = apiModels
 	w.step = stepModel
 
 	w, _ = w.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
@@ -275,6 +350,7 @@ func TestSetupModelSelection(t *testing.T) {
 
 func TestSetupModelSelectAdvances(t *testing.T) {
 	w := newTestSetup(t)
+	w.models = apiModels
 	w.step = stepModel
 
 	w, _ = w.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -282,8 +358,8 @@ func TestSetupModelSelectAdvances(t *testing.T) {
 	if w.step != stepDocker {
 		t.Errorf("expected step stepDocker, got %d", w.step)
 	}
-	if w.cfg.Models.Main.Model != defaultModels[0] {
-		t.Errorf("expected model %q, got %q", defaultModels[0], w.cfg.Models.Main.Model)
+	if w.cfg.Models.Main.Model != apiModels[0] {
+		t.Errorf("expected model %q, got %q", apiModels[0], w.cfg.Models.Main.Model)
 	}
 }
 
@@ -574,6 +650,8 @@ func TestSetupViewAPIKeyWithoutSubscription(t *testing.T) {
 
 func TestSetupViewModelRecommended(t *testing.T) {
 	w := newTestSetup(t)
+	w.models = apiModels
+	w.cfg.Models.Main.Model = apiModels[0]
 	w.step = stepModel
 
 	view := w.View()

@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"net/url"
 	"testing"
 )
 
@@ -108,6 +109,48 @@ func TestGenerateState(t *testing.T) {
 
 	if s1 == s2 {
 		t.Error("two consecutive states should differ")
+	}
+}
+
+func TestPrepareLogin(t *testing.T) {
+	req, err := PrepareLogin()
+	if err != nil {
+		t.Fatalf("PrepareLogin: %v", err)
+	}
+
+	u, err := url.Parse(req.AuthURL)
+	if err != nil {
+		t.Fatalf("parse AuthURL: %v", err)
+	}
+	if u.Host != "auth.openai.com" {
+		t.Errorf("host = %q, want auth.openai.com", u.Host)
+	}
+	q := u.Query()
+	if q.Get("response_type") != "code" {
+		t.Errorf("response_type = %q, want code", q.Get("response_type"))
+	}
+	if q.Get("client_id") != clientID {
+		t.Errorf("client_id = %q, want %q", q.Get("client_id"), clientID)
+	}
+	if q.Get("redirect_uri") != redirectURI {
+		t.Errorf("redirect_uri = %q, want %q", q.Get("redirect_uri"), redirectURI)
+	}
+	if q.Get("code_challenge_method") != "S256" {
+		t.Errorf("code_challenge_method = %q, want S256", q.Get("code_challenge_method"))
+	}
+	if q.Get("state") != req.state {
+		t.Error("state in URL doesn't match request state")
+	}
+	if req.verifier == "" {
+		t.Error("verifier empty")
+	}
+}
+
+func TestCompleteRejectsEmptyInput(t *testing.T) {
+	req := &AuthRequest{verifier: "v", state: "s"}
+	_, err := req.Complete("   ", t.TempDir()+"/auth.json")
+	if err == nil {
+		t.Fatal("expected error for empty input")
 	}
 }
 

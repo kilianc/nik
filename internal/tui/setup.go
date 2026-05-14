@@ -43,21 +43,24 @@ const (
 )
 
 type setupModel struct {
-	step       setupStep
-	apiKeyIn   textinput.Model
-	exaKeyIn   textinput.Model
-	timezoneIn textinput.Model
-	pulse      *pulse
-	anims      animators
-	err        error
-	cfg        *config.Config
-	conn       *sql.DB
+	step         setupStep
+	apiKeyIn     textinput.Model
+	exaKeyIn     textinput.Model
+	timezoneIn   textinput.Model
+	codexPasteIn textinput.Model
+	pulse        *pulse
+	anims        animators
+	err          error
+	cfg          *config.Config
+	conn         *sql.DB
 
-	authCursor      int
-	hasSubscription bool
-	models          []string
-	modelCursor     int
-	dockerCursor    int
+	authCursor         int
+	hasSubscription    bool
+	codexAuthReq       *codex.AuthRequest
+	codexBrowserOpened bool
+	models             []string
+	modelCursor        int
+	dockerCursor       int
 
 	daemonWasAlive   bool
 	daemonOldPID     int
@@ -65,11 +68,30 @@ type setupModel struct {
 	completed        bool
 }
 
-var defaultModels = []string{
+var subscriptionModels = []string{
 	"gpt-5.3-codex",
+}
+
+var apiModels = []string{
 	"gpt-5.4",
 	"claude-sonnet-4-20250514",
 	"claude-opus-4-20250514",
+}
+
+func modelsFor(backend string) []string {
+	if backend == "subscription" {
+		return subscriptionModels
+	}
+	return apiModels
+}
+
+func cursorFor(models []string, current string) int {
+	for i, m := range models {
+		if m == current {
+			return i
+		}
+	}
+	return 0
 }
 
 func newSetupModel(cfg *config.Config, conn *sql.DB) setupModel {
@@ -89,14 +111,6 @@ func newSetupModel(cfg *config.Config, conn *sql.DB) setupModel {
 		exaKey.SetValue(existing)
 	}
 
-	defaultCursor := 0
-	for i, m := range defaultModels {
-		if m == cfg.Models.Main.Model {
-			defaultCursor = i
-			break
-		}
-	}
-
 	tz := cfg.Timezone
 	if tz == "" {
 		tz = time.Now().Location().String()
@@ -108,23 +122,32 @@ func newSetupModel(cfg *config.Config, conn *sql.DB) setupModel {
 	tzIn.SetValue(tz)
 	tzIn.Width = 50
 
+	codexPasteIn := textinput.New()
+	codexPasteIn.Placeholder = "http://localhost:1455/auth/callback?code=..."
+	codexPasteIn.Width = 60
+
 	p := newPulse(30 * time.Millisecond)
 	return setupModel{
-		step:        stepWelcome,
-		apiKeyIn:    apiKey,
-		exaKeyIn:    exaKey,
-		timezoneIn:  tzIn,
-		pulse:       p,
-		anims:       animators{p},
-		cfg:         cfg,
-		conn:        conn,
-		models:      defaultModels,
-		modelCursor: defaultCursor,
+		step:         stepWelcome,
+		apiKeyIn:     apiKey,
+		exaKeyIn:     exaKey,
+		timezoneIn:   tzIn,
+		codexPasteIn: codexPasteIn,
+		pulse:        p,
+		anims:        animators{p},
+		cfg:          cfg,
+		conn:         conn,
 	}
 }
 
 type codexLoginMsg struct {
 	err error
+}
+
+type codexAuthReadyMsg struct {
+	req           *codex.AuthRequest
+	browserOpened bool
+	err           error
 }
 
 type apiKeyValidatedMsg struct{ err error }
@@ -142,13 +165,23 @@ type daemonPollMsg struct {
 	alive bool
 }
 
-func codexLoginCmd() tea.Cmd {
+func codexAuthStartCmd() tea.Cmd {
 	return func() tea.Msg {
-		_, err := codex.LoadOrLogin("")
-		if err != nil {
-			return codexLoginMsg{err: err}
+		if _, err := codex.Load(""); err == nil {
+			return codexLoginMsg{}
 		}
-		return codexLoginMsg{}
+		req, err := codex.PrepareLogin()
+		if err != nil {
+			return codexAuthReadyMsg{err: err}
+		}
+		return codexAuthReadyMsg{req: req, browserOpened: codex.OpenBrowser(req.AuthURL)}
+	}
+}
+
+func codexCompleteLoginCmd(req *codex.AuthRequest, input string) tea.Cmd {
+	return func() tea.Msg {
+		_, err := req.Complete(input, "")
+		return codexLoginMsg{err: err}
 	}
 }
 
@@ -383,12 +416,32 @@ func (m setupModel) Update(msg tea.Msg) (setupModel, tea.Cmd) {
 			return m, tea.Quit
 		}
 
-	case codexLoginMsg:
+	case codexAuthReadyMsg:
 		if msg.err != nil {
 			m.err = msg.err
 			m.step = stepCodexLogin
 			return m, tea.Batch(cmds...)
 		}
+		m.codexAuthReq = msg.req
+		m.codexBrowserOpened = msg.browserOpened
+		m.codexPasteIn.Reset()
+		m.codexPasteIn.Focus()
+		m.step = stepCodexLogin
+		m.err = nil
+		cmds = append(cmds, textinput.Blink)
+		return m, tea.Batch(cmds...)
+
+	case codexLoginMsg:
+		if msg.err != nil {
+			m.err = msg.err
+			m.step = stepCodexLogin
+			if m.codexAuthReq != nil {
+				m.codexPasteIn.Focus()
+				cmds = append(cmds, textinput.Blink)
+			}
+			return m, tea.Batch(cmds...)
+		}
+		m.codexAuthReq = nil
 		m.hasSubscription = true
 		m.err = nil
 		m.step = stepCodexDone
@@ -506,9 +559,17 @@ func (m setupModel) updateAuthChoice(msg tea.Msg) (setupModel, tea.Cmd) {
 			return m, nil
 		case "enter":
 			if m.authCursor == 0 {
+				m.cfg.Models.Main.Backend = "subscription"
+				m.models = modelsFor("subscription")
+				m.modelCursor = cursorFor(m.models, m.cfg.Models.Main.Model)
+				m.cfg.Models.Main.Model = m.models[m.modelCursor]
 				m.step = stepCodexLogin
-				return m, codexLoginCmd()
+				return m, codexAuthStartCmd()
 			}
+			m.cfg.Models.Main.Backend = "api"
+			m.models = modelsFor("api")
+			m.modelCursor = cursorFor(m.models, m.cfg.Models.Main.Model)
+			m.cfg.Models.Main.Model = m.models[m.modelCursor]
 			m.step = stepAPIKey
 			m.apiKeyIn.Focus()
 			return m, textinput.Blink
@@ -518,9 +579,33 @@ func (m setupModel) updateAuthChoice(msg tea.Msg) (setupModel, tea.Cmd) {
 }
 
 func (m setupModel) updateCodexLogin(msg tea.Msg) (setupModel, tea.Cmd) {
-	if key, ok := msg.(tea.KeyMsg); ok && key.String() == "enter" && m.err != nil {
-		m.err = nil
-		return m, codexLoginCmd()
+	if key, ok := msg.(tea.KeyMsg); ok {
+		switch key.String() {
+		case "esc":
+			m.codexAuthReq = nil
+			m.codexPasteIn.Blur()
+			m.err = nil
+			m.step = stepAuthChoice
+			return m, nil
+		case "enter":
+			if m.codexAuthReq == nil {
+				m.err = nil
+				return m, codexAuthStartCmd()
+			}
+			val := strings.TrimSpace(m.codexPasteIn.Value())
+			if val == "" {
+				m.err = fmt.Errorf("paste the URL from your browser after signing in")
+				return m, nil
+			}
+			m.err = nil
+			return m, codexCompleteLoginCmd(m.codexAuthReq, val)
+		}
+	}
+
+	if m.codexAuthReq != nil {
+		var cmd tea.Cmd
+		m.codexPasteIn, cmd = m.codexPasteIn.Update(msg)
+		return m, cmd
 	}
 	return m, nil
 }
@@ -714,13 +799,32 @@ func (m setupModel) viewAuthChoice() string {
 }
 
 func (m setupModel) viewCodexLogin() string {
-	if m.err != nil {
-		s := errorStyle.Render("Sign-in failed: "+m.err.Error()) + "\n\n"
-		s += dimStyle.Render("press enter to retry")
+	if m.codexAuthReq == nil {
+		s := m.spinnerView() + " Preparing OpenAI sign-in...\n\n"
+		s += hintStyle.Render("This connects nik to your ChatGPT Plus or Pro subscription.") + "\n"
+		if m.err != nil {
+			s += "\n" + errorStyle.Render(m.err.Error()) + "\n"
+			s += dimStyle.Render("\npress enter to retry, esc to go back")
+		}
 		return s
 	}
-	s := m.spinnerView() + " Opening your browser to sign in with OpenAI...\n\n"
-	s += hintStyle.Render("This connects nik to your ChatGPT Plus or Pro subscription.")
+
+	s := labelStyle.Render("Sign in with OpenAI") + "\n\n"
+	if m.codexBrowserOpened {
+		s += hintStyle.Render("1. Your browser should have opened to OpenAI. If it didn't,") + "\n"
+		s += hintStyle.Render("   open this URL manually:") + "\n\n"
+	} else {
+		s += hintStyle.Render("1. Open this URL in your browser and sign in:") + "\n\n"
+	}
+	s += "   " + m.codexAuthReq.AuthURL + "\n\n"
+	s += hintStyle.Render("2. After signing in your browser will fail to load a") + "\n"
+	s += hintStyle.Render("   localhost page — that's expected. Copy that URL from") + "\n"
+	s += hintStyle.Render("   the address bar and paste it below:") + "\n\n"
+	s += m.codexPasteIn.View() + "\n"
+	if m.err != nil {
+		s += errorStyle.Render(m.err.Error()) + "\n"
+	}
+	s += dimStyle.Render("\npress enter to continue, esc to go back")
 	return s
 }
 
