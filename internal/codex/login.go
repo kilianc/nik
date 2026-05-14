@@ -45,13 +45,16 @@ func PrepareLogin() (*AuthRequest, error) {
 	}
 
 	params := url.Values{
-		"response_type":         {"code"},
-		"client_id":             {clientID},
-		"redirect_uri":          {redirectURI},
-		"scope":                 {scopes},
-		"code_challenge":        {challenge},
-		"code_challenge_method": {"S256"},
-		"state":                 {state},
+		"response_type":              {"code"},
+		"client_id":                  {clientID},
+		"redirect_uri":               {redirectURI},
+		"scope":                      {scopes},
+		"code_challenge":             {challenge},
+		"code_challenge_method":      {"S256"},
+		"state":                      {state},
+		"id_token_add_organizations": {"true"},
+		"codex_cli_simplified_flow":  {"true"},
+		"originator":                 {originator},
 	}
 
 	return &AuthRequest{

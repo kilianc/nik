@@ -18,7 +18,8 @@ const (
 	// public OAuth client ID for the Codex CLI "sign in with OpenAI" flow
 	clientID      = "app_EMoamEEZ73f0CkXaXp7hrann"
 	tokenEndpoint = "https://auth.openai.com/oauth/token"
-	scopes        = "openid profile email offline_access"
+	scopes        = "openid profile email offline_access api.connectors.read api.connectors.invoke"
+	originator    = "codex_cli_rs"
 	refreshBuffer = 5 * time.Minute
 )
 

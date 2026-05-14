@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -126,23 +127,49 @@ func TestPrepareLogin(t *testing.T) {
 		t.Errorf("host = %q, want auth.openai.com", u.Host)
 	}
 	q := u.Query()
-	if q.Get("response_type") != "code" {
-		t.Errorf("response_type = %q, want code", q.Get("response_type"))
+
+	wantParams := map[string]string{
+		"response_type":              "code",
+		"client_id":                  clientID,
+		"redirect_uri":               redirectURI,
+		"scope":                      scopes,
+		"code_challenge_method":      "S256",
+		"id_token_add_organizations": "true",
+		"codex_cli_simplified_flow":  "true",
+		"originator":                 originator,
 	}
-	if q.Get("client_id") != clientID {
-		t.Errorf("client_id = %q, want %q", q.Get("client_id"), clientID)
+	for k, want := range wantParams {
+		if got := q.Get(k); got != want {
+			t.Errorf("auth URL param %q = %q, want %q", k, got, want)
+		}
 	}
-	if q.Get("redirect_uri") != redirectURI {
-		t.Errorf("redirect_uri = %q, want %q", q.Get("redirect_uri"), redirectURI)
-	}
-	if q.Get("code_challenge_method") != "S256" {
-		t.Errorf("code_challenge_method = %q, want S256", q.Get("code_challenge_method"))
-	}
+
 	if q.Get("state") != req.state {
 		t.Error("state in URL doesn't match request state")
 	}
 	if req.verifier == "" {
 		t.Error("verifier empty")
+	}
+
+	// challenge in URL must be the SHA-256 of the verifier (PKCE S256).
+	h := sha256.Sum256([]byte(req.verifier))
+	wantChallenge := base64.RawURLEncoding.EncodeToString(h[:])
+	if got := q.Get("code_challenge"); got != wantChallenge {
+		t.Errorf("code_challenge = %q, want %q", got, wantChallenge)
+	}
+}
+
+func TestPrepareLoginScopesIncludeConnectors(t *testing.T) {
+	req, err := PrepareLogin()
+	if err != nil {
+		t.Fatalf("PrepareLogin: %v", err)
+	}
+	u, _ := url.Parse(req.AuthURL)
+	scope := u.Query().Get("scope")
+	for _, required := range []string{"openid", "offline_access", "api.connectors.read", "api.connectors.invoke"} {
+		if !strings.Contains(scope, required) {
+			t.Errorf("scope missing %q (got %q)", required, scope)
+		}
 	}
 }
 
