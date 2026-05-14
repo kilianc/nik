@@ -135,6 +135,15 @@ type TaskListParams struct {
 	IncludeRecent  bool
 }
 
+func TaskCountActive(ctx context.Context, db DBTX) (int, error) {
+	var n int
+	err := db.QueryRowContext(ctx, queries.TaskCountActive).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("count active tasks: %w", err)
+	}
+	return n, nil
+}
+
 func TaskList(ctx context.Context, db *sql.DB, p TaskListParams) ([]TaskListRow, error) {
 	recency := "-0 seconds"
 	if p.IncludeRecent {

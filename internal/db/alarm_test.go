@@ -504,6 +504,56 @@ func TestAlarmFireAtomicCommit(t *testing.T) {
 	}
 }
 
+func TestAlarmCountActiveIgnoresCancelled(t *testing.T) {
+	ctx := context.Background()
+
+	conn, err := OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	convID := seedConversation(t, ctx, conn, "whatsapp", "count-conv@g.us", "group")
+	now := time.Now().UTC().Truncate(time.Second)
+
+	n, err := AlarmCountActive(ctx, conn)
+	if err != nil {
+		t.Fatalf("count empty: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("expected 0 active alarms on empty db, got %d", n)
+	}
+
+	a1, err := AlarmCreate(ctx, conn, AlarmCreateParams{OriginConversationID: convID, Goal: "g1", NextFireAt: now.Add(time.Hour)})
+	if err != nil {
+		t.Fatalf("create a1: %v", err)
+	}
+	_, err = AlarmCreate(ctx, conn, AlarmCreateParams{OriginConversationID: convID, Goal: "g2", NextFireAt: now.Add(2 * time.Hour)})
+	if err != nil {
+		t.Fatalf("create a2: %v", err)
+	}
+
+	n, err = AlarmCountActive(ctx, conn)
+	if err != nil {
+		t.Fatalf("count with two: %v", err)
+	}
+	if n != 2 {
+		t.Errorf("expected 2 active alarms, got %d", n)
+	}
+
+	if err := AlarmCancel(ctx, conn, a1.ID); err != nil {
+		t.Fatalf("cancel a1: %v", err)
+	}
+
+	n, err = AlarmCountActive(ctx, conn)
+	if err != nil {
+		t.Fatalf("count after cancel: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("expected 1 active alarm after cancel, got %d", n)
+	}
+}
+
 func seedContactForAlarm(t *testing.T, ctx context.Context, conn *sql.DB) Contact {
 	t.Helper()
 

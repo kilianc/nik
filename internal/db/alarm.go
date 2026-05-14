@@ -127,6 +127,15 @@ func AlarmGet(ctx context.Context, db DBTX, identifier string) (Alarm, bool, err
 	return a, true, nil
 }
 
+func AlarmCountActive(ctx context.Context, db DBTX) (int, error) {
+	var n int
+	err := db.QueryRowContext(ctx, queries.AlarmCountActive).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("count active alarms: %w", err)
+	}
+	return n, nil
+}
+
 func AlarmListStale(ctx context.Context, db *sql.DB, now time.Time) ([]Alarm, error) {
 	rows, err := db.QueryContext(ctx, queries.AlarmStaleRecurring, now)
 	if err != nil {

@@ -190,3 +190,62 @@ func TestTaskRetryChain(t *testing.T) {
 		}
 	})
 }
+
+func TestTaskCountActiveCountsPendingAndRunning(t *testing.T) {
+	ctx := context.Background()
+
+	conn, err := OpenInMemory()
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer conn.Close()
+
+	convID := seedConversation(t, ctx, conn, "whatsapp", "task-count@s.whatsapp.net", "dm")
+	now := time.Now().UTC()
+
+	n, err := TaskCountActive(ctx, conn)
+	if err != nil {
+		t.Fatalf("count empty: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("expected 0 active tasks on empty db, got %d", n)
+	}
+
+	cases := []struct {
+		status string
+		active bool
+	}{
+		{"pending", true},
+		{"running", true},
+		{"completed", false},
+		{"failed", false},
+		{"cancelled", false},
+	}
+
+	want := 0
+	for _, c := range cases {
+		err = TaskInsert(ctx, conn, TaskInsertParams{
+			ID:             id.V7(),
+			ConversationID: convID,
+			Goal:           "g-" + c.status,
+			Plan:           "p",
+			Thinking:       "low",
+			Status:         c.status,
+			CreatedAt:      now,
+		})
+		if err != nil {
+			t.Fatalf("insert %s: %v", c.status, err)
+		}
+		if c.active {
+			want++
+		}
+	}
+
+	n, err = TaskCountActive(ctx, conn)
+	if err != nil {
+		t.Fatalf("count after inserts: %v", err)
+	}
+	if n != want {
+		t.Errorf("expected %d active tasks, got %d", want, n)
+	}
+}
