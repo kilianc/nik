@@ -43,7 +43,7 @@ func NewApp(cfg *config.Config, conn *sql.DB, sender MessageSender, setup bool, 
 		a.setup = newSetupModel(cfg, conn)
 	} else {
 		a.view = viewChat
-		a.chat = newChatModel(conn, sender, opts)
+		a.chat = newChatModel(cfg, conn, sender, opts)
 	}
 
 	return a
@@ -72,7 +72,8 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if a.setup.isDone() {
 			a.view = viewChat
-			a.chat = newChatModel(a.conn, a.sender, a.opts)
+			a.chat = newChatModel(a.cfg, a.conn, a.sender, a.opts)
+			a.chat, _ = a.chat.Update(tea.WindowSizeMsg{Width: a.width, Height: a.height})
 			return a, a.chat.Init()
 		}
 
@@ -99,7 +100,7 @@ func (a App) View() string {
 
 func Run(cfg *config.Config, conn *sql.DB, sender MessageSender, setup bool, opts Options) error {
 	app := NewApp(cfg, conn, sender, setup, opts)
-	p := tea.NewProgram(app)
+	p := tea.NewProgram(app, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	_, err := p.Run()
 	return err
 }

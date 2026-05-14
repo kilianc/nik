@@ -12,10 +12,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/kciuffolo/nik/internal/codex"
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/daemonctl"
@@ -49,7 +47,8 @@ type setupModel struct {
 	apiKeyIn   textinput.Model
 	exaKeyIn   textinput.Model
 	timezoneIn textinput.Model
-	spinner    spinner.Model
+	pulse      *pulse
+	anims      animators
 	err        error
 	cfg        *config.Config
 	conn       *sql.DB
@@ -64,9 +63,6 @@ type setupModel struct {
 	daemonOldPID     int
 	serviceInstalled bool
 	completed        bool
-
-	width  int
-	height int
 }
 
 var defaultModels = []string{
@@ -112,16 +108,14 @@ func newSetupModel(cfg *config.Config, conn *sql.DB) setupModel {
 	tzIn.SetValue(tz)
 	tzIn.Width = 50
 
-	sp := spinner.New()
-	sp.Spinner = spinner.Dot
-	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("63"))
-
+	p := newPulse(30 * time.Millisecond)
 	return setupModel{
 		step:        stepWelcome,
 		apiKeyIn:    apiKey,
 		exaKeyIn:    exaKey,
 		timezoneIn:  tzIn,
-		spinner:     sp,
+		pulse:       p,
+		anims:       animators{p},
 		cfg:         cfg,
 		conn:        conn,
 		models:      defaultModels,
@@ -370,16 +364,20 @@ func daemonPollCmd(home string) tea.Cmd {
 }
 
 func (m setupModel) Init() tea.Cmd {
-	return m.spinner.Tick
+	return m.pulse.SetActive(true)
 }
 
 func (m setupModel) Update(msg tea.Msg) (setupModel, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-		return m, nil
+	var cmds []tea.Cmd
 
+	// Universal animator fanout. MUST stay at the top of Update so animation
+	// messages can never be swallowed by a step handler delegating to
+	// textinput.Update — that's how the spinner used to die mid-step.
+	if cmd := m.anims.Update(msg); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+
+	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
@@ -389,53 +387,58 @@ func (m setupModel) Update(msg tea.Msg) (setupModel, tea.Cmd) {
 		if msg.err != nil {
 			m.err = msg.err
 			m.step = stepCodexLogin
-			return m, nil
+			return m, tea.Batch(cmds...)
 		}
 		m.hasSubscription = true
 		m.err = nil
 		m.step = stepCodexDone
-		return m, nil
+		return m, tea.Batch(cmds...)
 
 	case apiKeyValidatedMsg:
 		if msg.err != nil {
 			m.err = msg.err
 			m.step = stepAPIKey
 			m.apiKeyIn.Focus()
-			return m, textinput.Blink
+			cmds = append(cmds, textinput.Blink)
+			return m, tea.Batch(cmds...)
 		}
 		m.err = nil
 		m.step = stepExaKey
 		m.exaKeyIn.Focus()
-		return m, textinput.Blink
+		cmds = append(cmds, textinput.Blink)
+		return m, tea.Batch(cmds...)
 
 	case exaKeyValidatedMsg:
 		if msg.err != nil {
 			m.err = msg.err
 			m.step = stepExaKey
 			m.exaKeyIn.Focus()
-			return m, textinput.Blink
+			cmds = append(cmds, textinput.Blink)
+			return m, tea.Batch(cmds...)
 		}
 		m.err = nil
 		m.step = stepModel
-		return m, nil
+		return m, tea.Batch(cmds...)
 
 	case locationResolvedMsg:
 		if msg.err != nil {
 			m.err = msg.err
 			m.step = stepTimezone
 			m.timezoneIn.Focus()
-			return m, textinput.Blink
+			cmds = append(cmds, textinput.Blink)
+			return m, tea.Batch(cmds...)
 		}
 		m.err = nil
 		m.cfg.Timezone = msg.timezone
 		m.cfg.Location = msg.location
 		m.step = stepWriting
-		return m, writeSetupCmd(m.cfg, m.conn, m.apiKeyIn.Value(), m.exaKeyIn.Value())
+		cmds = append(cmds, writeSetupCmd(m.cfg, m.conn, m.apiKeyIn.Value(), m.exaKeyIn.Value()))
+		return m, tea.Batch(cmds...)
 
 	case configWrittenMsg:
 		if msg.err != nil {
 			m.err = msg.err
-			return m, nil
+			return m, tea.Batch(cmds...)
 		}
 		m.err = nil
 		m.step = stepDone
@@ -444,50 +447,44 @@ func (m setupModel) Update(msg tea.Msg) (setupModel, tea.Cmd) {
 		m.daemonOldPID = pid
 		m.serviceInstalled = daemonctl.IsInstalled()
 		if !alive {
-			return m, tea.Batch(m.spinner.Tick, daemonPollCmd(m.cfg.Home))
+			cmds = append(cmds, daemonPollCmd(m.cfg.Home))
 		}
-		return m, nil
+		return m, tea.Batch(cmds...)
 
 	case daemonPollMsg:
 		if msg.alive && msg.pid != m.daemonOldPID {
 			m.completed = true
-			return m, nil
+			return m, tea.Batch(cmds...)
 		}
-		return m, daemonPollCmd(m.cfg.Home)
+		cmds = append(cmds, daemonPollCmd(m.cfg.Home))
+		return m, tea.Batch(cmds...)
 	}
 
+	var stepCmd tea.Cmd
 	switch m.step {
 	case stepWelcome:
-		return m.updateWelcome(msg)
+		m, stepCmd = m.updateWelcome(msg)
 	case stepAuthChoice:
-		return m.updateAuthChoice(msg)
+		m, stepCmd = m.updateAuthChoice(msg)
 	case stepCodexLogin:
-		return m.updateCodexLogin(msg)
+		m, stepCmd = m.updateCodexLogin(msg)
 	case stepCodexDone:
-		return m.updateCodexDone(msg)
+		m, stepCmd = m.updateCodexDone(msg)
 	case stepAPIKey:
-		return m.updateAPIKey(msg)
-	case stepAPIKeyValidating:
-		return m.updateSpinner(msg)
+		m, stepCmd = m.updateAPIKey(msg)
 	case stepExaKey:
-		return m.updateExaKey(msg)
-	case stepExaKeyValidating:
-		return m.updateSpinner(msg)
+		m, stepCmd = m.updateExaKey(msg)
 	case stepModel:
-		return m.updateModel(msg)
+		m, stepCmd = m.updateModel(msg)
 	case stepDocker:
-		return m.updateDocker(msg)
+		m, stepCmd = m.updateDocker(msg)
 	case stepTimezone:
-		return m.updateTimezone(msg)
-	case stepLocationResolving:
-		return m.updateSpinner(msg)
+		m, stepCmd = m.updateTimezone(msg)
 	case stepDone:
-		return m.updateDone(msg)
-	case stepWaitDaemon:
-		return m.updateSpinner(msg)
+		m, stepCmd = m.updateDone(msg)
 	}
-
-	return m, nil
+	cmds = append(cmds, stepCmd)
+	return m, tea.Batch(cmds...)
 }
 
 func (m setupModel) updateWelcome(msg tea.Msg) (setupModel, tea.Cmd) {
@@ -525,10 +522,7 @@ func (m setupModel) updateCodexLogin(msg tea.Msg) (setupModel, tea.Cmd) {
 		m.err = nil
 		return m, codexLoginCmd()
 	}
-
-	var cmd tea.Cmd
-	m.spinner, cmd = m.spinner.Update(msg)
-	return m, cmd
+	return m, nil
 }
 
 func (m setupModel) updateCodexDone(msg tea.Msg) (setupModel, tea.Cmd) {
@@ -571,12 +565,6 @@ func (m setupModel) updateExaKey(msg tea.Msg) (setupModel, tea.Cmd) {
 
 	var cmd tea.Cmd
 	m.exaKeyIn, cmd = m.exaKeyIn.Update(msg)
-	return m, cmd
-}
-
-func (m setupModel) updateSpinner(msg tea.Msg) (setupModel, tea.Cmd) {
-	var cmd tea.Cmd
-	m.spinner, cmd = m.spinner.Update(msg)
 	return m, cmd
 }
 
@@ -646,72 +634,63 @@ func (m setupModel) updateTimezone(msg tea.Msg) (setupModel, tea.Cmd) {
 }
 
 func (m setupModel) updateDone(msg tea.Msg) (setupModel, tea.Cmd) {
-	if !m.daemonWasAlive {
-		var cmd tea.Cmd
-		m.spinner, cmd = m.spinner.Update(msg)
-		return m, cmd
+	if m.daemonWasAlive {
+		if key, ok := msg.(tea.KeyMsg); ok && key.String() == "enter" {
+			_ = daemonctl.SignalDaemon(m.cfg.Home, syscall.SIGTERM)
+			m.step = stepWaitDaemon
+			return m, daemonPollCmd(m.cfg.Home)
+		}
 	}
-
-	if key, ok := msg.(tea.KeyMsg); ok && key.String() == "enter" {
-		_ = daemonctl.SignalDaemon(m.cfg.Home, syscall.SIGTERM)
-		m.step = stepWaitDaemon
-		return m, tea.Batch(m.spinner.Tick, daemonPollCmd(m.cfg.Home))
-	}
-
 	return m, nil
 }
 
 func (m setupModel) View() string {
-	banner := titleStyle.Render("nik") + "\n\n"
-
 	switch m.step {
 	case stepWelcome:
-		return m.viewWelcome(banner)
+		return m.viewWelcome()
 	case stepAuthChoice:
-		return m.viewAuthChoice(banner)
+		return m.viewAuthChoice()
 	case stepCodexLogin:
-		return m.viewCodexLogin(banner)
+		return m.viewCodexLogin()
 	case stepCodexDone:
-		return m.viewCodexDone(banner)
+		return m.viewCodexDone()
 	case stepAPIKey:
-		return m.viewAPIKey(banner)
+		return m.viewAPIKey()
 	case stepAPIKeyValidating:
-		return banner + m.spinner.View() + " validating API key..."
+		return m.spinnerView() + " validating API key..."
 	case stepExaKey:
-		return m.viewExaKey(banner)
+		return m.viewExaKey()
 	case stepExaKeyValidating:
-		return banner + m.spinner.View() + " validating Exa key..."
+		return m.spinnerView() + " validating Exa key..."
 	case stepModel:
-		return m.viewModel(banner)
+		return m.viewModel()
 	case stepDocker:
-		return m.viewDocker(banner)
+		return m.viewDocker()
 	case stepTimezone:
-		return m.viewTimezone(banner)
+		return m.viewTimezone()
 	case stepLocationResolving:
-		return banner + m.spinner.View() + " finding where you are..."
+		return m.spinnerView() + " finding where you are..."
 	case stepWriting:
-		return banner + m.spinner.View() + " writing config..."
+		return m.spinnerView() + " writing config..."
 	case stepDone:
-		return m.viewDone(banner)
+		return m.viewDone()
 	case stepWaitDaemon:
-		return m.viewDone(banner)
+		return m.viewDone()
 	}
 
-	return banner
+	return ""
 }
 
-func (m setupModel) viewWelcome(banner string) string {
-	s := banner
-	s += "Welcome to " + titleStyle.Render("nik") + "\n\n"
+func (m setupModel) viewWelcome() string {
+	s := "Welcome to " + titleStyle.Render("nik") + "\n\n"
 	s += "He can't wait to meet you, so let's get these\n"
 	s += "settings quickly out of the way.\n"
 	s += dimStyle.Render("\npress enter to begin")
 	return s
 }
 
-func (m setupModel) viewAuthChoice(banner string) string {
-	s := banner
-	s += labelStyle.Render("How do you connect to OpenAI?") + "\n"
+func (m setupModel) viewAuthChoice() string {
+	s := labelStyle.Render("How do you connect to OpenAI?") + "\n"
 	s += hintStyle.Render("nik needs access to OpenAI models to think, remember, and speak.") + "\n\n"
 
 	sub := "  "
@@ -734,36 +713,32 @@ func (m setupModel) viewAuthChoice(banner string) string {
 	return s
 }
 
-func (m setupModel) viewCodexLogin(banner string) string {
-	s := banner
+func (m setupModel) viewCodexLogin() string {
 	if m.err != nil {
-		s += errorStyle.Render("Sign-in failed: "+m.err.Error()) + "\n\n"
+		s := errorStyle.Render("Sign-in failed: "+m.err.Error()) + "\n\n"
 		s += dimStyle.Render("press enter to retry")
 		return s
 	}
-	s += m.spinner.View() + " Opening your browser to sign in with OpenAI...\n\n"
+	s := m.spinnerView() + " Opening your browser to sign in with OpenAI...\n\n"
 	s += hintStyle.Render("This connects nik to your ChatGPT Plus or Pro subscription.")
 	return s
 }
 
-func (m setupModel) viewCodexDone(banner string) string {
-	s := banner
-	s += successStyle.Render("Signed in successfully!") + "\n\n"
+func (m setupModel) viewCodexDone() string {
+	s := successStyle.Render("Signed in successfully!") + "\n\n"
 	s += hintStyle.Render("Your ChatGPT subscription is active and nik will use it") + "\n"
 	s += hintStyle.Render("for its main model. No API credits needed for that part.") + "\n"
 	s += dimStyle.Render("\npress enter to continue")
 	return s
 }
 
-func (m setupModel) viewAPIKey(banner string) string {
-	s := banner
-
+func (m setupModel) viewAPIKey() string {
 	brainNote := "this applies to you"
 	if m.hasSubscription {
 		brainNote = "doesn't apply to you"
 	}
 
-	s += labelStyle.Render("OpenAI API Key") + "\n\n"
+	s := labelStyle.Render("OpenAI API Key") + "\n\n"
 	s += hintStyle.Render("The API key is used for:") + "\n"
 	s += hintStyle.Render("  - nik's brain when not using a subscription ("+brainNote+")") + "\n"
 	s += hintStyle.Render("  - recall — searching long-term memory") + "\n"
@@ -779,13 +754,12 @@ func (m setupModel) viewAPIKey(banner string) string {
 	return s
 }
 
-func (m setupModel) viewExaKey(banner string) string {
-	s := banner
-	s += labelStyle.Render("Exa API Key") + "\n\n"
+func (m setupModel) viewExaKey() string {
+	s := labelStyle.Render("Exa API Key") + "\n\n"
 	s += hintStyle.Render("nik uses Exa to search the web. This powers research,") + "\n"
 	s += hintStyle.Render("fact-checking, and staying up to date on current events.") + "\n\n"
 	s += hintStyle.Render("Exa has a free tier with 1000 searches/month, more than") + "\n"
-	s += hintStyle.Render("enough for personal use. Sign up at dashboard.exa.ai and") + "\n"
+	s += hintStyle.Render("enough for personal use. Sign up at https://dashboard.exa.ai and") + "\n"
 	s += hintStyle.Render("create an API key under your account settings.") + "\n\n"
 	s += m.exaKeyIn.View() + "\n"
 	if m.err != nil {
@@ -795,9 +769,8 @@ func (m setupModel) viewExaKey(banner string) string {
 	return s
 }
 
-func (m setupModel) viewModel(banner string) string {
-	s := banner
-	s += labelStyle.Render("Choose a model") + "\n"
+func (m setupModel) viewModel() string {
+	s := labelStyle.Render("Choose a model") + "\n"
 	s += hintStyle.Render("This is what nik thinks with day-to-day. You can change it later in config.yaml.") + "\n\n"
 
 	recommended := m.cfg.Models.Main.Model
@@ -816,9 +789,8 @@ func (m setupModel) viewModel(banner string) string {
 	return s
 }
 
-func (m setupModel) viewDocker(banner string) string {
-	s := banner
-	s += labelStyle.Render("Shell sandbox") + "\n"
+func (m setupModel) viewDocker() string {
+	s := labelStyle.Render("Shell sandbox") + "\n"
 	s += hintStyle.Render("nik runs shell commands to search the web, manage files, and run code.") + "\n"
 	s += hintStyle.Render("Docker keeps those commands sandboxed so they can't affect your system.") + "\n\n"
 
@@ -840,9 +812,8 @@ func (m setupModel) viewDocker(banner string) string {
 	return s
 }
 
-func (m setupModel) viewTimezone(banner string) string {
-	s := banner
-	s += labelStyle.Render("Where you live") + "\n"
+func (m setupModel) viewTimezone() string {
+	s := labelStyle.Render("Where you live") + "\n"
 	s += hintStyle.Render("nik uses this for scheduling, alarms, and understanding") + "\n"
 	s += hintStyle.Render("things like \"tomorrow morning\" or \"next Friday\".") + "\n\n"
 
@@ -856,9 +827,8 @@ func (m setupModel) viewTimezone(banner string) string {
 	return s
 }
 
-func (m setupModel) viewDone(banner string) string {
-	s := banner
-	s += successStyle.Render("You're all set.") + "\n\n"
+func (m setupModel) viewDone() string {
+	s := successStyle.Render("You're all set.") + "\n\n"
 
 	if m.hasSubscription {
 		s += "  OpenAI account    " + successStyle.Render("connected") + "\n"
@@ -882,7 +852,7 @@ func (m setupModel) viewDone(banner string) string {
 		} else if m.daemonWasAlive {
 			s += hintStyle.Render("nik has been stopped. Please restart it in your other terminal.") + "\n"
 		}
-		s += m.spinner.View() + " waiting for nik to start..."
+		s += m.spinnerView() + " waiting for nik to start..."
 		return s
 	}
 
@@ -902,8 +872,12 @@ func (m setupModel) viewDone(banner string) string {
 	} else {
 		s += hintStyle.Render("Start nik with: nik daemon") + "\n"
 	}
-	s += "\n" + m.spinner.View() + " waiting for nik to start..."
+	s += "\n" + m.spinnerView() + " waiting for nik to start..."
 	return s
+}
+
+func (m setupModel) spinnerView() string {
+	return spinnerColor.Render(spinnerGlyph(m.pulse.Tick()))
 }
 
 func (m setupModel) isDone() bool {

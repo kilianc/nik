@@ -10,8 +10,14 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/db"
 )
+
+func newTestChat(t *testing.T, conn *sql.DB, sender MessageSender, opts Options) chatModel {
+	t.Helper()
+	return newChatModel(&config.Config{Home: t.TempDir()}, conn, sender, opts)
+}
 
 type stubSender struct {
 	lastBody string
@@ -34,7 +40,7 @@ func TestChatModelRendersEmptyState(t *testing.T) {
 	}
 	defer conn.Close()
 
-	c := newChatModel(conn, nil, Options{})
+	c := newTestChat(t, conn, nil, Options{})
 
 	view := c.View()
 	if !strings.Contains(view, "❯") {
@@ -49,7 +55,7 @@ func TestChatNewMessagesMsg(t *testing.T) {
 	}
 	defer conn.Close()
 
-	c := newChatModel(conn, nil, Options{})
+	c := newTestChat(t, conn, nil, Options{})
 
 	msgs := []db.Message{
 		{ID: "msg-1", Body: "hello", Kind: "text", ContactID: db.OwnerContactID, SentAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)},
@@ -73,7 +79,7 @@ func TestChatActivityThinking(t *testing.T) {
 	}
 	defer conn.Close()
 
-	c := newChatModel(conn, nil, Options{})
+	c := newTestChat(t, conn, nil, Options{})
 	c, _ = c.Update(newMessagesMsg{activity: []string{"thinking"}})
 
 	if len(c.activity) == 0 {
@@ -84,6 +90,41 @@ func TestChatActivityThinking(t *testing.T) {
 	}
 }
 
+func TestGhostBubblePrecedence(t *testing.T) {
+	conn, err := db.OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	c := newTestChat(t, conn, nil, Options{})
+	c, _ = c.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
+
+	// thinking only -> ghost shows "thinking"
+	c, _ = c.Update(newMessagesMsg{activity: []string{"thinking"}})
+	out := stripAnsi(c.convCache)
+	if !strings.Contains(out, "thinking") {
+		t.Errorf("expected 'thinking' ghost bubble when thinking, got %q", out)
+	}
+	if strings.Contains(out, "typing") {
+		t.Errorf("did not expect 'typing' label when only thinking, got %q", out)
+	}
+
+	// typing+thinking -> typing wins
+	c, _ = c.Update(newMessagesMsg{activity: []string{"typing", "thinking"}})
+	out = stripAnsi(c.convCache)
+	if !strings.Contains(out, "typing") {
+		t.Errorf("expected 'typing' ghost bubble when typing+thinking, got %q", out)
+	}
+
+	// no activity -> no ghost bubble
+	c, _ = c.Update(newMessagesMsg{activity: nil})
+	out = stripAnsi(c.convCache)
+	if strings.Contains(out, "typing") || strings.Contains(out, "thinking") {
+		t.Errorf("did not expect ghost bubble when idle, got %q", out)
+	}
+}
+
 func TestChatWindowResize(t *testing.T) {
 	conn, err := db.OpenInMemory()
 	if err != nil {
@@ -91,7 +132,7 @@ func TestChatWindowResize(t *testing.T) {
 	}
 	defer conn.Close()
 
-	c := newChatModel(conn, nil, Options{})
+	c := newTestChat(t, conn, nil, Options{})
 	c, _ = c.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 
 	if c.width != 100 {
@@ -123,7 +164,7 @@ func TestChatEmptyPollSchedulesNext(t *testing.T) {
 	}
 	defer conn.Close()
 
-	c := newChatModel(conn, nil, Options{})
+	c := newTestChat(t, conn, nil, Options{})
 	c, cmd := c.Update(newMessagesMsg{})
 
 	if cmd == nil {
@@ -141,7 +182,7 @@ func TestChatViewIncludesMessages(t *testing.T) {
 	}
 	defer conn.Close()
 
-	c := newChatModel(conn, nil, Options{})
+	c := newTestChat(t, conn, nil, Options{})
 	c, _ = c.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
 	c, _ = c.Update(newMessagesMsg{
 		messages: []db.Message{
@@ -166,7 +207,7 @@ func TestRenderConversation_ContainsMessages(t *testing.T) {
 		{ID: "2", Body: "hi there", Kind: "text", ContactID: db.SystemContactID, IsFromMe: true, SentAt: base.Add(time.Minute)},
 	}
 
-	out := stripAnsi(renderConversation(msgs, 80, 0, -1, false))
+	out := stripAnsi(renderConversation(msgs, 80, 0, -1, "", false))
 
 	if !strings.Contains(out, "hello") {
 		t.Error("expected hello in output")
@@ -191,7 +232,7 @@ func TestRenderConversation_GroupsSameSender(t *testing.T) {
 		{ID: "3", Body: "third", Kind: "text", ContactID: db.OwnerContactID, SentAt: base.Add(time.Minute)},
 	}
 
-	out := stripAnsi(renderConversation(msgs, 80, 0, -1, false))
+	out := stripAnsi(renderConversation(msgs, 80, 0, -1, "", false))
 
 	count := strings.Count(out, "you")
 	if count != 1 {
@@ -207,7 +248,7 @@ func TestRenderConversation_SenderChange(t *testing.T) {
 		{ID: "2", Body: "sup", Kind: "text", ContactID: db.SystemContactID, IsFromMe: true, SentAt: base.Add(time.Minute)},
 	}
 
-	out := renderConversation(msgs, 80, 0, -1, false)
+	out := renderConversation(msgs, 80, 0, -1, "", false)
 	lines := strings.Split(out, "\n")
 
 	foundBlank := false
@@ -237,7 +278,7 @@ func TestRenderConversation_DateSeparator(t *testing.T) {
 		{ID: "2", Body: "new", Kind: "text", ContactID: db.OwnerContactID, SentAt: today},
 	}
 
-	out := stripAnsi(renderConversation(msgs, 80, 0, -1, false))
+	out := stripAnsi(renderConversation(msgs, 80, 0, -1, "", false))
 
 	if !strings.Contains(out, "Yesterday") {
 		t.Error("expected Yesterday separator")
@@ -255,7 +296,7 @@ func TestRenderConversation_BigGap(t *testing.T) {
 		{ID: "2", Body: "after gap", Kind: "text", ContactID: db.OwnerContactID, SentAt: base.Add(10 * time.Minute)},
 	}
 
-	out := stripAnsi(renderConversation(msgs, 80, 0, -1, false))
+	out := stripAnsi(renderConversation(msgs, 80, 0, -1, "", false))
 
 	count := strings.Count(out, "you")
 	if count != 2 {
@@ -291,9 +332,13 @@ func TestBubble_LeftAlignedForNik(t *testing.T) {
 }
 
 func TestGhostBubble_Content(t *testing.T) {
-	out := stripAnsi(ghostBubble(0))
+	out := stripAnsi(ghostBubble(0, "typing"))
 	if !strings.Contains(out, "typing") {
 		t.Error("expected typing in ghost bubble")
+	}
+	out = stripAnsi(ghostBubble(0, "thinking"))
+	if !strings.Contains(out, "thinking") {
+		t.Error("expected thinking in ghost bubble")
 	}
 }
 
@@ -398,7 +443,7 @@ func TestRenderConversation_ToolCalls(t *testing.T) {
 		{ID: "4", Body: "here you go", Kind: "text", ContactID: db.SystemContactID, IsFromMe: true, SentAt: base.Add(3 * time.Second)},
 	}
 
-	out := stripAnsi(renderConversation(msgs, 80, 0, -1, false))
+	out := stripAnsi(renderConversation(msgs, 80, 0, -1, "", false))
 
 	if !strings.Contains(out, "db_query") {
 		t.Error("expected db_query tool call in output")
@@ -430,7 +475,7 @@ func TestRenderConversation_DoneToolCallFiltered(t *testing.T) {
 		{ID: "start-done", Body: `{"name":"done","input":"{\"reason\":\"nothing to do\"}"}`, Kind: "tool_call_start", ContactID: db.SystemContactID, IsFromMe: true, Platform: "system", SentAt: base},
 	}
 
-	out := stripAnsi(renderConversation(msgs, 80, 0, -1, false))
+	out := stripAnsi(renderConversation(msgs, 80, 0, -1, "", false))
 
 	if strings.Contains(out, "nothing to do") {
 		t.Error("done tool call starts should be filtered out")
@@ -444,7 +489,7 @@ func TestRenderConversation_InProgressToolCall(t *testing.T) {
 		{ID: "start-1", Body: `{"name":"db_query","input":"{\"reason\":\"fetching rows\"}"}`, Kind: "tool_call_start", ContactID: db.SystemContactID, IsFromMe: true, Platform: "system", SentAt: base},
 	}
 
-	out := stripAnsi(renderConversation(msgs, 80, 5, -1, false))
+	out := stripAnsi(renderConversation(msgs, 80, 5, -1, "", false))
 
 	if !strings.Contains(out, "db_query") {
 		t.Error("expected in-progress tool call name")
@@ -516,7 +561,7 @@ func TestRenderConversation_ToolCallsSplitByTimeGap(t *testing.T) {
 		{ID: "call-2", Body: `{"name":"load_skill","input":"{}","output":"{\"ok\":true}","round":1}`, Kind: "tool_call", ContactID: db.SystemContactID, IsFromMe: true, Platform: "system", SentAt: base.Add(46 * time.Minute), ContextStanzaID: sql.NullString{Valid: true, String: "start-2"}},
 	}
 
-	out := stripAnsi(renderConversation(msgs, 80, 0, -1, false))
+	out := stripAnsi(renderConversation(msgs, 80, 0, -1, "", false))
 
 	openCount := strings.Count(out, "╭")
 	closeCount := strings.Count(out, "╰")
@@ -535,23 +580,22 @@ func TestRenderConversation_ToolCallsSplitByTimeGap(t *testing.T) {
 	}
 }
 
-func TestThinkTickEnergy(t *testing.T) {
+func TestChatPulseAdvancesOnActivity(t *testing.T) {
 	conn, err := db.OpenInMemory()
 	if err != nil {
 		t.Fatalf("open in-memory db: %v", err)
 	}
 	defer conn.Close()
 
-	c := newChatModel(conn, nil, Options{})
-	c.activity = []string{"thinking"}
+	c := newTestChat(t, conn, nil, Options{})
+	c, _ = c.Update(newMessagesMsg{activity: []string{"thinking"}})
+	c, _ = c.Update(pulseTickMsg{tag: 0})
 
-	c, _ = c.Update(thinkTickMsg(time.Now()))
-
-	if c.thinkEnergy <= 0 {
-		t.Errorf("expected energy > 0 after think tick, got %f", c.thinkEnergy)
+	if c.pulse.Energy() <= 0 {
+		t.Errorf("expected energy > 0 after pulse tick, got %f", c.pulse.Energy())
 	}
-	if c.thinkTick != 1 {
-		t.Errorf("expected thinkTick 1, got %d", c.thinkTick)
+	if c.pulse.Tick() != 1 {
+		t.Errorf("expected pulse tick 1, got %d", c.pulse.Tick())
 	}
 }
 
@@ -562,7 +606,7 @@ func TestChatMessagesCapped(t *testing.T) {
 	}
 	defer conn.Close()
 
-	c := newChatModel(conn, nil, Options{})
+	c := newTestChat(t, conn, nil, Options{})
 	c, _ = c.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
 
 	var msgs []db.Message
@@ -596,7 +640,7 @@ func TestChatConvCacheDirtyOnNewMessages(t *testing.T) {
 	}
 	defer conn.Close()
 
-	c := newChatModel(conn, nil, Options{})
+	c := newTestChat(t, conn, nil, Options{})
 	c, _ = c.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
 
 	initial := c.convCache
@@ -615,14 +659,14 @@ func TestChatConvCacheDirtyOnNewMessages(t *testing.T) {
 	}
 }
 
-func TestChatConvCacheStableOnThinkTick(t *testing.T) {
+func TestChatConvCacheStableOnPulseTick(t *testing.T) {
 	conn, err := db.OpenInMemory()
 	if err != nil {
 		t.Fatalf("open in-memory db: %v", err)
 	}
 	defer conn.Close()
 
-	c := newChatModel(conn, nil, Options{})
+	c := newTestChat(t, conn, nil, Options{})
 	c, _ = c.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
 	c, _ = c.Update(newMessagesMsg{
 		messages: []db.Message{
@@ -633,11 +677,11 @@ func TestChatConvCacheStableOnThinkTick(t *testing.T) {
 
 	cached := c.convCache
 
-	c, _ = c.Update(thinkTickMsg(time.Now()))
-	c, _ = c.Update(thinkTickMsg(time.Now()))
+	c, _ = c.Update(pulseTickMsg{tag: c.pulse.tag})
+	c, _ = c.Update(pulseTickMsg{tag: c.pulse.tag})
 
 	if c.convCache != cached {
-		t.Error("expected convCache to remain stable across think ticks")
+		t.Error("expected convCache to remain stable across pulse ticks within the same frame window")
 	}
 }
 
@@ -697,7 +741,7 @@ func TestRenderConversation_Reactions(t *testing.T) {
 		{ID: "4", ExternalMessageID: "ext-4", Body: "❤️", Kind: "reaction", ContactID: db.OwnerContactID, SentAt: base.Add(3 * time.Minute), ContextStanzaID: sql.NullString{Valid: true, String: "ext-2"}},
 	}
 
-	out := stripAnsi(renderConversation(msgs, 80, 0, -1, false))
+	out := stripAnsi(renderConversation(msgs, 80, 0, -1, "", false))
 
 	if !strings.Contains(out, "hello") {
 		t.Error("expected hello in output")
@@ -719,7 +763,7 @@ func TestRenderConversation_ReactionRemoval(t *testing.T) {
 		{ID: "3", ExternalMessageID: "ext-3", Body: "", Kind: "reaction", ContactID: db.SystemContactID, IsFromMe: true, SentAt: base.Add(2 * time.Minute), ContextStanzaID: sql.NullString{Valid: true, String: "ext-1"}},
 	}
 
-	out := stripAnsi(renderConversation(msgs, 80, 0, -1, false))
+	out := stripAnsi(renderConversation(msgs, 80, 0, -1, "", false))
 
 	if !strings.Contains(out, "hello") {
 		t.Error("expected hello in output")
@@ -798,4 +842,229 @@ func TestCollectReactions(t *testing.T) {
 			t.Errorf("expected no reactions for orphan, got %v", got)
 		}
 	})
+}
+
+func TestWorkloadCmdPullsRealCounts(t *testing.T) {
+	conn, err := db.OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	ctx := context.Background()
+	if err := db.OwnerContactEnsure(ctx, conn); err != nil {
+		t.Fatalf("ensure owner contact: %v", err)
+	}
+	if err := db.LocalConversationEnsure(ctx, conn); err != nil {
+		t.Fatalf("ensure local conversation: %v", err)
+	}
+
+	if _, err := db.AlarmCreate(ctx, conn, db.AlarmCreateParams{
+		OriginConversationID: db.LocalConversationID,
+		Goal:                 "ring me",
+		NextFireAt:           time.Now().Add(time.Hour),
+	}); err != nil {
+		t.Fatalf("seed alarm: %v", err)
+	}
+
+	if err := db.TaskInsert(ctx, conn, db.TaskInsertParams{
+		ID:             "task-1",
+		ConversationID: db.LocalConversationID,
+		Goal:           "do thing",
+		Plan:           "p",
+		Thinking:       "low",
+		Status:         "running",
+		CreatedAt:      time.Now(),
+	}); err != nil {
+		t.Fatalf("seed task: %v", err)
+	}
+
+	msg := workloadCmd(conn, 0)()
+	wl, ok := msg.(workloadMsg)
+	if !ok {
+		t.Fatalf("expected workloadMsg, got %T", msg)
+	}
+	if wl.alarms != 1 {
+		t.Errorf("expected 1 alarm, got %d", wl.alarms)
+	}
+	if wl.tasks != 1 {
+		t.Errorf("expected 1 task, got %d", wl.tasks)
+	}
+
+	c := newChatModel(&config.Config{Home: t.TempDir()}, conn, nil, Options{})
+	c, _ = c.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	c, _ = c.Update(wl)
+	out := stripAnsi(c.renderHeader())
+	if !strings.Contains(out, "1 alarm") {
+		t.Errorf("expected '1 alarm' in header, got %q", out)
+	}
+	if !strings.Contains(out, "1 task") {
+		t.Errorf("expected '1 task' in header, got %q", out)
+	}
+}
+
+func TestViewportScrollKeys(t *testing.T) {
+	conn, err := db.OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	c := newTestChat(t, conn, nil, Options{})
+	c, _ = c.Update(tea.WindowSizeMsg{Width: 80, Height: 15})
+
+	var msgs []db.Message
+	for i := 0; i < 50; i++ {
+		msgs = append(msgs, db.Message{
+			ID:        fmt.Sprintf("m-%d", i),
+			Body:      fmt.Sprintf("line %d", i),
+			Kind:      "text",
+			ContactID: db.OwnerContactID,
+			SentAt:    time.Date(2026, 1, 1, 12, 0, i, 0, time.Local),
+		})
+	}
+	c, _ = c.Update(newMessagesMsg{messages: msgs})
+
+	c.viewport.GotoBottom()
+	bottomY := c.viewport.YOffset
+
+	c, _ = c.Update(tea.KeyMsg{Type: tea.KeyPgUp})
+	if c.viewport.YOffset >= bottomY {
+		t.Errorf("expected pgup to scroll up, offset stayed at %d", c.viewport.YOffset)
+	}
+}
+
+func TestViewportMouseWheel(t *testing.T) {
+	conn, err := db.OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	c := newTestChat(t, conn, nil, Options{})
+	c, _ = c.Update(tea.WindowSizeMsg{Width: 80, Height: 15})
+
+	var msgs []db.Message
+	for i := 0; i < 50; i++ {
+		msgs = append(msgs, db.Message{
+			ID:        fmt.Sprintf("m-%d", i),
+			Body:      fmt.Sprintf("line %d", i),
+			Kind:      "text",
+			ContactID: db.OwnerContactID,
+			SentAt:    time.Date(2026, 1, 1, 12, 0, i, 0, time.Local),
+		})
+	}
+	c, _ = c.Update(newMessagesMsg{messages: msgs})
+
+	c.viewport.GotoBottom()
+	bottomY := c.viewport.YOffset
+
+	c, _ = c.Update(tea.MouseMsg{
+		Action: tea.MouseActionPress,
+		Button: tea.MouseButtonWheelUp,
+	})
+	if c.viewport.YOffset >= bottomY {
+		t.Errorf("expected mouse wheel up to scroll viewport, offset stayed at %d", c.viewport.YOffset)
+	}
+
+	afterUp := c.viewport.YOffset
+	c, _ = c.Update(tea.MouseMsg{
+		Action: tea.MouseActionPress,
+		Button: tea.MouseButtonWheelDown,
+	})
+	if c.viewport.YOffset <= afterUp {
+		t.Errorf("expected mouse wheel down to scroll viewport back, offset stayed at %d", c.viewport.YOffset)
+	}
+}
+
+func TestViewportStickyBottom(t *testing.T) {
+	conn, err := db.OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	c := newTestChat(t, conn, nil, Options{})
+	c, _ = c.Update(tea.WindowSizeMsg{Width: 80, Height: 15})
+
+	var msgs []db.Message
+	for i := 0; i < 40; i++ {
+		msgs = append(msgs, db.Message{
+			ID:        fmt.Sprintf("m-%d", i),
+			Body:      fmt.Sprintf("line %d", i),
+			Kind:      "text",
+			ContactID: db.OwnerContactID,
+			SentAt:    time.Date(2026, 1, 1, 12, 0, i, 0, time.Local),
+		})
+	}
+	c, _ = c.Update(newMessagesMsg{messages: msgs})
+	c.viewport.GotoBottom()
+
+	more := []db.Message{{
+		ID: "new", Body: "fresh message", Kind: "text",
+		ContactID: db.OwnerContactID,
+		SentAt:    time.Date(2026, 1, 1, 13, 0, 0, 0, time.Local),
+	}}
+	c, _ = c.Update(newMessagesMsg{messages: more})
+
+	if !c.viewport.AtBottom() {
+		t.Error("expected viewport to stay at bottom after new messages when already at bottom")
+	}
+}
+
+func TestLoadGenesisStartedAt(t *testing.T) {
+	conn, err := db.OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	ctx := context.Background()
+	started := time.Date(2025, 1, 1, 8, 0, 0, 0, time.UTC)
+	if err := db.SettingSet(ctx, conn, db.GenesisStartedAtKey, db.ISO8601MS(started)); err != nil {
+		t.Fatalf("set setting: %v", err)
+	}
+
+	msg := loadGenesisCmd(conn)()
+	loaded, ok := msg.(genesisLoadedMsg)
+	if !ok {
+		t.Fatalf("expected genesisLoadedMsg, got %T", msg)
+	}
+	if !loaded.at.Equal(started) {
+		t.Errorf("expected loaded.at=%v, got %v", started, loaded.at)
+	}
+}
+
+func TestGhostReservationKeepsHeightStable(t *testing.T) {
+	now := time.Now()
+	nikMsg := db.Message{
+		ID: "1", ExternalMessageID: "e1", Platform: "local",
+		Kind: "text", Body: "hi", IsFromMe: true, SentAt: now, ContactID: db.NikContactID,
+	}
+	userMsg := db.Message{
+		ID: "2", ExternalMessageID: "e2", Platform: "local",
+		Kind: "text", Body: "yo", IsFromMe: false, SentAt: now, ContactID: db.OwnerContactID,
+	}
+
+	countLines := func(s string) int { return strings.Count(s, "\n") }
+
+	cases := []struct {
+		name string
+		msgs []db.Message
+	}{
+		{"empty", nil},
+		{"nik-last", []db.Message{nikMsg}},
+		{"user-last", []db.Message{userMsg}},
+		{"user-then-nik", []db.Message{userMsg, nikMsg}},
+		{"nik-then-user", []db.Message{nikMsg, userMsg}},
+	}
+
+	for _, tc := range cases {
+		noGhost := renderConversation(tc.msgs, 80, 0, -1, "", false)
+		withGhost := renderConversation(tc.msgs, 80, 0, 0, "thinking", false)
+		if countLines(noGhost) != countLines(withGhost) {
+			t.Errorf("%s: line count differs — no-ghost=%d with-ghost=%d\nno-ghost:\n%s\nwith-ghost:\n%s",
+				tc.name, countLines(noGhost), countLines(withGhost), noGhost, withGhost)
+		}
+	}
 }

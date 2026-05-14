@@ -10,8 +10,11 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/kciuffolo/nik/internal/config"
+	"github.com/kciuffolo/nik/internal/daemonctl"
 	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/genesis"
 	"github.com/kciuffolo/nik/internal/id"
@@ -43,32 +46,36 @@ func NewLocalSender(svc *messaging.Service) MessageSender {
 	return &localSender{svc: svc}
 }
 
-const (
-	easeOutRate = 0.03
-	easeInRate  = 0.06
-)
-
 type chatModel struct {
 	input       textinput.Model
+	viewport    viewport.Model
+	cfg         *config.Config
 	conn        *sql.DB
 	sender      MessageSender
 	messages    []db.Message
 	lastID      string
 	width       int
+	height      int
 	activity    []string
 	err         error
-	thinkTick   int
-	thinkEnergy float64
+	pulse       *pulse
+	anims       animators
 	convCache   string
 	convDirty   bool
-	wasTyping   bool
+	ghostLabel  string
 	cachedFrame int
 	showSystem  bool
 	inputLocked bool
 	genesisSeed string
+	genesisAt   time.Time
+	daemonAlive bool
+	vpReady     bool
+
+	pendingAlarms int
+	activeTasks   int
 }
 
-func newChatModel(conn *sql.DB, sender MessageSender, opts Options) chatModel {
+func newChatModel(cfg *config.Config, conn *sql.DB, sender MessageSender, opts Options) chatModel {
 	ti := textinput.New()
 	ti.Placeholder = "message..."
 	ti.Prompt = "❯ "
@@ -76,16 +83,26 @@ func newChatModel(conn *sql.DB, sender MessageSender, opts Options) chatModel {
 	ti.CharLimit = 0
 	ti.Focus()
 
+	p := newPulse(30 * time.Millisecond)
 	return chatModel{
 		input:      ti,
+		cfg:        cfg,
 		conn:       conn,
 		sender:     sender,
+		pulse:      p,
+		anims:      animators{p},
 		showSystem: opts.ShowSystem,
 	}
 }
 
 type pollTickMsg time.Time
-type thinkTickMsg time.Time
+type daemonTickMsg struct{ alive bool }
+type genesisLoadedMsg struct{ at time.Time }
+type workloadMsg struct {
+	alarms int
+	tasks  int
+}
+
 type newMessagesMsg struct {
 	messages []db.Message
 	activity []string
@@ -132,17 +149,69 @@ func sendMessageCmd(sender MessageSender, body string) tea.Cmd {
 	}
 }
 
-func thinkTickCmd() tea.Cmd {
-	return tea.Tick(30*time.Millisecond, func(t time.Time) tea.Msg {
-		return thinkTickMsg(t)
+func daemonTickCmd(home string, delay time.Duration) tea.Cmd {
+	return tea.Tick(delay, func(time.Time) tea.Msg {
+		_, alive := daemonctl.CheckPID(home)
+		return daemonTickMsg{alive: alive}
+	})
+}
+
+func workloadCmd(conn *sql.DB, delay time.Duration) tea.Cmd {
+	return tea.Tick(delay, func(time.Time) tea.Msg {
+		if conn == nil {
+			return workloadMsg{}
+		}
+		ctx := context.Background()
+		alarms, _ := db.AlarmCountActive(ctx, conn)
+		tasks, _ := db.TaskCountActive(ctx, conn)
+		return workloadMsg{alarms: alarms, tasks: tasks}
 	})
 }
 
 func (m chatModel) Init() tea.Cmd {
-	return tea.Batch(textinput.Blink, fetchMessagesCmd(m.conn, ""))
+	cmds := []tea.Cmd{textinput.Blink, fetchMessagesCmd(m.conn, "")}
+	if m.cfg != nil {
+		cmds = append(cmds, daemonTickCmd(m.cfg.Home, 0))
+	}
+	if m.conn != nil {
+		cmds = append(cmds, loadGenesisCmd(m.conn), workloadCmd(m.conn, 0))
+	}
+	return tea.Batch(cmds...)
+}
+
+func loadGenesisCmd(conn *sql.DB) tea.Cmd {
+	return func() tea.Msg {
+		if conn == nil {
+			return genesisLoadedMsg{}
+		}
+		s, err := db.SettingGet(context.Background(), conn, db.GenesisStartedAtKey)
+		if err != nil || s == nil {
+			return genesisLoadedMsg{}
+		}
+		t, err := db.ParseTimeValue(s.Value)
+		if err != nil {
+			return genesisLoadedMsg{}
+		}
+		return genesisLoadedMsg{at: t}
+	}
 }
 
 func (m chatModel) Update(msg tea.Msg) (chatModel, tea.Cmd) {
+	var cmds []tea.Cmd
+
+	// Universal animator fanout. MUST stay at the top of Update so animation
+	// messages (pulseTickMsg etc.) can never be swallowed by a fallthrough
+	// handler — see setup spinner history.
+	if cmd := m.anims.Update(msg); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	if frame := m.pulse.Tick() / 4; frame != m.cachedFrame {
+		m.cachedFrame = frame
+		if len(m.activity) > 0 {
+			m.refreshConvCache()
+		}
+	}
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		const maxChatWidth = 120
@@ -150,10 +219,9 @@ func (m chatModel) Update(msg tea.Msg) (chatModel, tea.Cmd) {
 		if m.width > maxChatWidth {
 			m.width = maxChatWidth
 		}
-		m.input.Width = m.width - 4
-		m.convDirty = true
-		m.refreshConvCache()
-		return m, nil
+		m.height = msg.Height
+		m.resyncLayout()
+		return m, tea.Batch(cmds...)
 
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -161,25 +229,59 @@ func (m chatModel) Update(msg tea.Msg) (chatModel, tea.Cmd) {
 			return m, tea.Quit
 		case "enter":
 			if m.inputLocked {
-				return m, nil
+				return m, tea.Batch(cmds...)
 			}
 			text := strings.TrimSpace(m.input.Value())
 			if text == "" {
-				return m, nil
+				return m, tea.Batch(cmds...)
 			}
 			m.input.Reset()
-			return m, sendMessageCmd(m.sender, text)
+			if m.vpReady {
+				m.viewport.GotoBottom()
+			}
+			cmds = append(cmds, sendMessageCmd(m.sender, text))
+			return m, tea.Batch(cmds...)
+		case "up", "down", "pgup", "pgdown", "home", "end":
+			var cmd tea.Cmd
+			m.viewport, cmd = m.viewport.Update(msg)
+			cmds = append(cmds, cmd)
+			return m, tea.Batch(cmds...)
 		}
 		if m.inputLocked {
-			return m, nil
+			return m, tea.Batch(cmds...)
 		}
 
+	case tea.MouseMsg:
+		var cmd tea.Cmd
+		m.viewport, cmd = m.viewport.Update(msg)
+		cmds = append(cmds, cmd)
+		return m, tea.Batch(cmds...)
+
+	case daemonTickMsg:
+		m.daemonAlive = msg.alive
+		if m.cfg != nil {
+			cmds = append(cmds, daemonTickCmd(m.cfg.Home, 3*time.Second))
+		}
+		return m, tea.Batch(cmds...)
+
+	case workloadMsg:
+		m.pendingAlarms = msg.alarms
+		m.activeTasks = msg.tasks
+		if m.conn != nil {
+			cmds = append(cmds, workloadCmd(m.conn, 5*time.Second))
+		}
+		return m, tea.Batch(cmds...)
+
+	case genesisLoadedMsg:
+		m.genesisAt = msg.at
+		return m, tea.Batch(cmds...)
+
 	case pollTickMsg:
-		return m, fetchMessagesCmd(m.conn, m.lastID)
+		cmds = append(cmds, fetchMessagesCmd(m.conn, m.lastID))
+		return m, tea.Batch(cmds...)
 
 	case newMessagesMsg:
 		const maxMessages = 500
-		var cmds []tea.Cmd
 
 		if len(msg.messages) > 0 {
 			m.messages = append(m.messages, msg.messages...)
@@ -191,13 +293,18 @@ func (m chatModel) Update(msg tea.Msg) (chatModel, tea.Cmd) {
 			m.genesisSeed = currentGenesisSeed(m.messages)
 		}
 
-		wasIdle := len(m.activity) == 0
 		m.activity = msg.activity
 
-		typing := slices.Contains(m.activity, "typing")
-		if typing != m.wasTyping {
+		ghost := ""
+		switch {
+		case slices.Contains(m.activity, "typing"):
+			ghost = "typing"
+		case slices.Contains(m.activity, "thinking"):
+			ghost = "thinking"
+		}
+		if ghost != m.ghostLabel {
 			m.convDirty = true
-			m.wasTyping = typing
+			m.ghostLabel = ghost
 		}
 
 		locked := computeInputLocked(m.genesisSeed, m.activity)
@@ -210,9 +317,10 @@ func (m chatModel) Update(msg tea.Msg) (chatModel, tea.Cmd) {
 				cmds = append(cmds, m.input.Focus())
 			}
 		}
+		m.input.Placeholder = placeholderFor(m.inputLocked, m.genesisSeed)
 
-		if wasIdle && len(m.activity) > 0 {
-			cmds = append(cmds, thinkTickCmd())
+		if cmd := m.pulse.SetActive(len(m.activity) > 0); cmd != nil {
+			cmds = append(cmds, cmd)
 		}
 
 		if m.convDirty {
@@ -229,63 +337,73 @@ func (m chatModel) Update(msg tea.Msg) (chatModel, tea.Cmd) {
 			m.err = msg.err
 			m.refreshConvCache()
 		}
-		return m, nil
-
-	case thinkTickMsg:
-		m.thinkTick++
-		active := len(m.activity) > 0
-
-		if active {
-			frame := m.thinkTick / 4
-			if frame != m.cachedFrame {
-				m.cachedFrame = frame
-				m.refreshConvCache()
-			}
-			if m.thinkEnergy < 1.0 {
-				m.thinkEnergy += easeInRate * (1.0 - m.thinkEnergy + 0.05)
-				if m.thinkEnergy > 1.0 {
-					m.thinkEnergy = 1.0
-				}
-			}
-			return m, thinkTickCmd()
-		}
-
-		if m.thinkEnergy > 0.0 {
-			m.thinkEnergy *= (1.0 - easeOutRate)
-			if m.thinkEnergy < 0.005 {
-				m.thinkEnergy = 0.0
-				return m, nil
-			}
-			return m, thinkTickCmd()
-		}
-
-		return m, nil
+		return m, tea.Batch(cmds...)
 	}
 
 	var cmd tea.Cmd
 	m.input, cmd = m.input.Update(msg)
-	return m, cmd
+	cmds = append(cmds, cmd)
+	return m, tea.Batch(cmds...)
 }
 
 func (m chatModel) viewWidth() int {
-	const pad = 1
-	w := m.width - 2*pad
+	w := m.width - 2*chatHorizontalPad
 	if w <= 0 {
 		w = 80
 	}
 	return w
 }
 
+const (
+	chatHeaderHeight  = 3
+	chatHeaderGap     = 1
+	chatFooterGap     = 1
+	chatFooterHeight  = 1
+	chatHorizontalPad = 2
+	chatVerticalPad   = 1
+	chatChromeHeight  = chatHeaderHeight + chatHeaderGap + chatFooterGap + chatFooterHeight + 2*chatVerticalPad
+)
+
+func (m chatModel) viewportHeight() int {
+	h := m.height - chatChromeHeight
+	if h < 3 {
+		h = 3
+	}
+	return h
+}
+
+func (m *chatModel) resyncLayout() {
+	m.input.Width = m.viewWidth() - 2
+
+	w, h := m.viewWidth(), m.viewportHeight()
+	if !m.vpReady {
+		m.viewport = viewport.New(w, h)
+		m.vpReady = true
+	} else {
+		m.viewport.Width = w
+		m.viewport.Height = h
+	}
+	m.convDirty = true
+	m.refreshConvCache()
+}
+
 func (m *chatModel) refreshConvCache() {
 	w := m.viewWidth()
+	tick := m.pulse.Tick()
 
-	typingTick := -1
-	if slices.Contains(m.activity, "typing") {
-		typingTick = m.thinkTick
+	ghostTick := -1
+	ghostLabel := ""
+	switch {
+	case slices.Contains(m.activity, "typing"):
+		ghostTick = tick
+		ghostLabel = "typing"
+	case slices.Contains(m.activity, "thinking"):
+		ghostTick = tick
+		ghostLabel = "thinking"
 	}
 
 	var b strings.Builder
-	b.WriteString(renderConversation(m.messages, w, m.thinkTick, typingTick, m.showSystem))
+	b.WriteString(renderConversation(m.messages, w, tick, ghostTick, ghostLabel, m.showSystem))
 
 	if m.err != nil {
 		b.WriteString(errorStyle.Render(m.err.Error()) + "\n")
@@ -293,28 +411,34 @@ func (m *chatModel) refreshConvCache() {
 
 	m.convCache = b.String()
 	m.convDirty = false
+
+	if m.vpReady {
+		wasAtBottom := m.viewport.AtBottom()
+		m.viewport.SetContent(m.convCache)
+		if wasAtBottom {
+			m.viewport.GotoBottom()
+		}
+	}
 }
 
 func (m chatModel) View() string {
-	const pad = 1
-	w := m.viewWidth()
+	var body string
+	if m.vpReady {
+		body = m.viewport.View()
+	} else {
+		body = m.convCache
+	}
 
 	var b strings.Builder
-	b.WriteString(m.convCache)
+	b.WriteString(m.renderHeader() + "\n")
+	b.WriteString(strings.Repeat("\n", chatHeaderGap))
+	b.WriteString(body + "\n")
+	b.WriteString(strings.Repeat("\n", chatFooterGap))
+	b.WriteString(m.input.View())
 
-	b.WriteString(strings.Repeat("\n", 4))
-	switch {
-	case m.inputLocked:
-		m.input.Placeholder = "waiting for nik to finish..."
-	case m.genesisSeed == "first_contact":
-		m.input.Placeholder = "introduce yourself to nik"
-	default:
-		m.input.Placeholder = "message..."
-	}
-	b.WriteString(m.input.View() + "\n")
-	b.WriteString(thinkMorph(m.thinkTick, m.thinkEnergy, w) + "\n")
-
-	return lipgloss.NewStyle().PaddingLeft(pad).PaddingRight(pad).Render(b.String())
+	return lipgloss.NewStyle().
+		Padding(chatVerticalPad, chatHorizontalPad).
+		Render(b.String())
 }
 
 func bubble(body string, isNik bool, isSystem bool, width int, reactions []string) string {
@@ -401,11 +525,10 @@ func dateSep(s string, width int) string {
 	return sepText.Render(strings.Repeat(" ", pad) + text)
 }
 
-func ghostBubble(tick int) string {
-	frame := spinnerFrames[(tick/4)%len(spinnerFrames)]
+func ghostBubble(tick int, label string) string {
 	ndots := (tick / 8) % 4
 	dots := strings.Repeat(".", ndots) + strings.Repeat(" ", 3-ndots)
-	content := " " + dimText.Render(frame+" typing"+dots) + " "
+	content := " " + thinkingSpinnerStyle.Render(spinnerGlyph(tick)) + thinkingStyle.Render(" "+label+dots) + " "
 	border := nikBorder
 	w := lipgloss.Width(content)
 	top := border.Render("╭" + strings.Repeat("─", w) + "╮")
@@ -424,8 +547,7 @@ func renderToolLine(tick int, toolName string, state toolState, reason string, w
 	case toolError:
 		indicator = errorIndicatorStyle.Render("✗")
 	default:
-		frame := spinnerFrames[(tick/4)%len(spinnerFrames)]
-		indicator = spinnerColor.Render(frame)
+		indicator = spinnerColor.Render(spinnerGlyph(tick))
 	}
 
 	name := toolNameStyle.Render(toolName)
@@ -445,7 +567,7 @@ func renderToolLine(tick int, toolName string, state toolState, reason string, w
 	return base + toolDimStyle.Render(sep+reason)
 }
 
-func renderConversation(msgs []db.Message, width int, tick int, nikTypingTick int, showSystem bool) string {
+func renderConversation(msgs []db.Message, width int, tick int, ghostTick int, ghostLabel string, showSystem bool) string {
 	var b strings.Builder
 	var prevSender string
 	var prevDate string
@@ -554,15 +676,15 @@ func renderConversation(msgs []db.Message, width int, tick int, nikTypingTick in
 			b.WriteString(toolRailStyle.Render(" ╰") + "\n")
 		}
 
-		if isLast && nikTypingTick >= 0 {
+		if isLast && ghostTick >= 0 {
 			if e.isNik {
-				b.WriteString(ghostBubble(nikTypingTick) + "\n")
+				b.WriteString(ghostBubble(ghostTick, ghostLabel) + "\n")
 			}
 			if endOfGroup {
 				b.WriteString(groupLabel(e.lt, e.isNik, width) + "\n")
 			}
 			if !e.isNik {
-				b.WriteString("\n" + ghostBubble(nikTypingTick) + "\n")
+				b.WriteString("\n" + ghostBubble(ghostTick, ghostLabel) + "\n")
 			}
 		} else if endOfGroup {
 			b.WriteString(groupLabel(e.lt, e.isNik, width) + "\n")
@@ -575,8 +697,21 @@ func renderConversation(msgs []db.Message, width int, tick int, nikTypingTick in
 		}
 	}
 
-	if len(entries) == 0 && nikTypingTick >= 0 {
-		b.WriteString(ghostBubble(nikTypingTick) + "\n")
+	if len(entries) == 0 && ghostTick >= 0 {
+		b.WriteString(ghostBubble(ghostTick, ghostLabel) + "\n")
+	}
+
+	// Always reserve space for a ghost bubble at the bottom so a thinking/typing
+	// bubble appearing or disappearing doesn't shift the conversation upward.
+	// Padding matches the newline count the ghost would add in each position:
+	//   empty / nik-last: ghostBubble + "\n"        → 3 newlines
+	//   user-last:        "\n" + ghostBubble + "\n" → 4 newlines
+	if ghostTick < 0 {
+		pad := 3
+		if len(entries) > 0 && !entries[len(entries)-1].isNik {
+			pad = 4
+		}
+		b.WriteString(strings.Repeat("\n", pad))
 	}
 
 	return b.String()
@@ -744,6 +879,17 @@ func computeInputLocked(seed string, activity []string) bool {
 		return true
 	}
 	return len(activity) > 0
+}
+
+func placeholderFor(inputLocked bool, genesisSeed string) string {
+	switch {
+	case inputLocked:
+		return "waiting for nik to finish..."
+	case genesisSeed == "first_contact":
+		return "introduce yourself to nik"
+	default:
+		return "message..."
+	}
 }
 
 func resolveToolCallState(paired *db.Message) toolState {

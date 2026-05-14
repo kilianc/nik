@@ -7,61 +7,83 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// theme bundles every color decision the TUI makes. Two base hues only:
+// `main` (rose) for accents/foreground, `secondary` (grey) for muted
+// chrome. `dim` and `sep` stay numbered greys so plain text doesn't ride
+// the blend. Light/dark only differ in greyscale shades and blend target.
 type theme struct {
 	dim         lipgloss.Color
 	sep         lipgloss.Color
 	idleOpacity float64
 	blendTarget [3]float64
+	main        [3]float64
+	secondary   [3]float64
 }
 
 var (
+	rose = [3]float64{244, 168, 179}
+	grey = [3]float64{158, 158, 158}
+
 	darkTheme = theme{
 		dim:         lipgloss.Color("242"),
 		sep:         lipgloss.Color("245"),
 		idleOpacity: 0.55,
 		blendTarget: [3]float64{0, 0, 0},
+		main:        rose,
+		secondary:   grey,
 	}
 	lightTheme = theme{
 		dim:         lipgloss.Color("245"),
 		sep:         lipgloss.Color("240"),
 		idleOpacity: 0.35,
 		blendTarget: [3]float64{255, 255, 255},
+		main:        rose,
+		secondary:   grey,
 	}
 	th theme
 )
 
-var nikRGB = [3]float64{158, 158, 158}
-
 var spinnerFrames = []string{"⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"}
 
+func spinnerGlyph(tick int) string {
+	return spinnerFrames[(tick/4)%len(spinnerFrames)]
+}
+
 var (
-	nikAccent lipgloss.Color
-	youAccent lipgloss.Color
+	appStyle   lipgloss.Style
+	titleStyle lipgloss.Style
 
-	appStyle   = lipgloss.NewStyle().Padding(1, 2)
-	titleStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("99"))
+	labelStyle   lipgloss.Style
+	successStyle lipgloss.Style
+	errorStyle   lipgloss.Style
 
-	labelStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Bold(true)
-	successStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
-	errorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
-
-	nikLabel            lipgloss.Style
-	youLabel            lipgloss.Style
-	nikBorder           lipgloss.Style
-	youBorder           lipgloss.Style
-	systemBorder        lipgloss.Style
-	msgText             lipgloss.Style
-	dimText             lipgloss.Style
-	sepText             lipgloss.Style
-	promptStyle         lipgloss.Style
-	dimStyle            lipgloss.Style
-	hintStyle           lipgloss.Style
-	toolRailStyle       lipgloss.Style
-	toolNameStyle       lipgloss.Style
-	toolDimStyle        lipgloss.Style
-	checkStyle          lipgloss.Style
-	errorIndicatorStyle lipgloss.Style
-	spinnerColor        lipgloss.Style
+	nikLabel             lipgloss.Style
+	youLabel             lipgloss.Style
+	nikBorder            lipgloss.Style
+	youBorder            lipgloss.Style
+	systemBorder         lipgloss.Style
+	msgText              lipgloss.Style
+	dimText              lipgloss.Style
+	sepText              lipgloss.Style
+	promptStyle          lipgloss.Style
+	dimStyle             lipgloss.Style
+	hintStyle            lipgloss.Style
+	toolRailStyle        lipgloss.Style
+	toolNameStyle        lipgloss.Style
+	toolDimStyle         lipgloss.Style
+	checkStyle           lipgloss.Style
+	errorIndicatorStyle  lipgloss.Style
+	spinnerColor         lipgloss.Style
+	headerBrandStyle     lipgloss.Style
+	headerMetaStyle      lipgloss.Style
+	headerModelStyle     lipgloss.Style
+	headerPathStyle      lipgloss.Style
+	headerDividerStyle   lipgloss.Style
+	statusOKStyle        lipgloss.Style
+	statusOKLabelStyle   lipgloss.Style
+	statusDownStyle      lipgloss.Style
+	thinkingStyle        lipgloss.Style
+	thinkingSpinnerStyle lipgloss.Style
 )
 
 const morphPaletteSize = 20
@@ -75,39 +97,56 @@ func init() {
 		th = lightTheme
 	}
 
-	nikAccent = lipgloss.Color("245")
-	youAccent = lipgloss.Color("#1982fc")
+	appStyle = lipgloss.NewStyle().Padding(1, 2)
+	titleStyle = lipgloss.NewStyle().Foreground(mainAt(1.0)).Bold(true)
+	labelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Bold(true)
+	successStyle = lipgloss.NewStyle().Foreground(mainAt(1.0))
+	errorStyle = lipgloss.NewStyle().Foreground(mainAt(1.0))
 
-	nikLabel = lipgloss.NewStyle().Foreground(nikAccent).Bold(true).Italic(true)
-	youLabel = lipgloss.NewStyle().Foreground(youAccent).Bold(true).Italic(true)
-	nikBorder = lipgloss.NewStyle().Foreground(nikAccent)
-	youBorder = lipgloss.NewStyle().Foreground(youAccent)
+	nikLabel = lipgloss.NewStyle().Foreground(mainAt(1.0)).Bold(true).Italic(true)
+	youLabel = lipgloss.NewStyle().Foreground(secondaryAt(1.0)).Bold(true).Italic(true)
+	nikBorder = lipgloss.NewStyle().Foreground(mainAt(1.0))
+	youBorder = lipgloss.NewStyle().Foreground(secondaryAt(1.0))
 	systemBorder = lipgloss.NewStyle().Foreground(th.dim)
 	msgText = lipgloss.NewStyle()
 	dimText = lipgloss.NewStyle().Foreground(th.dim).Italic(true)
 	sepText = lipgloss.NewStyle().Foreground(th.sep)
-	promptStyle = lipgloss.NewStyle().Foreground(nikAccent).Bold(true)
+	promptStyle = lipgloss.NewStyle().Foreground(secondaryAt(1.0)).Bold(true)
 	dimStyle = lipgloss.NewStyle().Foreground(th.dim)
 	hintStyle = lipgloss.NewStyle().Foreground(th.sep).Italic(true)
-	toolRailStyle = lipgloss.NewStyle().Foreground(nikAt(0.8))
+	toolRailStyle = lipgloss.NewStyle().Foreground(secondaryAt(0.8))
 	toolNameStyle = lipgloss.NewStyle().Bold(true)
 	toolDimStyle = lipgloss.NewStyle().Foreground(th.sep)
-	checkStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#4caf50"))
-	errorIndicatorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#e53935"))
-	spinnerColor = lipgloss.NewStyle().Foreground(lipgloss.Color("#f9a825"))
+	checkStyle = lipgloss.NewStyle().Foreground(mainAt(1.0))
+	errorIndicatorStyle = lipgloss.NewStyle().Foreground(mainAt(1.0))
+	spinnerColor = lipgloss.NewStyle().Foreground(secondaryAt(0.85))
+	statusOKStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#4ade80"))
+	statusOKLabelStyle = lipgloss.NewStyle().Foreground(mainAt(1.0))
+	statusDownStyle = lipgloss.NewStyle().Foreground(th.dim).Italic(true)
+	thinkingStyle = lipgloss.NewStyle().Italic(true)
+	thinkingSpinnerStyle = lipgloss.NewStyle().Foreground(mainAt(0.55))
+
+	headerBrandStyle = lipgloss.NewStyle().Foreground(mainAt(1.0)).Bold(true)
+	headerMetaStyle = lipgloss.NewStyle().Foreground(mainAt(0.45))
+	headerModelStyle = lipgloss.NewStyle().Foreground(mainAt(0.85))
+	headerPathStyle = lipgloss.NewStyle().Foreground(mainAt(0.95))
+	headerDividerStyle = lipgloss.NewStyle().Foreground(mainAt(th.idleOpacity))
 
 	for i := range morphPalette {
 		t := float64(i) / float64(morphPaletteSize-1)
-		c := nikAt(th.idleOpacity + t*(1-th.idleOpacity))
-		morphPalette[i] = lipgloss.NewStyle().Foreground(c).Render("━")
+		c := mainAt(th.idleOpacity + t*(1-th.idleOpacity))
+		morphPalette[i] = lipgloss.NewStyle().Foreground(c).Render("─")
 	}
 }
 
-func nikAt(t float64) lipgloss.Color {
+func mainAt(t float64) lipgloss.Color      { return blendRGB(th.main, t) }
+func secondaryAt(t float64) lipgloss.Color { return blendRGB(th.secondary, t) }
+
+func blendRGB(base [3]float64, t float64) lipgloss.Color {
 	bg := th.blendTarget
-	r := int(bg[0] + (nikRGB[0]-bg[0])*t)
-	g := int(bg[1] + (nikRGB[1]-bg[1])*t)
-	b := int(bg[2] + (nikRGB[2]-bg[2])*t)
+	r := int(bg[0] + (base[0]-bg[0])*t)
+	g := int(bg[1] + (base[1]-bg[1])*t)
+	b := int(bg[2] + (base[2]-bg[2])*t)
 	return lipgloss.Color(fmt.Sprintf("#%02x%02x%02x", r, g, b))
 }
 
