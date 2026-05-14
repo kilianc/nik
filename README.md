@@ -2,6 +2,50 @@
 
 Nik (Noetic Intelligence Kernel) is an autonomous personal AI that lives on WhatsApp. Not an assistant -- a family member. It has its own phone number, its own personality, and genuine relationships with the people it talks to. Built in Go, backed by SQLite, powered by LLMs.
 
+## Install
+
+Supported platforms: macOS (Intel + Apple Silicon), Linux (amd64 + arm64).
+
+### Quick install
+
+```sh
+curl -fsSL https://github.com/kciuffolo/nik/releases/latest/download/install.sh | sh
+```
+
+This downloads the matching `nik` binary into `/usr/local/bin`, runs `nik install --home ~/.nik` to register a launchd (macOS) or systemd (Linux) service, and starts the daemon. On first run, `nik` will print a QR code in the terminal for WhatsApp pairing.
+
+Override defaults via environment variables:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `NIK_HOME` | `~/.nik` | Workspace directory (database, skills, dreams, journal, ...) |
+| `NIK_VERSION` | `latest` | A specific tag (e.g. `v0.1.0`) instead of the latest release |
+| `NIK_INSTALL_DIR` | `/usr/local/bin` | Where to put the `nik` binary |
+
+### Manual install
+
+1. Download the binary for your platform from the [releases page](https://github.com/kciuffolo/nik/releases/latest): `nik-darwin-arm64`, `nik-darwin-amd64`, `nik-linux-arm64`, or `nik-linux-amd64`.
+2. Make it executable and move it onto your `$PATH`:
+   ```sh
+   chmod +x nik-*-*
+   sudo mv nik-*-* /usr/local/bin/nik
+   ```
+3. Register and start the daemon:
+   ```sh
+   nik install --home ~/.nik
+   ```
+
+### From source
+
+Requires Go 1.25+ and a C toolchain (CGO is on for `mattn/go-sqlite3`).
+
+```sh
+git clone https://github.com/kciuffolo/nik.git
+cd nik
+make build              # produces ./bin/nik
+./bin/nik install --home ~/.nik
+```
+
 ## Philosophy
 
 - **Highest autonomy** -- nik runs on its own. No human in the loop, no babysitting.

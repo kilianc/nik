@@ -114,3 +114,11 @@ workbench:
 .PHONY: shell-image
 shell-image:
 	docker build -t nik-shell:latest -f workspace/Dockerfile workspace/
+
+.PHONY: check-version
+check-version:
+	@expected="v$$(sed -n 's/^const V = "\(.*\)"/\1/p' internal/version/version.go)"; \
+	  actual="$$(echo $(tag) | sed 's|refs/tags/||')"; \
+	  if [ "$$expected" != "$$actual" ]; then \
+	    echo "version mismatch: code=$$expected tag=$$actual"; exit 1; \
+	  fi
