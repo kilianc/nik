@@ -4,7 +4,7 @@ Nik (Noetic Intelligence Kernel) is an autonomous personal AI that lives on What
 
 ## Install
 
-Supported platforms: macOS (Intel + Apple Silicon), Linux (amd64 + arm64).
+Supported platforms: macOS (Apple Silicon), Linux (amd64 + arm64). Intel Macs can build from source.
 
 ### Quick install
 
@@ -24,7 +24,7 @@ Override defaults via environment variables:
 
 ### Manual install
 
-1. Download the binary for your platform from the [releases page](https://github.com/kilianc/nik/releases/latest): `nik-darwin-arm64`, `nik-darwin-amd64`, `nik-linux-arm64`, or `nik-linux-amd64`.
+1. Download the binary for your platform from the [releases page](https://github.com/kilianc/nik/releases/latest): `nik-darwin-arm64`, `nik-linux-arm64`, or `nik-linux-amd64`.
 2. Make it executable and move it onto your `$PATH`:
    ```sh
    chmod +x nik-*-*
