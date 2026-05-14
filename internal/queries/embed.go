@@ -111,6 +111,9 @@ var AlarmGet string
 //go:embed alarm_stale_recurring.sql
 var AlarmStaleRecurring string
 
+//go:embed alarm_count_active.sql
+var AlarmCountActive string
+
 // alarm occurrence queries
 
 //go:embed alarm_occurrence_insert.sql
@@ -206,6 +209,9 @@ var TaskRetryChain string
 
 //go:embed task_list.sql
 var TaskList string
+
+//go:embed task_count_active.sql
+var TaskCountActive string
 
 // task report queries
 
