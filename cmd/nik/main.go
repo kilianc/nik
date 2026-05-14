@@ -33,10 +33,9 @@ import (
 	"github.com/kciuffolo/nik/internal/stats"
 	"github.com/kciuffolo/nik/internal/task"
 	"github.com/kciuffolo/nik/internal/timeline"
+	"github.com/kciuffolo/nik/internal/version"
 	"github.com/kciuffolo/nik/internal/whatsapp"
 )
-
-const version = "0.0.1"
 
 func main() {
 	subcmd := ""
@@ -79,7 +78,7 @@ func runDaemon(args []string) {
 		" 88   8888   888   888  88o",
 		"o88o    88  o888o o888o o888o",
 		"",
-		"Noetic Intelligence Kernel v" + version,
+		"Noetic Intelligence Kernel v" + version.V,
 		"",
 	}
 
