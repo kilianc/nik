@@ -57,8 +57,10 @@ func PrepareLogin() (*AuthRequest, error) {
 		"originator":                 {originator},
 	}
 
+	encoded := strings.ReplaceAll(params.Encode(), "+", "%20")
+
 	return &AuthRequest{
-		AuthURL:  issuer + "/oauth/authorize?" + params.Encode(),
+		AuthURL:  issuer + "/oauth/authorize?" + encoded,
 		verifier: verifier,
 		state:    state,
 	}, nil
