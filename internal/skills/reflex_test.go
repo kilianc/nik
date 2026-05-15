@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -96,7 +97,7 @@ func setupReflexTest(t *testing.T) (*reflexHarness, func(context.Context)) {
 		ctx:       ctx,
 	}
 
-	return h, SkillChangeReflex(cfg, conn)
+	return h, SkillChangeReflex(cfg, conn, []fs.FS{os.DirFS(skillsDir)})
 }
 
 func latestSkillEvent(t *testing.T, ctx context.Context, conn *sql.DB, name string) db.SkillEvent {
@@ -337,7 +338,7 @@ func TestSkillChangeReflexOnlyFirstPrivilegedConv(t *testing.T) {
 		},
 	}
 
-	reflex := SkillChangeReflex(cfg, conn)
+	reflex := SkillChangeReflex(cfg, conn, []fs.FS{os.DirFS(skillsDir)})
 	writeSkillFile(t, skillsDir, "journal", "---\nname: journal\nsummary: daily journal\n---\n# Journal\n")
 
 	reflex(ctx)
@@ -467,7 +468,7 @@ func TestSkillCheckReflex(t *testing.T) {
 			t.Fatalf("seed reflex: %v", err)
 		}
 
-		checkReflex := SkillCheckReflex(h.cfg, h.conn, mockCompleter("0 23 * * *"), localRunner)
+		checkReflex := SkillCheckReflex(h.cfg, h.conn, mockCompleter("0 23 * * *"), localRunner, []fs.FS{os.DirFS(h.skillsDir)})
 		checkReflex(h.ctx)
 
 		var count int
@@ -491,7 +492,7 @@ func TestSkillCheckReflex(t *testing.T) {
 
 		writeSkillFile(t, h.skillsDir, "journal", "---\nname: journal\nsummary: daily journal\nreflex:\n  - name: journal\n    every: \"every day at 11pm\"\n---\n# Journal\n")
 
-		checkReflex := SkillCheckReflex(h.cfg, h.conn, mockCompleter("0 23 * * *"), localRunner)
+		checkReflex := SkillCheckReflex(h.cfg, h.conn, mockCompleter("0 23 * * *"), localRunner, []fs.FS{os.DirFS(h.skillsDir)})
 		checkReflex(h.ctx)
 
 		var count int

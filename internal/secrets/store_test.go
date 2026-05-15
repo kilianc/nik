@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 )
 
 func TestSetAndGet(t *testing.T) {
@@ -296,19 +297,11 @@ func TestDataFilePermissions(t *testing.T) {
 func TestEnsureAdapter(t *testing.T) {
 	t.Run("copies adapter when missing", func(t *testing.T) {
 		home := t.TempDir()
-		skillsDir := t.TempDir()
-
-		err := os.MkdirAll(filepath.Join(skillsDir, "secrets"), 0o755)
-		if err != nil {
-			t.Fatalf("mkdir: %v", err)
+		builtin := fstest.MapFS{
+			"secrets/cli.sh": &fstest.MapFile{Data: []byte("#!/bin/sh\necho ok")},
 		}
 
-		err = os.WriteFile(filepath.Join(skillsDir, "secrets", "cli.sh"), []byte("#!/bin/sh\necho ok"), 0o644)
-		if err != nil {
-			t.Fatalf("write source: %v", err)
-		}
-
-		EnsureAdapter(home, skillsDir)
+		EnsureAdapter(home, builtin)
 
 		dst := filepath.Join(home, "secrets", "cli")
 		info, err := os.Stat(dst)
@@ -332,7 +325,9 @@ func TestEnsureAdapter(t *testing.T) {
 
 	t.Run("skips when adapter exists", func(t *testing.T) {
 		home := t.TempDir()
-		skillsDir := t.TempDir()
+		builtin := fstest.MapFS{
+			"secrets/cli.sh": &fstest.MapFile{Data: []byte("from builtin")},
+		}
 
 		err := os.MkdirAll(filepath.Join(home, "secrets"), 0o755)
 		if err != nil {
@@ -344,7 +339,7 @@ func TestEnsureAdapter(t *testing.T) {
 			t.Fatalf("write existing: %v", err)
 		}
 
-		EnsureAdapter(home, skillsDir)
+		EnsureAdapter(home, builtin)
 
 		data, err := os.ReadFile(filepath.Join(home, "secrets", "cli"))
 		if err != nil {
@@ -358,9 +353,9 @@ func TestEnsureAdapter(t *testing.T) {
 
 	t.Run("no-op when source missing", func(t *testing.T) {
 		home := t.TempDir()
-		skillsDir := t.TempDir()
+		builtin := fstest.MapFS{}
 
-		EnsureAdapter(home, skillsDir)
+		EnsureAdapter(home, builtin)
 
 		_, err := os.Stat(filepath.Join(home, "secrets", "cli"))
 		if err == nil {

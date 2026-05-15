@@ -208,7 +208,7 @@ func runDaemon(args []string) {
 		fatal("create tmp dir", err)
 	}
 
-	secrets.EnsureAdapter(cfg.Home, cfg.SkillsPath())
+	secrets.EnsureAdapter(cfg.Home, skills.BuiltinFS())
 
 	// adapters
 
@@ -369,8 +369,9 @@ func runDaemon(args []string) {
 		b.RegisterReflex(0, genesis.Reflex(conn))
 		slog.Info("genesis mode active", "pkg", "main")
 	} else {
-		b.RegisterReflex(5*time.Minute, skills.SkillChangeReflex(cfg, conn))
-		b.RegisterReflex(5*time.Minute, skills.SkillCheckReflex(cfg, conn, llmClient.Generate, shellSvc.RunCommand))
+		skillSrcs := skills.Sources(cfg.Home)
+		b.RegisterReflex(5*time.Minute, skills.SkillChangeReflex(cfg, conn, skillSrcs))
+		b.RegisterReflex(5*time.Minute, skills.SkillCheckReflex(cfg, conn, llmClient.Generate, shellSvc.RunCommand, skillSrcs))
 	}
 
 	// tools: shell only during genesis; post-genesis nik delegates to tasks

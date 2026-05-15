@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"io/fs"
 	"log/slog"
 	"strings"
 	"time"
@@ -15,12 +16,10 @@ import (
 
 type CommandRunner func(ctx context.Context, command, stdin string) (stdout, stderr string, err error)
 
-func SkillChangeReflex(cfg *config.Config, conn *sql.DB) func(ctx context.Context) {
+func SkillChangeReflex(cfg *config.Config, conn *sql.DB, srcs []fs.FS) func(ctx context.Context) {
 	return func(ctx context.Context) {
-		dirs := []string{cfg.SkillsPath(), cfg.WorkspaceSkillsPath()}
-
 		fsSkills := map[string]fsSkill{}
-		err := walkSkillDirs(dirs, func(s SkillSummary, data []byte) {
+		err := walkSkillSources(srcs, func(s SkillSummary, data []byte) {
 			content := string(data)
 			contentHash := sha256.Sum256(data)
 			installSection := extractInstallSection(content)
@@ -198,11 +197,9 @@ func ExtractInstallSection(content string) string {
 
 const maxCheckTimeout = 30 * time.Second
 
-func SkillCheckReflex(cfg *config.Config, conn *sql.DB, complete Completer, run CommandRunner) func(ctx context.Context) {
+func SkillCheckReflex(cfg *config.Config, conn *sql.DB, complete Completer, run CommandRunner, srcs []fs.FS) func(ctx context.Context) {
 	return func(ctx context.Context) {
-		dirs := []string{cfg.SkillsPath(), cfg.WorkspaceSkillsPath()}
-
-		reflexes, err := ListReflexes(dirs...)
+		reflexes, err := ListReflexes(srcs...)
 		if err != nil {
 			slog.Error("skill check reflex: list reflexes", "error", err)
 			return

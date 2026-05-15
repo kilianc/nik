@@ -112,7 +112,7 @@ func (r *Renderer) BuildBrainData(workerToolNames []string, toolDefs []llm.ToolD
 		data.NikTools = nikOnly
 	}
 
-	data.Skills = LoadSkills(nil, cfg.SkillsPath(), cfg.WorkspaceSkillsPath())
+	data.Skills = LoadSkills(nil, skills.Sources(cfg.Home)...)
 
 	return data
 }
@@ -135,7 +135,7 @@ func BuildTaskData(cfg *config.Config, t db.Task, tools []llm.ToolDef) TaskData 
 		TableList:  db.TableList(),
 		TokenTraps: ScanTokenTraps(cfg.Home),
 		Tools:      toolDocs,
-		Skills:     LoadSkills(toolDocs, cfg.SkillsPath(), cfg.WorkspaceSkillsPath()),
+		Skills:     LoadSkills(toolDocs, skills.Sources(cfg.Home)...),
 		Plan:       t.Plan,
 		Timeout:    cfg.Task.TimeoutOrDefault().String(),
 		MaxRounds:  cfg.Task.MaxRoundsOrDefault(),
@@ -149,10 +149,10 @@ func BuildTaskData(cfg *config.Config, t db.Task, tools []llm.ToolDef) TaskData 
 	return data
 }
 
-// LoadSkills loads preloaded and available skills from the given directories.
+// LoadSkills loads preloaded and available skills from the given sources.
 // When filterTools is non-nil, preloaded skills are included only if at least
 // one of their declared tools is present in filterTools.
-func LoadSkills(filterTools []ToolDoc, dirs ...string) SkillData {
+func LoadSkills(filterTools []ToolDoc, srcs ...fs.FS) SkillData {
 	var available map[string]bool
 	if len(filterTools) > 0 {
 		available = make(map[string]bool, len(filterTools))
@@ -163,7 +163,7 @@ func LoadSkills(filterTools []ToolDoc, dirs ...string) SkillData {
 
 	var sd SkillData
 
-	preloaded, err := skills.PreloadedSkills(dirs...)
+	preloaded, err := skills.PreloadedSkills(srcs...)
 	if err != nil {
 		slog.Warn("load preloaded skills", "pkg", "prompt", "error", err)
 	}
@@ -178,7 +178,7 @@ func LoadSkills(filterTools []ToolDoc, dirs ...string) SkillData {
 		})
 	}
 
-	summaries, err := skills.ListSkills(dirs...)
+	summaries, err := skills.ListSkills(srcs...)
 	if err != nil {
 		slog.Warn("load skill index", "pkg", "prompt", "error", err)
 	}

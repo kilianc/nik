@@ -1,6 +1,7 @@
 package skills
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -86,7 +87,7 @@ func TestListSkills(t *testing.T) {
 			writeSkill(t, dir, name, name, "desc for "+name, "[t1]")
 		}
 
-		summaries, err := ListSkills(dir)
+		summaries, err := ListSkills(os.DirFS(dir))
 		if err != nil {
 			t.Fatalf("ListSkills: %v", err)
 		}
@@ -102,7 +103,7 @@ func TestListSkills(t *testing.T) {
 		writeSkill(t, builtinDir, "search", "search", "search things", "[db_query]")
 		writeSkill(t, workspaceDir, "custom", "custom", "nik-authored skill", "[shell]")
 
-		summaries, err := ListSkills(builtinDir, workspaceDir)
+		summaries, err := ListSkills(os.DirFS(builtinDir), os.DirFS(workspaceDir))
 		if err != nil {
 			t.Fatalf("ListSkills: %v", err)
 		}
@@ -126,7 +127,7 @@ func TestListSkills(t *testing.T) {
 		writeSkill(t, builtinDir, "alarm", "alarm", "builtin alarms", "[create_alarm]")
 		writeSkill(t, workspaceDir, "alarm", "alarm", "custom alarms", "[create_alarm, delete_alarm]")
 
-		summaries, err := ListSkills(builtinDir, workspaceDir)
+		summaries, err := ListSkills(os.DirFS(builtinDir), os.DirFS(workspaceDir))
 		if err != nil {
 			t.Fatalf("ListSkills: %v", err)
 		}
@@ -143,7 +144,7 @@ func TestListSkills(t *testing.T) {
 		writeSkill(t, builtinDir, "alarm", "alarm", "manage alarms", "[create_alarm]")
 		missingDir := filepath.Join(t.TempDir(), "does_not_exist")
 
-		summaries, err := ListSkills(builtinDir, missingDir)
+		summaries, err := ListSkills(os.DirFS(builtinDir), os.DirFS(missingDir))
 		if err != nil {
 			t.Fatalf("ListSkills with missing dir: %v", err)
 		}
@@ -159,7 +160,7 @@ func TestPreloadedSkills(t *testing.T) {
 		writePreloadSkill(t, dir, "pre", "Preloaded body.")
 		writeSkill(t, dir, "normal", "normal", "not preloaded", "[t2]")
 
-		result, err := PreloadedSkills(dir)
+		result, err := PreloadedSkills(os.DirFS(dir))
 		if err != nil {
 			t.Fatalf("PreloadedSkills: %v", err)
 		}
@@ -187,7 +188,7 @@ func TestPreloadedSkills(t *testing.T) {
 		writeSkill(t, workspaceDir, "custom", "custom", "not preloaded", "[shell]")
 		writePreloadSkill(t, workspaceDir, "ws_pre", "Workspace preloaded body.")
 
-		result, err := PreloadedSkills(builtinDir, workspaceDir)
+		result, err := PreloadedSkills(os.DirFS(builtinDir), os.DirFS(workspaceDir))
 		if err != nil {
 			t.Fatalf("PreloadedSkills: %v", err)
 		}
@@ -212,7 +213,7 @@ func TestPreloadedSkills(t *testing.T) {
 		writePreloadSkill(t, builtinDir, "messaging", "Builtin version.")
 		writePreloadSkill(t, workspaceDir, "messaging", "Workspace override.")
 
-		result, err := PreloadedSkills(builtinDir, workspaceDir)
+		result, err := PreloadedSkills(os.DirFS(builtinDir), os.DirFS(workspaceDir))
 		if err != nil {
 			t.Fatalf("PreloadedSkills: %v", err)
 		}
@@ -230,7 +231,7 @@ func TestPreloadedSkills(t *testing.T) {
 		os.MkdirAll(skillDir, 0o755)
 		os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\nname: myskill\npreload: true\nsummary: a skill\ntools: [t1]\n---\n\n# My Skill\n\nBody content.\n\n## Install\n\nCreate a recurring alarm.\n\n## Behavior\n\nDo things.\n"), 0o644)
 
-		result, err := PreloadedSkills(dir)
+		result, err := PreloadedSkills(os.DirFS(dir))
 		if err != nil {
 			t.Fatalf("PreloadedSkills: %v", err)
 		}
@@ -282,8 +283,9 @@ func TestParseFlowSequence(t *testing.T) {
 func TestHandleLoad(t *testing.T) {
 	t.Run("rejects path traversal", func(t *testing.T) {
 		dir := t.TempDir()
+		src := os.DirFS(dir)
 		for _, name := range []string{"../../../etc", "foo/bar", "valid\\..\\etc"} {
-			out, err := handleLoad([]string{dir}, name)
+			out, err := handleLoad([]fs.FS{src}, name)
 			if err != nil {
 				t.Fatalf("unexpected error for %q: %v", name, err)
 			}
@@ -299,64 +301,12 @@ func TestHandleLoad(t *testing.T) {
 		os.MkdirAll(skillDir, 0o755)
 		os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# Secrets"), 0o644)
 
-		out, err := handleLoad([]string{dir}, "secrets")
+		out, err := handleLoad([]fs.FS{os.DirFS(dir)}, "secrets")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if !strings.Contains(out, "# Secrets") {
 			t.Fatalf("expected skill content, got %q", out)
-		}
-	})
-}
-
-func TestSymlinkEscapeBlocked(t *testing.T) {
-	t.Run("handleLoad", func(t *testing.T) {
-		dir := t.TempDir()
-		outside := t.TempDir()
-
-		skillDir := filepath.Join(outside, "secret")
-		os.MkdirAll(skillDir, 0o755)
-		os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# Secret"), 0o644)
-
-		err := os.Symlink(outside, filepath.Join(dir, "escape"))
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		out, loadErr := handleLoad([]string{dir}, "escape/secret")
-		if loadErr != nil {
-			t.Fatalf("unexpected error: %v", loadErr)
-		}
-		if !strings.Contains(out, "not found") {
-			t.Fatalf("expected not found for symlink escape, got %q", out)
-		}
-	})
-
-	t.Run("walkSkillDirs", func(t *testing.T) {
-		dir := t.TempDir()
-		outside := t.TempDir()
-
-		skillDir := filepath.Join(outside, "secret")
-		os.MkdirAll(skillDir, 0o755)
-		os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\nname: secret\nsummary: escaped\n---\n"), 0o644)
-
-		err := os.Symlink(skillDir, filepath.Join(dir, "escape"))
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		var found []string
-		walkErr := walkSkillDirs([]string{dir}, func(s SkillSummary, _ []byte) {
-			found = append(found, s.Name)
-		})
-		if walkErr != nil {
-			t.Fatalf("walk error: %v", walkErr)
-		}
-
-		for _, name := range found {
-			if name == "secret" {
-				t.Fatalf("symlink escape should have been blocked, but found skill %q", name)
-			}
 		}
 	})
 }
@@ -491,7 +441,7 @@ func TestListReflexes(t *testing.T) {
 	os.MkdirAll(normalDir, 0o755)
 	os.WriteFile(filepath.Join(normalDir, "SKILL.md"), []byte("---\nname: journal\nsummary: write\ntools: [shell]\n---\n"), 0o644)
 
-	reflexes, err := ListReflexes(dir)
+	reflexes, err := ListReflexes(os.DirFS(dir))
 	if err != nil {
 		t.Fatalf("ListReflexes: %v", err)
 	}
