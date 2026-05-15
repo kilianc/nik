@@ -1,6 +1,6 @@
 package tui
 
-import tea "github.com/charmbracelet/bubbletea"
+import tea "charm.land/bubbletea/v2"
 
 // animator is a self-contained UI component with its own tick loop. Update
 // accepts any tea.Msg and filters internally for the messages it cares about.

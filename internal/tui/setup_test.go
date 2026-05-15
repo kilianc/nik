@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/kciuffolo/nik/internal/codex"
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/db"
@@ -23,7 +23,7 @@ func TestSetupInitialStep(t *testing.T) {
 func TestSetupWelcomeToAuthChoice(t *testing.T) {
 	w := newTestSetup(t)
 
-	w, _ = w.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	w, _ = w.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	if w.step != stepAuthChoice {
 		t.Errorf("expected step stepAuthChoice, got %d", w.step)
@@ -35,7 +35,7 @@ func TestSetupAuthChoiceSubscription(t *testing.T) {
 	w.step = stepAuthChoice
 	w.authCursor = 0
 
-	w, cmd := w.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	w, cmd := w.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	if w.step != stepCodexLogin {
 		t.Errorf("expected step stepCodexLogin, got %d", w.step)
@@ -50,7 +50,7 @@ func TestSetupAuthChoiceAPIKey(t *testing.T) {
 	w.step = stepAuthChoice
 	w.authCursor = 1
 
-	w, _ = w.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	w, _ = w.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	if w.step != stepAPIKey {
 		t.Errorf("expected step stepAPIKey, got %d", w.step)
@@ -61,12 +61,12 @@ func TestSetupAuthChoiceNavigation(t *testing.T) {
 	w := newTestSetup(t)
 	w.step = stepAuthChoice
 
-	w, _ = w.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	w, _ = w.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	if w.authCursor != 1 {
 		t.Errorf("expected cursor 1 after j, got %d", w.authCursor)
 	}
 
-	w, _ = w.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
+	w, _ = w.Update(tea.KeyPressMsg{Code: 'k', Text: "k"})
 	if w.authCursor != 0 {
 		t.Errorf("expected cursor 0 after k, got %d", w.authCursor)
 	}
@@ -113,7 +113,7 @@ func TestSetupCodexPasteEmptyShowsError(t *testing.T) {
 	w.codexAuthReq = &codex.AuthRequest{AuthURL: "https://example.com"}
 	w.codexPasteIn.Focus()
 
-	w, cmd := w.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	w, cmd := w.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	if w.err == nil {
 		t.Error("expected error for empty paste")
@@ -130,7 +130,7 @@ func TestSetupCodexPasteFiresComplete(t *testing.T) {
 	w.codexPasteIn.Focus()
 	w.codexPasteIn.SetValue("http://localhost:1455/auth/callback?code=abc&state=xyz")
 
-	w, cmd := w.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	w, cmd := w.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	if cmd == nil {
 		t.Fatal("expected complete-login cmd")
@@ -146,7 +146,7 @@ func TestSetupCodexEscCancels(t *testing.T) {
 	w.codexAuthReq = &codex.AuthRequest{AuthURL: "https://example.com"}
 	w.err = errTest
 
-	w, _ = w.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	w, _ = w.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 
 	if w.step != stepAuthChoice {
 		t.Errorf("expected step stepAuthChoice after esc, got %d", w.step)
@@ -178,7 +178,7 @@ func TestSetupCodexLoginRetry(t *testing.T) {
 	w.step = stepCodexLogin
 	w.err = errTest
 
-	w, cmd := w.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	w, cmd := w.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	if w.err != nil {
 		t.Error("expected error to be cleared")
@@ -192,7 +192,7 @@ func TestSetupCodexDoneToAPIKey(t *testing.T) {
 	w := newTestSetup(t)
 	w.step = stepCodexDone
 
-	w, _ = w.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	w, _ = w.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	if w.step != stepAPIKey {
 		t.Errorf("expected step stepAPIKey, got %d", w.step)
@@ -203,7 +203,7 @@ func TestSetupAPIKeyRequired(t *testing.T) {
 	w := newTestSetup(t)
 	w.step = stepAPIKey
 
-	w, _ = w.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	w, _ = w.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	if w.step != stepAPIKey {
 		t.Errorf("expected step to stay at stepAPIKey, got %d", w.step)
@@ -219,7 +219,7 @@ func TestSetupAPIKeySubmit(t *testing.T) {
 	w.apiKeyIn.SetValue("sk-test")
 	w.apiKeyIn.Focus()
 
-	w, cmd := w.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	w, cmd := w.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	if w.step != stepAPIKeyValidating {
 		t.Errorf("expected step stepAPIKeyValidating, got %d", w.step)
@@ -261,7 +261,7 @@ func TestSetupExaKeyRequired(t *testing.T) {
 	w := newTestSetup(t)
 	w.step = stepExaKey
 
-	w, _ = w.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	w, _ = w.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	if w.step != stepExaKey {
 		t.Errorf("expected step to stay at stepExaKey, got %d", w.step)
@@ -277,7 +277,7 @@ func TestSetupExaKeySubmit(t *testing.T) {
 	w.exaKeyIn.SetValue("exa-test")
 	w.exaKeyIn.Focus()
 
-	w, cmd := w.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	w, cmd := w.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	if w.step != stepExaKeyValidating {
 		t.Errorf("expected step stepExaKeyValidating, got %d", w.step)
@@ -337,12 +337,12 @@ func TestSetupModelSelection(t *testing.T) {
 	w.models = apiModels
 	w.step = stepModel
 
-	w, _ = w.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	w, _ = w.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	if w.modelCursor != 1 {
 		t.Errorf("expected cursor 1, got %d", w.modelCursor)
 	}
 
-	w, _ = w.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
+	w, _ = w.Update(tea.KeyPressMsg{Code: 'k', Text: "k"})
 	if w.modelCursor != 0 {
 		t.Errorf("expected cursor 0, got %d", w.modelCursor)
 	}
@@ -353,7 +353,7 @@ func TestSetupModelSelectAdvances(t *testing.T) {
 	w.models = apiModels
 	w.step = stepModel
 
-	w, _ = w.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	w, _ = w.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	if w.step != stepDocker {
 		t.Errorf("expected step stepDocker, got %d", w.step)
@@ -368,7 +368,7 @@ func TestSetupDockerSelectDocker(t *testing.T) {
 	w.step = stepDocker
 	w.dockerCursor = 0
 
-	w, _ = w.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	w, _ = w.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	if w.step != stepTimezone {
 		t.Errorf("expected step stepTimezone, got %d", w.step)
@@ -386,7 +386,7 @@ func TestSetupDockerSelectHost(t *testing.T) {
 	w.step = stepDocker
 	w.dockerCursor = 1
 
-	w, _ = w.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	w, _ = w.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	if w.step != stepTimezone {
 		t.Errorf("expected step stepTimezone, got %d", w.step)
@@ -402,7 +402,7 @@ func TestSetupDockerPreservesExisting(t *testing.T) {
 	w.dockerCursor = 0
 	w.cfg.Shell.DockerImage = "custom-image"
 
-	w, _ = w.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	w, _ = w.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	if w.cfg.Shell.DockerImage != "custom-image" {
 		t.Errorf("expected existing docker image preserved, got %q", w.cfg.Shell.DockerImage)
@@ -414,7 +414,7 @@ func TestSetupTimezoneRequiresInput(t *testing.T) {
 	w.step = stepTimezone
 	w.timezoneIn.SetValue("")
 
-	w, _ = w.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	w, _ = w.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	if w.step != stepTimezone {
 		t.Errorf("expected step to stay at stepTimezone, got %d", w.step)
@@ -437,7 +437,7 @@ func TestSetupTimezoneAlwaysResolves(t *testing.T) {
 			w.timezoneIn.SetValue(input)
 			w.apiKeyIn.SetValue("sk-test")
 
-			w, cmd := w.Update(tea.KeyMsg{Type: tea.KeyEnter})
+			w, cmd := w.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 			if w.step != stepLocationResolving {
 				t.Errorf("expected step stepLocationResolving, got %d", w.step)

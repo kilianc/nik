@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/db"
 )
@@ -926,11 +926,11 @@ func TestViewportScrollKeys(t *testing.T) {
 	c, _ = c.Update(newMessagesMsg{messages: msgs})
 
 	c.viewport.GotoBottom()
-	bottomY := c.viewport.YOffset
+	bottomY := c.viewport.YOffset()
 
-	c, _ = c.Update(tea.KeyMsg{Type: tea.KeyPgUp})
-	if c.viewport.YOffset >= bottomY {
-		t.Errorf("expected pgup to scroll up, offset stayed at %d", c.viewport.YOffset)
+	c, _ = c.Update(tea.KeyPressMsg{Code: tea.KeyPgUp})
+	if c.viewport.YOffset() >= bottomY {
+		t.Errorf("expected pgup to scroll up, offset stayed at %d", c.viewport.YOffset())
 	}
 }
 
@@ -957,23 +957,17 @@ func TestViewportMouseWheel(t *testing.T) {
 	c, _ = c.Update(newMessagesMsg{messages: msgs})
 
 	c.viewport.GotoBottom()
-	bottomY := c.viewport.YOffset
+	bottomY := c.viewport.YOffset()
 
-	c, _ = c.Update(tea.MouseMsg{
-		Action: tea.MouseActionPress,
-		Button: tea.MouseButtonWheelUp,
-	})
-	if c.viewport.YOffset >= bottomY {
-		t.Errorf("expected mouse wheel up to scroll viewport, offset stayed at %d", c.viewport.YOffset)
+	c, _ = c.Update(tea.MouseWheelMsg{Button: tea.MouseWheelUp})
+	if c.viewport.YOffset() >= bottomY {
+		t.Errorf("expected mouse wheel up to scroll viewport, offset stayed at %d", c.viewport.YOffset())
 	}
 
-	afterUp := c.viewport.YOffset
-	c, _ = c.Update(tea.MouseMsg{
-		Action: tea.MouseActionPress,
-		Button: tea.MouseButtonWheelDown,
-	})
-	if c.viewport.YOffset <= afterUp {
-		t.Errorf("expected mouse wheel down to scroll viewport back, offset stayed at %d", c.viewport.YOffset)
+	afterUp := c.viewport.YOffset()
+	c, _ = c.Update(tea.MouseWheelMsg{Button: tea.MouseWheelDown})
+	if c.viewport.YOffset() <= afterUp {
+		t.Errorf("expected mouse wheel down to scroll viewport back, offset stayed at %d", c.viewport.YOffset())
 	}
 }
 
