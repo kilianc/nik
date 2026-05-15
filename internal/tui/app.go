@@ -3,7 +3,7 @@ package tui
 import (
 	"database/sql"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/kciuffolo/nik/internal/config"
 )
 
@@ -88,19 +88,29 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return a, nil
 }
 
-func (a App) View() string {
+func (a App) View() tea.View {
+	var content string
+	var mouseMode tea.MouseMode
 	switch a.view {
 	case viewSetup:
-		return appStyle.Render(a.setup.View())
+		content = appStyle.Render(a.setup.View())
+		// No mouse capture during setup — the terminal needs it so users can
+		// drag-select the sign-in URL.
+		mouseMode = tea.MouseModeNone
 	case viewChat:
-		return a.chat.View()
+		content = a.chat.View()
+		// Chat needs mouse events for viewport wheel-scrolling.
+		mouseMode = tea.MouseModeCellMotion
 	}
-	return ""
+	v := tea.NewView(content)
+	v.AltScreen = true
+	v.MouseMode = mouseMode
+	return v
 }
 
 func Run(cfg *config.Config, conn *sql.DB, sender MessageSender, setup bool, opts Options) error {
 	app := NewApp(cfg, conn, sender, setup, opts)
-	p := tea.NewProgram(app, tea.WithAltScreen(), tea.WithMouseCellMotion())
+	p := tea.NewProgram(app)
 	_, err := p.Run()
 	return err
 }

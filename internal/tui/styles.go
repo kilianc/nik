@@ -2,9 +2,11 @@ package tui
 
 import (
 	"fmt"
+	"image/color"
 	"math"
+	"os"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // theme bundles every color decision the TUI makes. Two base hues only:
@@ -12,8 +14,8 @@ import (
 // chrome. `dim` and `sep` stay numbered greys so plain text doesn't ride
 // the blend. Light/dark only differ in greyscale shades and blend target.
 type theme struct {
-	dim         lipgloss.Color
-	sep         lipgloss.Color
+	dim         color.Color
+	sep         color.Color
 	idleOpacity float64
 	blendTarget [3]float64
 	main        [3]float64
@@ -91,7 +93,7 @@ const morphPaletteSize = 20
 var morphPalette [morphPaletteSize]string
 
 func init() {
-	if lipgloss.HasDarkBackground() {
+	if lipgloss.HasDarkBackground(os.Stdin, os.Stdout) {
 		th = darkTheme
 	} else {
 		th = lightTheme
@@ -139,10 +141,10 @@ func init() {
 	}
 }
 
-func mainAt(t float64) lipgloss.Color      { return blendRGB(th.main, t) }
-func secondaryAt(t float64) lipgloss.Color { return blendRGB(th.secondary, t) }
+func mainAt(t float64) color.Color      { return blendRGB(th.main, t) }
+func secondaryAt(t float64) color.Color { return blendRGB(th.secondary, t) }
 
-func blendRGB(base [3]float64, t float64) lipgloss.Color {
+func blendRGB(base [3]float64, t float64) color.Color {
 	bg := th.blendTarget
 	r := int(bg[0] + (base[0]-bg[0])*t)
 	g := int(bg[1] + (base[1]-bg[1])*t)

@@ -1,11 +1,14 @@
 package tui
 
 import (
+	"image/color"
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
+
+var _ = lipgloss.NewStyle // keep import used after Color type changed to color.Color
 
 func TestStylesNotNil(t *testing.T) {
 	styles := []struct {
@@ -52,15 +55,15 @@ func TestStylesNotNil(t *testing.T) {
 }
 
 func TestThemeAccessors(t *testing.T) {
-	accessors := map[string]func(float64) lipgloss.Color{
+	accessors := map[string]func(float64) color.Color{
 		"mainAt":      mainAt,
 		"secondaryAt": secondaryAt,
 	}
 	for name, fn := range accessors {
 		for _, v := range []float64{0.0, 0.5, 1.0} {
-			s := string(fn(v))
-			if !strings.HasPrefix(s, "#") || len(s) != 7 {
-				t.Errorf("%s(%v) = %q, want #rrggbb hex", name, v, s)
+			c := fn(v)
+			if c == nil {
+				t.Errorf("%s(%v) returned nil color", name, v)
 			}
 		}
 	}

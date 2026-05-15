@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/textinput"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/daemonctl"
 	"github.com/kciuffolo/nik/internal/db"
@@ -79,7 +79,10 @@ func newChatModel(cfg *config.Config, conn *sql.DB, sender MessageSender, opts O
 	ti := textinput.New()
 	ti.Placeholder = "message..."
 	ti.Prompt = "❯ "
-	ti.PromptStyle = promptStyle
+	styles := ti.Styles()
+	styles.Focused.Prompt = promptStyle
+	styles.Blurred.Prompt = promptStyle
+	ti.SetStyles(styles)
 	ti.CharLimit = 0
 	ti.Focus()
 
@@ -373,15 +376,15 @@ func (m chatModel) viewportHeight() int {
 }
 
 func (m *chatModel) resyncLayout() {
-	m.input.Width = m.viewWidth() - 2
+	m.input.SetWidth(m.viewWidth() - 2)
 
 	w, h := m.viewWidth(), m.viewportHeight()
 	if !m.vpReady {
-		m.viewport = viewport.New(w, h)
+		m.viewport = viewport.New(viewport.WithWidth(w), viewport.WithHeight(h))
 		m.vpReady = true
 	} else {
-		m.viewport.Width = w
-		m.viewport.Height = h
+		m.viewport.SetWidth(w)
+		m.viewport.SetHeight(h)
 	}
 	m.convDirty = true
 	m.refreshConvCache()

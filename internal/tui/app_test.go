@@ -3,7 +3,7 @@ package tui
 import (
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/db"
 )
@@ -49,7 +49,7 @@ func TestAppViewRendersSetup(t *testing.T) {
 	app := NewApp(cfg, conn, nil, true, Options{})
 
 	output := app.View()
-	if output == "" {
+	if output.Content == "" {
 		t.Error("expected non-empty view output")
 	}
 }

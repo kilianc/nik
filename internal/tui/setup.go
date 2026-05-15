@@ -12,8 +12,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/kciuffolo/nik/internal/codex"
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/daemonctl"
@@ -53,6 +54,7 @@ type setupModel struct {
 	err          error
 	cfg          *config.Config
 	conn         *sql.DB
+	width        int
 
 	authCursor         int
 	hasSubscription    bool
@@ -98,7 +100,7 @@ func newSetupModel(cfg *config.Config, conn *sql.DB) setupModel {
 	apiKey := textinput.New()
 	apiKey.Placeholder = "sk-..."
 	apiKey.EchoMode = textinput.EchoPassword
-	apiKey.Width = 60
+	apiKey.SetWidth(60)
 	if existing, err := secrets.New(cfg.Home).Get("openai_key"); err == nil {
 		apiKey.SetValue(existing)
 	}
@@ -106,7 +108,7 @@ func newSetupModel(cfg *config.Config, conn *sql.DB) setupModel {
 	exaKey := textinput.New()
 	exaKey.Placeholder = "exa-..."
 	exaKey.EchoMode = textinput.EchoPassword
-	exaKey.Width = 60
+	exaKey.SetWidth(60)
 	if existing, err := secrets.New(cfg.Home).Get("exa_api_key"); err == nil {
 		exaKey.SetValue(existing)
 	}
@@ -120,11 +122,11 @@ func newSetupModel(cfg *config.Config, conn *sql.DB) setupModel {
 	}
 	tzIn := textinput.New()
 	tzIn.SetValue(tz)
-	tzIn.Width = 50
+	tzIn.SetWidth(50)
 
 	codexPasteIn := textinput.New()
 	codexPasteIn.Placeholder = "http://localhost:1455/auth/callback?code=..."
-	codexPasteIn.Width = 60
+	codexPasteIn.SetWidth(60)
 
 	p := newPulse(30 * time.Millisecond)
 	return setupModel{
@@ -411,6 +413,9 @@ func (m setupModel) Update(msg tea.Msg) (setupModel, tea.Cmd) {
 	}
 
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
@@ -816,7 +821,15 @@ func (m setupModel) viewCodexLogin() string {
 	} else {
 		s += hintStyle.Render("1. Open this URL in your browser and sign in:") + "\n\n"
 	}
-	s += "   " + m.codexAuthReq.AuthURL + "\n\n"
+	// Width-wrap the URL so all of it is on screen and selectable. The
+	// terminal would otherwise clip lines longer than its width inside the
+	// alt-screen. Browsers strip the embedded newlines on paste-into-address
+	// bar, so multi-line copy still works.
+	urlWidth := m.width - 8
+	if urlWidth < 20 {
+		urlWidth = 20
+	}
+	s += lipgloss.NewStyle().Width(urlWidth).Render(m.codexAuthReq.AuthURL) + "\n\n"
 	s += hintStyle.Render("2. After signing in your browser will fail to load a") + "\n"
 	s += hintStyle.Render("   localhost page — that's expected. Copy that URL from") + "\n"
 	s += hintStyle.Render("   the address bar and paste it below:") + "\n\n"
