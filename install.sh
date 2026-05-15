@@ -33,6 +33,18 @@ curl -fsSL "$URL" -o /tmp/nik
 chmod +x /tmp/nik
 sudo mv /tmp/nik "${INSTALL_DIR}/nik"
 
+if [ "$OS" = "darwin" ]; then
+  if [ "$VERSION" = "latest" ]; then
+    LINUX_URL="https://github.com/kilianc/nik/releases/latest/download/nik-linux-${ARCH}"
+  else
+    LINUX_URL="https://github.com/kilianc/nik/releases/download/${VERSION}/nik-linux-${ARCH}"
+  fi
+  echo "Downloading nik (linux/${ARCH}) for shell container from ${LINUX_URL}..."
+  curl -fsSL "$LINUX_URL" -o /tmp/nik-linux-${ARCH}
+  chmod +x /tmp/nik-linux-${ARCH}
+  sudo mv /tmp/nik-linux-${ARCH} "${INSTALL_DIR}/nik-linux-${ARCH}"
+fi
+
 echo "Setting up daemon service..."
 mkdir -p "$NIK_HOME"
 nik install --home "$NIK_HOME"

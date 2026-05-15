@@ -36,6 +36,9 @@ func (s *Service) nikBinDir() string {
 }
 
 func (s *Service) nikBinLinux() string {
+	if runtime.GOOS == "linux" {
+		return s.nikBin
+	}
 	return filepath.Join(filepath.Dir(s.nikBin),
 		fmt.Sprintf("nik-linux-%s", runtime.GOARCH))
 }
