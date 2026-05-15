@@ -2,6 +2,7 @@ package daemonctl
 
 import (
 	"bytes"
+	_ "embed"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,21 +12,12 @@ import (
 	"text/template"
 )
 
-var systemdUnitTmpl = template.Must(template.New("unit").Parse(`[Unit]
-Description=nik daemon
-After=network-online.target
-Wants=network-online.target
+const systemdUserUnit = "nikd.service"
 
-[Service]
-Type=simple
-ExecStart={{ .NikBinary }} daemon --home {{ .NikHome }}
-Restart=on-failure
-RestartSec=5
-Environment=NIK_HOME={{ .NikHome }}
+//go:embed nikd.service.tmpl
+var systemdUnitTmplSrc string
 
-[Install]
-WantedBy=default.target
-`))
+var systemdUnitTmpl = template.Must(template.New("unit").Parse(systemdUnitTmplSrc))
 
 func systemdUnitPath() (string, error) {
 	u, err := user.Current()
@@ -33,7 +25,7 @@ func systemdUnitPath() (string, error) {
 		return "", fmt.Errorf("get current user: %w", err)
 	}
 
-	return filepath.Join(u.HomeDir, ".config", "systemd", "user", "nik.service"), nil
+	return filepath.Join(u.HomeDir, ".config", "systemd", "user", systemdUserUnit), nil
 }
 
 func installSystemd(nikBinary, nikHome string) error {
@@ -69,7 +61,7 @@ func installSystemd(nikBinary, nikHome string) error {
 		return fmt.Errorf("systemctl daemon-reload: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 
-	out, err = exec.Command("systemctl", "--user", "enable", "--now", "nik.service").CombinedOutput()
+	out, err = exec.Command("systemctl", "--user", "enable", "--now", systemdUserUnit).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("systemctl enable: %s: %w", strings.TrimSpace(string(out)), err)
 	}
@@ -78,7 +70,7 @@ func installSystemd(nikBinary, nikHome string) error {
 }
 
 func uninstallSystemd() error {
-	_ = exec.Command("systemctl", "--user", "disable", "--now", "nik.service").Run()
+	_ = exec.Command("systemctl", "--user", "disable", "--now", systemdUserUnit).Run()
 
 	unitPath, err := systemdUnitPath()
 	if err != nil {
@@ -106,7 +98,7 @@ func isInstalledSystemd() bool {
 }
 
 func isRunningSystemd() (bool, error) {
-	out, err := exec.Command("systemctl", "--user", "is-active", "nik.service").CombinedOutput()
+	out, err := exec.Command("systemctl", "--user", "is-active", systemdUserUnit).CombinedOutput()
 	if err != nil {
 		return false, nil
 	}

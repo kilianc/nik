@@ -2,6 +2,7 @@ package daemonctl
 
 import (
 	"bytes"
+	_ "embed"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,36 +14,10 @@ import (
 
 const launchdLabel = "com.nik.daemon"
 
-var launchdPlistTmpl = template.Must(template.New("plist").Parse(`<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key>
-  <string>{{ .Label }}</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>{{ .NikBinary }}</string>
-    <string>daemon</string>
-    <string>--home</string>
-    <string>{{ .NikHome }}</string>
-  </array>
-  <key>RunAtLoad</key>
-  <true/>
-  <key>KeepAlive</key>
-  <true/>
-  <key>StandardOutPath</key>
-  <string>{{ .NikHome }}/launchd.stdout.log</string>
-  <key>StandardErrorPath</key>
-  <string>{{ .NikHome }}/launchd.stderr.log</string>
-  <key>EnvironmentVariables</key>
-  <dict>
-    <key>NIK_HOME</key>
-    <string>{{ .NikHome }}</string>
-  </dict>
-</dict>
-</plist>
-`))
+//go:embed com.nik.daemon.plist.tmpl
+var launchdPlistTmplSrc string
+
+var launchdPlistTmpl = template.Must(template.New("plist").Parse(launchdPlistTmplSrc))
 
 func launchdPlistPath() (string, error) {
 	u, err := user.Current()
