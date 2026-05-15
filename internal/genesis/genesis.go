@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/id"
@@ -86,6 +87,13 @@ func Reflex(conn *sql.DB) func(ctx context.Context) {
 		}
 
 		if i == len(seeds)-1 {
+			s, err := db.SettingGet(ctx, conn, "genesis_completed_at")
+			if err == nil && s == nil {
+				err := db.SettingSet(ctx, conn, "genesis_completed_at", db.ISO8601MS(time.Now()))
+				if err != nil {
+					slog.Warn("genesis reflex: stamp genesis_completed_at", "pkg", "genesis", "error", err)
+				}
+			}
 			return
 		}
 
