@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>{{ .Label }}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>{{ .NikBinary }}</string>
+    <string>daemon</string>
+    <string>--home</string>
+    <string>{{ .NikHome }}</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>{{ .NikHome }}/launchd.stdout.log</string>
+  <key>StandardErrorPath</key>
+  <string>{{ .NikHome }}/launchd.stderr.log</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>NIK_HOME</key>
+    <string>{{ .NikHome }}</string>
+  </dict>
+</dict>
+</plist>
