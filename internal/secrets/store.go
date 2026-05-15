@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -231,14 +232,13 @@ func validateName(name string) error {
 	return nil
 }
 
-func EnsureAdapter(home, skillsDir string) {
+func EnsureAdapter(home string, builtin fs.FS) {
 	dst := filepath.Join(home, "secrets", "cli")
 	if _, err := os.Stat(dst); err == nil {
 		return
 	}
 
-	src := filepath.Join(skillsDir, "secrets", "cli.sh")
-	data, err := os.ReadFile(src)
+	data, err := fs.ReadFile(builtin, "secrets/cli.sh")
 	if err != nil {
 		return
 	}

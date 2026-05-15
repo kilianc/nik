@@ -28,10 +28,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	dirs := []string{cfg.SkillsPath(), cfg.WorkspaceSkillsPath()}
 	found := false
 
-	summaries, err := skills.ListSkills(dirs...)
+	summaries, err := skills.ListSkills(skills.Sources(cfg.Home)...)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "list skills: %v\n", err)
 		os.Exit(1)

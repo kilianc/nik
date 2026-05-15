@@ -39,9 +39,6 @@ task:
   timeout: {{ .Task.Timeout }}                              # max wall-clock time per task
   profile: {{ .Task.Profile }}                             # "nik" = include identity/soul, anything else = generic
 
-# paths (relative to home dir)
-skills_dir: {{ .SkillsDirValue }}
-
 # conversations (label: uuid)
 privileged_conversation_ids:{{ convList .PrivilegedConversationIDs }}
 allow_conversation_ids:{{ convList .AllowConversationIDs }}

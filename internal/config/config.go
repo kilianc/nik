@@ -152,10 +152,9 @@ type Config struct {
 	Home        string    `yaml:"-"`
 	lastModTime time.Time `yaml:"-"`
 
-	Models         ModelsConfig `yaml:"models"`
-	Task           TaskConfig   `yaml:"task"`
-	Shell          ShellConfig  `yaml:"shell"`
-	SkillsDirValue string       `yaml:"skills_dir"`
+	Models ModelsConfig `yaml:"models"`
+	Task   TaskConfig   `yaml:"task"`
+	Shell  ShellConfig  `yaml:"shell"`
 
 	AllowConversationIDs      ConversationList `yaml:"allow_conversation_ids"`
 	PrivilegedConversationIDs ConversationList `yaml:"privileged_conversation_ids"`
@@ -197,7 +196,6 @@ func Default(home string) *Config {
 			Timeout:   60 * time.Minute,
 			Profile:   "nik",
 		},
-		SkillsDirValue:      "../skills",
 		MaxHistory:          100,
 		SystemMessageMaxAge: 2 * time.Hour,
 		Timezone:            "",
@@ -243,23 +241,6 @@ func (c Config) TmpPath() string {
 
 func (c Config) ConfigPath() string {
 	return filepath.Join(c.Home, "config.yaml")
-}
-
-func (c Config) SkillsPath() string {
-	dir := c.SkillsDirValue
-	if dir == "" {
-		dir = "skills"
-	}
-
-	if filepath.IsAbs(dir) {
-		return dir
-	}
-
-	return filepath.Join(c.Home, dir)
-}
-
-func (c Config) WorkspaceSkillsPath() string {
-	return filepath.Join(c.Home, "skills")
 }
 
 func (c Config) MediaPath() string {

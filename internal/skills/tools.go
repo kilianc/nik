@@ -5,10 +5,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
-	"os"
-	"path/filepath"
+	"io/fs"
+	"path"
 	"strings"
 
 	"github.com/kciuffolo/nik/internal/config"
@@ -72,21 +72,21 @@ func loadSkillHandler(cfg *config.Config) llm.ToolExecutor {
 			return llm.ToolError(err), nil
 		}
 
-		dirs := []string{cfg.SkillsPath(), cfg.WorkspaceSkillsPath()}
+		srcs := Sources(cfg.Home)
 
 		switch args.Action {
 		case "list":
-			return handleList(dirs)
+			return handleList(srcs)
 		case "load":
-			return handleLoad(dirs, args.Name)
+			return handleLoad(srcs, args.Name)
 		default:
 			return llm.ToolErrorf("unknown action %q", args.Action), nil
 		}
 	}
 }
 
-func handleList(dirs []string) (string, error) {
-	summaries, err := ListSkills(dirs...)
+func handleList(srcs []fs.FS) (string, error) {
+	summaries, err := ListSkills(srcs...)
 	if err != nil {
 		return llm.ToolError(err), nil
 	}
@@ -99,62 +99,34 @@ func handleList(dirs []string) (string, error) {
 	return string(data), nil
 }
 
-func handleLoad(dirs []string, name string) (string, error) {
+func handleLoad(srcs []fs.FS, name string) (string, error) {
 	if name == "" {
 		return `{"error":"empty name"}`, nil
 	}
 
-	for i := len(dirs) - 1; i >= 0; i-- {
-		root, err := os.OpenRoot(dirs[i])
+	for i := len(srcs) - 1; i >= 0; i-- {
+		data, err := fs.ReadFile(srcs[i], path.Join(name, "SKILL.md"))
 		if err != nil {
 			continue
 		}
-
-		relPath := filepath.Join(name, "SKILL.md")
-		f, openErr := root.Open(relPath)
-		if openErr != nil {
-			root.Close()
-			continue
-		}
-
-		data, readErr := io.ReadAll(f)
-		f.Close()
-		root.Close()
-		if readErr != nil {
-			continue
-		}
-
 		return string(data), nil
 	}
 
 	return llm.ToolErrorf("skill %q not found", name), nil
 }
 
-// walkSkillDirs iterates skill directories, parses frontmatter from each
-// SKILL.md, and calls fn for each unique skill. All filesystem access goes
-// through os.OpenRoot for traversal resistance. Later directories override
-// earlier ones when skills share a name.
-func walkSkillDirs(dirs []string, fn func(s SkillSummary, data []byte)) error {
-	for _, dir := range dirs {
-		root, err := os.OpenRoot(dir)
+// walkSkillSources iterates skill sources, parses frontmatter from each
+// SKILL.md, and calls fn for each skill found. Later sources override
+// earlier ones when skills share a name. A missing source (e.g. workspace
+// dir not yet created) is silently skipped.
+func walkSkillSources(srcs []fs.FS, fn func(s SkillSummary, data []byte)) error {
+	for _, src := range srcs {
+		entries, err := fs.ReadDir(src, ".")
 		if err != nil {
-			if os.IsNotExist(err) {
+			if errors.Is(err, fs.ErrNotExist) {
 				continue
 			}
-			return fmt.Errorf("open skills root %s: %w", dir, err)
-		}
-
-		dirFile, err := root.Open(".")
-		if err != nil {
-			root.Close()
-			return fmt.Errorf("read skills dir %s: %w", dir, err)
-		}
-
-		entries, err := dirFile.ReadDir(-1)
-		dirFile.Close()
-		if err != nil {
-			root.Close()
-			return fmt.Errorf("read skills dir %s: %w", dir, err)
+			return fmt.Errorf("read skills root: %w", err)
 		}
 
 		for _, entry := range entries {
@@ -162,38 +134,29 @@ func walkSkillDirs(dirs []string, fn func(s SkillSummary, data []byte)) error {
 				continue
 			}
 
-			relPath := filepath.Join(entry.Name(), "SKILL.md")
-			f, openErr := root.Open(relPath)
-			if openErr != nil {
+			data, err := fs.ReadFile(src, path.Join(entry.Name(), "SKILL.md"))
+			if err != nil {
 				continue
 			}
 
-			data, readErr := io.ReadAll(f)
-			f.Close()
-			if readErr != nil {
-				continue
-			}
-
-			s, parseErr := parseFrontmatter(data)
-			if parseErr != nil {
+			s, err := parseFrontmatter(data)
+			if err != nil {
 				continue
 			}
 
 			fn(s, data)
 		}
-
-		root.Close()
 	}
 
 	return nil
 }
 
-// later directories override earlier ones when skills share a name.
-func ListSkills(dirs ...string) ([]SkillSummary, error) {
+// later sources override earlier ones when skills share a name.
+func ListSkills(srcs ...fs.FS) ([]SkillSummary, error) {
 	seen := map[string]int{}
 	var summaries []SkillSummary
 
-	err := walkSkillDirs(dirs, func(s SkillSummary, _ []byte) {
+	err := walkSkillSources(srcs, func(s SkillSummary, _ []byte) {
 		if idx, ok := seen[s.Name]; ok {
 			summaries[idx] = s
 		} else {
@@ -362,10 +325,10 @@ func parseFrontmatter(data []byte) (SkillSummary, error) {
 	return s, nil
 }
 
-func ListReflexes(dirs ...string) (map[string]SkillReflexDef, error) {
+func ListReflexes(srcs ...fs.FS) (map[string]SkillReflexDef, error) {
 	result := map[string]SkillReflexDef{}
 
-	err := walkSkillDirs(dirs, func(s SkillSummary, _ []byte) {
+	err := walkSkillSources(srcs, func(s SkillSummary, _ []byte) {
 		for _, r := range s.Reflexes {
 			key := s.Name + "/" + r.Name
 			result[key] = SkillReflexDef{
@@ -386,12 +349,12 @@ type PreloadedSkill struct {
 	Content string
 }
 
-// later directories override earlier ones by name.
-func PreloadedSkills(dirs ...string) ([]PreloadedSkill, error) {
+// later sources override earlier ones by name.
+func PreloadedSkills(srcs ...fs.FS) ([]PreloadedSkill, error) {
 	seen := map[string]int{}
 	var result []PreloadedSkill
 
-	err := walkSkillDirs(dirs, func(s SkillSummary, data []byte) {
+	err := walkSkillSources(srcs, func(s SkillSummary, data []byte) {
 		if !s.Preload {
 			return
 		}
