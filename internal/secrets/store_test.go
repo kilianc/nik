@@ -11,8 +11,7 @@ import (
 func TestSetAndGet(t *testing.T) {
 	s := New(t.TempDir())
 
-	err := s.Set("openai_key", "sk-test-123")
-	if err != nil {
+	if err := s.Set("openai_key", "sk-test-123"); err != nil {
 		t.Fatalf("set: %v", err)
 	}
 
@@ -20,9 +19,19 @@ func TestSetAndGet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-
 	if val != "sk-test-123" {
 		t.Fatalf("expected sk-test-123, got %s", val)
+	}
+
+	if err := s.Set("openai_key", "sk-updated"); err != nil {
+		t.Fatalf("overwrite: %v", err)
+	}
+	val, err = s.Get("openai_key")
+	if err != nil {
+		t.Fatalf("get after overwrite: %v", err)
+	}
+	if val != "sk-updated" {
+		t.Fatalf("expected sk-updated, got %s", val)
 	}
 }
 
@@ -36,29 +45,6 @@ func TestGetNotFound(t *testing.T) {
 
 	if !strings.Contains(err.Error(), "not found") {
 		t.Fatalf("expected 'not found' error, got: %v", err)
-	}
-}
-
-func TestSetOverwrite(t *testing.T) {
-	s := New(t.TempDir())
-
-	err := s.Set("key", "v1")
-	if err != nil {
-		t.Fatalf("set v1: %v", err)
-	}
-
-	err = s.Set("key", "v2")
-	if err != nil {
-		t.Fatalf("set v2: %v", err)
-	}
-
-	val, err := s.Get("key")
-	if err != nil {
-		t.Fatalf("get: %v", err)
-	}
-
-	if val != "v2" {
-		t.Fatalf("expected v2, got %s", val)
 	}
 }
 
@@ -164,22 +150,27 @@ func TestKeyAutoGeneration(t *testing.T) {
 		t.Fatal("key file should not exist before first write")
 	}
 
-	err := s.Set("test", "value")
-	if err != nil {
+	if err := s.Set("test", "value"); err != nil {
 		t.Fatalf("set: %v", err)
 	}
 
-	info, err := os.Stat(keyPath)
+	keyInfo, err := os.Stat(keyPath)
 	if err != nil {
 		t.Fatalf("key file should exist after first write: %v", err)
 	}
-
-	if info.Mode().Perm() != 0o600 {
-		t.Fatalf("key file perms: expected 0600, got %o", info.Mode().Perm())
+	if keyInfo.Mode().Perm() != 0o600 {
+		t.Fatalf("key file perms: expected 0600, got %o", keyInfo.Mode().Perm())
+	}
+	if keyInfo.Size() != keySize {
+		t.Fatalf("key file size: expected %d, got %d", keySize, keyInfo.Size())
 	}
 
-	if info.Size() != keySize {
-		t.Fatalf("key file size: expected %d, got %d", keySize, info.Size())
+	dataInfo, err := os.Stat(filepath.Join(dir, "secrets", "secrets.enc"))
+	if err != nil {
+		t.Fatalf("stat data file: %v", err)
+	}
+	if dataInfo.Mode().Perm() != 0o600 {
+		t.Fatalf("data file perms: expected 0600, got %o", dataInfo.Mode().Perm())
 	}
 }
 
@@ -272,25 +263,6 @@ func TestMultipleSecrets(t *testing.T) {
 
 	if len(names) != 3 {
 		t.Fatalf("expected 3 names, got %d", len(names))
-	}
-}
-
-func TestDataFilePermissions(t *testing.T) {
-	dir := t.TempDir()
-	s := New(dir)
-
-	err := s.Set("test", "value")
-	if err != nil {
-		t.Fatalf("set: %v", err)
-	}
-
-	info, err := os.Stat(filepath.Join(dir, "secrets", "secrets.enc"))
-	if err != nil {
-		t.Fatalf("stat: %v", err)
-	}
-
-	if info.Mode().Perm() != 0o600 {
-		t.Fatalf("data file perms: expected 0600, got %o", info.Mode().Perm())
 	}
 }
 

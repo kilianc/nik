@@ -95,15 +95,10 @@ func (fakeReceiver) ReceiveConversation(context.Context, Conversation) error    
 func (fakeReceiver) ReceiveMessage(context.Context, InboundMessage) error        { return nil }
 func (fakeReceiver) OnHistorySyncComplete(context.Context, string) error         { return nil }
 
-func TestAdapterContractsCompileAndExposePlatformName(t *testing.T) {
-	var _ MessageReceiver = (*fakeReceiver)(nil)
-	var _ MessagingPlatform = (*mockPlatform)(nil)
-
-	p := &mockPlatform{platform: "whatsapp"}
-	if p.Platform() != "whatsapp" {
-		t.Fatalf("expected platform name whatsapp, got %q", p.Platform())
-	}
-}
+var (
+	_ MessageReceiver   = (*fakeReceiver)(nil)
+	_ MessagingPlatform = (*mockPlatform)(nil)
+)
 
 func TestReceiveMessageFailsWhenContactResolutionFails(t *testing.T) {
 	ctx := context.Background()

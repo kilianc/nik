@@ -72,24 +72,6 @@ func TestChatNewMessagesMsg(t *testing.T) {
 	}
 }
 
-func TestChatActivityThinking(t *testing.T) {
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
-
-	c := newTestChat(t, conn, nil, Options{})
-	c, _ = c.Update(newMessagesMsg{activity: []string{"thinking"}})
-
-	if len(c.activity) == 0 {
-		t.Error("expected activity to be set")
-	}
-	if c.activity[0] != "thinking" {
-		t.Errorf("expected thinking activity, got %q", c.activity[0])
-	}
-}
-
 func TestGhostBubblePrecedence(t *testing.T) {
 	conn, err := db.OpenInMemory()
 	if err != nil {
@@ -342,43 +324,61 @@ func TestGhostBubble_Content(t *testing.T) {
 	}
 }
 
-func TestRenderToolLine_Running(t *testing.T) {
-	out := stripAnsi(renderToolLine(0, "search_contacts", toolRunning, "finding kilian", 80))
-	if !strings.Contains(out, "search_contacts") {
-		t.Errorf("should contain tool name, got %q", out)
+func TestRenderToolLine(t *testing.T) {
+	cases := []struct {
+		name   string
+		tool   string
+		state  toolState
+		reason string
+		wants  []string
+		avoids []string
+	}{
+		{
+			name:   "running",
+			tool:   "search_contacts",
+			state:  toolRunning,
+			reason: "finding kilian",
+			wants:  []string{"search_contacts", "finding kilian"},
+			avoids: []string{"✓"},
+		},
+		{
+			name:   "done",
+			tool:   "search_contacts",
+			state:  toolDone,
+			reason: "finding kilian",
+			wants:  []string{"✓"},
+		},
+		{
+			name:   "error",
+			tool:   "db_query",
+			state:  toolError,
+			reason: "check data",
+			wants:  []string{"✗"},
+			avoids: []string{"✓"},
+		},
+		{
+			name:   "no reason hides separator",
+			tool:   "db_query",
+			state:  toolDone,
+			reason: "",
+			wants:  []string{"db_query"},
+			avoids: []string{"—"},
+		},
 	}
-	if !strings.Contains(out, "finding kilian") {
-		t.Errorf("should contain reason, got %q", out)
-	}
-	if strings.Contains(out, "✓") {
-		t.Error("running tool should not have checkmark")
-	}
-}
-
-func TestRenderToolLine_Done(t *testing.T) {
-	out := stripAnsi(renderToolLine(0, "search_contacts", toolDone, "finding kilian", 80))
-	if !strings.Contains(out, "✓") {
-		t.Error("done tool should have checkmark")
-	}
-}
-
-func TestRenderToolLine_Error(t *testing.T) {
-	out := stripAnsi(renderToolLine(0, "db_query", toolError, "check data", 80))
-	if !strings.Contains(out, "✗") {
-		t.Error("error tool should have ✗ indicator")
-	}
-	if strings.Contains(out, "✓") {
-		t.Error("error tool should not have checkmark")
-	}
-}
-
-func TestRenderToolLine_NoReason(t *testing.T) {
-	out := stripAnsi(renderToolLine(0, "db_query", toolDone, "", 80))
-	if !strings.Contains(out, "db_query") {
-		t.Errorf("should contain tool name, got %q", out)
-	}
-	if strings.Contains(out, "—") {
-		t.Error("should not show separator when reason is empty")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out := stripAnsi(renderToolLine(0, tc.tool, tc.state, tc.reason, 80))
+			for _, want := range tc.wants {
+				if !strings.Contains(out, want) {
+					t.Errorf("output missing %q, got %q", want, out)
+				}
+			}
+			for _, avoid := range tc.avoids {
+				if strings.Contains(out, avoid) {
+					t.Errorf("output should not contain %q, got %q", avoid, out)
+				}
+			}
+		})
 	}
 }
 

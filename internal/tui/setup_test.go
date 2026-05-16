@@ -12,14 +12,6 @@ import (
 	"github.com/kciuffolo/nik/internal/db"
 )
 
-func TestSetupInitialStep(t *testing.T) {
-	w := newTestSetup(t)
-
-	if w.step != stepWelcome {
-		t.Errorf("expected initial step stepWelcome, got %d", w.step)
-	}
-}
-
 func TestSetupWelcomeToAuthChoice(t *testing.T) {
 	w := newTestSetup(t)
 
@@ -159,20 +151,6 @@ func TestSetupCodexEscCancels(t *testing.T) {
 	}
 }
 
-func TestSetupCodexLoginFail(t *testing.T) {
-	w := newTestSetup(t)
-	w.step = stepCodexLogin
-
-	w, _ = w.Update(codexLoginMsg{err: errTest})
-
-	if w.step != stepCodexLogin {
-		t.Errorf("expected step to stay at stepCodexLogin, got %d", w.step)
-	}
-	if w.err == nil {
-		t.Error("expected error to be set")
-	}
-}
-
 func TestSetupCodexLoginRetry(t *testing.T) {
 	w := newTestSetup(t)
 	w.step = stepCodexLogin
@@ -199,17 +177,29 @@ func TestSetupCodexDoneToAPIKey(t *testing.T) {
 	}
 }
 
-func TestSetupAPIKeyRequired(t *testing.T) {
-	w := newTestSetup(t)
-	w.step = stepAPIKey
-
-	w, _ = w.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-
-	if w.step != stepAPIKey {
-		t.Errorf("expected step to stay at stepAPIKey, got %d", w.step)
+func TestSetupRequiredFieldsBlock(t *testing.T) {
+	cases := []struct {
+		name string
+		step setupStep
+	}{
+		{"api key", stepAPIKey},
+		{"exa key", stepExaKey},
+		{"timezone", stepTimezone},
 	}
-	if w.err == nil {
-		t.Error("expected error for empty API key")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			w := newTestSetup(t)
+			w.step = tc.step
+
+			w, _ = w.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+
+			if w.step != tc.step {
+				t.Errorf("step = %d, want %d (no advance on empty input)", w.step, tc.step)
+			}
+			if w.err == nil {
+				t.Error("expected error for empty input")
+			}
+		})
 	}
 }
 
@@ -229,48 +219,6 @@ func TestSetupAPIKeySubmit(t *testing.T) {
 	}
 }
 
-func TestSetupAPIKeyValidationFail(t *testing.T) {
-	w := newTestSetup(t)
-	w.step = stepAPIKeyValidating
-
-	w, _ = w.Update(apiKeyValidatedMsg{err: errTest})
-
-	if w.step != stepAPIKey {
-		t.Errorf("expected step to revert to stepAPIKey, got %d", w.step)
-	}
-	if w.err == nil {
-		t.Error("expected error to be set")
-	}
-}
-
-func TestSetupAPIKeyValidationSuccess(t *testing.T) {
-	w := newTestSetup(t)
-	w.step = stepAPIKeyValidating
-
-	w, _ = w.Update(apiKeyValidatedMsg{})
-
-	if w.step != stepExaKey {
-		t.Errorf("expected step to advance to stepExaKey, got %d", w.step)
-	}
-	if w.err != nil {
-		t.Errorf("expected no error, got %v", w.err)
-	}
-}
-
-func TestSetupExaKeyRequired(t *testing.T) {
-	w := newTestSetup(t)
-	w.step = stepExaKey
-
-	w, _ = w.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-
-	if w.step != stepExaKey {
-		t.Errorf("expected step to stay at stepExaKey, got %d", w.step)
-	}
-	if w.err == nil {
-		t.Error("expected error for empty Exa key")
-	}
-}
-
 func TestSetupExaKeySubmit(t *testing.T) {
 	w := newTestSetup(t)
 	w.step = stepExaKey
@@ -287,48 +235,37 @@ func TestSetupExaKeySubmit(t *testing.T) {
 	}
 }
 
-func TestSetupExaKeyValidationSuccess(t *testing.T) {
-	w := newTestSetup(t)
-	w.step = stepExaKeyValidating
-
-	w, _ = w.Update(exaKeyValidatedMsg{})
-
-	if w.step != stepModel {
-		t.Errorf("expected step stepModel, got %d", w.step)
+func TestSetupStepTransitions(t *testing.T) {
+	cases := []struct {
+		name      string
+		startStep setupStep
+		msg       tea.Msg
+		wantStep  setupStep
+		wantErr   bool
+	}{
+		{"codex login fail stays", stepCodexLogin, codexLoginMsg{err: errTest}, stepCodexLogin, true},
+		{"api key validation success advances", stepAPIKeyValidating, apiKeyValidatedMsg{}, stepExaKey, false},
+		{"api key validation fail reverts", stepAPIKeyValidating, apiKeyValidatedMsg{err: errTest}, stepAPIKey, true},
+		{"exa key validation success advances", stepExaKeyValidating, exaKeyValidatedMsg{}, stepModel, false},
+		{"exa key validation fail reverts", stepExaKeyValidating, exaKeyValidatedMsg{err: errTest}, stepExaKey, true},
+		{"location resolved fail reverts", stepLocationResolving, locationResolvedMsg{err: errTest}, stepTimezone, true},
+		{"config write success advances", stepWriting, configWrittenMsg{}, stepDone, false},
+		{"config write fail keeps step", stepWriting, configWrittenMsg{err: errTest}, stepWriting, true},
 	}
-	if w.err != nil {
-		t.Errorf("expected no error, got %v", w.err)
-	}
-}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			w := newTestSetup(t)
+			w.step = tc.startStep
 
-func TestSetupExaKeyValidationFail(t *testing.T) {
-	w := newTestSetup(t)
-	w.step = stepExaKeyValidating
+			w, _ = w.Update(tc.msg)
 
-	w, _ = w.Update(exaKeyValidatedMsg{err: errTest})
-
-	if w.step != stepExaKey {
-		t.Errorf("expected step to revert to stepExaKey, got %d", w.step)
-	}
-	if w.err == nil {
-		t.Error("expected error to be set")
-	}
-}
-
-func TestSetupViewExaKey(t *testing.T) {
-	w := newTestSetup(t)
-	w.step = stepExaKey
-
-	view := w.View()
-
-	if !strings.Contains(view, "Exa API Key") {
-		t.Error("expected Exa API Key in view")
-	}
-	if !strings.Contains(view, "free tier") {
-		t.Error("expected free tier mention in view")
-	}
-	if !strings.Contains(view, "dashboard.exa.ai") {
-		t.Error("expected signup URL in view")
+			if w.step != tc.wantStep {
+				t.Errorf("step = %d, want %d", w.step, tc.wantStep)
+			}
+			if (w.err != nil) != tc.wantErr {
+				t.Errorf("err = %v, wantErr = %v", w.err, tc.wantErr)
+			}
+		})
 	}
 }
 
@@ -409,21 +346,6 @@ func TestSetupDockerPreservesExisting(t *testing.T) {
 	}
 }
 
-func TestSetupTimezoneRequiresInput(t *testing.T) {
-	w := newTestSetup(t)
-	w.step = stepTimezone
-	w.timezoneIn.SetValue("")
-
-	w, _ = w.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-
-	if w.step != stepTimezone {
-		t.Errorf("expected step to stay at stepTimezone, got %d", w.step)
-	}
-	if w.err == nil {
-		t.Error("expected error for empty input")
-	}
-}
-
 func TestSetupTimezoneAlwaysResolves(t *testing.T) {
 	cases := map[string]string{
 		"iana":  "America/New_York",
@@ -469,20 +391,6 @@ func TestSetupLocationResolvedSuccess(t *testing.T) {
 	}
 }
 
-func TestSetupLocationResolvedFail(t *testing.T) {
-	w := newTestSetup(t)
-	w.step = stepLocationResolving
-
-	w, _ = w.Update(locationResolvedMsg{err: errTest})
-
-	if w.step != stepTimezone {
-		t.Errorf("expected step stepTimezone, got %d", w.step)
-	}
-	if w.err == nil {
-		t.Error("expected error to be set")
-	}
-}
-
 func TestSetupWriteFansOutToContacts(t *testing.T) {
 	cfg := config.Default(t.TempDir())
 	cfg.Timezone = "Europe/Rome"
@@ -514,67 +422,32 @@ func TestSetupWriteFansOutToContacts(t *testing.T) {
 	}
 }
 
-func TestSetupConfigWriteSuccess(t *testing.T) {
-	w := newTestSetup(t)
-	w.step = stepWriting
-
-	w, _ = w.Update(configWrittenMsg{})
-
-	if w.step != stepDone {
-		t.Errorf("expected step stepDone, got %d", w.step)
+func TestSetupDaemonPoll(t *testing.T) {
+	cases := []struct {
+		name          string
+		msg           daemonPollMsg
+		wantCompleted bool
+		wantRetry     bool
+	}{
+		{"new pid completes", daemonPollMsg{pid: 200, alive: true}, true, false},
+		{"same pid retries", daemonPollMsg{pid: 100, alive: true}, false, true},
+		{"not alive retries", daemonPollMsg{alive: false}, false, true},
 	}
-}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			w := newTestSetup(t)
+			w.step = stepWaitDaemon
+			w.daemonOldPID = 100
 
-func TestSetupConfigWriteFail(t *testing.T) {
-	w := newTestSetup(t)
-	w.step = stepWriting
+			w, cmd := w.Update(tc.msg)
 
-	w, _ = w.Update(configWrittenMsg{err: errTest})
-
-	if w.err == nil {
-		t.Error("expected error to be set")
-	}
-}
-
-func TestSetupDaemonPollComplete(t *testing.T) {
-	w := newTestSetup(t)
-	w.step = stepWaitDaemon
-	w.daemonOldPID = 100
-
-	w, _ = w.Update(daemonPollMsg{pid: 200, alive: true})
-
-	if !w.completed {
-		t.Error("expected completed to be true")
-	}
-}
-
-func TestSetupDaemonPollSamePID(t *testing.T) {
-	w := newTestSetup(t)
-	w.step = stepWaitDaemon
-	w.daemonOldPID = 100
-
-	w, cmd := w.Update(daemonPollMsg{pid: 100, alive: true})
-
-	if w.completed {
-		t.Error("expected completed to be false for same PID")
-	}
-	if cmd == nil {
-		t.Error("expected retry poll cmd")
-	}
-}
-
-func TestSetupDaemonPollNotAlive(t *testing.T) {
-	w := newTestSetup(t)
-	w.step = stepWaitDaemon
-	w.daemonOldPID = 100
-
-	w, cmd := w.Update(daemonPollMsg{alive: false})
-
-	if w.completed {
-		t.Error("expected completed to be false")
-	}
-	if cmd == nil {
-		t.Error("expected retry poll cmd")
+			if w.completed != tc.wantCompleted {
+				t.Errorf("completed = %v, want %v", w.completed, tc.wantCompleted)
+			}
+			if tc.wantRetry && cmd == nil {
+				t.Error("expected retry poll cmd")
+			}
+		})
 	}
 }
 
@@ -591,100 +464,71 @@ func TestSetupIsDone(t *testing.T) {
 	}
 }
 
-func TestSetupViewWelcome(t *testing.T) {
-	w := newTestSetup(t)
-
-	view := w.View()
-
-	if !strings.Contains(view, "Welcome") {
-		t.Error("expected Welcome in view")
+func TestSetupView(t *testing.T) {
+	cases := []struct {
+		name  string
+		setup func(*setupModel)
+		wants []string
+	}{
+		{
+			name:  "welcome",
+			setup: func(w *setupModel) {},
+			wants: []string{"Welcome", "press enter to begin"},
+		},
+		{
+			name:  "auth choice",
+			setup: func(w *setupModel) { w.step = stepAuthChoice },
+			wants: []string{"OpenAI", "subscription", "API key"},
+		},
+		{
+			name:  "api key with subscription",
+			setup: func(w *setupModel) { w.step = stepAPIKey; w.hasSubscription = true },
+			wants: []string{"doesn't apply to you", "recall"},
+		},
+		{
+			name:  "api key without subscription",
+			setup: func(w *setupModel) { w.step = stepAPIKey; w.hasSubscription = false },
+			wants: []string{"this applies to you"},
+		},
+		{
+			name:  "exa key",
+			setup: func(w *setupModel) { w.step = stepExaKey },
+			wants: []string{"Exa API Key", "free tier", "dashboard.exa.ai"},
+		},
+		{
+			name: "model recommended",
+			setup: func(w *setupModel) {
+				w.models = apiModels
+				w.cfg.Models.Main.Model = apiModels[0]
+				w.step = stepModel
+			},
+			wants: []string{"(recommended)"},
+		},
+		{
+			name: "done summary",
+			setup: func(w *setupModel) {
+				w.step = stepDone
+				w.hasSubscription = true
+				w.cfg.Models.Main.Model = "gpt-5.4"
+				w.cfg.Timezone = "America/New_York"
+				w.cfg.Location = "New York, NY"
+			},
+			wants: []string{"all set", "connected", "gpt-5.4", "America/New_York", "New York, NY"},
+		},
 	}
-	if !strings.Contains(view, "press enter to begin") {
-		t.Error("expected press enter prompt in view")
-	}
-}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			w := newTestSetup(t)
+			tc.setup(&w)
 
-func TestSetupViewAuthChoice(t *testing.T) {
-	w := newTestSetup(t)
-	w.step = stepAuthChoice
+			view := w.View()
 
-	view := w.View()
-
-	if !strings.Contains(view, "OpenAI") {
-		t.Error("expected OpenAI in view")
-	}
-	if !strings.Contains(view, "subscription") {
-		t.Error("expected subscription in view")
-	}
-	if !strings.Contains(view, "API key") {
-		t.Error("expected API key in view")
-	}
-}
-
-func TestSetupViewAPIKeyWithSubscription(t *testing.T) {
-	w := newTestSetup(t)
-	w.step = stepAPIKey
-	w.hasSubscription = true
-
-	view := w.View()
-
-	if !strings.Contains(view, "doesn't apply to you") {
-		t.Error("expected subscription note in view")
-	}
-	if !strings.Contains(view, "recall") {
-		t.Error("expected recall mention in view")
-	}
-}
-
-func TestSetupViewAPIKeyWithoutSubscription(t *testing.T) {
-	w := newTestSetup(t)
-	w.step = stepAPIKey
-	w.hasSubscription = false
-
-	view := w.View()
-
-	if !strings.Contains(view, "this applies to you") {
-		t.Error("expected applies note in view")
-	}
-}
-
-func TestSetupViewModelRecommended(t *testing.T) {
-	w := newTestSetup(t)
-	w.models = apiModels
-	w.cfg.Models.Main.Model = apiModels[0]
-	w.step = stepModel
-
-	view := w.View()
-
-	if !strings.Contains(view, "(recommended)") {
-		t.Error("expected (recommended) label in model view")
-	}
-}
-
-func TestSetupViewDoneSummary(t *testing.T) {
-	w := newTestSetup(t)
-	w.step = stepDone
-	w.hasSubscription = true
-	w.cfg.Models.Main.Model = "gpt-5.4"
-	w.cfg.Timezone = "America/New_York"
-	w.cfg.Location = "New York, NY"
-
-	view := w.View()
-
-	if !strings.Contains(view, "all set") {
-		t.Error("expected completion message in view")
-	}
-	if !strings.Contains(view, "connected") {
-		t.Error("expected OpenAI account connected in view")
-	}
-	if !strings.Contains(view, "gpt-5.4") {
-		t.Error("expected model in view")
-	}
-	if !strings.Contains(view, "America/New_York") {
-		t.Error("expected timezone in view")
-	}
-	if !strings.Contains(view, "New York, NY") {
-		t.Error("expected location in view")
+			for _, want := range tc.wants {
+				if !strings.Contains(view, want) {
+					t.Errorf("view missing %q", want)
+				}
+			}
+		})
 	}
 }
 

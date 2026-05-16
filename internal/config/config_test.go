@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -314,36 +315,6 @@ func TestLoadValidation(t *testing.T) {
 	}
 }
 
-func TestLoadAcceptsTaskModel(t *testing.T) {
-	dir := t.TempDir()
-	writeTestConfig(t, dir, `
-models:
-  main:
-    model: gpt-5
-    reasoning_effort: high
-  task:
-    model: gpt-4.1-mini
-    reasoning_effort: low
-    verbosity: medium
-  recall:
-    reasoning_effort: minimal
-privileged_conversation_ids:
-  owner: conv-1
-`)
-
-	cfg, err := Load(dir)
-	if err != nil {
-		t.Fatalf("load: %v", err)
-	}
-
-	if cfg.Models.Task.Model != "gpt-4.1-mini" {
-		t.Fatalf("expected models.task.model gpt-4.1-mini, got %q", cfg.Models.Task.Model)
-	}
-	if cfg.Models.Task.ReasoningEffort != "low" {
-		t.Fatalf("expected models.task.reasoning_effort low, got %q", cfg.Models.Task.ReasoningEffort)
-	}
-}
-
 func TestIsAllowed(t *testing.T) {
 	cfg := Config{
 		AllowConversationIDs: ConversationList{
@@ -421,7 +392,9 @@ models:
     model: gpt-5
     reasoning_effort: high
   task:
-    reasoning_effort: xhigh
+    model: gpt-4.1-mini
+    reasoning_effort: low
+    verbosity: medium
   recall:
     reasoning_effort: minimal
 privileged_conversation_ids:
@@ -436,6 +409,12 @@ task:
 			t.Fatalf("load: %v", err)
 		}
 
+		if cfg.Models.Task.Model != "gpt-4.1-mini" {
+			t.Fatalf("expected models.task.model gpt-4.1-mini, got %q", cfg.Models.Task.Model)
+		}
+		if cfg.Models.Task.ReasoningEffort != "low" {
+			t.Fatalf("expected models.task.reasoning_effort low, got %q", cfg.Models.Task.ReasoningEffort)
+		}
 		if cfg.Task.MaxRounds != 250 {
 			t.Fatalf("expected task.max_rounds 250, got %d", cfg.Task.MaxRounds)
 		}
@@ -534,7 +513,7 @@ func TestSaveRoundTrip(t *testing.T) {
 		"retention: 720h0m0s",
 		"# models",
 	} {
-		if !contains(out, want) {
+		if !strings.Contains(out, want) {
 			t.Errorf("output missing %q", want)
 		}
 	}
@@ -543,7 +522,7 @@ func TestSaveRoundTrip(t *testing.T) {
 		"openai_key:",
 		"anthropic_key:",
 	} {
-		if contains(out, bad) {
+		if strings.Contains(out, bad) {
 			t.Errorf("output should not contain %q", bad)
 		}
 	}
@@ -562,17 +541,4 @@ func TestSaveRoundTrip(t *testing.T) {
 	if loaded.Timezone != "America/New_York" {
 		t.Errorf("round-trip timezone: got %q", loaded.Timezone)
 	}
-}
-
-func contains(s, sub string) bool {
-	return len(s) >= len(sub) && (s == sub || len(s) > 0 && containsStr(s, sub))
-}
-
-func containsStr(s, sub string) bool {
-	for i := 0; i <= len(s)-len(sub); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
 }
