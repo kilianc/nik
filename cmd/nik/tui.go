@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"flag"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/contacts"
 	"github.com/kciuffolo/nik/internal/db"
+	"github.com/kciuffolo/nik/internal/genesis"
 	"github.com/kciuffolo/nik/internal/messaging"
 	"github.com/kciuffolo/nik/internal/tui"
 )
@@ -73,11 +75,45 @@ func runTUI(args []string) {
 
 	messagingSvc.RegisterPlatform(messaging.NewLocalAdapter(conn))
 
+	bornAt, _ := genesis.StartedAt(ctx, conn)
+
 	err = tui.Run(cfg, conn, tui.NewLocalSender(messagingSvc), setup, tui.Options{
 		ShowSystem: *showSystem,
+		BornAt:     bornAt,
+		InputGate:  onboardingInputGate(ctx, conn),
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
+	}
+}
+
+// onboardingInputGate gates the chat input while genesis is in progress.
+// Returns nil (= TUI default: always editable) when genesis is already done
+// at launch — the common case for returning users. The seed→input mapping
+// lives here because it's onboarding UX, not generic chat or pure genesis.
+func onboardingInputGate(ctx context.Context, conn *sql.DB) tui.InputGate {
+	if genesis.IsCompleted(ctx, conn) {
+		return nil
+	}
+
+	interactiveSeeds := map[string]bool{
+		"first_contact":   true,
+		"contact_card":    true,
+		"read_the_manual": true,
+	}
+	placeholders := map[string]string{
+		"first_contact": "introduce yourself to nik",
+	}
+
+	return func(messages []db.Message, activity []string) tui.InputState {
+		if genesis.IsCompleted(context.Background(), conn) {
+			return tui.InputState{}
+		}
+		seed := genesis.CurrentSeed(messages)
+		if seed == "" || !interactiveSeeds[seed] || len(activity) > 0 {
+			return tui.InputState{Locked: true, Placeholder: "waiting for nik to finish..."}
+		}
+		return tui.InputState{Placeholder: placeholders[seed]}
 	}
 }

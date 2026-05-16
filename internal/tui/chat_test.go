@@ -1006,29 +1006,6 @@ func TestViewportStickyBottom(t *testing.T) {
 	}
 }
 
-func TestLoadGenesisStartedAt(t *testing.T) {
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
-
-	ctx := context.Background()
-	started := time.Date(2025, 1, 1, 8, 0, 0, 0, time.UTC)
-	if err := db.SettingSet(ctx, conn, db.GenesisStartedAtKey, db.ISO8601MS(started)); err != nil {
-		t.Fatalf("set setting: %v", err)
-	}
-
-	msg := loadGenesisCmd(conn)()
-	loaded, ok := msg.(genesisLoadedMsg)
-	if !ok {
-		t.Fatalf("expected genesisLoadedMsg, got %T", msg)
-	}
-	if !loaded.at.Equal(started) {
-		t.Errorf("expected loaded.at=%v, got %v", started, loaded.at)
-	}
-}
-
 func TestGhostReservationKeepsHeightStable(t *testing.T) {
 	now := time.Now()
 	nikMsg := db.Message{

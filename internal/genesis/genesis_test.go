@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"testing"
+	"time"
 
 	"github.com/kciuffolo/nik/internal/db"
 )
@@ -158,13 +159,95 @@ func TestReflex(t *testing.T) {
 	})
 }
 
-func TestIsInteractive(t *testing.T) {
-	for _, s := range seeds {
-		if got := IsInteractive(s.name); got != s.interactive {
-			t.Errorf("IsInteractive(%q) = %v, want %v", s.name, got, s.interactive)
-		}
+func TestStartedAt(t *testing.T) {
+	conn, err := db.OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
 	}
-	if IsInteractive("unknown") {
-		t.Error("IsInteractive(\"unknown\") = true, want false")
+	defer conn.Close()
+
+	ctx := context.Background()
+
+	if got, err := StartedAt(ctx, conn); err != nil || !got.IsZero() {
+		t.Errorf("StartedAt unset: got (%v, %v), want (zero, nil)", got, err)
+	}
+
+	started := time.Date(2026, 1, 1, 8, 0, 0, 0, time.UTC)
+	if err := db.SettingSet(ctx, conn, db.GenesisStartedAtKey, db.ISO8601MS(started)); err != nil {
+		t.Fatalf("set started: %v", err)
+	}
+	if got, err := StartedAt(ctx, conn); err != nil || !got.Equal(started) {
+		t.Errorf("StartedAt: got (%v, %v), want (%v, nil)", got, err, started)
+	}
+}
+
+func TestIsCompleted(t *testing.T) {
+	completionLatch.Store(false)
+	t.Cleanup(func() { completionLatch.Store(false) })
+
+	conn, err := db.OpenInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+	defer conn.Close()
+
+	ctx := context.Background()
+
+	if IsCompleted(ctx, conn) {
+		t.Error("IsCompleted unset: got true, want false")
+	}
+
+	if err := db.SettingSet(ctx, conn, db.GenesisCompletedAtKey, db.ISO8601MS(time.Now())); err != nil {
+		t.Fatalf("set completed: %v", err)
+	}
+	if !IsCompleted(ctx, conn) {
+		t.Error("IsCompleted after stamp: got false, want true")
+	}
+
+	// Latched: even after blowing away the setting, IsCompleted stays true
+	// without touching the DB — genesis completion is a monotonic invariant.
+	if _, err := conn.Exec("DELETE FROM setting WHERE key = ?", db.GenesisCompletedAtKey); err != nil {
+		t.Fatalf("delete completed setting: %v", err)
+	}
+	if !IsCompleted(ctx, conn) {
+		t.Error("IsCompleted after latch: got false, want true (should be cached)")
+	}
+}
+
+func TestCurrentSeed(t *testing.T) {
+	mk := func(platform, ext string) db.Message {
+		return db.Message{Platform: platform, ExternalMessageID: ext}
+	}
+
+	cases := []struct {
+		name string
+		msgs []db.Message
+		want string
+	}{
+		{"empty", nil, ""},
+		{"no genesis messages", []db.Message{mk("local", "abc"), mk("system", "other:1")}, ""},
+		{"single seed", []db.Message{mk("system", "genesis:birth")}, "birth"},
+		{
+			"most recent wins",
+			[]db.Message{
+				mk("system", "genesis:birth"),
+				mk("local", "user reply"),
+				mk("system", "genesis:first_contact"),
+				mk("local", "later"),
+			},
+			"first_contact",
+		},
+		{
+			"ignores non-system genesis-looking messages",
+			[]db.Message{mk("local", "genesis:fake"), mk("system", "genesis:birth")},
+			"birth",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := CurrentSeed(tc.msgs); got != tc.want {
+				t.Errorf("CurrentSeed = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }

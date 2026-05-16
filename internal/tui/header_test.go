@@ -40,7 +40,7 @@ func TestHeaderShowsVersionModelStatus(t *testing.T) {
 	c := newChatModel(cfg, conn, nil, Options{})
 	c, _ = c.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
 	c.daemonAlive = true
-	c.genesisAt = time.Now().Add(-23 * 24 * time.Hour)
+	c.bornAt = time.Now().Add(-23 * 24 * time.Hour)
 	c, _ = c.Update(workloadMsg{alarms: 2, tasks: 1})
 
 	out := stripAnsi(c.renderHeader())
@@ -194,20 +194,20 @@ func TestModelAge(t *testing.T) {
 func TestNikAgeLabel(t *testing.T) {
 	now := time.Date(2026, 4, 17, 12, 0, 0, 0, time.UTC)
 	tests := []struct {
-		name    string
-		genesis time.Time
-		want    string
+		name   string
+		bornAt time.Time
+		want   string
 	}{
-		{"zero genesis returns empty", time.Time{}, ""},
+		{"zero returns empty", time.Time{}, ""},
 		{"same moment = born today", now, "nik was born today"},
 		{"1 day", now.Add(-24 * time.Hour), "nik is 1 day old"},
 		{"2 days", now.Add(-2 * 24 * time.Hour), "nik is 2 days old"},
-		{"future genesis says born today", now.Add(5 * time.Hour), "nik was born today"},
+		{"future time says born today", now.Add(5 * time.Hour), "nik was born today"},
 		{"23 days", now.Add(-23 * 24 * time.Hour), "nik is 23 days old"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := nikAgeLabel(tt.genesis, now)
+			got := nikAgeLabel(tt.bornAt, now)
 			if got != tt.want {
 				t.Errorf("nikAgeLabel = %q, want %q", got, tt.want)
 			}

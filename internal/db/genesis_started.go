@@ -7,7 +7,10 @@ import (
 	"time"
 )
 
-const GenesisStartedAtKey = "genesis_started_at"
+const (
+	GenesisStartedAtKey   = "genesis_started_at"
+	GenesisCompletedAtKey = "genesis_completed_at"
+)
 
 func GenesisStartedAtEnsure(ctx context.Context, conn *sql.DB) (time.Time, error) {
 	s, err := SettingGet(ctx, conn, GenesisStartedAtKey)

@@ -16,7 +16,6 @@ import (
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/daemonctl"
 	"github.com/kciuffolo/nik/internal/db"
-	"github.com/kciuffolo/nik/internal/genesis"
 	"github.com/kciuffolo/nik/internal/id"
 	"github.com/kciuffolo/nik/internal/messaging"
 )
@@ -66,8 +65,8 @@ type chatModel struct {
 	cachedFrame int
 	showSystem  bool
 	inputLocked bool
-	genesisSeed string
-	genesisAt   time.Time
+	bornAt      time.Time
+	inputGate   InputGate
 	daemonAlive bool
 	vpReady     bool
 
@@ -95,12 +94,13 @@ func newChatModel(cfg *config.Config, conn *sql.DB, sender MessageSender, opts O
 		pulse:      p,
 		anims:      animators{p},
 		showSystem: opts.ShowSystem,
+		bornAt:     opts.BornAt,
+		inputGate:  opts.InputGate,
 	}
 }
 
 type pollTickMsg time.Time
 type daemonTickMsg struct{ alive bool }
-type genesisLoadedMsg struct{ at time.Time }
 type workloadMsg struct {
 	alarms int
 	tasks  int
@@ -177,26 +177,9 @@ func (m chatModel) Init() tea.Cmd {
 		cmds = append(cmds, daemonTickCmd(m.cfg.Home, 0))
 	}
 	if m.conn != nil {
-		cmds = append(cmds, loadGenesisCmd(m.conn), workloadCmd(m.conn, 0))
+		cmds = append(cmds, workloadCmd(m.conn, 0))
 	}
 	return tea.Batch(cmds...)
-}
-
-func loadGenesisCmd(conn *sql.DB) tea.Cmd {
-	return func() tea.Msg {
-		if conn == nil {
-			return genesisLoadedMsg{}
-		}
-		s, err := db.SettingGet(context.Background(), conn, db.GenesisStartedAtKey)
-		if err != nil || s == nil {
-			return genesisLoadedMsg{}
-		}
-		t, err := db.ParseTimeValue(s.Value)
-		if err != nil {
-			return genesisLoadedMsg{}
-		}
-		return genesisLoadedMsg{at: t}
-	}
 }
 
 func (m chatModel) Update(msg tea.Msg) (chatModel, tea.Cmd) {
@@ -275,10 +258,6 @@ func (m chatModel) Update(msg tea.Msg) (chatModel, tea.Cmd) {
 		}
 		return m, tea.Batch(cmds...)
 
-	case genesisLoadedMsg:
-		m.genesisAt = msg.at
-		return m, tea.Batch(cmds...)
-
 	case pollTickMsg:
 		cmds = append(cmds, fetchMessagesCmd(m.conn, m.lastID))
 		return m, tea.Batch(cmds...)
@@ -293,7 +272,6 @@ func (m chatModel) Update(msg tea.Msg) (chatModel, tea.Cmd) {
 			if len(m.messages) > maxMessages {
 				m.messages = m.messages[len(m.messages)-maxMessages:]
 			}
-			m.genesisSeed = currentGenesisSeed(m.messages)
 		}
 
 		m.activity = msg.activity
@@ -310,17 +288,24 @@ func (m chatModel) Update(msg tea.Msg) (chatModel, tea.Cmd) {
 			m.ghostLabel = ghost
 		}
 
-		locked := computeInputLocked(m.genesisSeed, m.activity)
-		if locked != m.inputLocked {
-			m.inputLocked = locked
+		var state InputState
+		if m.inputGate != nil {
+			state = m.inputGate(m.messages, m.activity)
+		}
+		if state.Locked != m.inputLocked {
+			m.inputLocked = state.Locked
 			m.convDirty = true
-			if locked {
+			if state.Locked {
 				m.input.Blur()
 			} else {
 				cmds = append(cmds, m.input.Focus())
 			}
 		}
-		m.input.Placeholder = placeholderFor(m.inputLocked, m.genesisSeed)
+		placeholder := state.Placeholder
+		if placeholder == "" {
+			placeholder = "message..."
+		}
+		m.input.Placeholder = placeholder
 
 		if cmd := m.pulse.SetActive(len(m.activity) > 0); cmd != nil {
 			cmds = append(cmds, cmd)
@@ -864,35 +849,6 @@ func collectReactions(msgs []db.Message) map[string][]string {
 	}
 
 	return byTarget
-}
-
-func currentGenesisSeed(msgs []db.Message) string {
-	for i := len(msgs) - 1; i >= 0; i-- {
-		ext := msgs[i].ExternalMessageID
-		if msgs[i].Platform != "system" || !strings.HasPrefix(ext, "genesis:") {
-			continue
-		}
-		return strings.TrimPrefix(ext, "genesis:")
-	}
-	return ""
-}
-
-func computeInputLocked(seed string, activity []string) bool {
-	if seed == "" || !genesis.IsInteractive(seed) {
-		return true
-	}
-	return len(activity) > 0
-}
-
-func placeholderFor(inputLocked bool, genesisSeed string) string {
-	switch {
-	case inputLocked:
-		return "waiting for nik to finish..."
-	case genesisSeed == "first_contact":
-		return "introduce yourself to nik"
-	default:
-		return "message..."
-	}
 }
 
 func resolveToolCallState(paired *db.Message) toolState {

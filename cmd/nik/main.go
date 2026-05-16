@@ -356,16 +356,12 @@ func runDaemon(args []string) {
 	b.RegisterReflex(10*time.Second, shellSvc.CheckSessions)
 	b.RegisterReflex(30*time.Minute, alarmSvc.StaleAlarmReflex())
 
-	genesisCompletedAt, err := db.SettingGet(ctx, conn, "genesis_completed_at")
-	if err != nil {
-		fatal("check genesis setting", err)
-	}
-
 	if _, err := db.GenesisStartedAtEnsure(ctx, conn); err != nil {
 		slog.Warn("stamp genesis_started_at", "pkg", "main", "error", err)
 	}
 
-	if genesisCompletedAt == nil {
+	genesisDone := genesis.IsCompleted(ctx, conn)
+	if !genesisDone {
 		b.RegisterReflex(0, genesis.Reflex(conn))
 		slog.Info("genesis mode active", "pkg", "main")
 	} else {
@@ -391,7 +387,7 @@ func runDaemon(args []string) {
 	b.RegisterTools(skills.BuildTools(cfg)...)
 	b.RegisterTools(task.BuildTools(taskSvc, taskRunner)...)
 
-	if genesisCompletedAt == nil {
+	if !genesisDone {
 		b.RegisterTools(shellSvc.BuildTools()...)
 	}
 
