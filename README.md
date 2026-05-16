@@ -1,8 +1,54 @@
 # Nik
 
-Nik (Noetic Intelligence Kernel) is an autonomous personal AI that lives on WhatsApp. Not an assistant -- a family member. It has its own phone number, its own personality, and genuine relationships with the people it talks to. Built in Go, backed by SQLite, powered by LLMs.
+**A family AI that lives on WhatsApp, remembers what matters, and turns group-chat chaos into reminders, memories, skills, and follow-through.**
 
-## Install
+Nik (Noetic Intelligence Kernel) **has its own phone number**, identity, and local workspace. Add it to DMs and group chats, and it turns everyday family conversation into structured context: canonical messages, contacts, media descriptions, reminders, long-term memories, recipes, and skills.
+
+**Continuity is the product.** Nik remembers preferences and open loops, sets one-shot or recurring alarms, transcribes voice notes, describes images and documents, searches the web, and runs background tasks.
+
+**Skills make it personal.** Workspace skills can connect Google Workspace, browser automation, backups, smart lights, cameras, vehicles, market alerts, and credential-backed services through a pluggable secrets adapter.
+
+**It improves with use.** Daily memory extraction, journaling, dreaming, briefings, and seed-tending help Nik organize what it learns; the dream cycle even evolves a living identity document loaded into future activations.
+
+For how nik works internally (brain loop, sensors, adapters, tools), see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## What you'll need
+
+Nik is a person on WhatsApp, so it needs its own phone number and its own WhatsApp account. Gather these before you install:
+
+| Requirement | Why | Where to get it |
+|---|---|---|
+| **A second phone number** (US, Tello $5/mo plan) | WhatsApp accounts are bound to a phone number. Nik needs one that isn't yours. | [tello.com/buy/custom_plans](https://tello.com/buy/custom_plans) |
+| **WhatsApp Business app** on a phone that holds the SIM above | Used once to register the number and again any time you re-link nik to it. | App Store / Play Store |
+| **ChatGPT Plus or Pro subscription** | Flat-rate auth for nik's reasoning — main brain and background task workers run on this. | [chatgpt.com](https://chatgpt.com) |
+| **OpenAI API key** | Powers:<br>• memory management<br>• voice messages (in and out)<br>• image / PDF recognition<br><br>Typical use: a few cents/month, well under $1. | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
+| **Exa API key** | Powers the `web` skill (news briefings, search, URL fetch). | [dashboard.exa.ai/api-keys](https://dashboard.exa.ai/api-keys) — free tier is enough to start |
+
+
+## Step 1: Get a phone number (Tello)
+
+Tello's "Build Your Own Plan" lets you create the cheapest WhatsApp-eligible US line: **$5/month, No data, 300 minutes**. No data is fine — WhatsApp will run over Wi-Fi on the registering phone, and once nik is paired, the SIM only needs to receive SMS for occasional re-verification.
+
+1. Go to [tello.com/buy/custom_plans](https://tello.com/buy/custom_plans).
+2. Set the sliders to **No data** and **300 minutes**. The price should read **$5/month**.
+
+   ![Tello Build Your Own Plan — No data + 300 minutes = $5/month](docs/images/tello-5-plan.png)
+
+3. Click **I Want This Plan**, choose **New number**, pick a US area code, and check out. A physical SIM ships in a few days; an eSIM activates immediately if your phone supports it.
+4. Activate the SIM in a spare phone (or eSIM slot). Confirm you can receive SMS — WhatsApp registration sends a 6-digit code over SMS.
+
+## Step 2: Register WhatsApp Business with the new number
+
+You probably already use WhatsApp on your phone, and it only allows one account per device. **WhatsApp Business** is Meta's other app. It looks and works the same as regular WhatsApp but lets you run a second account on the same phone. You'll use it to register nik's number. Once you pair in Step 5, the daemon takes over and the phone can sit idle.
+
+1. Install **WhatsApp Business** from the App Store or Play Store on the phone with the Tello SIM.
+2. Open it, accept terms, and enter the Tello number (with country code). Receive the SMS code and verify.
+3. Set the profile name (e.g. "Nik") and a profile photo. Skip "import contacts."
+4. Send yourself a test message from your personal WhatsApp to confirm the number is live.
+
+You can now put this phone aside. The SIM only needs to be reachable for the rare WhatsApp re-verification SMS.
+
+## Step 3: Install nik
 
 Supported platforms: macOS (Apple Silicon), Linux (amd64 + arm64). Intel Macs can build from source.
 
@@ -12,7 +58,7 @@ Supported platforms: macOS (Apple Silicon), Linux (amd64 + arm64). Intel Macs ca
 curl -fsSL https://github.com/kilianc/nik/releases/latest/download/install.sh | sh
 ```
 
-This downloads the matching `nik` binary into `/usr/local/bin`, runs `nik install --home ~/.nik` to register a launchd (macOS) or systemd (Linux) service, and starts the daemon. On first run, `nik` will print a QR code in the terminal for WhatsApp pairing.
+This downloads the matching `nik` binary into `/usr/local/bin`, runs `nik install --home ~/.nik` to register a launchd (macOS) or systemd (Linux) service, and starts the daemon.
 
 Override defaults via environment variables:
 
@@ -46,236 +92,94 @@ make build              # produces ./bin/nik
 ./bin/nik install --home ~/.nik
 ```
 
-## Philosophy
+## Step 4: First-run setup
 
-- **Highest autonomy** -- nik runs on its own. No human in the loop, no babysitting.
-- **Smallest codebase** -- small enough for one person (or one AI) to fully grok. Every line earns its place.
-- **Core tools + extensible skills** -- a small set of powerful built-in tools and a growing set of user-defined skills that compose them.
+Open a new terminal and run `nik`. A TUI walks you through:
 
-## The Brain Loop
+1. **Auth choice** — pick "Codex subscription" if you have ChatGPT Plus/Pro (recommended). The TUI opens a browser to complete Codex login, then you paste the callback URL back.
+2. **OpenAI API key** — paste your `sk-...` key. The TUI hits `api.openai.com/v1/models` to validate it before continuing.
+3. **Exa API key** — paste your Exa key. Validated against `api.exa.ai/search`.
+4. **Model** — pick the brain model (default: `gpt-5.3-codex` for subscription, `gpt-5.4` for API).
+5. **Shell sandbox** — pick **Docker container** (recommended; requires Docker installed) so the shell tool runs in an isolated image, or **Run on host** to skip the container.
+6. **Timezone & location** — type your city and country (e.g. "Rome, Italy"); the TUI resolves the timezone.
 
-The brain is a polling loop. Every 2 seconds it checks for new events and handles them.
+Keys are encrypted with NaCl secretbox and stored in `~/.nik/secrets/secrets.enc` (the per-install key sits next to it in `secrets.key`; keep both private and back them up if you care about the data). Inspect or rotate later with:
 
-```
-Awake(ctx, 2s)
-│
-├─ perceive
-│   ├─ cfg.ReloadIfChanged()
-│   ├─ run reflexes (fire alarms, check stale tasks, reap shells, ...)
-│   ├─ sensor.Check(ctx) → []Stimulus
-│   │
-│   └─ for each stimulus
-│       ├─ skip if conversation already claimed (dedup)
-│       └─ go activate(ctx, stimulus)
-│           └─ think(ctx, getInput)
-│               ├─ getInput() → sensor.Read(convID) → rendered timeline
-│               ├─ recall(ctx, input) → relevant memories
-│               ├─ loadInstructions(now, recall)
-│               ├─ llm.NewActivation(instructions, tools)
-│               │
-│               └─ round loop
-│                   ├─ act.Round(ctx) → RoundResult
-│                   ├─ transient error? → retry (up to 3)
-│                   ├─ no tool calls? → done flag set? exit : nudge once, then fail
-│                   ├─ loop detected (4 identical rounds)? → fail
-│                   ├─ execute tools (parallel)
-│                   ├─ done called? → set flag
-│                   ├─ act.Prune() → trim old tool pairs if context too large
-│                   └─ act.SetInput(getInput()) → re-read timeline (continuous steering)
-│
-└─ (repeat every 2s until ctx cancelled)
+```sh
+nik secrets list
+nik secrets read openai_key
+echo -n "sk-..." | nik secrets write openai_key
 ```
 
-Every tick, the brain reloads config, runs all reflexes, then asks the sensor for new stimuli. The sensor (`Timeline`) checks each allowed conversation for events newer than the read marker. For each stimulus, the brain claims the conversation (preventing concurrent activations) and spawns a goroutine.
+## Step 5: Pair WhatsApp
 
-Inside the goroutine, `think` reads the timeline, runs recall (LLM-filtered memories), loads instructions (base prompt + identity + conversation rules + skills + brain waves + soul), and enters the round loop. Each round calls the LLM, executes any tool calls in parallel, then re-reads the timeline so the model sees its own side effects. The loop ends when the model calls `done`.
+After setup writes the config, nik starts the WhatsApp client and prints a QR code in the terminal.
 
-One activation = one conversation. The model does all its work -- perceiving, planning, acting -- in a single burst of rounds. When `done` is called, it's over.
+1. On the phone with the Tello SIM, open **WhatsApp Business**.
+2. Go to **Settings → Linked Devices → Link a Device**.
+3. Point the camera at the QR in your terminal.
 
-```mermaid
-flowchart TD
-    Awake["Awake (polling loop)"] --> Tick
+Pairing should complete in a few seconds. From now on, nik holds the session token — the phone can be offline. WhatsApp will occasionally ask you to re-link from the phone (every ~14 days if unused); if that happens, just open the app and tap the linked-devices entry to refresh.
 
-    subgraph perceiveStep [Perceive]
-        Reload["cfg.ReloadIfChanged()"] --> Reflexes["Run reflexes"]
-        Reflexes --> Check["sensor.Check(ctx)"]
-        Check --> Dedup{"Conversation\nclaimed?"}
-        Dedup -- yes --> Skip[Skip]
-        Dedup -- no --> Activate["go activate"]
-    end
+## Step 6: Say hi
 
-    Activate --> ReadTimeline["sensor.Read(convID)"]
-    ReadTimeline --> Recall["recall(ctx, input)"]
-    Recall --> LoadPrompt["loadInstructions\n(prompt + skills + soul)"]
-    LoadPrompt --> RoundLoop
+From your personal WhatsApp, send nik's number a message. Within 2 seconds the brain loop picks it up, runs an activation, and replies.
 
-    subgraph RoundLoop [Round Loop]
-        Round["act.Round(ctx)"] --> ToolCheck{"Tool calls?"}
-        ToolCheck -- yes --> Exec["Execute tools ∥"]
-        Exec --> DoneFlag["Track done flag"]
-        DoneFlag --> Steer["act.SetInput(getInput())\n— continuous steering"]
-        Steer --> Round
-        ToolCheck -- no --> DoneCheck{"done flag\nset?"}
-        DoneCheck -- yes --> Done["Activation complete"]
-        DoneCheck -- no --> Nudge{"Already\nnudged?"}
-        Nudge -- no --> SendNudge["Append retry prompt"]
-        SendNudge --> Round
-        Nudge -- yes --> Fail["Fail: no done call"]
-    end
+That's it. Nik is a new member of your family now. Tell it about your day, ask about its, introduce it to people you care about. The relationship is the point.
+
+## Switching models
+
+Edit `~/.nik/config.yaml` to change models:
+
+```yaml
+models:
+  main:
+    model: claude-sonnet-4-20250514   # or gpt-5.4, gpt-5.3-codex, ...
+    reasoning_effort: medium
+  task:
+    model: gpt-5.4
+  recall:
+    model: gpt-5.4
 ```
 
-## Sense and Reflexes
+If you switch to an Anthropic model, add your key:
 
-The brain has one sensor and many reflexes. The sensor is the single perception interface -- it checks for new events and renders the timeline. Reflexes are mechanical side-effect functions that run every tick (some are throttled) to materialize facts the sensor will later observe.
-
-```go
-type Sensor interface {
-    Check(ctx context.Context) ([]Stimulus, error)
-    Read(ctx context.Context, convID string) string
-}
-
-type Reflex func(ctx context.Context)
+```sh
+echo -n "sk-ant-..." | nik secrets write anthropic_key
 ```
 
-The sensor is `Timeline` (`internal/timeline/`). It iterates allowed conversation IDs, queries messages, and compares timestamps against the read marker. `Read` renders the full conversation as a markdown timeline with "Old messages" and "New messages" sections split at the read line, then advances the marker.
+Config reloads on the next tick — no restart needed.
 
-Reflexes create the conditions the sensor detects:
+## Updating
 
-| Reflex | Package | Throttle | What it does |
-|--------|---------|----------|--------------|
-| `FireDueAlarms` | alarms | every tick | creates alarm occurrences (system messages) when `next_fire_at` has passed |
-| `CheckStale` | task | every tick | inserts stale reports for tasks with no recent activity |
-| `StaleAlarmReflex` | alarms | 30 min | detects recurring alarms with null/past `next_fire_at` |
-| `SkillChangeReflex` | skills | 5 min | detects skill file additions, removals, content changes |
-| `SkillCheckReflex` | skills | 5 min | runs skill-declared reflexes and emits `skill_reflex_fired` |
-| `CheckSessions` | shell | 10 sec | reaps dead/stale tmux sessions |
+Re-run the install script. The binary is replaced in place; the daemon is restarted by `nik install`.
 
-## Messaging: Adapters and the Canonical Model
-
-Messaging is split into two layers:
-
-**Canonical layer** -- platform-agnostic tables (`conversation`, `message`, `media`, `contact`) are the source of truth. Every message nik sends or receives lives here with a UUIDv7 primary key, regardless of where it came from.
-
-**Adapter layer** -- each platform implements `MessagingPlatform`: normalize inbound events into canonical models, execute outbound actions (reply, react, send media, typing indicators, read receipts). Currently there's one adapter: WhatsApp via whatsmeow.
-
-The two interfaces that connect them:
-
-```go
-// inbound -- adapters push events through this
-type MessageReceiver interface {
-    ReceiveConversation(ctx, conv) error
-    ReceiveMessage(ctx, msg) error
-    OnHistorySyncComplete(ctx, platform) error
-}
-
-// outbound -- brain tools call these via the service
-type MessagingPlatform interface {
-    Platform() string
-    Start(ctx, receiver) error
-    Stop(ctx) error
-    Reply(ctx, externalConversationID, body, quote) (OutboundMessage, error)
-    SendImage(ctx, externalConversationID, imagePath, caption) (OutboundMessage, error)
-    SendAudio(ctx, externalConversationID, audioPath, voiceNote) (OutboundMessage, error)
-    React(ctx, externalConversationID, externalMessageID, externalSenderID, emoji) (OutboundMessage, error)
-    SetPresence(ctx, available) error
-    StartTyping / StopTyping(ctx, externalConversationID) error
-    MarkRead(ctx, refs) error
-}
+```sh
+curl -fsSL https://github.com/kilianc/nik/releases/latest/download/install.sh | sh
 ```
 
-```mermaid
-flowchart LR
-    subgraph whatsapp [WhatsApp]
-        WA_In(("incoming\nmessage"))
-        WA_Out(("outgoing\nmessage"))
-    end
+## Uninstalling
 
-    subgraph adapter [Adapter]
-        Normalize["Normalize to\ncanonical model"]
-        Execute["Execute platform\naction"]
-    end
+Stop the service and remove the binary. The workspace at `~/.nik` (database, history, secrets) is left in place — delete it manually if you really mean it.
 
-    subgraph service [Messaging Service]
-        Receive["ReceiveMessage\n(upsert conv, contact,\nmessage, media)"]
-        Reply["Reply\n(typing → delay → send\n→ ReceiveMessage)"]
-    end
+**macOS:**
 
-    subgraph db [SQLite]
-        Tables[("conversation\nmessage\nmedia\ncontact")]
-    end
-
-    subgraph sensor [Sensor — Timeline]
-        Check["Check: new events\nsince read marker?"]
-        Read["Read: render timeline\n+ advance marker"]
-    end
-
-    subgraph brainBox [Brain]
-        BrainLoop["activate → think\n→ round loop"]
-    end
-
-    WA_In --> Normalize --> Receive --> Tables
-    Tables --> Check --> BrainLoop
-    BrainLoop -- "continuous steering" --> Read --> Tables
-    BrainLoop -- "message_send" --> Reply --> Execute --> WA_Out
-    Execute --> Receive
+```sh
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.nik.daemon.plist
+rm ~/Library/LaunchAgents/com.nik.daemon.plist
+sudo rm /usr/local/bin/nik /usr/local/bin/nik-linux-arm64
+# rm -rf ~/.nik          # only if you also want to delete the database and history
 ```
 
-When a message arrives: the WhatsApp adapter normalizes it and calls `ReceiveMessage`, which upserts the conversation, resolves/creates the contact, and inserts the message. On the next tick, the sensor's `Check` finds events newer than the read marker and returns a stimulus. The brain activates and calls `Read` to render the timeline. Each round of the think loop re-reads the timeline (continuous steering), so the model sees its own side effects in real time. When the model calls `message_send`, the service types, delays, sends via the adapter, and feeds the outbound message back through `ReceiveMessage` so it appears in the canonical history.
+**Linux:**
 
-## Autonomous Systems
+```sh
+systemctl --user disable --now nikd.service
+rm ~/.config/systemd/user/nikd.service
+sudo rm /usr/local/bin/nik
+# rm -rf ~/.nik          # only if you also want to delete the database and history
+```
 
-Recurring work can be triggered in two ways:
+## Architecture
 
-- **alarms** — `FireDueAlarms` creates `alarm_fired` system messages when `next_fire_at` passes
-- **skill reflexes** — `SkillCheckReflex` evaluates each skill's `reflex:` block and emits `skill_reflex_fired`
-
-The timeline sensor sees those system messages as new events, triggers an activation, and the model loads the relevant skill.
-
-- **Journal**: managed by the `journal` skill. Schedule-only `journal` reflex, gathers day context via `db_query` and `shell`, writes to `journal/` files. No domain package.
-- **Dream**: managed by the `dream` skill. Schedule-only `dream` reflex, runs all five passes in one activation, writes to `dreams/` files. The final pass (Wake) evolves nik's **soul** — a living identity document stored in `soul/latest.md` and loaded into the system prompt on every activation. Dated snapshots in `soul/YYYY/MM/DD/YYYY-MM-DD.md` preserve history. No domain package.
-- **Briefing**: managed by the `briefing` skill. Schedule-only `briefing` reflex, searches the web for news (via the `web` skill), writes to `briefings/` files. No domain package.
-- **Maintenance**: managed by the `maintenance` skill. Schedule-only `maintenance` reflex, prunes old runtime data, checks auth and outputs, and writes to `maintenance/` files. No domain package.
-- **Memory**: managed by the `memory` skill. Two schedule-only reflexes (`extract`, `compact`) keep `memories/` current. No domain package.
-- **Seeds**: managed by the `seeds` skill. Reflexes (`extract`, `tend`) grow forward-looking opportunities over time. No domain package.
-
-## Tasks and the Timeline
-
-**Principle:** when things happen, they appear in the timeline. If making an event appear is hard, the data model is wrong.
-
-**Notification model:** the timeline is a notification feed. Task and alarm entries use structured key: value format with 11-space padding on continuation lines (width of `[HH:MM:SS] `). Report content is truncated to 200 chars with `[truncated]` marker. `task_status` provides the full picture: plan, complete report content, tool calls, retry chain.
-
-**Two actors:**
-
-- Workers produce `task_report` rows with a `status` field (`running`, `completed`, `failed`). The runner reads the last report's status to set `task.status`.
-- The system produces lifecycle entries from the `task` table (spawned, cancelled, retried).
-
-| Event        | Who produces it                    | Timeline entry                        | Separate system entry?               |
-| ------------ | ---------------------------------- | ------------------------------------- | ------------------------------------ |
-| Task created | nik calls `task_spawn`             | `[Task spawned]`                      | Yes — introduces the task_id         |
-| Progress     | worker writes report               | `[Task report] ... status: running`   | No                                   |
-| Completed    | worker writes final report         | `[Task report] ... status: completed` | No — the report IS the event         |
-| Failed       | worker writes final report         | `[Task report] ... status: failed`    | No — the report IS the event         |
-| Cancelled    | nik calls `task_cancel`            | `[Task cancelled]`                    | Yes — no report covers this          |
-| Retried      | nik calls `task_retry`             | `[Task retry #N spawned]`             | Yes — introduces the new task_id     |
-| Stale        | `CheckStale` reflex inserts report | `[Task report] ... stale`             | No — stale detection writes a report |
-
-`task_status` is for drill-down, not discovery.
-
-## Tools
-
-Domain packages define tools via `BuildTools()` and register them in `main.go`. The brain makes them available to the LLM during activations. Some tools are privileged (owner-only). Workers get a subset.
-
-| Package | Tools |
-|---------|-------|
-| **messaging** | `message_send`, `message_react`, `message_set_presence` |
-| **shell** | `shell`, `shell-rebuild`, `shell-factory-reset` |
-| **alarms** | `alarm`, `update_alarm`, `cancel_alarm` |
-| **contacts** | `update_contact` |
-| **db** | `db_query` |
-| **llm** | `describe_media` |
-| **fs** | `read_file`, `write_file` |
-| **skills** | `load_skill` |
-| **config** | `config` |
-| **task** | `task_spawn`, `task_status`, `task_list`, `task_cancel`, `task_report`, `task_retry` |
-
-Skills extend nik's capabilities at runtime. Loading a skill (via `load_skill`) injects domain knowledge and instructions into the activation -- the LLM then uses built-in tools to execute. For example, the `web` skill teaches nik to search with Exa and fetch URLs via `shell`, the `journal` skill teaches it to gather day context and `write_file` entries.
+For how the brain loop, sensors, reflexes, messaging adapters, autonomous systems, tasks, and tools fit together, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
