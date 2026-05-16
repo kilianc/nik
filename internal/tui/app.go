@@ -2,9 +2,11 @@ package tui
 
 import (
 	"database/sql"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/kciuffolo/nik/internal/config"
+	"github.com/kciuffolo/nik/internal/db"
 )
 
 type view int
@@ -28,7 +30,25 @@ type App struct {
 
 type Options struct {
 	ShowSystem bool
+	// BornAt is when the chat agent first came online. Zero value hides the
+	// age chip from the header strip.
+	BornAt time.Time
+	// InputGate decides whether the chat input is locked and what placeholder
+	// to show. Called on every poll tick. Nil means input is always editable
+	// with the default placeholder.
+	InputGate InputGate
 }
+
+// InputState describes how the chat input should behave. Zero value means
+// editable with the default placeholder.
+type InputState struct {
+	Locked      bool
+	Placeholder string
+}
+
+// InputGate returns the current input state given the chat's message tail and
+// activity flags.
+type InputGate func(messages []db.Message, activity []string) InputState
 
 func NewApp(cfg *config.Config, conn *sql.DB, sender MessageSender, setup bool, opts Options) App {
 	a := App{

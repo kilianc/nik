@@ -64,7 +64,7 @@ func (m chatModel) chromeStrip() string {
 			parts = append(parts, model)
 		}
 	}
-	if age := nikAgeLabel(m.genesisAt, time.Now()); age != "" {
+	if age := nikAgeLabel(m.bornAt, time.Now()); age != "" {
 		parts = append(parts, age)
 	}
 	if m.cfg != nil {
@@ -254,11 +254,11 @@ func plural(n int, noun string) string {
 	return fmt.Sprintf("%d %ss", n, noun)
 }
 
-func nikAgeLabel(genesisAt, now time.Time) string {
-	if genesisAt.IsZero() {
+func nikAgeLabel(bornAt, now time.Time) string {
+	if bornAt.IsZero() {
 		return ""
 	}
-	days := int(now.Sub(genesisAt).Hours() / 24)
+	days := int(now.Sub(bornAt).Hours() / 24)
 	switch {
 	case days <= 0:
 		return "nik was born today"
