@@ -54,54 +54,60 @@ func TestHTMLCommentStripping(t *testing.T) {
 }
 
 func TestBrainRender(t *testing.T) {
-	home := t.TempDir()
-	soulDir := filepath.Join(home, "soul")
-	os.MkdirAll(soulDir, 0o755)
-	os.WriteFile(filepath.Join(soulDir, "latest.md"), []byte("# Soul\n\nI am curious."), 0o644)
-
-	r := NewRenderer(&config.Config{Home: home})
-
-	got := r.Brain(BrainData{
-		BannedWords: []string{"forbidden"},
-	})
-
-	for _, want := range []string{"You are NIK", "forbidden", "I am curious", "Rules"} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("expected %q in output, got:\n%s", want, got)
-		}
+	cases := []struct {
+		name     string
+		seedSoul string
+		data     BrainData
+		wants    []string
+		avoids   []string
+	}{
+		{
+			name:     "with soul and banned word",
+			seedSoul: "# Soul\n\nI am curious.",
+			data:     BrainData{BannedWords: []string{"forbidden"}},
+			wants:    []string{"You are NIK", "forbidden", "I am curious", "Rules"},
+			avoids:   []string{"<!--"},
+		},
+		{
+			name:  "sections present without soul",
+			data:  BrainData{},
+			wants: []string{"Wave 1: Perceive", "Tables (nik.db)", "Plans must be self-contained", "task_spawn"},
+		},
+		{
+			name:  "identity present without soul",
+			data:  BrainData{},
+			wants: []string{"You are NIK"},
+		},
 	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			home := t.TempDir()
+			if tc.seedSoul != "" {
+				soulDir := filepath.Join(home, "soul")
+				os.MkdirAll(soulDir, 0o755)
+				os.WriteFile(filepath.Join(soulDir, "latest.md"), []byte(tc.seedSoul), 0o644)
+			}
+			r := NewRenderer(&config.Config{Home: home})
 
-	if strings.Contains(got, "<!--") {
-		t.Fatal("expected HTML comments stripped")
-	}
-}
+			got := r.Brain(tc.data)
 
-func TestBrainRenderSections(t *testing.T) {
-	r := NewRenderer(&config.Config{Home: t.TempDir()})
-
-	got := r.Brain(BrainData{})
-
-	for _, want := range []string{"Wave 1: Perceive", "Tables (nik.db)", "Plans must be self-contained", "task_spawn"} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("expected %q in output, got:\n%s", want, got)
-		}
-	}
-}
-
-func TestBrainRenderNoSoul(t *testing.T) {
-	r := NewRenderer(&config.Config{Home: t.TempDir()})
-
-	got := r.Brain(BrainData{})
-
-	if !strings.Contains(got, "You are NIK") {
-		t.Fatalf("expected identity section, got:\n%s", got)
+			for _, want := range tc.wants {
+				if !strings.Contains(got, want) {
+					t.Errorf("expected %q in output, got:\n%s", want, got)
+				}
+			}
+			for _, avoid := range tc.avoids {
+				if strings.Contains(got, avoid) {
+					t.Errorf("output should not contain %q, got:\n%s", avoid, got)
+				}
+			}
+		})
 	}
 }
 
 func TestTaskRender(t *testing.T) {
-	r := NewRenderer(&config.Config{Home: t.TempDir()})
-
 	t.Run("without identity", func(t *testing.T) {
+		r := NewRenderer(&config.Config{Home: t.TempDir()})
 		got := r.Task(TaskData{
 			Plan:      "do stuff",
 			Timeout:   "1h0m0s",
@@ -114,6 +120,7 @@ func TestTaskRender(t *testing.T) {
 	})
 
 	t.Run("with identity", func(t *testing.T) {
+		r := NewRenderer(&config.Config{Home: t.TempDir()})
 		got := r.Task(TaskData{
 			Plan:      "do stuff",
 			Timeout:   "1h0m0s",
@@ -125,29 +132,29 @@ func TestTaskRender(t *testing.T) {
 			t.Fatalf("expected identity section, got:\n%s", got)
 		}
 	})
-}
 
-func TestTaskRenderSoulFuncMap(t *testing.T) {
-	home := t.TempDir()
-	soulDir := filepath.Join(home, "soul")
-	os.MkdirAll(soulDir, 0o755)
-	os.WriteFile(filepath.Join(soulDir, "latest.md"), []byte("# Current soul\n\nI value honesty."), 0o644)
+	t.Run("with identity and soul", func(t *testing.T) {
+		home := t.TempDir()
+		soulDir := filepath.Join(home, "soul")
+		os.MkdirAll(soulDir, 0o755)
+		os.WriteFile(filepath.Join(soulDir, "latest.md"), []byte("# Current soul\n\nI value honesty."), 0o644)
 
-	r := NewRenderer(&config.Config{Home: home})
+		r := NewRenderer(&config.Config{Home: home})
 
-	got := r.Task(TaskData{
-		Plan:      "do stuff",
-		Timeout:   "1h0m0s",
-		MaxRounds: 200,
-		Profile:   "nik",
+		got := r.Task(TaskData{
+			Plan:      "do stuff",
+			Timeout:   "1h0m0s",
+			MaxRounds: 200,
+			Profile:   "nik",
+		})
+
+		if !strings.Contains(got, "### Current soul") {
+			t.Fatalf("expected shifted soul headings, got:\n%s", got)
+		}
+		if !strings.Contains(got, "I value honesty.") {
+			t.Fatalf("expected soul body, got:\n%s", got)
+		}
 	})
-
-	if !strings.Contains(got, "### Current soul") {
-		t.Fatalf("expected shifted soul headings, got:\n%s", got)
-	}
-	if !strings.Contains(got, "I value honesty.") {
-		t.Fatalf("expected soul body, got:\n%s", got)
-	}
 }
 
 func TestInputRender(t *testing.T) {
