@@ -71,13 +71,16 @@ type setupModel struct {
 }
 
 var subscriptionModels = []string{
+	"gpt-5.5",
+	"gpt-5.4",
+	"gpt-5.4-mini",
 	"gpt-5.3-codex",
 }
 
 var apiModels = []string{
 	"gpt-5.4",
-	"claude-sonnet-4-20250514",
-	"claude-opus-4-20250514",
+	"claude-opus-4-7",
+	"claude-sonnet-4-6",
 }
 
 func modelsFor(backend string) []string {

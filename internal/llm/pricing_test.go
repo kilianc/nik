@@ -56,6 +56,14 @@ func TestComputeCost(t *testing.T) {
 			t.Fatalf("expected $%.6f, got $%.6f", want, cost)
 		}
 	})
+
+	t.Run("claude-opus-4-7 exact cost", func(t *testing.T) {
+		cost := ComputeCost("claude-opus-4-7", 100000, 1000, 80000)
+		want := 20000*5.0e-6 + 80000*0.50e-6 + 1000*25.0e-6
+		if math.Abs(cost-want) > 1e-9 {
+			t.Fatalf("expected $%.6f, got $%.6f", want, cost)
+		}
+	})
 }
 
 func TestModelRates(t *testing.T) {

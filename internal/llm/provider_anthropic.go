@@ -11,6 +11,7 @@ import (
 )
 
 const defaultAnthropicMaxTokens = 16384
+const adaptiveThinkingMaxTokens = 65536
 
 type anthropicProvider struct {
 	client   *anthropic.Client
@@ -28,19 +29,18 @@ func newAnthropicProvider(client *Client, instructions string, tools []ToolDef) 
 		Model:     anthropic.Model(*client.model),
 		MaxTokens: defaultAnthropicMaxTokens,
 		System: []anthropic.TextBlockParam{
-			{Text: instructions},
+			// Caches the tools + system prefix: Anthropic orders the request
+			// tools -> system -> messages, so a breakpoint here covers both.
+			{
+				Text:         instructions,
+				CacheControl: anthropic.NewCacheControlEphemeralParam(),
+			},
 		},
 		Tools: buildAnthropicTools(tools),
 	}
 
-	if client.reasoningEffort != nil && *client.reasoningEffort != "" {
-		budget := thinkingBudget(*client.reasoningEffort)
-		if budget > 0 {
-			params.Thinking = anthropic.ThinkingConfigParamOfEnabled(budget)
-			if budget+1024 > params.MaxTokens {
-				params.MaxTokens = budget + 8192
-			}
-		}
+	if client.reasoningEffort != nil {
+		applyAnthropicReasoning(&params, *client.model, *client.reasoningEffort)
 	}
 
 	return &anthropicProvider{
@@ -50,9 +50,20 @@ func newAnthropicProvider(client *Client, instructions string, tools []ToolDef) 
 	}
 }
 
+// Anthropic rejects empty text content blocks, but the task runner intentionally
+// seeds an empty user turn (all instructions live in the system prompt).
+const anthropicEmptyTextPlaceholder = "Begin."
+
+func anthropicTextBlock(content string) anthropic.ContentBlockParamUnion {
+	if strings.TrimSpace(content) == "" {
+		content = anthropicEmptyTextPlaceholder
+	}
+	return anthropic.NewTextBlock(content)
+}
+
 func (p *anthropicProvider) setInput(content string) {
 	content = ensureJSONInput(content, p.jsonOutput)
-	msg := anthropic.NewUserMessage(anthropic.NewTextBlock(content))
+	msg := anthropic.NewUserMessage(anthropicTextBlock(content))
 
 	if len(p.messages) == 0 {
 		p.messages = append(p.messages, msg)
@@ -146,10 +157,10 @@ func (p *anthropicProvider) loadHistory(messages []Message) {
 		switch m.Role {
 		case "user":
 			flush()
-			msgs = append(msgs, anthropic.NewUserMessage(anthropic.NewTextBlock(m.Content)))
+			msgs = append(msgs, anthropic.NewUserMessage(anthropicTextBlock(m.Content)))
 		case "assistant":
 			flush()
-			msgs = append(msgs, anthropic.NewAssistantMessage(anthropic.NewTextBlock(m.Content)))
+			msgs = append(msgs, anthropic.NewAssistantMessage(anthropicTextBlock(m.Content)))
 		case "tool_call":
 			if len(toolResultBlocks) > 0 {
 				flush()
@@ -293,15 +304,61 @@ func (p *anthropicProvider) fullInput() string {
 }
 
 func (p *anthropicProvider) setReasoningEffort(effort string) {
+	applyAnthropicReasoning(&p.params, string(p.params.Model), effort)
+}
+
+// The latest models use adaptive thinking driven by OutputConfig.Effort; older
+// models keep the fixed thinking-budget behavior.
+func applyAnthropicReasoning(params *anthropic.MessageNewParams, model, effort string) {
 	if effort == "" {
 		return
 	}
+
+	if usesAdaptiveThinking(model) {
+		params.OutputConfig.Effort = anthropicOutputEffort(effort)
+		if effort == "none" {
+			params.Thinking = anthropic.ThinkingConfigParamUnion{}
+		} else {
+			params.Thinking = anthropic.ThinkingConfigParamUnion{
+				OfAdaptive: &anthropic.ThinkingConfigAdaptiveParam{},
+			}
+		}
+		if effort == "high" || effort == "xhigh" {
+			if params.MaxTokens < adaptiveThinkingMaxTokens {
+				params.MaxTokens = adaptiveThinkingMaxTokens
+			}
+		}
+		return
+	}
+
 	budget := thinkingBudget(effort)
 	if budget > 0 {
-		p.params.Thinking = anthropic.ThinkingConfigParamOfEnabled(budget)
-		if budget+1024 > p.params.MaxTokens {
-			p.params.MaxTokens = budget + 8192
+		params.Thinking = anthropic.ThinkingConfigParamOfEnabled(budget)
+		if budget+1024 > params.MaxTokens {
+			params.MaxTokens = budget + 8192
 		}
+	}
+}
+
+func usesAdaptiveThinking(model string) bool {
+	switch model {
+	case "claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-4-6":
+		return true
+	default:
+		return false
+	}
+}
+
+func anthropicOutputEffort(effort string) anthropic.OutputConfigEffort {
+	switch effort {
+	case "xhigh":
+		return anthropic.OutputConfigEffortMax
+	case "high":
+		return anthropic.OutputConfigEffortHigh
+	case "medium":
+		return anthropic.OutputConfigEffortMedium
+	default: // none, minimal, low
+		return anthropic.OutputConfigEffortLow
 	}
 }
 
