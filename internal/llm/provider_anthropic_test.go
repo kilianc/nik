@@ -2,6 +2,8 @@ package llm
 
 import (
 	"testing"
+
+	anthropic "github.com/anthropics/anthropic-sdk-go"
 )
 
 func TestAnthropicProviderSetInput(t *testing.T) {
@@ -21,6 +23,34 @@ func TestAnthropicProviderSetInput(t *testing.T) {
 
 	if len(p.messages) != 1 {
 		t.Fatalf("expected 1 message after replace, got %d", len(p.messages))
+	}
+}
+
+func TestAnthropicProviderPromptCaching(t *testing.T) {
+	model := "claude-opus-4-7"
+	client := &Client{model: &model}
+	p := newAnthropicProvider(client, "instructions", nil)
+
+	if len(p.params.System) != 1 {
+		t.Fatalf("expected 1 system block, got %d", len(p.params.System))
+	}
+	if got := string(p.params.System[0].CacheControl.Type); got != "ephemeral" {
+		t.Fatalf("expected ephemeral cache control on system block, got %q", got)
+	}
+}
+
+func TestAnthropicProviderEmptyInput(t *testing.T) {
+	model := "claude-opus-4-7"
+	client := &Client{model: &model}
+	p := newAnthropicProvider(client, "instructions", nil)
+
+	p.setInput("")
+
+	if len(p.messages) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(p.messages))
+	}
+	if got := p.userInput(); got != anthropicEmptyTextPlaceholder {
+		t.Fatalf("expected empty input to become %q, got %q", anthropicEmptyTextPlaceholder, got)
 	}
 }
 
@@ -108,34 +138,88 @@ func TestAnthropicProviderSetReasoningEffort(t *testing.T) {
 	client := &Client{model: &model}
 	p := newAnthropicProvider(client, "instructions", nil)
 
-	if p.params.Thinking.OfEnabled != nil {
+	if p.params.Thinking.OfAdaptive != nil {
 		t.Fatalf("expected no thinking before setReasoningEffort")
 	}
 
 	p.setReasoningEffort("high")
+	if p.params.Thinking.OfAdaptive == nil {
+		t.Fatalf("expected adaptive thinking after setting high")
+	}
+	if got := p.params.OutputConfig.Effort; got != anthropic.OutputConfigEffortHigh {
+		t.Fatalf("expected effort high, got %q", got)
+	}
+
+	p.setReasoningEffort("medium")
+	if got := p.params.OutputConfig.Effort; got != anthropic.OutputConfigEffortMedium {
+		t.Fatalf("expected effort medium, got %q", got)
+	}
+
+	p.setReasoningEffort("")
+	if got := p.params.OutputConfig.Effort; got != anthropic.OutputConfigEffortMedium {
+		t.Fatalf("expected effort unchanged after empty, got %q", got)
+	}
+}
+
+func TestAnthropicProviderOpus47Reasoning(t *testing.T) {
+	model := "claude-opus-4-7"
+	client := &Client{model: &model}
+	effort := "high"
+	client.reasoningEffort = &effort
+	p := newAnthropicProvider(client, "instructions", nil)
+
+	if p.params.Thinking.OfAdaptive == nil {
+		t.Fatalf("expected adaptive thinking for opus-4-7 high")
+	}
+	if p.params.Thinking.OfEnabled != nil {
+		t.Fatalf("expected no fixed-budget thinking for adaptive model")
+	}
+	if got := p.params.OutputConfig.Effort; got != anthropic.OutputConfigEffortHigh {
+		t.Fatalf("expected effort high, got %q", got)
+	}
+	if p.params.MaxTokens != adaptiveThinkingMaxTokens {
+		t.Fatalf("expected max tokens %d for adaptive high, got %d", adaptiveThinkingMaxTokens, p.params.MaxTokens)
+	}
+}
+
+func TestAnthropicProviderLegacyReasoning(t *testing.T) {
+	model := "claude-opus-4-5"
+	client := &Client{model: &model}
+	effort := "high"
+	client.reasoningEffort = &effort
+	p := newAnthropicProvider(client, "instructions", nil)
+
+	if p.params.Thinking.OfAdaptive != nil {
+		t.Fatalf("expected no adaptive thinking for legacy model")
+	}
 	if p.params.Thinking.OfEnabled == nil {
-		t.Fatalf("expected thinking to be enabled after setting high")
+		t.Fatalf("expected fixed-budget thinking for legacy model")
 	}
 	if got := p.params.Thinking.OfEnabled.BudgetTokens; got != 16384 {
 		t.Fatalf("expected budget 16384 for high, got %d", got)
 	}
+}
 
-	p.setReasoningEffort("low")
-	if got := p.params.Thinking.OfEnabled.BudgetTokens; got != 4096 {
-		t.Fatalf("expected budget 4096 for low, got %d", got)
+func TestAnthropicOutputEffort(t *testing.T) {
+	tests := []struct {
+		effort string
+		want   anthropic.OutputConfigEffort
+	}{
+		{"none", anthropic.OutputConfigEffortLow},
+		{"minimal", anthropic.OutputConfigEffortLow},
+		{"low", anthropic.OutputConfigEffortLow},
+		{"medium", anthropic.OutputConfigEffortMedium},
+		{"high", anthropic.OutputConfigEffortHigh},
+		{"xhigh", anthropic.OutputConfigEffortMax},
 	}
 
-	p.setReasoningEffort("")
-	if got := p.params.Thinking.OfEnabled.BudgetTokens; got != 4096 {
-		t.Fatalf("expected budget unchanged after empty, got %d", got)
-	}
-
-	p.setReasoningEffort("medium")
-	if got := p.params.Thinking.OfEnabled.BudgetTokens; got != 8192 {
-		t.Fatalf("expected budget 8192 for medium, got %d", got)
-	}
-	if p.params.MaxTokens < 8192+1024 {
-		t.Fatalf("expected max tokens to be bumped for medium budget, got %d", p.params.MaxTokens)
+	for _, tt := range tests {
+		t.Run(tt.effort, func(t *testing.T) {
+			got := anthropicOutputEffort(tt.effort)
+			if got != tt.want {
+				t.Fatalf("anthropicOutputEffort(%q) = %q, want %q", tt.effort, got, tt.want)
+			}
+		})
 	}
 }
 

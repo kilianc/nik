@@ -43,6 +43,7 @@ var modelPricing = map[string]tokenPricing{
 	"o4-mini": {input: 1.10e-6, output: 4.40e-6, cached: 0.275e-6, contextWindow: 200_000},
 	"o1-mini": {input: 1.10e-6, output: 4.40e-6, contextWindow: 128_000},
 	// Claude family (cached: 90% off input)
+	"claude-opus-4-7":   {input: 5.0e-6, output: 25.0e-6, cached: 0.50e-6, contextWindow: 1_000_000},
 	"claude-opus-4-6":   {input: 15.0e-6, output: 75.0e-6, cached: 1.50e-6, contextWindow: 200_000},
 	"claude-sonnet-4-6": {input: 3.00e-6, output: 15.0e-6, cached: 0.30e-6, contextWindow: 200_000},
 	"claude-haiku-4-5":  {input: 0.80e-6, output: 4.00e-6, cached: 0.08e-6, contextWindow: 200_000},
