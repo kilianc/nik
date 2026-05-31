@@ -353,7 +353,7 @@ func applyAnthropicReasoning(params *anthropic.MessageNewParams, model, effort s
 
 func usesAdaptiveThinking(model string) bool {
 	switch model {
-	case "claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-4-6":
+	case "claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-4-6":
 		return true
 	default:
 		return false
