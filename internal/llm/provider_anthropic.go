@@ -87,6 +87,17 @@ func (p *anthropicProvider) appendAssistant(text string) {
 }
 
 func (p *anthropicProvider) appendUser(text string) {
+	// Flush any pending tool results first so they remain in the message
+	// immediately following their tool_use. Otherwise this user text would be
+	// inserted between an assistant tool_use and its tool_result, which the
+	// Anthropic API rejects ("tool_use ids without tool_result in the next
+	// message"). This happens when a user message is appended mid-loop — e.g.
+	// the task runner's 5-minute "report" nudge — while a round's results are
+	// still pending.
+	if len(p.pendingResults) > 0 {
+		p.messages = append(p.messages, anthropic.NewUserMessage(p.pendingResults...))
+		p.pendingResults = nil
+	}
 	p.messages = append(p.messages, anthropic.NewUserMessage(anthropic.NewTextBlock(text)))
 }
 

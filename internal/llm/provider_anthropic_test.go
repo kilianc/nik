@@ -95,6 +95,64 @@ func TestAnthropicProviderToolResultAccumulation(t *testing.T) {
 	}
 }
 
+// Regression: a user message appended mid-loop (e.g. the task runner's
+// 5-minute "report" nudge) while a round's tool results are still pending must
+// not land between an assistant tool_use and its tool_result. Anthropic rejects
+// that with "tool_use ids without tool_result in the next message" (400).
+func TestAnthropicProviderAppendUserKeepsToolResultAdjacent(t *testing.T) {
+	model := "claude-opus-4-7"
+	client := &Client{model: &model}
+	p := newAnthropicProvider(client, "instructions", nil)
+	p.setInput("do work")
+
+	// End-of-round state: the assistant tool_use turn is in the message list
+	// and its result is pending (not yet flushed) — what addToolResult leaves
+	// behind between rounds.
+	p.messages = append(p.messages, anthropic.NewAssistantMessage(anthropic.ContentBlockParamUnion{
+		OfToolUse: &anthropic.ToolUseBlockParam{ID: "tool1", Name: "shell"},
+	}))
+	p.pendingResults = append(p.pendingResults, anthropic.NewToolResultBlock("tool1", "running", false))
+
+	// Runner injects a user message before the next round.
+	p.appendUser("You haven't reported in 5 minutes. Call task_report now.")
+
+	assertToolUseAnswered(t, p.messages)
+
+	if len(p.pendingResults) != 0 {
+		t.Fatalf("expected pending results to be flushed, got %d", len(p.pendingResults))
+	}
+}
+
+// assertToolUseAnswered enforces the Anthropic invariant: every tool_use block
+// must have its matching tool_result in the immediately following message.
+func assertToolUseAnswered(t *testing.T, messages []anthropic.MessageParam) {
+	t.Helper()
+	for i, m := range messages {
+		var toolUseIDs []string
+		for _, blk := range m.Content {
+			if blk.OfToolUse != nil {
+				toolUseIDs = append(toolUseIDs, blk.OfToolUse.ID)
+			}
+		}
+		if len(toolUseIDs) == 0 {
+			continue
+		}
+		answered := map[string]bool{}
+		if i+1 < len(messages) {
+			for _, blk := range messages[i+1].Content {
+				if blk.OfToolResult != nil {
+					answered[blk.OfToolResult.ToolUseID] = true
+				}
+			}
+		}
+		for _, id := range toolUseIDs {
+			if !answered[id] {
+				t.Fatalf("messages.%d tool_use %q has no tool_result in the next message", i, id)
+			}
+		}
+	}
+}
+
 func TestAnthropicProviderPrune(t *testing.T) {
 	model := "claude-opus-4-6"
 	client := &Client{model: &model}
