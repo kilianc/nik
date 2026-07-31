@@ -260,22 +260,71 @@ func TestAnthropicProviderLegacyReasoning(t *testing.T) {
 
 func TestAnthropicOutputEffort(t *testing.T) {
 	tests := []struct {
+		model  string
 		effort string
 		want   anthropic.OutputConfigEffort
 	}{
-		{"none", anthropic.OutputConfigEffortLow},
-		{"minimal", anthropic.OutputConfigEffortLow},
-		{"low", anthropic.OutputConfigEffortLow},
-		{"medium", anthropic.OutputConfigEffortMedium},
-		{"high", anthropic.OutputConfigEffortHigh},
-		{"xhigh", anthropic.OutputConfigEffortMax},
+		{"claude-opus-5", "none", anthropic.OutputConfigEffortLow},
+		{"claude-opus-5", "minimal", anthropic.OutputConfigEffortLow},
+		{"claude-opus-5", "low", anthropic.OutputConfigEffortLow},
+		{"claude-opus-5", "medium", anthropic.OutputConfigEffortMedium},
+		{"claude-opus-5", "high", anthropic.OutputConfigEffortHigh},
+		{"claude-opus-5", "xhigh", anthropicEffortXHigh},
+		{"claude-opus-4-8", "xhigh", anthropicEffortXHigh},
+		{"claude-opus-4-7", "xhigh", anthropicEffortXHigh},
+		// xhigh predates these; they only accept low/medium/high/max.
+		{"claude-opus-4-6", "xhigh", anthropic.OutputConfigEffortMax},
+		{"claude-sonnet-4-6", "xhigh", anthropic.OutputConfigEffortMax},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.effort, func(t *testing.T) {
-			got := anthropicOutputEffort(tt.effort)
+		t.Run(tt.model+"/"+tt.effort, func(t *testing.T) {
+			got := anthropicOutputEffort(tt.model, tt.effort)
 			if got != tt.want {
-				t.Fatalf("anthropicOutputEffort(%q) = %q, want %q", tt.effort, got, tt.want)
+				t.Fatalf("anthropicOutputEffort(%q, %q) = %q, want %q", tt.model, tt.effort, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAnthropicProviderOpus5Reasoning(t *testing.T) {
+	model := "claude-opus-5"
+	client := &Client{model: &model}
+	effort := "xhigh"
+	client.reasoningEffort = &effort
+	p := newAnthropicProvider(client, "instructions", nil)
+
+	if p.params.Thinking.OfAdaptive == nil {
+		t.Fatalf("expected adaptive thinking for opus-5 xhigh")
+	}
+	if got := p.params.OutputConfig.Effort; got != anthropicEffortXHigh {
+		t.Fatalf("expected effort xhigh, got %q", got)
+	}
+	if p.params.MaxTokens != adaptiveThinkingMaxTokens {
+		t.Fatalf("expected max tokens %d for adaptive xhigh, got %d", adaptiveThinkingMaxTokens, p.params.MaxTokens)
+	}
+}
+
+// On claude-opus-5 an omitted thinking field means adaptive thinking, so "none"
+// has to send an explicit disabled block to actually turn thinking off.
+func TestAnthropicProviderEffortNoneDisablesThinking(t *testing.T) {
+	for _, model := range []string{"claude-opus-5", "claude-opus-4-8", "claude-sonnet-4-6"} {
+		t.Run(model, func(t *testing.T) {
+			m := model
+			client := &Client{model: &m}
+			effort := "none"
+			client.reasoningEffort = &effort
+			p := newAnthropicProvider(client, "instructions", nil)
+
+			if p.params.Thinking.OfDisabled == nil {
+				t.Fatalf("expected explicit disabled thinking for effort none")
+			}
+			if p.params.Thinking.OfAdaptive != nil {
+				t.Fatalf("expected no adaptive thinking for effort none")
+			}
+			// Disabled thinking is only accepted at effort high or below.
+			if got := p.params.OutputConfig.Effort; got != anthropic.OutputConfigEffortLow {
+				t.Fatalf("expected effort low alongside disabled thinking, got %q", got)
 			}
 		})
 	}

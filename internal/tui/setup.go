@@ -79,7 +79,7 @@ var subscriptionModels = []string{
 
 var apiModels = []string{
 	"gpt-5.4",
-	"claude-opus-4-7",
+	"claude-opus-5",
 	"claude-sonnet-4-6",
 }
 

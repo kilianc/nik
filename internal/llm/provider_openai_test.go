@@ -323,8 +323,11 @@ func TestMaxPairsForModel(t *testing.T) {
 		{"o1-mini", 16},
 		{"o3", 25},
 		{"unknown-model", maxHistoryPairs},
-		{"claude-opus-4-6", 25},
-		{"claude-sonnet-4-6", 25},
+		// 1M-context Claude models all land on the pair cap.
+		{"claude-opus-5", maxHistoryPairs},
+		{"claude-opus-4-6", maxHistoryPairs},
+		{"claude-sonnet-4-6", maxHistoryPairs},
+		{"claude-haiku-4-5", 25},
 	}
 
 	for _, tt := range tests {

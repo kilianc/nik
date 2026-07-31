@@ -49,19 +49,26 @@ func TestComputeCost(t *testing.T) {
 		}
 	})
 
-	t.Run("claude-opus-4-6 exact cost", func(t *testing.T) {
-		cost := ComputeCost("claude-opus-4-6", 100000, 1000, 80000)
-		want := 20000*15.0e-6 + 80000*1.50e-6 + 1000*75.0e-6
-		if math.Abs(cost-want) > 1e-9 {
-			t.Fatalf("expected $%.6f, got $%.6f", want, cost)
-		}
-	})
-
 	t.Run("claude-opus-4-7 exact cost", func(t *testing.T) {
 		cost := ComputeCost("claude-opus-4-7", 100000, 1000, 80000)
 		want := 20000*5.0e-6 + 80000*0.50e-6 + 1000*25.0e-6
 		if math.Abs(cost-want) > 1e-9 {
 			t.Fatalf("expected $%.6f, got $%.6f", want, cost)
+		}
+	})
+
+	t.Run("claude-opus-5 exact cost", func(t *testing.T) {
+		cost := ComputeCost("claude-opus-5", 100000, 1000, 80000)
+		want := 20000*5.0e-6 + 80000*0.50e-6 + 1000*25.0e-6
+		if math.Abs(cost-want) > 1e-9 {
+			t.Fatalf("expected $%.6f, got $%.6f", want, cost)
+		}
+	})
+
+	t.Run("claude-opus-5 context window", func(t *testing.T) {
+		got, ok := ModelContextWindow("claude-opus-5")
+		if !ok || got != 1_000_000 {
+			t.Fatalf("expected 1M context window, got %d (ok=%v)", got, ok)
 		}
 	})
 }
@@ -97,22 +104,22 @@ func TestModelRates(t *testing.T) {
 			t.Fatal("expected claude-opus-4-6 to be found")
 		}
 
-		if rates.Input != 15.0 {
-			t.Fatalf("expected input rate 15.0, got %f", rates.Input)
+		if rates.Input != 5.0 {
+			t.Fatalf("expected input rate 5.0, got %f", rates.Input)
 		}
-		if rates.Output != 75.0 {
-			t.Fatalf("expected output rate 75.0, got %f", rates.Output)
+		if rates.Output != 25.0 {
+			t.Fatalf("expected output rate 25.0, got %f", rates.Output)
 		}
-		if rates.Cached != 1.5 {
-			t.Fatalf("expected cached rate 1.5, got %f", rates.Cached)
+		if rates.Cached != 0.5 {
+			t.Fatalf("expected cached rate 0.5, got %f", rates.Cached)
 		}
 	})
 }
 
 func TestModelContextWindow(t *testing.T) {
-	ctx, ok := ModelContextWindow("claude-opus-4-6")
+	ctx, ok := ModelContextWindow("claude-haiku-4-5")
 	if !ok {
-		t.Fatal("expected claude-opus-4-6 to have a context window")
+		t.Fatal("expected claude-haiku-4-5 to have a context window")
 	}
 	if ctx != 200_000 {
 		t.Fatalf("expected 200000 context window, got %d", ctx)
