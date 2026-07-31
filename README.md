@@ -134,7 +134,7 @@ Edit `~/.nik/config.yaml` to change models:
 ```yaml
 models:
   main:
-    model: claude-sonnet-4-20250514   # or gpt-5.4, gpt-5.3-codex, ...
+    model: claude-opus-5              # or gpt-5.4, gpt-5.3-codex, ...
     reasoning_effort: medium
   task:
     model: gpt-5.4

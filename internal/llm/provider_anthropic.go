@@ -326,9 +326,14 @@ func applyAnthropicReasoning(params *anthropic.MessageNewParams, model, effort s
 	}
 
 	if usesAdaptiveThinking(model) {
-		params.OutputConfig.Effort = anthropicOutputEffort(effort)
+		params.OutputConfig.Effort = anthropicOutputEffort(model, effort)
 		if effort == "none" {
-			params.Thinking = anthropic.ThinkingConfigParamUnion{}
+			// Must be explicit: on claude-opus-5 an omitted thinking field means
+			// adaptive thinking, not no thinking. Only valid at effort high or
+			// below, which "none" always maps to.
+			params.Thinking = anthropic.ThinkingConfigParamUnion{
+				OfDisabled: &anthropic.ThinkingConfigDisabledParam{},
+			}
 		} else {
 			params.Thinking = anthropic.ThinkingConfigParamUnion{
 				OfAdaptive: &anthropic.ThinkingConfigAdaptiveParam{},
@@ -353,16 +358,34 @@ func applyAnthropicReasoning(params *anthropic.MessageNewParams, model, effort s
 
 func usesAdaptiveThinking(model string) bool {
 	switch model {
-	case "claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-4-6":
+	case "claude-opus-5", "claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-4-6":
 		return true
 	default:
 		return false
 	}
 }
 
-func anthropicOutputEffort(effort string) anthropic.OutputConfigEffort {
+// xhigh sits between high and max, and arrived with claude-opus-4-7. Older
+// adaptive models only accept low/medium/high/max and reject it.
+func supportsXHighEffort(model string) bool {
+	switch model {
+	case "claude-opus-5", "claude-opus-4-8", "claude-opus-4-7":
+		return true
+	default:
+		return false
+	}
+}
+
+// The SDK has no xhigh constant yet; OutputConfigEffort is a string type, so the
+// literal is what the wire format expects.
+const anthropicEffortXHigh anthropic.OutputConfigEffort = "xhigh"
+
+func anthropicOutputEffort(model, effort string) anthropic.OutputConfigEffort {
 	switch effort {
 	case "xhigh":
+		if supportsXHighEffort(model) {
+			return anthropicEffortXHigh
+		}
 		return anthropic.OutputConfigEffortMax
 	case "high":
 		return anthropic.OutputConfigEffortHigh
