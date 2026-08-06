@@ -2,7 +2,7 @@
 models:
   main:
     model: {{ .Models.Main.Model }}
-    reasoning_effort: {{ .Models.Main.ReasoningEffort }}  # none, minimal, low, medium, high, xhigh
+    reasoning_effort: {{ .Models.Main.ReasoningEffort }}  # none, minimal, low, medium, high, xhigh, max
 {{- if .Models.Main.Verbosity }}
     verbosity: {{ .Models.Main.Verbosity }}               # low, medium, high
 {{- end }}
@@ -27,6 +27,9 @@ models:
     reasoning_effort: {{ .Models.Recall.ReasoningEffort }}
 {{- if .Models.Recall.Verbosity }}
     verbosity: {{ .Models.Recall.Verbosity }}
+{{- end }}
+{{- if .Models.Recall.Backend }}
+    backend: {{ .Models.Recall.Backend }}                  # api | subscription
 {{- end }}
   tts:
     model: {{ .Models.TTS.Model }}

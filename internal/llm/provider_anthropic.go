@@ -339,7 +339,7 @@ func applyAnthropicReasoning(params *anthropic.MessageNewParams, model, effort s
 				OfAdaptive: &anthropic.ThinkingConfigAdaptiveParam{},
 			}
 		}
-		if effort == "high" || effort == "xhigh" {
+		if effort == "high" || effort == "xhigh" || effort == "max" {
 			if params.MaxTokens < adaptiveThinkingMaxTokens {
 				params.MaxTokens = adaptiveThinkingMaxTokens
 			}
@@ -382,6 +382,8 @@ const anthropicEffortXHigh anthropic.OutputConfigEffort = "xhigh"
 
 func anthropicOutputEffort(model, effort string) anthropic.OutputConfigEffort {
 	switch effort {
+	case "max":
+		return anthropic.OutputConfigEffortMax
 	case "xhigh":
 		if supportsXHighEffort(model) {
 			return anthropicEffortXHigh
@@ -475,7 +477,7 @@ func thinkingBudget(effort string) int64 {
 		return 8192
 	case "high":
 		return 16384
-	case "xhigh":
+	case "xhigh", "max":
 		return 32768
 	default:
 		return 0
