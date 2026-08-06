@@ -272,8 +272,11 @@ func runDaemon(args []string) {
 	llmClient := llm.NewClient(&cfg.Models.Main.Model, mainLLMOpts...)
 
 	var recallClient *llm.Client
-	if cfg.Models.Recall.Model != "" && len(sharedLLMOpts) > 0 {
+	if cfg.Models.Recall.Model != "" && (len(sharedLLMOpts) > 0 || cfg.Models.Recall.UsesCodexAuth()) {
 		recallLLMOpts := append([]llm.ClientOption{}, sharedLLMOpts...)
+		if cfg.Models.Recall.UsesCodexAuth() {
+			recallLLMOpts = append(recallLLMOpts, llm.WithCodex(codexAuth))
+		}
 		recallLLMOpts = append(recallLLMOpts, llm.WithReasoningEffort(&cfg.Models.Recall.ReasoningEffort))
 		recallLLMOpts = append(recallLLMOpts, llm.WithVerbosity(&cfg.Models.Recall.Verbosity))
 		recallClient = llm.NewClient(&cfg.Models.Recall.Model, recallLLMOpts...)

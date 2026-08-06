@@ -71,14 +71,15 @@ type setupModel struct {
 }
 
 var subscriptionModels = []string{
-	"gpt-5.5",
-	"gpt-5.4",
-	"gpt-5.4-mini",
-	"gpt-5.3-codex",
+	"gpt-5.6-sol",
+	"gpt-5.6-terra",
+	"gpt-5.6-luna",
 }
 
 var apiModels = []string{
-	"gpt-5.4",
+	"gpt-5.6-sol",
+	"gpt-5.6-terra",
+	"gpt-5.6-luna",
 	"claude-opus-5",
 	"claude-sonnet-4-6",
 }
@@ -568,6 +569,7 @@ func (m setupModel) updateAuthChoice(msg tea.Msg) (setupModel, tea.Cmd) {
 		case "enter":
 			if m.authCursor == 0 {
 				m.cfg.Models.Main.Backend = "subscription"
+				m.cfg.Models.Recall.Backend = "subscription"
 				m.models = modelsFor("subscription")
 				m.modelCursor = cursorFor(m.models, m.cfg.Models.Main.Model)
 				m.cfg.Models.Main.Model = m.models[m.modelCursor]
@@ -575,6 +577,8 @@ func (m setupModel) updateAuthChoice(msg tea.Msg) (setupModel, tea.Cmd) {
 				return m, codexAuthStartCmd()
 			}
 			m.cfg.Models.Main.Backend = "api"
+			// recall must not demand codex auth on an API-key-only install
+			m.cfg.Models.Recall.Backend = ""
 			m.models = modelsFor("api")
 			m.modelCursor = cursorFor(m.models, m.cfg.Models.Main.Model)
 			m.cfg.Models.Main.Model = m.models[m.modelCursor]
@@ -860,9 +864,9 @@ func (m setupModel) viewAPIKey() string {
 
 	s := labelStyle.Render("OpenAI API Key") + "\n\n"
 	s += hintStyle.Render("The API key is used for:") + "\n"
-	s += hintStyle.Render("  - nik's brain when not using a subscription ("+brainNote+")") + "\n"
-	s += hintStyle.Render("  - recall — searching long-term memory") + "\n"
-	s += hintStyle.Render("  - text-to-speech") + "\n\n"
+	s += hintStyle.Render("  - nik's brain and recall when not using a subscription ("+brainNote+")") + "\n"
+	s += hintStyle.Render("  - text-to-speech and voice transcription") + "\n"
+	s += hintStyle.Render("  - describing images and files") + "\n\n"
 	s += hintStyle.Render("These features use cheap models and should cost only") + "\n"
 	s += hintStyle.Render("a few cents a month unless you configure otherwise.") + "\n\n"
 	s += hintStyle.Render("Get one at platform.openai.com/api-keys") + "\n\n"
