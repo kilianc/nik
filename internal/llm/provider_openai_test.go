@@ -315,6 +315,9 @@ func TestMaxPairsForModel(t *testing.T) {
 		model string
 		want  int
 	}{
+		{"gpt-5.6-sol", maxHistoryPairs},
+		{"gpt-5.6-terra", maxHistoryPairs},
+		{"gpt-5.6-luna", maxHistoryPairs},
 		{"gpt-5.4", maxHistoryPairs},
 		{"gpt-4.1", maxHistoryPairs},
 		{"gpt-5.4-mini", 50},

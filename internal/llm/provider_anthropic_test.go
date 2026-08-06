@@ -275,6 +275,9 @@ func TestAnthropicOutputEffort(t *testing.T) {
 		// xhigh predates these; they only accept low/medium/high/max.
 		{"claude-opus-4-6", "xhigh", anthropic.OutputConfigEffortMax},
 		{"claude-sonnet-4-6", "xhigh", anthropic.OutputConfigEffortMax},
+		// max is accepted by every adaptive model.
+		{"claude-opus-5", "max", anthropic.OutputConfigEffortMax},
+		{"claude-sonnet-4-6", "max", anthropic.OutputConfigEffortMax},
 	}
 
 	for _, tt := range tests {

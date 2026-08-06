@@ -174,7 +174,7 @@ func Default(home string) *Config {
 		Home: home,
 		Models: ModelsConfig{
 			Main: ModelConfig{
-				Model:           "gpt-5.3-codex",
+				Model:           "gpt-5.6-sol",
 				ReasoningEffort: "high",
 				Backend:         "subscription",
 			},
@@ -183,7 +183,9 @@ func Default(home string) *Config {
 				Backend:         "api",
 			},
 			Recall: ModelConfig{
-				ReasoningEffort: "minimal",
+				Model:           "gpt-5.6-luna",
+				ReasoningEffort: "low",
+				Backend:         "subscription",
 			},
 			TTS: TTSConfig{
 				Model: "gpt-4o-mini-tts",
@@ -517,7 +519,7 @@ func validateConfig(cfg Config) error {
 
 func validatePurposeModel(purpose string, modelCfg ModelConfig) error {
 	if !isValidReasoningEffort(modelCfg.ReasoningEffort) {
-		return fmt.Errorf("missing models.%s.reasoning_effort (none, minimal, low, medium, high, xhigh)", purpose)
+		return fmt.Errorf("missing models.%s.reasoning_effort (none, minimal, low, medium, high, xhigh, max)", purpose)
 	}
 
 	if !isValidVerbosity(modelCfg.Verbosity) {
@@ -540,9 +542,11 @@ func isValidBackend(value string) bool {
 	}
 }
 
+// max is GPT-5.6 Sol-only on the OpenAI side; Anthropic adaptive models map it
+// to their own max effort.
 func isValidReasoningEffort(value string) bool {
 	switch value {
-	case "none", "minimal", "low", "medium", "high", "xhigh":
+	case "none", "minimal", "low", "medium", "high", "xhigh", "max":
 		return true
 	default:
 		return false

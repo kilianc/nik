@@ -41,6 +41,39 @@ func TestComputeCost(t *testing.T) {
 		}
 	})
 
+	t.Run("gpt-5.6-terra exact cost", func(t *testing.T) {
+		cost := ComputeCost("gpt-5.6-terra", 100000, 1000, 80000)
+		want := 20000*2.00e-6 + 80000*0.20e-6 + 1000*12.0e-6
+		if math.Abs(cost-want) > 1e-9 {
+			t.Fatalf("expected $%.6f, got $%.6f", want, cost)
+		}
+	})
+
+	t.Run("gpt-5.6-sol exact cost", func(t *testing.T) {
+		cost := ComputeCost("gpt-5.6-sol", 100000, 1000, 80000)
+		want := 20000*5.00e-6 + 80000*0.50e-6 + 1000*30.0e-6
+		if math.Abs(cost-want) > 1e-9 {
+			t.Fatalf("expected $%.6f, got $%.6f", want, cost)
+		}
+	})
+
+	t.Run("gpt-5.6 alias matches gpt-5.6-sol", func(t *testing.T) {
+		alias := ComputeCost("gpt-5.6", 100000, 1000, 80000)
+		sol := ComputeCost("gpt-5.6-sol", 100000, 1000, 80000)
+		if math.Abs(alias-sol) > 1e-9 {
+			t.Fatalf("expected alias cost $%.6f to match sol $%.6f", alias, sol)
+		}
+	})
+
+	t.Run("gpt-5.6 family context window", func(t *testing.T) {
+		for _, m := range []string{"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"} {
+			got, ok := ModelContextWindow(m)
+			if !ok || got != 1_050_000 {
+				t.Fatalf("%s: expected 1.05M context window, got %d (ok=%v)", m, got, ok)
+			}
+		}
+	})
+
 	t.Run("gpt-5.4-codex exact cost", func(t *testing.T) {
 		cost := ComputeCost("gpt-5.4-codex", 100000, 1000, 80000)
 		want := 20000*2.50e-6 + 80000*0.25e-6 + 1000*15.0e-6

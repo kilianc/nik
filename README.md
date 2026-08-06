@@ -20,8 +20,8 @@ Nik is a person on WhatsApp, so it needs its own phone number and its own WhatsA
 |---|---|---|
 | **A second phone number** (US, Tello $5/mo plan) | WhatsApp accounts are bound to a phone number. Nik needs one that isn't yours. | [tello.com/buy/custom_plans](https://tello.com/buy/custom_plans) |
 | **WhatsApp Business app** on a phone that holds the SIM above | Used once to register the number and again any time you re-link nik to it. | App Store / Play Store |
-| **ChatGPT Plus or Pro subscription** | Flat-rate auth for nik's reasoning — main brain and background task workers run on this. | [chatgpt.com](https://chatgpt.com) |
-| **OpenAI API key** | Powers:<br>• memory management<br>• voice messages (in and out)<br>• image / PDF recognition<br><br>Typical use: a few cents/month, well under $1. | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
+| **ChatGPT Plus or Pro subscription** | Flat-rate auth for nik's reasoning — main brain, background task workers, and memory recall all run on this. | [chatgpt.com](https://chatgpt.com) |
+| **OpenAI API key** | Powers:<br>• voice messages (in and out)<br>• image / PDF recognition<br><br>Typical use: a few cents/month, well under $1. | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
 | **Exa API key** | Powers the `web` skill (news briefings, search, URL fetch). | [dashboard.exa.ai/api-keys](https://dashboard.exa.ai/api-keys) — free tier is enough to start |
 
 
@@ -99,7 +99,7 @@ Open a new terminal and run `nik`. A TUI walks you through:
 1. **Auth choice** — pick "Codex subscription" if you have ChatGPT Plus/Pro (recommended). The TUI opens a browser to complete Codex login, then you paste the callback URL back.
 2. **OpenAI API key** — paste your `sk-...` key. The TUI hits `api.openai.com/v1/models` to validate it before continuing.
 3. **Exa API key** — paste your Exa key. Validated against `api.exa.ai/search`.
-4. **Model** — pick the brain model (default: `gpt-5.3-codex` for subscription, `gpt-5.4` for API).
+4. **Model** — pick the brain model (default: `gpt-5.6-sol`, the frontier tier; `gpt-5.6-terra` and `gpt-5.6-luna` are the cheaper siblings).
 5. **Shell sandbox** — pick **Docker container** (recommended; requires Docker installed) so the shell tool runs in an isolated image, or **Run on host** to skip the container.
 6. **Timezone & location** — type your city and country (e.g. "Rome, Italy"); the TUI resolves the timezone.
 
@@ -134,12 +134,12 @@ Edit `~/.nik/config.yaml` to change models:
 ```yaml
 models:
   main:
-    model: claude-opus-5              # or gpt-5.4, gpt-5.3-codex, ...
-    reasoning_effort: medium
+    model: gpt-5.6-sol                # or gpt-5.6-terra, claude-opus-5, ...
+    reasoning_effort: high
   task:
-    model: gpt-5.4
+    model: gpt-5.6-sol                # omit to reuse the main model/backend
   recall:
-    model: gpt-5.4
+    model: gpt-5.6-luna
 ```
 
 If you switch to an Anthropic model, add your key:

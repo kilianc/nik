@@ -9,6 +9,12 @@ type tokenPricing struct {
 
 var modelPricing = map[string]tokenPricing{
 	// GPT-5.x family (cached: 90% off input)
+	"gpt-5.6-sol":        {input: 5.00e-6, output: 30.0e-6, cached: 0.50e-6, contextWindow: 1_050_000},
+	"gpt-5.6":            {input: 5.00e-6, output: 30.0e-6, cached: 0.50e-6, contextWindow: 1_050_000}, // alias for gpt-5.6-sol
+	"gpt-5.6-terra":      {input: 2.00e-6, output: 12.0e-6, cached: 0.20e-6, contextWindow: 1_050_000},
+	"gpt-5.6-luna":       {input: 0.20e-6, output: 1.20e-6, cached: 0.020e-6, contextWindow: 1_050_000},
+	"gpt-5.5":            {input: 5.00e-6, output: 30.0e-6, cached: 0.50e-6, contextWindow: 1_050_000},
+	"gpt-5.5-pro":        {input: 30.0e-6, output: 180.0e-6, contextWindow: 1_050_000},
 	"gpt-5.4":            {input: 2.50e-6, output: 15.0e-6, cached: 0.25e-6, contextWindow: 1_050_000},
 	"gpt-5.4-codex":      {input: 2.50e-6, output: 15.0e-6, cached: 0.25e-6, contextWindow: 1_050_000},
 	"gpt-5.4-mini":       {input: 0.75e-6, output: 4.50e-6, cached: 0.075e-6, contextWindow: 400_000},
