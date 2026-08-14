@@ -21,6 +21,7 @@ import (
 	"github.com/kciuffolo/nik/internal/daemonctl"
 	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/fs"
+	"github.com/kciuffolo/nik/internal/gateway"
 	"github.com/kciuffolo/nik/internal/genesis"
 	"github.com/kciuffolo/nik/internal/llm"
 	niklog "github.com/kciuffolo/nik/internal/log"
@@ -209,6 +210,7 @@ func runDaemon(args []string) {
 	}
 
 	secrets.EnsureAdapter(cfg.Home, skills.BuiltinFS())
+	secretStore := secrets.New(h)
 
 	// adapters
 
@@ -236,9 +238,29 @@ func runDaemon(args []string) {
 		}
 	}
 
+	// gateway adapter — nik as a nik-saas agent: no local session, no QR. a
+	// local whatsapp session wins when both are configured, so BYO-number
+	// installs keep working untouched
+	var gatewayAdapter *gateway.Adapter
+	if whatsappClient == nil && gateway.Enabled(cfg, secretStore) {
+		hostname, _ := os.Hostname()
+		gatewayAdapter, err = gateway.FromConfig(cfg, secretStore, hostname)
+		if err != nil {
+			fatal("create gateway adapter", err)
+		}
+
+		messagingSvc.RegisterPlatform(gatewayAdapter)
+		err = gatewayAdapter.Start(ctx, messagingSvc)
+		if err != nil {
+			fatal("start gateway adapter", err)
+		}
+		slog.Info("gateway adapter active", "pkg", "main", "url", cfg.Gateway.URL)
+	} else if whatsappClient != nil && gateway.Enabled(cfg, secretStore) {
+		slog.Warn("both whatsapp session and gateway configured; using local whatsapp", "pkg", "main")
+	}
+
 	// llm clients
 
-	secretStore := secrets.New(h)
 	openaiKey, _ := secretStore.Get("openai_key")
 	anthropicKey, _ := secretStore.Get("anthropic_key")
 
@@ -415,6 +437,14 @@ func runDaemon(args []string) {
 		if err != nil {
 			fatal("whatsapp connect", err)
 		}
+	}
+	if gatewayAdapter != nil {
+		go func() {
+			err := gatewayAdapter.Connect(ctx)
+			if err != nil && ctx.Err() == nil {
+				slog.Error("gateway session", "pkg", "main", "error", err)
+			}
+		}()
 	}
 
 	sig := make(chan os.Signal, 2)
