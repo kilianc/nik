@@ -542,3 +542,57 @@ func TestSaveRoundTrip(t *testing.T) {
 		t.Errorf("round-trip timezone: got %q", loaded.Timezone)
 	}
 }
+
+func TestLoadGatewayConfig(t *testing.T) {
+	t.Run("parses url", func(t *testing.T) {
+		dir := t.TempDir()
+		writeTestConfig(t, dir, `
+models:
+  main:
+    model: gpt-5
+    reasoning_effort: high
+  task:
+    reasoning_effort: xhigh
+  recall:
+    reasoning_effort: minimal
+privileged_conversation_ids:
+  owner: conv-1
+gateway:
+  url: wss://nik-gw.example.com/v1/agent
+`)
+
+		cfg, err := Load(dir)
+		if err != nil {
+			t.Fatalf("load: %v", err)
+		}
+
+		if cfg.Gateway.URL != "wss://nik-gw.example.com/v1/agent" {
+			t.Fatalf("expected gateway.url, got %q", cfg.Gateway.URL)
+		}
+	})
+
+	t.Run("defaults to empty", func(t *testing.T) {
+		dir := t.TempDir()
+		writeTestConfig(t, dir, `
+models:
+  main:
+    model: gpt-5
+    reasoning_effort: high
+  task:
+    reasoning_effort: xhigh
+  recall:
+    reasoning_effort: minimal
+privileged_conversation_ids:
+  owner: conv-1
+`)
+
+		cfg, err := Load(dir)
+		if err != nil {
+			t.Fatalf("load: %v", err)
+		}
+
+		if cfg.Gateway.URL != "" {
+			t.Fatalf("expected empty gateway.url, got %q", cfg.Gateway.URL)
+		}
+	})
+}
