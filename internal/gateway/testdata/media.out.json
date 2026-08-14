@@ -1,0 +1,10 @@
+{
+  "id": "0199443c1f7-718293041526374a",
+  "type": "media.out",
+  "ts": "2026-08-13T17:05:00Z",
+  "payload": {
+    "chat": "14155551234@s.whatsapp.net",
+    "handle": "mh_01k2f8xq7m9",
+    "kind": "voice"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "id": "0199443c1f5-5f60718293041526",
+  "type": "conv.in",
+  "ts": "2026-08-13T17:03:01Z",
+  "payload": {
+    "chat": "120363021234567890@g.us",
+    "is_group": true,
+    "sealed": "c2VhbGVkLWNvbnZlcnNhdGlvbi1tZXRhZGF0YQ"
+  }
+}
