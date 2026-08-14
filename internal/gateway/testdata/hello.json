@@ -1,0 +1,10 @@
+{
+  "id": "0199443c1f0-8a3f21c4d5e60718",
+  "type": "hello",
+  "ts": "2026-08-13T17:00:00Z",
+  "payload": {
+    "version": 2,
+    "agent_name": "kitchen-mac",
+    "public_key": "3q2-796tvu_erb7v3q2-796tvu_erb7v3q2-796tvu8"
+  }
+}

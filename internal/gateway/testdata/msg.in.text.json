@@ -1,0 +1,12 @@
+{
+  "id": "0199443c1f3-3d4e5f6071829304",
+  "type": "msg.in",
+  "ts": "2026-08-13T17:02:00Z",
+  "payload": {
+    "chat": "14155551234@s.whatsapp.net",
+    "sender": "14155551234@s.whatsapp.net",
+    "wa_id": "3EB0C767D82B0F3C1A2B",
+    "sent_at": "2026-08-13T17:01:58Z",
+    "sealed": "c2VhbGVkLXRleHQtbWVzc2FnZS1jaXBoZXJ0ZXh0"
+  }
+}

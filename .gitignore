@@ -13,6 +13,9 @@
 !internal/db/schema.sql
 !internal/queries/*.sql
 
+# Track gateway wire fixtures (byte-identical copies of nik-saas's)
+!internal/gateway/testdata/*.json
+
 # Track templates
 !*.tmpl
 
