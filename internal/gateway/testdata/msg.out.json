@@ -1,0 +1,13 @@
+{
+  "id": "0199443c1f6-6071829304152637",
+  "type": "msg.out",
+  "ts": "2026-08-13T17:04:00Z",
+  "payload": {
+    "chat": "120363021234567890@g.us",
+    "text": "Capers added. I'll nudge you at 4:00.",
+    "quote": {
+      "stanza_id": "3EB0AA11BB22CC33DD44",
+      "participant": "14155559876@s.whatsapp.net"
+    }
+  }
+}

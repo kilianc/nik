@@ -1,0 +1,10 @@
+{
+  "id": "0199443c1fa-041526374a5b6c7d",
+  "type": "read.out",
+  "ts": "2026-08-13T17:08:00Z",
+  "payload": {
+    "chat": "14155551234@s.whatsapp.net",
+    "wa_ids": ["3EB0C767D82B0F3C1A2B"],
+    "participant": "14155551234@s.whatsapp.net"
+  }
+}
