@@ -56,6 +56,11 @@ func (c *client) SelfJID() string {
 	return c.selfJID
 }
 
+// errAuthRejected marks a definitive refusal: the gateway saw the token and
+// said no. Retrying cannot fix a wrong or revoked token, so this ends the
+// run instead of entering the backoff loop — the daemon should die loudly.
+var errAuthRejected = errors.New("gateway rejected the install token (401): check gateway_token in the secret store")
+
 func (c *client) run(ctx context.Context) error {
 	backoff := time.Second
 
@@ -63,6 +68,9 @@ func (c *client) run(ctx context.Context) error {
 		err := c.session(ctx)
 		if ctx.Err() != nil {
 			return ctx.Err()
+		}
+		if errors.Is(err, errAuthRejected) {
+			return err
 		}
 
 		slog.Error("gateway session ended", "pkg", "gateway", "error", err, "retry_in", backoff)
@@ -81,11 +89,14 @@ func (c *client) run(ctx context.Context) error {
 
 func (c *client) session(ctx context.Context) error {
 	dialCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	conn, _, err := websocket.Dial(dialCtx, c.url, &websocket.DialOptions{
+	conn, resp, err := websocket.Dial(dialCtx, c.url, &websocket.DialOptions{
 		HTTPHeader: http.Header{"Authorization": {"Bearer " + c.token}},
 	})
 	cancel()
 	if err != nil {
+		if resp != nil && resp.StatusCode == http.StatusUnauthorized {
+			return errAuthRejected
+		}
 		return fmt.Errorf("dial gateway: %w", err)
 	}
 
