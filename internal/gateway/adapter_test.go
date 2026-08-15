@@ -417,14 +417,57 @@ func TestProbe(t *testing.T) {
 	gw := newFakeGateway(t)
 	ctx := context.Background()
 
-	if err := Probe(ctx, gw.url(), "test-token"); err != nil {
-		t.Fatalf("good token: %v", err)
+	if keep, err := Probe(ctx, gw.url(), "test-token", testKey(t)); err != nil || keep == "" {
+		t.Fatalf("good token: keep=%q err=%v", keep, err)
 	}
-	if err := Probe(ctx, gw.url(), "nik_wrong"); !errors.Is(err, ErrAuthRejected) {
+	if _, err := Probe(ctx, gw.url(), "nik_wrong", testKey(t)); !errors.Is(err, ErrAuthRejected) {
 		t.Fatalf("wrong token = %v, want ErrAuthRejected", err)
 	}
-	err := Probe(ctx, "ws://127.0.0.1:1/v1/agent", "test-token")
+	_, err := Probe(ctx, "ws://127.0.0.1:1/v1/agent", "test-token", testKey(t))
 	if err == nil || errors.Is(err, ErrAuthRejected) {
 		t.Fatalf("unreachable = %v, want a dial error", err)
 	}
+}
+
+// Rotation end to end: the install token dies on first connect, the store
+// holds what the gateway handed back, and a daemon booting with THAT token
+// gets rotated again and keeps working — twice over is the case that
+// catches "stored the typed one" bugs.
+func TestTokenRotationPersists(t *testing.T) {
+	gw := newFakeGateway(t)
+	ctx := context.Background()
+	store := newMemSecrets()
+
+	// nik connect / setup: probe with the install token.
+	if err := ProbeWithStore(ctx, gw.url(), "test-token", store); err != nil {
+		t.Fatal(err)
+	}
+	stored, _ := store.Get(tokenSecretName)
+	if stored == "test-token" || stored == "" {
+		t.Fatalf("store holds %q — the install token, not the rotated one", stored)
+	}
+	// The install token is dead now.
+	if _, err := Probe(ctx, gw.url(), "test-token", testKey(t)); !errors.Is(err, ErrAuthRejected) {
+		t.Fatalf("install token still accepted after rotation: %v", err)
+	}
+
+	// Boot: FromConfig dials with the stored token, gets rotated again,
+	// and persists the newer one.
+	cfg := &config.Config{Gateway: config.GatewayConfig{URL: gw.url()}}
+	a, err := FromConfig(cfg, store, "boot")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go func() { _ = a.Connect(bctx) }()
+	select {
+	case <-a.Ready():
+	case <-time.After(5 * time.Second):
+		t.Fatal("daemon never got hello.ack with the rotated token")
+	}
+	waitUntil(t, "second rotation persisted", func() bool {
+		now, _ := store.Get(tokenSecretName)
+		return now != stored && now != ""
+	})
 }

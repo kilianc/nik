@@ -73,6 +73,10 @@ type hello struct {
 // helloAck carries the central number's identity. There is no claim state:
 // the account was born from a DM, so its JID is bound before any agent runs.
 type helloAck struct {
+	// Token is a fresh long-lived agent token, rotated on every connect. nik
+	// stores it and dials with it next time; the one it connected with — on
+	// first run, the short-lived install code from the dashboard — is dead.
+	Token  string `json:"token,omitempty"`
 	Number string `json:"number,omitempty"`
 	// SelfJID is the central number's JID — the only source nik has for its
 	// own whatsapp identity in gateway mode

@@ -102,6 +102,9 @@ func TestDecodeHelloAck(t *testing.T) {
 	if p.SelfJID != "16502811468@s.whatsapp.net" {
 		t.Errorf("self_jid = %q — nik has no other source for its own jid", p.SelfJID)
 	}
+	if p.Token != "nik_rotated-example-token" {
+		t.Errorf("token = %q — every connect hands nik its next token", p.Token)
+	}
 }
 
 func TestDecodeMsgIn(t *testing.T) {

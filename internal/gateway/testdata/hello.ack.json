@@ -3,6 +3,7 @@
   "type": "hello.ack",
   "ts": "2026-08-13T17:00:00Z",
   "payload": {
+    "token": "nik_rotated-example-token",
     "number": "+16502811468",
     "self_jid": "16502811468@s.whatsapp.net"
   }
