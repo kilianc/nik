@@ -33,7 +33,6 @@ const (
 	typeTypingOut envelopeType = "typing.out"
 	typeReadOut   envelopeType = "read.out"
 	typeAck       envelopeType = "ack"
-	typeClaimDone envelopeType = "claim.done"
 	typeError     envelopeType = "error"
 )
 
@@ -71,10 +70,10 @@ type hello struct {
 	PublicKey string `json:"public_key"`
 }
 
+// helloAck carries the central number's identity. There is no claim state:
+// the account was born from a DM, so its JID is bound before any agent runs.
 type helloAck struct {
-	Claimed   bool   `json:"claimed"`
-	ClaimCode string `json:"claim_code,omitempty"`
-	Number    string `json:"number,omitempty"`
+	Number string `json:"number,omitempty"`
 	// SelfJID is the central number's JID — the only source nik has for its
 	// own whatsapp identity in gateway mode
 	SelfJID string `json:"self_jid,omitempty"`
@@ -175,10 +174,6 @@ type readOut struct {
 
 type ack struct {
 	IDs []string `json:"ids"`
-}
-
-type claimDone struct {
-	WaJID string `json:"wa_jid"`
 }
 
 type protocolError struct {

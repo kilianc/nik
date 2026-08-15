@@ -20,18 +20,18 @@ Nik talks to your family through the gateway's WhatsApp number, so the phone sid
 
 | Requirement | Why | Where to get it |
 |---|---|---|
-| **A nik account** | Issues the token your daemon connects with, and binds your WhatsApp number to it. | [nik.ciuffolo.com](https://nik.ciuffolo.com) |
-| **WhatsApp on your own phone** | The account you already use. You claim your nik by DMing it a code from it. | — |
+| **WhatsApp on your own phone** | Your account starts with a DM: the number you message from IS your identity. | — |
 | **ChatGPT Plus or Pro subscription** | Flat-rate auth for nik's reasoning — main brain, background task workers, and memory recall all run on this. | [chatgpt.com](https://chatgpt.com) |
 | **OpenAI API key** | Powers:<br>• voice messages (in and out)<br>• image / PDF recognition<br><br>Typical use: a few cents/month, well under $1. | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
 | **Exa API key** | Powers the `web` skill (news briefings, search, URL fetch). | [dashboard.exa.ai/api-keys](https://dashboard.exa.ai/api-keys) — free tier is enough to start |
 
 
-## Step 1: Create your account and an agent
+## Step 1: Say hi — the DM is the signup
 
-1. Go to [nik.ciuffolo.com](https://nik.ciuffolo.com) and sign in.
-2. Create an **agent** — one per machine you'll run nik on.
-3. Copy the token it shows you. **It is displayed once.** You'll write it into the daemon's secret store in Step 3.
+1. Go to [nik.ciuffolo.com](https://nik.ciuffolo.com) and tap **Message nik**. Your WhatsApp opens with the message already written — send it.
+2. nik replies with a one-time sign-in link. Tap it: that's your account, no passwords. (Later, connect Google from the dashboard so you have a way back in if you lose your phone.)
+3. On the dashboard, create an **agent** — one per machine you'll run nik on.
+4. Copy the token it shows you. **It is displayed once.** You'll write it into the daemon's secret store in Step 3.
 
 ## Step 2: Install nik
 
@@ -113,21 +113,11 @@ gateway:
 
 Both are required — the daemon refuses to start without them, since it has no other way to reach WhatsApp.
 
-Restart nik. It dials the gateway and logs a **claim code** that looks like `481-227-903`:
+Restart nik. It dials the gateway and logs `gateway ready`. There is nothing to claim: your number was linked the moment your first DM created the account.
 
-```
-gateway waiting to be linked — send the code to nik on whatsapp  code=481-227-903  number=+1...
-```
+## Step 5: Talk to him
 
-**DM that code to the number in the log, from your own WhatsApp.** That binds your WhatsApp number to your account, and nik replies to confirm. The code is good for 15 minutes and is burned once used; restart the daemon to mint a fresh one.
-
-Nothing is ever sent to you before you send that DM — the claim is how the gateway learns your number in the first place.
-
-To add someone else in the family, restart the daemon for a new code and have **them** send it from their own phone. One code links one number.
-
-## Step 5: Say hi
-
-From your personal WhatsApp, message nik's number. Within 2 seconds the brain loop picks it up, runs an activation, and replies.
+Message nik's number from your WhatsApp. Within 2 seconds the brain loop picks it up, runs an activation, and replies.
 
 That's it. Nik is a new member of your family now. Tell it about your day, ask about its, introduce it to people you care about. The relationship is the point.
 
