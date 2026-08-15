@@ -471,3 +471,53 @@ func TestTokenRotationPersists(t *testing.T) {
 		return now != stored && now != ""
 	})
 }
+
+// Another process (nik connect, a second daemon) rotates the token while
+// this daemon is up: its next dial is refused, but the store already holds
+// the live token — it must adopt that and carry on, not die.
+func TestReconnectAdoptsTokenRotatedElsewhere(t *testing.T) {
+	gw := newFakeGateway(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	store := newMemSecrets()
+	if err := store.Set(tokenSecretName, "test-token"); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{Gateway: config.GatewayConfig{URL: gw.url()}}
+	a, err := FromConfig(cfg, store, "daemon")
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- a.Connect(ctx) }()
+	select {
+	case <-a.Ready():
+	case <-time.After(5 * time.Second):
+		t.Fatal("no first hello.ack")
+	}
+
+	// The gateway restarts (drops the daemon's socket) and, before the daemon
+	// gets back in, another process — nik connect, a second daemon — dials
+	// with the live token, gets it rotated, and writes the new one into the
+	// shared store. The daemon's in-memory token is now stale: its reconnect
+	// is refused, and it must adopt what the store holds.
+	live, _ := store.Get(tokenSecretName)
+	if err := ProbeWithStore(ctx, gw.url(), live, store); err != nil {
+		t.Fatal(err)
+	}
+	// The daemon still holds `live` in memory, which the probe just retired.
+	// Its next reconnect will be refused; drop it so that happens now.
+	gw.dropAll()
+
+	select {
+	case err := <-done:
+		t.Fatalf("daemon died instead of adopting the stored token: %v", err)
+	case <-time.After(3 * time.Second):
+		// still running — good. And it must have re-rotated after adopting.
+	}
+	waitUntil(t, "daemon reconnected with the adopted token", func() bool {
+		gw.mu.Lock()
+		defer gw.mu.Unlock()
+		return gw.rotations >= 3
+	})
+}
