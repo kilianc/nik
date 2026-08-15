@@ -57,7 +57,7 @@ Nik's outbound actions (replies, reactions, tool reaction emojis) are stored via
 
 ### Nik's identity
 
-Nik is an independent entity with its own WhatsApp phone number. `is_from_me` means "sent by nik" (not "sent by nik's owner"). Nik communicates directly on WhatsApp.
+Nik is an independent entity. It reaches WhatsApp through the nik-saas gateway, which owns the number and routes each family's conversations to their own daemon — nik has no session of its own. `is_from_me` means "sent by nik" (not "sent by nik's owner"). Nik communicates directly on WhatsApp.
 
 ### Messaging
 
@@ -70,7 +70,7 @@ Entry points: `cmd/nik/main.go`, `cmd/workbench/main.go`
 | Package | Purpose |
 |---------|---------|
 | `bin/` | local build outputs produced by `make`, git-ignored |
-| `cmd/nik/` | daemon entry point — config, DB, WhatsApp client wiring, signal handling |
+| `cmd/nik/` | daemon entry point — config, DB, gateway adapter wiring, signal handling |
 | `cmd/workbench/` | workbench CLI entry point — config, DB, OpenAI client wiring, subcommand dispatch |
 | `internal/config/` | `Config` struct + `Load(home)` from `config.yaml` in home dir |
 | `internal/db/` | SQLite open/schema, models, one Go file per query function |
@@ -80,7 +80,7 @@ Entry points: `cmd/nik/main.go`, `cmd/workbench/main.go`
 | `internal/id/` | UUID generation — `V4()`, `V7()`, `Short(n)` |
 | `internal/llm/` | LLM API client — `Activation` (multi-round protocol state), `Transcribe`, `Describe`; supports OpenAI and Codex auth. No retries, no loop control — callers own the loop. |
 | `internal/messaging/` | canonical messaging service and tool handlers |
-| `internal/whatsapp/` | WhatsApp platform adapter implementing messaging platform interface |
+| `internal/gateway/` | nik-saas gateway adapter — the only WhatsApp transport; wire protocol, sealing, agent key |
 | `internal/contacts/` | contact resolution/upsert orchestration + contact update tools |
 | `internal/shell/` | tmux-backed persistent shell tool |
 | `internal/alarms/` | alarm/reminder scheduling service, tools, and reflex |
@@ -248,7 +248,7 @@ Each domain package exposes a `BuildTools() []llm.Tool` function that returns to
 
 Wiring steps:
 
-1. Load config, open DB, create WhatsApp client and adapter
+1. Load config, open DB, create the gateway adapter (fatal if unconfigured)
 2. Register adapter with messaging service, start adapter
 3. Build LLM client (OpenAI key or Codex auth)
 4. Create domain services: `alarms`, `recall`

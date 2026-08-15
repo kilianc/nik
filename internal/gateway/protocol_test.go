@@ -68,7 +68,7 @@ func TestFixturesCoverEveryVerb(t *testing.T) {
 	}
 
 	want := []envelopeType{
-		typeHello, typeHelloAck, typeClaimDone, typeMsgIn, typeConvIn,
+		typeHello, typeHelloAck, typeMsgIn, typeConvIn,
 		typeMsgOut, typeMediaOut, typeReactOut, typeTypingOut, typeReadOut,
 		typeAck, typeError,
 	}
@@ -96,25 +96,11 @@ func TestDecodeHello(t *testing.T) {
 func TestDecodeHelloAck(t *testing.T) {
 	p := decodeFixture[helloAck](t, "hello.ack.json", typeHelloAck)
 
-	if p.Claimed {
-		t.Error("claimed = true, want false for the unclaimed fixture")
-	}
-	if p.ClaimCode != "417-902-336" {
-		t.Errorf("claim_code = %q", p.ClaimCode)
-	}
 	if p.Number != "+16502811468" {
 		t.Errorf("number = %q", p.Number)
 	}
 	if p.SelfJID != "16502811468@s.whatsapp.net" {
 		t.Errorf("self_jid = %q — nik has no other source for its own jid", p.SelfJID)
-	}
-}
-
-func TestDecodeClaimDone(t *testing.T) {
-	p := decodeFixture[claimDone](t, "claim.done.json", typeClaimDone)
-
-	if p.WaJID != "14155551234@s.whatsapp.net" {
-		t.Errorf("wa_jid = %q", p.WaJID)
 	}
 }
 

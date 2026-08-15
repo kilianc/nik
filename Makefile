@@ -67,10 +67,6 @@ run-daemon: build
 run-install: build
 	./$(BIN_DIR)/nik install --home $(NIK_HOME)
 
-.PHONY: run-replay
-run-replay: build
-	./$(BIN_DIR)/nik replay --home $(NIK_HOME) $(ARGS)
-
 .PHONY: run-tui
 run-tui: build
 	./$(BIN_DIR)/nik tui --home $(NIK_HOME) $(ARGS)
@@ -90,10 +86,6 @@ schema-diff:
 .PHONY: db-check
 db-check:
 	@go run ./tools/dbcheck -db $(NIK_HOME)/nik.db
-
-.PHONY: wapp-history-dump
-wapp-history-dump:
-	@go run ./tools/wapp-history-dump $(ARGS)
 
 .PHONY: timeline
 timeline:

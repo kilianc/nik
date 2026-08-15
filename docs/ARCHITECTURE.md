@@ -114,7 +114,7 @@ Messaging is split into two layers:
 
 **Canonical layer** -- platform-agnostic tables (`conversation`, `message`, `media`, `contact`) are the source of truth. Every message nik sends or receives lives here with a UUIDv7 primary key, regardless of where it came from.
 
-**Adapter layer** -- each platform implements `MessagingPlatform`: normalize inbound events into canonical models, execute outbound actions (reply, react, send media, typing indicators, read receipts). Currently there's one adapter: WhatsApp via whatsmeow.
+**Adapter layer** -- each platform implements `MessagingPlatform`: normalize inbound events into canonical models, execute outbound actions (reply, react, send media, typing indicators, read receipts). Currently there's one adapter: `internal/gateway`, which reaches WhatsApp through the nik-saas gateway over a websocket. It reports `Platform() == "whatsapp"` because the messages really are WhatsApp messages, just routed through a number nik doesn't own — so conversations, contacts and skills are keyed the same either way. Nik holds no WhatsApp session itself; the gateway does.
 
 The two interfaces that connect them:
 
@@ -143,7 +143,7 @@ type MessagingPlatform interface {
 
 ```mermaid
 flowchart LR
-    subgraph whatsapp [WhatsApp]
+    subgraph whatsapp [WhatsApp via gateway]
         WA_In(("incoming\nmessage"))
         WA_Out(("outgoing\nmessage"))
     end
@@ -178,7 +178,7 @@ flowchart LR
     Execute --> Receive
 ```
 
-When a message arrives: the WhatsApp adapter normalizes it and calls `ReceiveMessage`, which upserts the conversation, resolves/creates the contact, and inserts the message. On the next tick, the sensor's `Check` finds events newer than the read marker and returns a stimulus. The brain activates and calls `Read` to render the timeline. Each round of the think loop re-reads the timeline (continuous steering), so the model sees its own side effects in real time. When the model calls `message_send`, the service types, delays, sends via the adapter, and feeds the outbound message back through `ReceiveMessage` so it appears in the canonical history.
+When a message arrives: the gateway adapter normalizes it and calls `ReceiveMessage`, which upserts the conversation, resolves/creates the contact, and inserts the message. On the next tick, the sensor's `Check` finds events newer than the read marker and returns a stimulus. The brain activates and calls `Read` to render the timeline. Each round of the think loop re-reads the timeline (continuous steering), so the model sees its own side effects in real time. When the model calls `message_send`, the service types, delays, sends via the adapter, and feeds the outbound message back through `ReceiveMessage` so it appears in the canonical history.
 
 ## Autonomous Systems
 

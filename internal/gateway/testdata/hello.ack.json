@@ -3,8 +3,6 @@
   "type": "hello.ack",
   "ts": "2026-08-13T17:00:00Z",
   "payload": {
-    "claimed": false,
-    "claim_code": "417-902-336",
     "number": "+16502811468",
     "self_jid": "16502811468@s.whatsapp.net"
   }

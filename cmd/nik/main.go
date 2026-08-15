@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -35,7 +36,6 @@ import (
 	"github.com/kciuffolo/nik/internal/task"
 	"github.com/kciuffolo/nik/internal/timeline"
 	"github.com/kciuffolo/nik/internal/version"
-	"github.com/kciuffolo/nik/internal/whatsapp"
 )
 
 func main() {
@@ -44,15 +44,13 @@ func main() {
 		subcmd = os.Args[1]
 	}
 
-	known := []string{"daemon", "install", "replay", "secrets", "tui"}
+	known := []string{"daemon", "install", "secrets", "tui"}
 
 	switch subcmd {
 	case "daemon":
 		runDaemon(os.Args[2:])
 	case "install":
 		runInstall(os.Args[2:])
-	case "replay":
-		runReplay(os.Args[2:])
 	case "secrets":
 		runSecrets(os.Args[2:])
 	case "tui":
@@ -221,43 +219,26 @@ func runDaemon(args []string) {
 	messagingSvc.RegisterPlatform(messaging.NewLocalAdapter(conn))
 	slog.Info("local adapter active")
 
-	// whatsapp adapter
-	var whatsappClient *whatsapp.Client
-	if _, err := os.Stat(cfg.WappSessionDBPath()); err == nil {
-		whatsappClient, err = whatsapp.NewClient(cfg.WappSessionDBPath(), cfg.MediaPath())
-		if err != nil {
-			fatal("create whatsapp client", err)
-		}
-		defer whatsappClient.Close()
-
-		whatsappAdapter := whatsapp.NewAdapter(whatsappClient)
-		messagingSvc.RegisterPlatform(whatsappAdapter)
-		err = whatsappAdapter.Start(ctx, messagingSvc)
-		if err != nil {
-			fatal("start whatsapp adapter", err)
-		}
+	// gateway adapter — nik as a nik-saas agent: no SIM, no QR, no session of
+	// its own. whatsapp reaches nik only through the gateway, so a daemon
+	// without one can never answer a message: say so and stop.
+	if !gateway.Enabled(cfg, secretStore) {
+		fatal("gateway not configured", errors.New(
+			"set gateway.url in config.yaml and write the gateway_token secret"))
 	}
 
-	// gateway adapter — nik as a nik-saas agent: no local session, no QR. a
-	// local whatsapp session wins when both are configured, so BYO-number
-	// installs keep working untouched
-	var gatewayAdapter *gateway.Adapter
-	if whatsappClient == nil && gateway.Enabled(cfg, secretStore) {
-		hostname, _ := os.Hostname()
-		gatewayAdapter, err = gateway.FromConfig(cfg, secretStore, hostname)
-		if err != nil {
-			fatal("create gateway adapter", err)
-		}
-
-		messagingSvc.RegisterPlatform(gatewayAdapter)
-		err = gatewayAdapter.Start(ctx, messagingSvc)
-		if err != nil {
-			fatal("start gateway adapter", err)
-		}
-		slog.Info("gateway adapter active", "pkg", "main", "url", cfg.Gateway.URL)
-	} else if whatsappClient != nil && gateway.Enabled(cfg, secretStore) {
-		slog.Warn("both whatsapp session and gateway configured; using local whatsapp", "pkg", "main")
+	hostname, _ := os.Hostname()
+	gatewayAdapter, err := gateway.FromConfig(cfg, secretStore, hostname)
+	if err != nil {
+		fatal("create gateway adapter", err)
 	}
+
+	messagingSvc.RegisterPlatform(gatewayAdapter)
+	err = gatewayAdapter.Start(ctx, messagingSvc)
+	if err != nil {
+		fatal("start gateway adapter", err)
+	}
+	slog.Info("gateway adapter active", "pkg", "main", "url", cfg.Gateway.URL)
 
 	// llm clients
 
@@ -432,20 +413,12 @@ func runDaemon(args []string) {
 
 	// start
 
-	if whatsappClient != nil {
-		err = whatsappClient.Connect(ctx, false)
-		if err != nil {
-			fatal("whatsapp connect", err)
+	go func() {
+		err := gatewayAdapter.Connect(ctx)
+		if err != nil && ctx.Err() == nil {
+			slog.Error("gateway session", "pkg", "main", "error", err)
 		}
-	}
-	if gatewayAdapter != nil {
-		go func() {
-			err := gatewayAdapter.Connect(ctx)
-			if err != nil && ctx.Err() == nil {
-				slog.Error("gateway session", "pkg", "main", "error", err)
-			}
-		}()
-	}
+	}()
 
 	sig := make(chan os.Signal, 2)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)

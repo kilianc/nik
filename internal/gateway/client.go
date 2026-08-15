@@ -32,7 +32,7 @@ type client struct {
 
 	onMessage      func(context.Context, msgIn, msgContent) error
 	onConversation func(context.Context, convIn, convContent) error
-	onClaim        func(ctx context.Context, ack helloAck)
+	onReady        func(ctx context.Context, ack helloAck)
 
 	mu      sync.Mutex
 	conn    *websocket.Conn
@@ -124,16 +124,6 @@ func (c *client) dispatch(ctx context.Context, env envelope) error {
 	case typeHelloAck:
 		return c.onHelloAck(ctx, env)
 
-	case typeClaimDone:
-		done, err := decodePayload[claimDone](env)
-		if err != nil {
-			return err
-		}
-
-		slog.Info("gateway linked whatsapp", "pkg", "gateway", "jid", done.WaJID)
-
-		return nil
-
 	case typeMsgIn:
 		return c.onMsgIn(ctx, env)
 
@@ -166,8 +156,8 @@ func (c *client) onHelloAck(ctx context.Context, env envelope) error {
 	c.selfJID = ack.SelfJID
 	c.mu.Unlock()
 
-	if c.onClaim != nil {
-		c.onClaim(ctx, ack)
+	if c.onReady != nil {
+		c.onReady(ctx, ack)
 	}
 
 	return nil
