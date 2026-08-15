@@ -21,6 +21,9 @@ import (
 // fakeGateway is the platform side of the protocol: accepts the websocket,
 // answers hello, and lets a test push envelopes down and observe what comes up
 type fakeGateway struct {
+	// conns is every agent socket ever accepted, so a "gateway restart" can
+	// drop all of them at once.
+	conns []*websocket.Conn
 	// token is the one bearer the gateway currently accepts; it rotates on
 	// every hello, like the real one.
 	token string
@@ -61,6 +64,18 @@ func newFakeGateway(t *testing.T) *fakeGateway {
 	return g
 }
 
+// dropAll closes every agent socket server-side, the way a gateway restart
+// does; each client's session ends and its run loop reconnects.
+func (g *fakeGateway) dropAll() {
+	g.mu.Lock()
+	conns := append([]*websocket.Conn(nil), g.conns...)
+	g.conns = nil
+	g.mu.Unlock()
+	for _, c := range conns {
+		_ = c.CloseNow()
+	}
+}
+
 func (g *fakeGateway) url() string {
 	return "ws" + strings.TrimPrefix(g.srv.URL, "http") + "/v1/agent"
 }
@@ -82,6 +97,7 @@ func (g *fakeGateway) handleAgent(w http.ResponseWriter, r *http.Request) {
 
 	g.mu.Lock()
 	g.conn = conn
+	g.conns = append(g.conns, conn)
 	g.mu.Unlock()
 
 	for {
