@@ -2,7 +2,9 @@
 
 **A family AI that lives on WhatsApp, remembers what matters, and turns group-chat chaos into reminders, memories, skills, and follow-through.**
 
-Nik (Noetic Intelligence Kernel) **has its own phone number**, identity, and local workspace. Add it to DMs and group chats, and it turns everyday family conversation into structured context: canonical messages, contacts, media descriptions, reminders, long-term memories, recipes, and skills.
+Nik (Noetic Intelligence Kernel) **reaches WhatsApp through the nik gateway**, and keeps its own identity and local workspace. Add it to DMs and group chats, and it turns everyday family conversation into structured context: canonical messages, contacts, media descriptions, reminders, long-term memories, recipes, and skills.
+
+The daemon runs on your machine and holds your data. It has no WhatsApp session of its own: it connects out to the gateway, which owns nik's number and routes your conversations to you and nobody else. No SIM, no second phone, no QR code.
 
 **Continuity is the product.** Nik remembers preferences and open loops, sets one-shot or recurring alarms, transcribes voice notes, describes images and documents, searches the web, and runs background tasks.
 
@@ -14,41 +16,24 @@ For how nik works internally (brain loop, sensors, adapters, tools), see [docs/A
 
 ## What you'll need
 
-Nik is a person on WhatsApp, so it needs its own phone number and its own WhatsApp account. Gather these before you install:
+Nik talks to your family through the gateway's WhatsApp number, so the phone side is already handled. Gather these before you install:
 
 | Requirement | Why | Where to get it |
 |---|---|---|
-| **A second phone number** (US, Tello $5/mo plan) | WhatsApp accounts are bound to a phone number. Nik needs one that isn't yours. | [tello.com/buy/custom_plans](https://tello.com/buy/custom_plans) |
-| **WhatsApp Business app** on a phone that holds the SIM above | Used once to register the number and again any time you re-link nik to it. | App Store / Play Store |
+| **WhatsApp on your own phone** | Your account starts with a DM: the number you message from IS your identity. | — |
 | **ChatGPT Plus or Pro subscription** | Flat-rate auth for nik's reasoning — main brain, background task workers, and memory recall all run on this. | [chatgpt.com](https://chatgpt.com) |
 | **OpenAI API key** | Powers:<br>• voice messages (in and out)<br>• image / PDF recognition<br><br>Typical use: a few cents/month, well under $1. | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
 | **Exa API key** | Powers the `web` skill (news briefings, search, URL fetch). | [dashboard.exa.ai/api-keys](https://dashboard.exa.ai/api-keys) — free tier is enough to start |
 
 
-## Step 1: Get a phone number (Tello)
+## Step 1: Say hi — the DM is the signup
 
-Tello's "Build Your Own Plan" lets you create the cheapest WhatsApp-eligible US line: **$5/month, No data, 300 minutes**. No data is fine — WhatsApp will run over Wi-Fi on the registering phone, and once nik is paired, the SIM only needs to receive SMS for occasional re-verification.
+1. Go to [nik.ciuffolo.com](https://nik.ciuffolo.com) and tap **Message nik**. Your WhatsApp opens with the message already written — send it.
+2. nik replies with a one-time sign-in link. Tap it: that's your account, no passwords. (Later, connect Google from the dashboard so you have a way back in if you lose your phone.)
+3. On the dashboard, create an **agent** — one per machine you'll run nik on.
+4. Copy the token it shows you. **It is displayed once.** You'll write it into the daemon's secret store in Step 3.
 
-1. Go to [tello.com/buy/custom_plans](https://tello.com/buy/custom_plans).
-2. Set the sliders to **No data** and **300 minutes**. The price should read **$5/month**.
-
-   ![Tello Build Your Own Plan — No data + 300 minutes = $5/month](docs/images/tello-5-plan.png)
-
-3. Click **I Want This Plan**, choose **New number**, pick a US area code, and check out. A physical SIM ships in a few days; an eSIM activates immediately if your phone supports it.
-4. Activate the SIM in a spare phone (or eSIM slot). Confirm you can receive SMS — WhatsApp registration sends a 6-digit code over SMS.
-
-## Step 2: Register WhatsApp Business with the new number
-
-You probably already use WhatsApp on your phone, and it only allows one account per device. **WhatsApp Business** is Meta's other app. It looks and works the same as regular WhatsApp but lets you run a second account on the same phone. You'll use it to register nik's number. Once you pair in Step 5, the daemon takes over and the phone can sit idle.
-
-1. Install **WhatsApp Business** from the App Store or Play Store on the phone with the Tello SIM.
-2. Open it, accept terms, and enter the Tello number (with country code). Receive the SMS code and verify.
-3. Set the profile name (e.g. "Nik") and a profile photo. Skip "import contacts."
-4. Send yourself a test message from your personal WhatsApp to confirm the number is live.
-
-You can now put this phone aside. The SIM only needs to be reachable for the rare WhatsApp re-verification SMS.
-
-## Step 3: Install nik
+## Step 2: Install nik
 
 Supported platforms: macOS (Apple Silicon), Linux (amd64 + arm64). Intel Macs can build from source.
 
@@ -92,7 +77,7 @@ make build              # produces ./bin/nik
 ./bin/nik install --home ~/.nik
 ```
 
-## Step 4: First-run setup
+## Step 3: First-run setup
 
 Open a new terminal and run `nik`. A TUI walks you through:
 
@@ -111,19 +96,28 @@ nik secrets read openai_key
 echo -n "sk-..." | nik secrets write openai_key
 ```
 
-## Step 5: Pair WhatsApp
+## Step 4: Connect to the gateway
 
-After setup writes the config, nik starts the WhatsApp client and prints a QR code in the terminal.
+Point the daemon at the gateway and give it the token from Step 1:
 
-1. On the phone with the Tello SIM, open **WhatsApp Business**.
-2. Go to **Settings → Linked Devices → Link a Device**.
-3. Point the camera at the QR in your terminal.
+```sh
+echo -n "<your agent token>" | nik secrets write gateway_token
+```
 
-Pairing should complete in a few seconds. From now on, nik holds the session token — the phone can be offline. WhatsApp will occasionally ask you to re-link from the phone (every ~14 days if unused); if that happens, just open the app and tap the linked-devices entry to refresh.
+Then add the gateway to `~/.nik/config.yaml`:
 
-## Step 6: Say hi
+```yaml
+gateway:
+  url: wss://nik-gw.ciuffolo.com/v1/agent
+```
 
-From your personal WhatsApp, send nik's number a message. Within 2 seconds the brain loop picks it up, runs an activation, and replies.
+Both are required — the daemon refuses to start without them, since it has no other way to reach WhatsApp.
+
+Restart nik. It dials the gateway and logs `gateway ready`. There is nothing to claim: your number was linked the moment your first DM created the account.
+
+## Step 5: Talk to him
+
+Message nik's number from your WhatsApp. Within 2 seconds the brain loop picks it up, runs an activation, and replies.
 
 That's it. Nik is a new member of your family now. Tell it about your day, ask about its, introduce it to people you care about. The relationship is the point.
 

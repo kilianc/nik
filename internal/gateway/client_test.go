@@ -27,7 +27,6 @@ type fakeGateway struct {
 	received []envelope
 	agentPub *[keySize]byte
 
-	claimed bool
 	selfJID string
 	uploads map[string][]byte
 	blobs   map[string][]byte
@@ -102,14 +101,11 @@ func (g *fakeGateway) handleAgent(w http.ResponseWriter, r *http.Request) {
 
 			g.mu.Lock()
 			g.agentPub = &pub
-			claimed := g.claimed
 			g.mu.Unlock()
 
 			ackEnv, _ := newEnvelope(typeHelloAck, helloAck{
-				Claimed:   claimed,
-				ClaimCode: "417-902-336",
-				Number:    "+16502811468",
-				SelfJID:   g.selfJID,
+				Number:  "+16502811468",
+				SelfJID: g.selfJID,
 			})
 			_ = wsjson.Write(r.Context(), conn, ackEnv)
 

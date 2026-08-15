@@ -41,7 +41,7 @@ func (a *Adapter) Start(_ context.Context, receiver messaging.MessageReceiver) e
 
 	a.client.onMessage = a.handleMessage
 	a.client.onConversation = a.handleConversation
-	a.client.onClaim = a.handleClaim
+	a.client.onReady = a.handleReady
 
 	return nil
 }
@@ -160,15 +160,8 @@ func (a *Adapter) MarkRead(ctx context.Context, refs []messaging.InboundMessage)
 	return nil
 }
 
-func (a *Adapter) handleClaim(_ context.Context, ack helloAck) {
-	if ack.Claimed {
-		slog.Info("gateway ready", "pkg", "gateway", "number", ack.Number)
-
-		return
-	}
-
-	slog.Info("gateway waiting to be linked — send the code to nik on whatsapp",
-		"pkg", "gateway", "code", ack.ClaimCode, "number", ack.Number)
+func (a *Adapter) handleReady(_ context.Context, ack helloAck) {
+	slog.Info("gateway ready", "pkg", "gateway", "number", ack.Number)
 }
 
 func (a *Adapter) handleConversation(ctx context.Context, conv convIn, content convContent) error {
@@ -374,9 +367,9 @@ func optional[T comparable](v T) *T {
 // tokenSecretName holds the install token from the nik-saas dashboard
 const tokenSecretName = "gateway_token"
 
-// Enabled reports whether gateway mode is configured: a url in config and an
-// install token in the secret store. mirrors the wapp gate in main — whatsapp
-// mode activates iff the session db exists, gateway mode iff the token does.
+// Enabled reports whether the gateway is configured: a url in config and an
+// install token in the secret store. the daemon refuses to start without both
+// — the gateway is nik's only route to whatsapp.
 func Enabled(cfg *config.Config, store secretStore) bool {
 	if cfg.Gateway.URL == "" {
 		return false
