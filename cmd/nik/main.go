@@ -416,7 +416,11 @@ func runDaemon(args []string) {
 	go func() {
 		err := gatewayAdapter.Connect(ctx)
 		if err != nil && ctx.Err() == nil {
-			slog.Error("gateway session", "pkg", "main", "error", err)
+			// Connect only returns for terminal conditions (a rejected
+			// token); transient failures retry inside. The gateway is nik's
+			// only transport — without it the daemon is a brain with no
+			// mouth, so die loudly instead of idling.
+			fatal("gateway", err)
 		}
 	}()
 
