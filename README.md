@@ -84,9 +84,10 @@ Open a new terminal and run `nik`. A TUI walks you through:
 1. **Auth choice** — pick "Codex subscription" if you have ChatGPT Plus/Pro (recommended). The TUI opens a browser to complete Codex login, then you paste the callback URL back.
 2. **OpenAI API key** — paste your `sk-...` key. The TUI hits `api.openai.com/v1/models` to validate it before continuing.
 3. **Exa API key** — paste your Exa key. Validated against `api.exa.ai/search`.
-4. **Model** — pick the brain model (default: `gpt-5.6-sol`, the frontier tier; `gpt-5.6-terra` and `gpt-5.6-luna` are the cheaper siblings).
-5. **Shell sandbox** — pick **Docker container** (recommended; requires Docker installed) so the shell tool runs in an isolated image, or **Run on host** to skip the container.
-6. **Timezone & location** — type your city and country (e.g. "Rome, Italy"); the TUI resolves the timezone.
+4. **Gateway** — paste the agent token from Step 1. nik connects to the gateway right there to prove it works before going on.
+5. **Model** — pick the brain model (default: `gpt-5.6-sol`, the frontier tier; `gpt-5.6-terra` and `gpt-5.6-luna` are the cheaper siblings).
+6. **Shell sandbox** — pick **Docker container** (recommended; requires Docker installed) so the shell tool runs in an isolated image, or **Run on host** to skip the container.
+7. **Timezone & location** — type your city and country (e.g. "Rome, Italy"); the TUI resolves the timezone.
 
 Keys are encrypted with NaCl secretbox and stored in `~/.nik/secrets/secrets.enc` (the per-install key sits next to it in `secrets.key`; keep both private and back them up if you care about the data). Inspect or rotate later with:
 
@@ -96,26 +97,15 @@ nik secrets read openai_key
 echo -n "sk-..." | nik secrets write openai_key
 ```
 
-## Step 4: Connect to the gateway
-
-Point the daemon at the gateway and give it the token from Step 1:
+Setup wrote the token to the secret store and `gateway.url` to `~/.nik/config.yaml`; both are required, and the daemon refuses to start without them — it has no other way to reach WhatsApp. To rotate the token later:
 
 ```sh
-echo -n "<your agent token>" | nik secrets write gateway_token
+echo -n "<new agent token>" | nik secrets write gateway_token
 ```
 
-Then add the gateway to `~/.nik/config.yaml`:
+There is nothing to claim: your number was linked the moment your first DM created the account.
 
-```yaml
-gateway:
-  url: wss://nik-gw.ciuffolo.com/v1/agent
-```
-
-Both are required — the daemon refuses to start without them, since it has no other way to reach WhatsApp.
-
-Restart nik. It dials the gateway and logs `gateway ready`. There is nothing to claim: your number was linked the moment your first DM created the account.
-
-## Step 5: Talk to him
+## Step 4: Talk to him
 
 Message nik's number from your WhatsApp. Within 2 seconds the brain loop picks it up, runs an activation, and replies.
 

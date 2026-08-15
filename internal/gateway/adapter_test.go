@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"sync"
@@ -406,5 +407,24 @@ func TestEnabled(t *testing.T) {
 	cfg.Gateway.URL = ""
 	if Enabled(cfg, store) {
 		t.Error("enabled with a token but no url")
+	}
+}
+
+// Probe is what setup runs on the token a person just pasted. It must tell
+// apart the three answers a person acts on differently: yes, wrong token,
+// and can't reach.
+func TestProbe(t *testing.T) {
+	gw := newFakeGateway(t)
+	ctx := context.Background()
+
+	if err := Probe(ctx, gw.url(), "test-token"); err != nil {
+		t.Fatalf("good token: %v", err)
+	}
+	if err := Probe(ctx, gw.url(), "nik_wrong"); !errors.Is(err, ErrAuthRejected) {
+		t.Fatalf("wrong token = %v, want ErrAuthRejected", err)
+	}
+	err := Probe(ctx, "ws://127.0.0.1:1/v1/agent", "test-token")
+	if err == nil || errors.Is(err, ErrAuthRejected) {
+		t.Fatalf("unreachable = %v, want a dial error", err)
 	}
 }
