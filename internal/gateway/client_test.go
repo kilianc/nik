@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -417,5 +418,26 @@ func TestClientHTTPURL(t *testing.T) {
 	_, err := c.httpURL("/v1/media")
 	if err == nil {
 		t.Error("derived an http url from a non-agent websocket url")
+	}
+}
+
+// A 401 at the handshake is a rejected token, not a bad network moment:
+// run must return the terminal error instead of retrying forever.
+func TestRunStopsOnRejectedToken(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "bad token", http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+
+	c := newClient("ws"+strings.TrimPrefix(srv.URL, "http"), "nik_bad", "test", testKey(t))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	err := c.run(ctx)
+	if !errors.Is(err, errAuthRejected) {
+		t.Fatalf("run returned %v, want errAuthRejected", err)
+	}
+	if ctx.Err() != nil {
+		t.Fatal("run only ended because the context expired — it retried a rejected token")
 	}
 }
