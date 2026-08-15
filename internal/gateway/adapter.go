@@ -374,9 +374,9 @@ func optional[T comparable](v T) *T {
 // tokenSecretName holds the install token from the nik-saas dashboard
 const tokenSecretName = "gateway_token"
 
-// Enabled reports whether gateway mode is configured: a url in config and an
-// install token in the secret store. mirrors the wapp gate in main — whatsapp
-// mode activates iff the session db exists, gateway mode iff the token does.
+// Enabled reports whether the gateway is configured: a url in config and an
+// install token in the secret store. the daemon refuses to start without both
+// — the gateway is nik's only route to whatsapp.
 func Enabled(cfg *config.Config, store secretStore) bool {
 	if cfg.Gateway.URL == "" {
 		return false

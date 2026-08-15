@@ -171,8 +171,8 @@ type Config struct {
 	Gateway GatewayConfig `yaml:"gateway"`
 }
 
-// GatewayConfig points nik at a nik-saas gateway instead of a local whatsapp
-// session. URL is the agent websocket endpoint; the install token and agent
+// GatewayConfig points nik at its nik-saas gateway — nik's only route to
+// whatsapp. URL is the agent websocket endpoint; the install token and agent
 // key live in the secret store, not here.
 type GatewayConfig struct {
 	URL string `yaml:"url"`
@@ -240,10 +240,6 @@ func (c Config) ErrLogPath() string {
 
 func (c Config) DBPath() string {
 	return filepath.Join(c.Home, "nik.db")
-}
-
-func (c Config) WappSessionDBPath() string {
-	return filepath.Join(c.Home, "wapp_session.db")
 }
 
 func (c Config) TmpPath() string {
