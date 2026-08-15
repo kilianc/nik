@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"mime"
@@ -368,6 +369,43 @@ func optional[T comparable](v T) *T {
 
 	return &v
 }
+
+// DefaultURL is the production gateway. Setup writes it when config names
+// no other; a dev install overrides it in config.yaml before running setup.
+const DefaultURL = "wss://nik-gw.ciuffolo.com/v1/agent"
+
+// Probe checks a token the way boot does: dial, hello, wait for the first
+// ack, hang up. A rejected token comes back as ErrAuthRejected so setup can
+// say "wrong token" rather than "network"; anything else is the dial or
+// handshake error. A throwaway key is fine — nothing is stored server-side
+// for an agent that never delivers.
+func Probe(ctx context.Context, url, token string) error {
+	_, priv, err := generateKey()
+	if err != nil {
+		return err
+	}
+	c := newClient(url, token, "setup", priv)
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() { done <- c.session(ctx) }()
+	select {
+	case <-c.ready:
+		cancel()
+		return nil
+	case err := <-done:
+		if err == nil {
+			return errors.New("gateway closed before saying hello")
+		}
+		return err
+	case <-ctx.Done():
+		return errors.New("no answer from the gateway within 20s")
+	}
+}
+
+// ErrAuthRejected is what Probe returns for a token the gateway refused.
+var ErrAuthRejected = errAuthRejected
 
 // tokenSecretName holds the install token from the nik-saas dashboard
 const tokenSecretName = "gateway_token"
