@@ -33,6 +33,8 @@ type client struct {
 	onMessage      func(context.Context, msgIn, msgContent) error
 	onConversation func(context.Context, convIn, convContent) error
 	onReady        func(ctx context.Context, ack helloAck)
+	ready          chan struct{}
+	readyOnce      sync.Once
 
 	mu      sync.Mutex
 	conn    *websocket.Conn
@@ -46,6 +48,7 @@ func newClient(url, token, name string, priv *[keySize]byte) *client {
 		name:  name,
 		priv:  priv,
 		pub:   publicKeyOf(priv),
+		ready: make(chan struct{}),
 	}
 }
 
@@ -165,6 +168,7 @@ func (c *client) onHelloAck(ctx context.Context, env envelope) error {
 
 	c.mu.Lock()
 	c.selfJID = ack.SelfJID
+	c.readyOnce.Do(func() { close(c.ready) })
 	c.mu.Unlock()
 
 	if c.onReady != nil {

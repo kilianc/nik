@@ -238,7 +238,30 @@ func runDaemon(args []string) {
 	if err != nil {
 		fatal("start gateway adapter", err)
 	}
-	slog.Info("gateway adapter active", "pkg", "main", "url", cfg.Gateway.URL)
+
+	// Connecting is a boot step, synchronous like opening the database: the
+	// gateway is nik's only transport, so nothing downstream starts until
+	// hello.ack proves the token works. Transient failures retry inside the
+	// session loop (visible below); a rejected token or a minute of silence
+	// ends the boot. The loop keeps running for the daemon's lifetime.
+	gwErr := make(chan error, 1)
+	go func() { gwErr <- gatewayAdapter.Connect(ctx) }()
+	select {
+	case <-gatewayAdapter.Ready():
+		slog.Info("gateway connected", "pkg", "main", "url", cfg.Gateway.URL)
+	case err := <-gwErr:
+		fatal("gateway", err)
+	case <-time.After(time.Minute):
+		fatal("gateway", errors.New("no connection within 60s: "+cfg.Gateway.URL))
+	case <-ctx.Done():
+		return
+	}
+	go func() {
+		if err := <-gwErr; err != nil && ctx.Err() == nil {
+			// Terminal mid-run: the token was revoked out from under us.
+			fatal("gateway", err)
+		}
+	}()
 
 	// llm clients
 
@@ -412,17 +435,6 @@ func runDaemon(args []string) {
 	taskRunner.Privileged(privilegedTools...)
 
 	// start
-
-	go func() {
-		err := gatewayAdapter.Connect(ctx)
-		if err != nil && ctx.Err() == nil {
-			// Connect only returns for terminal conditions (a rejected
-			// token); transient failures retry inside. The gateway is nik's
-			// only transport — without it the daemon is a brain with no
-			// mouth, so die loudly instead of idling.
-			fatal("gateway", err)
-		}
-	}()
 
 	sig := make(chan os.Signal, 2)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
