@@ -463,5 +463,6 @@ func FromConfig(cfg *config.Config, store secretStore, name string) (*Adapter, e
 			slog.Error("persist rotated gateway token", "pkg", "gateway", "error", err)
 		}
 	}
+	a.client.reloadToken = func() (string, error) { return store.Get(tokenSecretName) }
 	return a, nil
 }

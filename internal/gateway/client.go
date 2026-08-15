@@ -34,8 +34,13 @@ type client struct {
 	onConversation func(context.Context, convIn, convContent) error
 	onReady        func(ctx context.Context, ack helloAck)
 	onToken        func(token string)
-	ready          chan struct{}
-	readyOnce      sync.Once
+	// reloadToken re-reads the token from wherever it is persisted. A 401
+	// mid-run may mean the token rotated under us (another process
+	// connected — nik connect, a second daemon) and the store already
+	// holds the live one; try that before concluding the token is dead.
+	reloadToken func() (string, error)
+	ready       chan struct{}
+	readyOnce   sync.Once
 
 	mu      sync.Mutex
 	conn    *websocket.Conn
@@ -74,7 +79,11 @@ func (c *client) run(ctx context.Context) error {
 			return ctx.Err()
 		}
 		if errors.Is(err, errAuthRejected) {
-			return err
+			if !c.adoptStoredToken() {
+				return err
+			}
+			slog.Warn("gateway rejected our token; retrying with the one in the store", "pkg", "gateway")
+			continue
 		}
 
 		slog.Error("gateway session ended", "pkg", "gateway", "error", err, "retry_in", backoff)
@@ -89,6 +98,25 @@ func (c *client) run(ctx context.Context) error {
 			backoff *= 2
 		}
 	}
+}
+
+// adoptStoredToken swaps in the persisted token if it differs from the one
+// we just dialed with. False means there is nothing new to try.
+func (c *client) adoptStoredToken() bool {
+	if c.reloadToken == nil {
+		return false
+	}
+	fresh, err := c.reloadToken()
+	if err != nil || fresh == "" {
+		return false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if fresh == c.token {
+		return false
+	}
+	c.token = fresh
+	return true
 }
 
 func (c *client) session(ctx context.Context) error {
