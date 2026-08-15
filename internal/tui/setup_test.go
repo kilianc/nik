@@ -13,13 +13,16 @@ import (
 	"github.com/kciuffolo/nik/internal/secrets"
 )
 
-func TestSetupWelcomeToAuthChoice(t *testing.T) {
+// The gateway is the hard gate: welcome leads to it before anything else.
+// With no stored token, the step appears and asks; with one, it is probed
+// silently (covered by the transition table: validating → auth choice).
+func TestSetupWelcomeToGateway(t *testing.T) {
 	w := newTestSetup(t)
 
 	w, _ = w.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 
-	if w.step != stepAuthChoice {
-		t.Errorf("expected step stepAuthChoice, got %d", w.step)
+	if w.step != stepGatewayToken {
+		t.Errorf("expected step stepGatewayToken, got %d", w.step)
 	}
 }
 
@@ -247,9 +250,9 @@ func TestSetupStepTransitions(t *testing.T) {
 		{"codex login fail stays", stepCodexLogin, codexLoginMsg{err: errTest}, stepCodexLogin, true},
 		{"api key validation success advances", stepAPIKeyValidating, apiKeyValidatedMsg{}, stepExaKey, false},
 		{"api key validation fail reverts", stepAPIKeyValidating, apiKeyValidatedMsg{err: errTest}, stepAPIKey, true},
-		{"exa key validation success advances", stepExaKeyValidating, exaKeyValidatedMsg{}, stepGatewayToken, false},
+		{"exa key validation success advances", stepExaKeyValidating, exaKeyValidatedMsg{}, stepModel, false},
 		{"exa key validation fail reverts", stepExaKeyValidating, exaKeyValidatedMsg{err: errTest}, stepExaKey, true},
-		{"gateway validation success advances", stepGatewayValidating, gatewayValidatedMsg{}, stepModel, false},
+		{"gateway validation success advances", stepGatewayValidating, gatewayValidatedMsg{}, stepAuthChoice, false},
 		{"gateway validation fail reverts", stepGatewayValidating, gatewayValidatedMsg{err: errTest}, stepGatewayToken, true},
 		{"location resolved fail reverts", stepLocationResolving, locationResolvedMsg{err: errTest}, stepTimezone, true},
 		{"config write success advances", stepWriting, configWrittenMsg{}, stepDone, false},
@@ -406,8 +409,11 @@ func TestSetupWriteFansOutToContacts(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected configWrittenMsg, got %T", msg)
 	}
-	if got, err := secrets.New(cfg.Home).Get("gateway_token"); err != nil || got != "nik_test-token" {
-		t.Fatalf("gateway_token = %q, %v", got, err)
+	// The typed token is NOT what gets stored: the validation probe already
+	// stored the rotated one, and writing the typed value back would
+	// resurrect a dead install code.
+	if got, _ := secrets.New(cfg.Home).Get("gateway_token"); got == "nik_test-token" {
+		t.Fatal("writeSetupCmd stored the typed install token over the rotated one")
 	}
 	if written.err != nil {
 		t.Fatalf("write failed: %v", written.err)

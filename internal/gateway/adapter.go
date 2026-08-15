@@ -375,15 +375,15 @@ func optional[T comparable](v T) *T {
 const DefaultURL = "wss://nik-gw.ciuffolo.com/v1/agent"
 
 // Probe checks a token the way boot does: dial, hello, wait for the first
-// ack, hang up. A rejected token comes back as ErrAuthRejected so setup can
-// say "wrong token" rather than "network"; anything else is the dial or
-// handshake error. A throwaway key is fine — nothing is stored server-side
-// for an agent that never delivers.
-func Probe(ctx context.Context, url, token string) error {
-	_, priv, err := generateKey()
-	if err != nil {
-		return err
-	}
+// ack, hang up — and returns the token to keep, which is the rotated one
+// the ack carried (the gateway retires whatever we dialed with). A rejected
+// token comes back as ErrAuthRejected so callers can say "wrong token"
+// rather than "network"; anything else is the dial or handshake error.
+//
+// The key is real, not throwaway: hello registers it, and it must be the
+// same key the daemon will later hold, or messages sealed in between would
+// be unreadable. Pass the store's key.
+func Probe(ctx context.Context, url, token string, priv *[keySize]byte) (keep string, err error) {
 	c := newClient(url, token, "setup", priv)
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
@@ -393,15 +393,33 @@ func Probe(ctx context.Context, url, token string) error {
 	select {
 	case <-c.ready:
 		cancel()
-		return nil
+		c.mu.Lock()
+		keep = c.token
+		c.mu.Unlock()
+		return keep, nil
 	case err := <-done:
 		if err == nil {
-			return errors.New("gateway closed before saying hello")
+			return "", errors.New("gateway closed before saying hello")
 		}
-		return err
+		return "", err
 	case <-ctx.Done():
-		return errors.New("no answer from the gateway within 20s")
+		return "", errors.New("no answer from the gateway within 20s")
 	}
+}
+
+// ProbeWithStore is Probe for callers holding a secret store: it uses (or
+// creates) the store's agent key and persists whatever token the gateway
+// hands back, so the daemon that boots next dials with the right pair.
+func ProbeWithStore(ctx context.Context, url, token string, store secretStore) error {
+	priv, err := loadOrCreateKey(store)
+	if err != nil {
+		return err
+	}
+	keep, err := Probe(ctx, url, token, priv)
+	if err != nil {
+		return err
+	}
+	return store.Set(tokenSecretName, keep)
 }
 
 // ErrAuthRejected is what Probe returns for a token the gateway refused.
@@ -436,5 +454,14 @@ func FromConfig(cfg *config.Config, store secretStore, name string) (*Adapter, e
 		return nil, err
 	}
 
-	return NewAdapter(cfg, cfg.Gateway.URL, token, name, priv), nil
+	a := NewAdapter(cfg, cfg.Gateway.URL, token, name, priv)
+	// The gateway rotates the token on every connect. Persist each one: the
+	// token in the store is then always one nobody typed, and the install
+	// code from the dashboard's one-liner is dead after first use.
+	a.client.onToken = func(fresh string) {
+		if err := store.Set(tokenSecretName, fresh); err != nil {
+			slog.Error("persist rotated gateway token", "pkg", "gateway", "error", err)
+		}
+	}
+	return a, nil
 }

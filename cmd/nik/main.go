@@ -44,9 +44,11 @@ func main() {
 		subcmd = os.Args[1]
 	}
 
-	known := []string{"daemon", "install", "secrets", "tui"}
+	known := []string{"connect", "daemon", "install", "secrets", "tui"}
 
 	switch subcmd {
+	case "connect":
+		runConnect(os.Args[2:])
 	case "daemon":
 		runDaemon(os.Args[2:])
 	case "install":

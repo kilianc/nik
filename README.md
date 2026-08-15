@@ -30,8 +30,7 @@ Nik talks to your family through the gateway's WhatsApp number, so the phone sid
 
 1. Go to [nik.ciuffolo.com](https://nik.ciuffolo.com) and tap **Message nik**. Your WhatsApp opens with the message already written — send it.
 2. nik replies with a one-time sign-in link. Tap it: that's your account, no passwords. (Later, connect Google from the dashboard so you have a way back in if you lose your phone.)
-3. On the dashboard, create an **agent** — one per machine you'll run nik on.
-4. Copy the token it shows you. **It is displayed once.** You'll write it into the daemon's secret store in Step 3.
+3. On the dashboard, create an **agent** — one per machine you'll run nik on. It shows you a one-line install command.
 
 ## Step 2: Install nik
 
@@ -39,11 +38,15 @@ Supported platforms: macOS (Apple Silicon), Linux (amd64 + arm64). Intel Macs ca
 
 ### Quick install
 
+Paste the one-liner from your dashboard. It looks like:
+
 ```sh
-curl -fsSL https://github.com/kilianc/nik/releases/latest/download/install.sh | sh
+curl -fsSL https://nik.ciuffolo.com/install.sh | NIK_TOKEN=nik_... sh
 ```
 
-This downloads the matching `nik` binary into `/usr/local/bin`, runs `nik install --home ~/.nik` to register a launchd (macOS) or systemd (Linux) service, and starts the daemon.
+This downloads the matching `nik` binary into `/usr/local/bin`, links it to your account (`nik connect`), registers a launchd (macOS) or systemd (Linux) service, and starts the daemon. The token in the command is an install code: it works once and expires in 15 minutes — nik swaps it for a fresh one the moment it connects, so it's harmless in your shell history.
+
+Without `NIK_TOKEN`, the installer still works and first-run setup asks for the token instead.
 
 Override defaults via environment variables:
 
@@ -81,10 +84,10 @@ make build              # produces ./bin/nik
 
 Open a new terminal and run `nik`. A TUI walks you through:
 
-1. **Auth choice** — pick "Codex subscription" if you have ChatGPT Plus/Pro (recommended). The TUI opens a browser to complete Codex login, then you paste the callback URL back.
-2. **OpenAI API key** — paste your `sk-...` key. The TUI hits `api.openai.com/v1/models` to validate it before continuing.
-3. **Exa API key** — paste your Exa key. Validated against `api.exa.ai/search`.
-4. **Gateway** — paste the agent token from Step 1. nik connects to the gateway right there to prove it works before going on.
+1. **Gateway** — skipped if the installer already linked you; otherwise paste the agent token and nik connects right there to prove it works. Nothing else is asked until this passes.
+2. **Auth choice** — pick "Codex subscription" if you have ChatGPT Plus/Pro (recommended). The TUI opens a browser to complete Codex login, then you paste the callback URL back.
+3. **OpenAI API key** — paste your `sk-...` key. The TUI hits `api.openai.com/v1/models` to validate it before continuing.
+4. **Exa API key** — paste your Exa key. Validated against `api.exa.ai/search`.
 5. **Model** — pick the brain model (default: `gpt-5.6-sol`, the frontier tier; `gpt-5.6-terra` and `gpt-5.6-luna` are the cheaper siblings).
 6. **Shell sandbox** — pick **Docker container** (recommended; requires Docker installed) so the shell tool runs in an isolated image, or **Run on host** to skip the container.
 7. **Timezone & location** — type your city and country (e.g. "Rome, Italy"); the TUI resolves the timezone.
@@ -97,10 +100,10 @@ nik secrets read openai_key
 echo -n "sk-..." | nik secrets write openai_key
 ```
 
-Setup wrote the token to the secret store and `gateway.url` to `~/.nik/config.yaml`; both are required, and the daemon refuses to start without them — it has no other way to reach WhatsApp. To rotate the token later:
+The token lives in the secret store and `gateway.url` in `~/.nik/config.yaml`; both are required, and the daemon refuses to start without them — it has no other way to reach WhatsApp. The gateway rotates the token on every connect, so what's stored is never one a human saw. To relink from scratch (a new agent from the dashboard):
 
 ```sh
-echo -n "<new agent token>" | nik secrets write gateway_token
+nik connect nik_...
 ```
 
 There is nothing to claim: your number was linked the moment your first DM created the account.
