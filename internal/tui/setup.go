@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -19,6 +20,7 @@ import (
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/daemonctl"
 	"github.com/kciuffolo/nik/internal/db"
+	"github.com/kciuffolo/nik/internal/gateway"
 	"github.com/kciuffolo/nik/internal/id"
 	"github.com/kciuffolo/nik/internal/secrets"
 )
@@ -34,6 +36,8 @@ const (
 	stepAPIKeyValidating
 	stepExaKey
 	stepExaKeyValidating
+	stepGatewayToken
+	stepGatewayValidating
 	stepModel
 	stepDocker
 	stepTimezone
@@ -47,6 +51,7 @@ type setupModel struct {
 	step         setupStep
 	apiKeyIn     textinput.Model
 	exaKeyIn     textinput.Model
+	gatewayIn    textinput.Model
 	timezoneIn   textinput.Model
 	codexPasteIn textinput.Model
 	pulse        *pulse
@@ -117,6 +122,14 @@ func newSetupModel(cfg *config.Config, conn *sql.DB) setupModel {
 		exaKey.SetValue(existing)
 	}
 
+	gatewayIn := textinput.New()
+	gatewayIn.Placeholder = "nik_..."
+	gatewayIn.EchoMode = textinput.EchoPassword
+	gatewayIn.SetWidth(60)
+	if existing, err := secrets.New(cfg.Home).Get("gateway_token"); err == nil {
+		gatewayIn.SetValue(existing)
+	}
+
 	tz := cfg.Timezone
 	if tz == "" {
 		tz = time.Now().Location().String()
@@ -137,6 +150,7 @@ func newSetupModel(cfg *config.Config, conn *sql.DB) setupModel {
 		step:         stepWelcome,
 		apiKeyIn:     apiKey,
 		exaKeyIn:     exaKey,
+		gatewayIn:    gatewayIn,
 		timezoneIn:   tzIn,
 		codexPasteIn: codexPasteIn,
 		pulse:        p,
@@ -216,6 +230,19 @@ func validateAPIKeyCmd(key string) tea.Cmd {
 		}
 
 		return apiKeyValidatedMsg{}
+	}
+}
+
+type gatewayValidatedMsg struct{ err error }
+
+// validateGatewayCmd proves the token the way boot will: by connecting.
+func validateGatewayCmd(url, token string) tea.Cmd {
+	return func() tea.Msg {
+		err := gateway.Probe(context.Background(), url, token)
+		if errors.Is(err, gateway.ErrAuthRejected) {
+			err = fmt.Errorf("the gateway rejected that token — copy it again from your dashboard")
+		}
+		return gatewayValidatedMsg{err: err}
 	}
 }
 
@@ -353,9 +380,16 @@ func resolveLocationCmd(apiKey, input string) tea.Cmd {
 	}
 }
 
-func writeSetupCmd(cfg *config.Config, conn *sql.DB, apiKey, exaKey string) tea.Cmd {
+func writeSetupCmd(cfg *config.Config, conn *sql.DB, apiKey, exaKey, gatewayToken string) tea.Cmd {
 	return func() tea.Msg {
 		store := secrets.New(cfg.Home)
+
+		if gatewayToken != "" {
+			err := store.Set("gateway_token", gatewayToken)
+			if err != nil {
+				return configWrittenMsg{err: err}
+			}
+		}
 
 		if apiKey != "" {
 			err := store.Set("openai_key", apiKey)
@@ -479,6 +513,20 @@ func (m setupModel) Update(msg tea.Msg) (setupModel, tea.Cmd) {
 			return m, tea.Batch(cmds...)
 		}
 		m.err = nil
+		m.step = stepGatewayToken
+		m.gatewayIn.Focus()
+		cmds = append(cmds, textinput.Blink)
+		return m, tea.Batch(cmds...)
+
+	case gatewayValidatedMsg:
+		if msg.err != nil {
+			m.err = msg.err
+			m.step = stepGatewayToken
+			m.gatewayIn.Focus()
+			cmds = append(cmds, textinput.Blink)
+			return m, tea.Batch(cmds...)
+		}
+		m.err = nil
 		m.step = stepModel
 		return m, tea.Batch(cmds...)
 
@@ -494,7 +542,8 @@ func (m setupModel) Update(msg tea.Msg) (setupModel, tea.Cmd) {
 		m.cfg.Timezone = msg.timezone
 		m.cfg.Location = msg.location
 		m.step = stepWriting
-		cmds = append(cmds, writeSetupCmd(m.cfg, m.conn, m.apiKeyIn.Value(), m.exaKeyIn.Value()))
+		m.cfg.Gateway.URL = m.gatewayURL()
+		cmds = append(cmds, writeSetupCmd(m.cfg, m.conn, m.apiKeyIn.Value(), m.exaKeyIn.Value(), strings.TrimSpace(m.gatewayIn.Value())))
 		return m, tea.Batch(cmds...)
 
 	case configWrittenMsg:
@@ -536,6 +585,8 @@ func (m setupModel) Update(msg tea.Msg) (setupModel, tea.Cmd) {
 		m, stepCmd = m.updateAPIKey(msg)
 	case stepExaKey:
 		m, stepCmd = m.updateExaKey(msg)
+	case stepGatewayToken:
+		m, stepCmd = m.updateGatewayToken(msg)
 	case stepModel:
 		m, stepCmd = m.updateModel(msg)
 	case stepDocker:
@@ -665,6 +716,33 @@ func (m setupModel) updateExaKey(msg tea.Msg) (setupModel, tea.Cmd) {
 	return m, cmd
 }
 
+func (m setupModel) updateGatewayToken(msg tea.Msg) (setupModel, tea.Cmd) {
+	if key, ok := msg.(tea.KeyMsg); ok && key.String() == "enter" {
+		val := strings.TrimSpace(m.gatewayIn.Value())
+		if val == "" {
+			m.err = fmt.Errorf("the gateway token is required — nik cannot reach WhatsApp without it")
+			return m, nil
+		}
+		m.step = stepGatewayValidating
+		m.err = nil
+		return m, validateGatewayCmd(m.gatewayURL(), val)
+	}
+
+	var cmd tea.Cmd
+	m.gatewayIn, cmd = m.gatewayIn.Update(msg)
+	return m, cmd
+}
+
+// gatewayURL is the configured gateway, else production. A dev install
+// writes gateway.url into config.yaml before running setup; nothing here
+// ever asks for a URL.
+func (m setupModel) gatewayURL() string {
+	if m.cfg.Gateway.URL != "" {
+		return m.cfg.Gateway.URL
+	}
+	return gateway.DefaultURL
+}
+
 func (m setupModel) updateModel(msg tea.Msg) (setupModel, tea.Cmd) {
 	if key, ok := msg.(tea.KeyMsg); ok {
 		switch key.String() {
@@ -759,6 +837,10 @@ func (m setupModel) View() string {
 		return m.viewExaKey()
 	case stepExaKeyValidating:
 		return m.spinnerView() + " validating Exa key..."
+	case stepGatewayToken:
+		return m.viewGatewayToken()
+	case stepGatewayValidating:
+		return m.spinnerView() + " connecting to the gateway..."
 	case stepModel:
 		return m.viewModel()
 	case stepDocker:
@@ -890,6 +972,21 @@ func (m setupModel) viewExaKey() string {
 		s += errorStyle.Render(m.err.Error()) + "\n"
 	}
 	s += dimStyle.Render("\npress enter to validate")
+	return s
+}
+
+func (m setupModel) viewGatewayToken() string {
+	s := labelStyle.Render("Connect to the gateway") + "\n\n"
+	s += hintStyle.Render("nik reaches WhatsApp through the nik gateway — no SIM, no QR code.") + "\n"
+	s += hintStyle.Render("It connects with a token from your account:") + "\n\n"
+	s += hintStyle.Render("  1. sign in at https://nik.ciuffolo.com") + "\n"
+	s += hintStyle.Render("  2. create an agent — one per machine you run nik on") + "\n"
+	s += hintStyle.Render("  3. copy the token it shows you (it is shown once)") + "\n\n"
+	s += m.gatewayIn.View() + "\n"
+	if m.err != nil {
+		s += errorStyle.Render(m.err.Error()) + "\n"
+	}
+	s += dimStyle.Render("\npress enter to connect")
 	return s
 }
 

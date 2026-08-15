@@ -10,6 +10,7 @@ import (
 	"github.com/kciuffolo/nik/internal/codex"
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/db"
+	"github.com/kciuffolo/nik/internal/secrets"
 )
 
 func TestSetupWelcomeToAuthChoice(t *testing.T) {
@@ -246,8 +247,10 @@ func TestSetupStepTransitions(t *testing.T) {
 		{"codex login fail stays", stepCodexLogin, codexLoginMsg{err: errTest}, stepCodexLogin, true},
 		{"api key validation success advances", stepAPIKeyValidating, apiKeyValidatedMsg{}, stepExaKey, false},
 		{"api key validation fail reverts", stepAPIKeyValidating, apiKeyValidatedMsg{err: errTest}, stepAPIKey, true},
-		{"exa key validation success advances", stepExaKeyValidating, exaKeyValidatedMsg{}, stepModel, false},
+		{"exa key validation success advances", stepExaKeyValidating, exaKeyValidatedMsg{}, stepGatewayToken, false},
 		{"exa key validation fail reverts", stepExaKeyValidating, exaKeyValidatedMsg{err: errTest}, stepExaKey, true},
+		{"gateway validation success advances", stepGatewayValidating, gatewayValidatedMsg{}, stepModel, false},
+		{"gateway validation fail reverts", stepGatewayValidating, gatewayValidatedMsg{err: errTest}, stepGatewayToken, true},
 		{"location resolved fail reverts", stepLocationResolving, locationResolvedMsg{err: errTest}, stepTimezone, true},
 		{"config write success advances", stepWriting, configWrittenMsg{}, stepDone, false},
 		{"config write fail keeps step", stepWriting, configWrittenMsg{err: errTest}, stepWriting, true},
@@ -397,11 +400,14 @@ func TestSetupWriteFansOutToContacts(t *testing.T) {
 	cfg.Location = "Rome, Italy"
 	conn := newTestDB(t)
 
-	msg := writeSetupCmd(cfg, conn, "", "")()
+	msg := writeSetupCmd(cfg, conn, "", "", "nik_test-token")()
 
 	written, ok := msg.(configWrittenMsg)
 	if !ok {
 		t.Fatalf("expected configWrittenMsg, got %T", msg)
+	}
+	if got, err := secrets.New(cfg.Home).Get("gateway_token"); err != nil || got != "nik_test-token" {
+		t.Fatalf("gateway_token = %q, %v", got, err)
 	}
 	if written.err != nil {
 		t.Fatalf("write failed: %v", written.err)
