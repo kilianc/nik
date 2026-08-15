@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -20,8 +21,13 @@ import (
 // fakeGateway is the platform side of the protocol: accepts the websocket,
 // answers hello, and lets a test push envelopes down and observe what comes up
 type fakeGateway struct {
-	t   *testing.T
-	srv *httptest.Server
+	// token is the one bearer the gateway currently accepts; it rotates on
+	// every hello, like the real one.
+	token string
+	// rotations counts hellos, so tests can assert rotation happened.
+	rotations int
+	t         *testing.T
+	srv       *httptest.Server
 
 	mu       sync.Mutex
 	conn     *websocket.Conn
@@ -38,6 +44,7 @@ func newFakeGateway(t *testing.T) *fakeGateway {
 
 	g := &fakeGateway{
 		t:       t,
+		token:   "test-token",
 		selfJID: "16502811468@s.whatsapp.net",
 		uploads: map[string][]byte{},
 		blobs:   map[string][]byte{},
@@ -59,7 +66,10 @@ func (g *fakeGateway) url() string {
 }
 
 func (g *fakeGateway) handleAgent(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("Authorization") != "Bearer test-token" {
+	g.mu.Lock()
+	want := g.token
+	g.mu.Unlock()
+	if r.Header.Get("Authorization") != "Bearer "+want {
 		http.Error(w, "bad token", http.StatusUnauthorized)
 
 		return
@@ -102,9 +112,13 @@ func (g *fakeGateway) handleAgent(w http.ResponseWriter, r *http.Request) {
 
 			g.mu.Lock()
 			g.agentPub = &pub
+			g.rotations++
+			g.token = fmt.Sprintf("nik_rotated-%d", g.rotations)
+			fresh := g.token
 			g.mu.Unlock()
 
 			ackEnv, _ := newEnvelope(typeHelloAck, helloAck{
+				Token:   fresh,
 				Number:  "+16502811468",
 				SelfJID: g.selfJID,
 			})
@@ -120,7 +134,10 @@ func (g *fakeGateway) handleAgent(w http.ResponseWriter, r *http.Request) {
 }
 
 func (g *fakeGateway) handleUpload(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("Authorization") != "Bearer test-token" {
+	g.mu.Lock()
+	want := g.token
+	g.mu.Unlock()
+	if r.Header.Get("Authorization") != "Bearer "+want {
 		http.Error(w, "bad token", http.StatusUnauthorized)
 
 		return

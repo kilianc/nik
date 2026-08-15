@@ -33,6 +33,7 @@ type client struct {
 	onMessage      func(context.Context, msgIn, msgContent) error
 	onConversation func(context.Context, convIn, convContent) error
 	onReady        func(ctx context.Context, ack helloAck)
+	onToken        func(token string)
 	ready          chan struct{}
 	readyOnce      sync.Once
 
@@ -91,9 +92,12 @@ func (c *client) run(ctx context.Context) error {
 }
 
 func (c *client) session(ctx context.Context) error {
+	c.mu.Lock()
+	token := c.token
+	c.mu.Unlock()
 	dialCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	conn, resp, err := websocket.Dial(dialCtx, c.url, &websocket.DialOptions{
-		HTTPHeader: http.Header{"Authorization": {"Bearer " + c.token}},
+		HTTPHeader: http.Header{"Authorization": {"Bearer " + token}},
 	})
 	cancel()
 	if err != nil {
@@ -168,9 +172,16 @@ func (c *client) onHelloAck(ctx context.Context, env envelope) error {
 
 	c.mu.Lock()
 	c.selfJID = ack.SelfJID
+	rotated := ack.Token != "" && ack.Token != c.token
+	if rotated {
+		c.token = ack.Token
+	}
 	c.readyOnce.Do(func() { close(c.ready) })
 	c.mu.Unlock()
 
+	if rotated && c.onToken != nil {
+		c.onToken(ack.Token)
+	}
 	if c.onReady != nil {
 		c.onReady(ctx, ack)
 	}

@@ -29,6 +29,8 @@ type setupStep int
 
 const (
 	stepWelcome setupStep = iota
+	stepGatewayToken
+	stepGatewayValidating
 	stepAuthChoice
 	stepCodexLogin
 	stepCodexDone
@@ -36,8 +38,6 @@ const (
 	stepAPIKeyValidating
 	stepExaKey
 	stepExaKeyValidating
-	stepGatewayToken
-	stepGatewayValidating
 	stepModel
 	stepDocker
 	stepTimezone
@@ -236,11 +236,13 @@ func validateAPIKeyCmd(key string) tea.Cmd {
 type gatewayValidatedMsg struct{ err error }
 
 // validateGatewayCmd proves the token the way boot will: by connecting.
-func validateGatewayCmd(url, token string) tea.Cmd {
+// The gateway rotates on connect, so the store ends up holding the token
+// it handed back, not the one that was pasted.
+func validateGatewayCmd(home, url, token string) tea.Cmd {
 	return func() tea.Msg {
-		err := gateway.Probe(context.Background(), url, token)
+		err := gateway.ProbeWithStore(context.Background(), url, token, secrets.New(home))
 		if errors.Is(err, gateway.ErrAuthRejected) {
-			err = fmt.Errorf("the gateway rejected that token — copy it again from your dashboard")
+			err = fmt.Errorf("the gateway rejected that token — it may have expired (they last 15 minutes); make a new agent on your dashboard")
 		}
 		return gatewayValidatedMsg{err: err}
 	}
@@ -384,12 +386,9 @@ func writeSetupCmd(cfg *config.Config, conn *sql.DB, apiKey, exaKey, gatewayToke
 	return func() tea.Msg {
 		store := secrets.New(cfg.Home)
 
-		if gatewayToken != "" {
-			err := store.Set("gateway_token", gatewayToken)
-			if err != nil {
-				return configWrittenMsg{err: err}
-			}
-		}
+		// gateway_token was already stored — rotated — by the validation
+		// probe; writing the typed value here would resurrect a dead token.
+		_ = gatewayToken
 
 		if apiKey != "" {
 			err := store.Set("openai_key", apiKey)
@@ -513,9 +512,7 @@ func (m setupModel) Update(msg tea.Msg) (setupModel, tea.Cmd) {
 			return m, tea.Batch(cmds...)
 		}
 		m.err = nil
-		m.step = stepGatewayToken
-		m.gatewayIn.Focus()
-		cmds = append(cmds, textinput.Blink)
+		m.step = stepModel
 		return m, tea.Batch(cmds...)
 
 	case gatewayValidatedMsg:
@@ -527,7 +524,7 @@ func (m setupModel) Update(msg tea.Msg) (setupModel, tea.Cmd) {
 			return m, tea.Batch(cmds...)
 		}
 		m.err = nil
-		m.step = stepModel
+		m.step = stepAuthChoice
 		return m, tea.Batch(cmds...)
 
 	case locationResolvedMsg:
@@ -602,8 +599,16 @@ func (m setupModel) Update(msg tea.Msg) (setupModel, tea.Cmd) {
 
 func (m setupModel) updateWelcome(msg tea.Msg) (setupModel, tea.Cmd) {
 	if key, ok := msg.(tea.KeyMsg); ok && key.String() == "enter" {
-		m.step = stepAuthChoice
-		return m, nil
+		// The gateway is the hard gate: prove the account before anything
+		// else is asked. A token the installer already stored is checked
+		// silently — the step only appears when there is something to type.
+		if tok := strings.TrimSpace(m.gatewayIn.Value()); tok != "" {
+			m.step = stepGatewayValidating
+			return m, validateGatewayCmd(m.cfg.Home, m.gatewayURL(), tok)
+		}
+		m.step = stepGatewayToken
+		m.gatewayIn.Focus()
+		return m, textinput.Blink
 	}
 	return m, nil
 }
@@ -725,7 +730,7 @@ func (m setupModel) updateGatewayToken(msg tea.Msg) (setupModel, tea.Cmd) {
 		}
 		m.step = stepGatewayValidating
 		m.err = nil
-		return m, validateGatewayCmd(m.gatewayURL(), val)
+		return m, validateGatewayCmd(m.cfg.Home, m.gatewayURL(), val)
 	}
 
 	var cmd tea.Cmd
