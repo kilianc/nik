@@ -52,6 +52,11 @@ func (a *Adapter) Connect(ctx context.Context) error {
 	return a.client.run(ctx)
 }
 
+// Ready is closed once the first hello.ack lands — the gateway accepted the
+// token and this daemon is live. Boot blocks on it: connecting is a boot
+// step, not a background hope.
+func (a *Adapter) Ready() <-chan struct{} { return a.client.ready }
+
 func (a *Adapter) Stop(_ context.Context) error {
 	a.client.close()
 
