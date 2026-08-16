@@ -58,7 +58,7 @@ func (m chatModel) activitySuffix() string {
 }
 
 func (m chatModel) chromeStrip() string {
-	parts := []string{"v" + version.V}
+	parts := []string{version.Number}
 	if m.cfg != nil {
 		if model := modelAcronym(m.cfg.Models.Main.Model); model != "" {
 			parts = append(parts, model)

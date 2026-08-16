@@ -145,6 +145,8 @@ Re-run the install script. The binary is replaced in place; the daemon is restar
 curl -fsSL https://github.com/kilianc/nik/releases/latest/download/install.sh | sh
 ```
 
+`nik version` prints the release and the commit it was built from — that pair is what a bug report needs. A binary you built yourself says `dev`.
+
 ## Uninstalling
 
 Stop the service and remove the binary. The workspace at `~/.nik` (database, history, secrets) is left in place — delete it manually if you really mean it.
