@@ -44,9 +44,11 @@ func main() {
 		subcmd = os.Args[1]
 	}
 
-	known := []string{"connect", "daemon", "install", "secrets", "tui"}
+	known := []string{"connect", "daemon", "install", "secrets", "tui", "version"}
 
 	switch subcmd {
+	case "version":
+		fmt.Println(version.String())
 	case "connect":
 		runConnect(os.Args[2:])
 	case "daemon":
@@ -79,7 +81,7 @@ func runDaemon(args []string) {
 		" 88   8888   888   888  88o",
 		"o88o    88  o888o o888o o888o",
 		"",
-		"Noetic Intelligence Kernel v" + version.V,
+		"Noetic Intelligence Kernel " + version.String(),
 		"",
 	}
 

@@ -137,6 +137,12 @@ EOF
 4. `/usr/bin/git log -1 --pretty=%B` and verify no forbidden trailer lines are present
 5. `/usr/bin/git status --short`
 
+## Releases
+
+Semver tags, `vMAJOR.MINOR.PATCH`. `VERSION` at the repo root is the release of record and `make release` is the only thing that writes it — it refuses to run off main, on a dirty tree, behind origin, or onto a tag that already exists, runs `make ci`, then commits VERSION, tags it, and pushes both. `make release ARGS="-bump minor"` for a minor, `-dry-run` to see what it would do, `-no-ci` when you just ran it.
+
+Every binary is stamped via ldflags with the release and the commit (`nik version` prints `v0.3.0 (a8e2c2f)`); a build that never went through the workflow says `dev`. The release workflow refuses any tag that disagrees with the VERSION committed alongside it, refuses a binary that came out unstamped, and publishes the GitHub release last — so a release on the releases page means the binaries are attached to it, not merely that someone pushed a tag. Notes are generated from the PRs merged since the previous release.
+
 ## Go
 
 ### Style
