@@ -1,5 +1,7 @@
 name: Release
 
+# a release is a tag, and the tag must match the VERSION committed alongside
+# it. cut one with `make release`, which bumps both and pushes them together.
 on:
   push:
     tags:
@@ -13,9 +15,36 @@ on:
 permissions:
   contents: write
 
+# two releases must never race for the same tag's assets.
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Version check
+        run: make check-version tag=${{ github.event.inputs.tag || github.ref }}
+
+      # the tagged commit must be green even if it was tagged out of band.
+      - name: CI
+        run: make ci
+
   build:
     name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
+    needs: verify
     strategy:
       fail-fast: false
       matrix:
@@ -39,25 +68,63 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.25'
+          go-version-file: go.mod
 
-      - name: Version check
-        run: make check-version tag=${{ github.event.inputs.tag || github.ref }}
-
+      # CGO is on for sqlite, so every target builds natively on its own
+      # runner rather than cross-compiling.
       - name: Build
-        env:
-          CGO_ENABLED: '1'
-          CGO_CFLAGS: '-w'
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-        run: |
-          mkdir -p bin
-          go build -o bin/nik-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/nik/
+        run: make build-release
 
-      - name: Upload release asset
-        uses: softprops/action-gh-release@v3
+      # an unstamped binary reports "dev" forever, in every bug report it
+      # ever appears in. cheaper to catch here than on someone's laptop.
+      - name: Stamp check
+        run: |
+          got="$(bin/nik-${{ matrix.goos }}-${{ matrix.goarch }} version)"
+          echo "$got"
+          case "$got" in
+            "$(cat VERSION) ("*")") ;;
+            *) echo "::error::binary reports $got, VERSION is $(cat VERSION)"; exit 1 ;;
+          esac
+
+      - name: Upload build
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
-          files: |
-            bin/nik-${{ matrix.goos }}-${{ matrix.goarch }}
-            ${{ (matrix.goos == 'linux' && matrix.goarch == 'amd64') && 'install.sh' || '' }}
+          name: nik-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: bin/nik-${{ matrix.goos }}-${{ matrix.goarch }}
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Publish
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Collect the binaries
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      # install.sh ships with the release so a pinned installer and the
+      # binaries it downloads are always the same vintage.
+      - name: Add the installer
+        run: cp install.sh dist/
+
+      # last, so a release on the releases page means the binaries are
+      # attached to it — not merely that someone pushed a tag. notes come
+      # from the PRs merged since the previous release.
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" --clobber dist/*
+          else
+            gh release create "$TAG" --title "$TAG" --generate-notes dist/*
+          fi

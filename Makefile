@@ -3,10 +3,17 @@ export CGO_CFLAGS = -w
 NIK_HOME ?= workspace
 BIN_DIR ?= bin
 
+# VERSION is the release of record, written only by `make release`. every
+# binary carries it plus the commit, so a bug report names one exact build.
+VERSION := $(shell cat VERSION)
+GIT_SHA := $(shell git rev-parse --short=7 HEAD 2>/dev/null || echo unknown)
+PKG := github.com/kciuffolo/nik/internal/version
+LDFLAGS := -X $(PKG).Number=$(VERSION) -X $(PKG).SHA=$(GIT_SHA)
+
 .PHONY: build
 build: build-linux-$(shell go env GOARCH)
 	@mkdir -p $(BIN_DIR)
-	CGO_ENABLED=1 go build -o $(BIN_DIR)/nik ./cmd/nik/
+	CGO_ENABLED=1 go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/nik ./cmd/nik/
 
 .PHONY: build-linux-amd64
 build-linux-amd64:
@@ -16,7 +23,7 @@ build-linux-amd64:
 	  -v nik-build-cache-amd64:/root/.cache/go-build \
 	  -e CGO_ENABLED=1 -e CGO_CFLAGS=-w \
 	  golang:1.25 \
-	  go build -o $(BIN_DIR)/nik-linux-amd64 ./cmd/nik/
+	  go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/nik-linux-amd64 ./cmd/nik/
 
 .PHONY: build-linux-arm64
 build-linux-arm64:
@@ -26,20 +33,28 @@ build-linux-arm64:
 	  -v nik-build-cache-arm64:/root/.cache/go-build \
 	  -e CGO_ENABLED=1 -e CGO_CFLAGS=-w \
 	  golang:1.25 \
-	  go build -o $(BIN_DIR)/nik-linux-arm64 ./cmd/nik/
+	  go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/nik-linux-arm64 ./cmd/nik/
 
 .PHONY: build-darwin-amd64
 build-darwin-amd64:
 	@mkdir -p $(BIN_DIR)
-	CGO_ENABLED=1 GOARCH=amd64 go build -o $(BIN_DIR)/nik-darwin-amd64 ./cmd/nik/
+	CGO_ENABLED=1 GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/nik-darwin-amd64 ./cmd/nik/
 
 .PHONY: build-darwin-arm64
 build-darwin-arm64:
 	@mkdir -p $(BIN_DIR)
-	CGO_ENABLED=1 GOARCH=arm64 go build -o $(BIN_DIR)/nik-darwin-arm64 ./cmd/nik/
+	CGO_ENABLED=1 GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/nik-darwin-arm64 ./cmd/nik/
 
 .PHONY: build-all
 build-all: build-linux-amd64 build-linux-arm64 build-darwin-amd64 build-darwin-arm64
+
+# what the release workflow builds: native, for whatever runner it lands on,
+# stripped, and named after the platform the installer asks for.
+.PHONY: build-release
+build-release:
+	@mkdir -p $(BIN_DIR)
+	CGO_ENABLED=1 go build -ldflags "-s -w $(LDFLAGS)" \
+	  -o $(BIN_DIR)/nik-$(shell go env GOOS)-$(shell go env GOARCH) ./cmd/nik/
 
 .PHONY: lint
 lint:
@@ -49,6 +64,15 @@ lint:
 
 .PHONY: test
 test:
+	go test ./...
+
+# the gate in front of a release. unlike `lint` it rewrites nothing: a check
+# that fixes what it finds always passes, which is no gate at all.
+.PHONY: ci
+ci:
+	@files="$$(gofmt -l .)"; if [ -n "$$files" ]; then \
+	  echo "gofmt needed:"; echo "$$files"; exit 1; fi
+	go vet ./...
 	go test ./...
 
 .PHONY: coverage
@@ -107,10 +131,16 @@ workbench:
 shell-image:
 	docker build -t nik-shell:latest -f workspace/Dockerfile workspace/
 
+# a hand-cut tag that drifts from VERSION would publish binaries stamped with
+# someone else's release number. the workflow calls this before it builds.
 .PHONY: check-version
 check-version:
-	@expected="v$$(sed -n 's/^const V = "\(.*\)"/\1/p' internal/version/version.go)"; \
+	@expected="$$(cat VERSION)"; \
 	  actual="$$(echo $(tag) | sed 's|refs/tags/||')"; \
 	  if [ "$$expected" != "$$actual" ]; then \
-	    echo "version mismatch: code=$$expected tag=$$actual"; exit 1; \
+	    echo "version mismatch: VERSION=$$expected tag=$$actual"; exit 1; \
 	  fi
+
+.PHONY: release
+release:
+	@go run ./tools/release $(ARGS)

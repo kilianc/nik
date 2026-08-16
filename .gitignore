@@ -23,6 +23,9 @@
 !Makefile
 !internal/shell/Dockerfile
 
+# Track the release of record (written only by `make release`)
+!VERSION
+
 # Track docs
 !.gitignore
 !*.md

@@ -47,8 +47,8 @@ func TestHeaderShowsVersionModelStatus(t *testing.T) {
 	if !strings.Contains(out, "nik") {
 		t.Errorf("expected 'nik' brand, got %q", out)
 	}
-	if !strings.Contains(out, version.V) {
-		t.Errorf("expected version %s, got %q", version.V, out)
+	if !strings.Contains(out, version.Number) {
+		t.Errorf("expected version %s, got %q", version.Number, out)
 	}
 	if !strings.Contains(out, pathLeaf) {
 		t.Errorf("expected workspace tail %q in header, got %q", pathLeaf, out)
