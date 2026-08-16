@@ -91,6 +91,9 @@ func TestDecodeHello(t *testing.T) {
 	if p.PublicKey == "" {
 		t.Error("public_key is required")
 	}
+	if p.ClientVersion != "v0.2.0" {
+		t.Errorf("client_version = %q", p.ClientVersion)
+	}
 }
 
 func TestDecodeHelloAck(t *testing.T) {
