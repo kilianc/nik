@@ -177,6 +177,8 @@ Every binary is stamped via ldflags with the release and the commit (`nik versio
 
 ### Testing
 
+- `make ci` is the gate: gofmt (checked, never rewritten), `go vet`, `go test ./...`. It runs on every PR and on main, on both macOS and Linux — the daemon control code is per-OS and each half skips itself on the other, so one runner would never exercise launchd or systemd. `make release` runs the same target before it tags.
+- **`tmux` must be on `PATH`**: it is how the shell tool runs commands, and `internal/shell` fails rather than skips without it. A suite that quietly skips the shell reads green while proving nothing about it.
 - tests run against in-memory SQLite (`:memory:`) where applicable
 - `make test` or regular `go test`
 - **strict 1:1 test file naming**: every `.go` file has a `_test.go` with the same base name (`foo.go` → `foo_test.go`). Tests for code in `foo.go` go in `foo_test.go`, nowhere else. Never name a test file after a concept (e.g. `stale_test.go`) when the code lives in another file (e.g. `service.go`). When creating a new `.go` file, create its `_test.go` in the same step. If a file gets too big it's a signal the base `.go` file might have to be split

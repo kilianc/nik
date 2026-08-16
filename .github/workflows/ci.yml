@@ -1,0 +1,66 @@
+name: ci
+
+# Every PR, and main after it lands. `make ci` is the same gate a release
+# runs (tools/release, and the verify job in release.yaml), so a green PR
+# means a release cut from that commit will not fail on tests.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Superseded runs are wasted runners: a second push to the same PR makes the
+# first answer irrelevant. Nothing here deploys, so cancelling is free.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      # Both platforms nik ships to. Not redundancy: the daemon control code
+      # is per-OS and each half skips itself on the other, so a single-runner
+      # CI would never once run launchd's tests or systemd's.
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      # tmux is not a test fixture, it is how the shell tool runs commands,
+      # and internal/shell fails rather than skips without it — deliberately,
+      # since a suite that quietly skips the shell reads green while proving
+      # nothing about it. Installed here so those tests actually run.
+      - name: tmux (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq tmux
+
+      - name: tmux (macOS)
+        if: runner.os == 'macOS'
+        run: brew list tmux >/dev/null 2>&1 || brew install tmux
+
+      # CGO is on for mattn/go-sqlite3 — nik's own store. Both runners carry
+      # a C toolchain; naming it here is what makes that a requirement rather
+      # than an accident of the image.
+      - name: CI
+        env:
+          CGO_ENABLED: '1'
+        run: make ci
+
+      # The release build, on the PR that could break it, rather than at 1am
+      # when someone is cutting a release. Proves the ldflags stamp still
+      # lands: an unstamped binary reports "dev" forever.
+      - name: Release build
+        run: |
+          make build-release
+          got="$(bin/nik-$(go env GOOS)-$(go env GOARCH) version)"
+          echo "$got"
+          case "$got" in
+            "$(cat VERSION) ("*")") ;;
+            *) echo "::error::binary reports $got, VERSION is $(cat VERSION)"; exit 1 ;;
+          esac
