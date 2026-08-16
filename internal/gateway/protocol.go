@@ -68,6 +68,11 @@ type hello struct {
 	Version   int    `json:"version"`
 	AgentName string `json:"agent_name,omitempty"`
 	PublicKey string `json:"public_key"`
+	// ClientVersion is nik's own release, stamped at build time. optional:
+	// every nik released before this field existed omits it, and the
+	// platform cannot ask them to say it. a build that never went through a
+	// release says "dev".
+	ClientVersion string `json:"client_version,omitempty"`
 }
 
 // helloAck carries the central number's identity. There is no claim state:
