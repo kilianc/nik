@@ -5,6 +5,7 @@
   "payload": {
     "version": 2,
     "agent_name": "kitchen-mac",
-    "public_key": "3q2-796tvu_erb7v3q2-796tvu_erb7v3q2-796tvu8"
+    "public_key": "3q2-796tvu_erb7v3q2-796tvu_erb7v3q2-796tvu8",
+    "client_version": "v0.2.0"
   }
 }

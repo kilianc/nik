@@ -16,6 +16,8 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
+
+	"github.com/kciuffolo/nik/internal/version"
 )
 
 // client speaks the nik-saas gateway protocol. it always dials out — nik sits
@@ -142,9 +144,10 @@ func (c *client) session(ctx context.Context) error {
 	defer conn.CloseNow()
 
 	err = c.send(ctx, typeHello, hello{
-		Version:   protocolVersion,
-		AgentName: c.name,
-		PublicKey: base64.RawURLEncoding.EncodeToString(c.pub[:]),
+		Version:       protocolVersion,
+		AgentName:     c.name,
+		PublicKey:     base64.RawURLEncoding.EncodeToString(c.pub[:]),
+		ClientVersion: version.Number,
 	})
 	if err != nil {
 		return err
