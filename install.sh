@@ -33,6 +33,13 @@ else
   BASE="https://github.com/kilianc/nik/releases/download/${VERSION}"
 fi
 
+# Root is reached with sudo only when we are not already root. A container is
+# root with no sudo installed at all — nik-saas installs into its cells exactly
+# that way — and there `sudo mv` is not a permission error but `sudo: not
+# found`, exit 127, which under `set -eu` ends the install on the first binary.
+SUDO=""
+[ "$(id -u)" -eq 0 ] || SUDO=sudo
+
 # nikd and nikctl install together. A host with one and not the other has no
 # working nik: nikctl writes a service file pointing at its sibling, and nikd
 # mounts its sibling into the shell sandbox.
@@ -40,7 +47,7 @@ fetch() {
   echo "Downloading $1 from ${BASE}/$1..."
   curl -fsSL "${BASE}/$1" -o "/tmp/$1"
   chmod +x "/tmp/$1"
-  sudo mv "/tmp/$1" "${INSTALL_DIR}/$2"
+  $SUDO mv "/tmp/$1" "${INSTALL_DIR}/$2"
 }
 
 fetch "nikd-${OS}-${ARCH}" nikd
@@ -48,7 +55,7 @@ fetch "nikctl-${OS}-${ARCH}" nikctl
 
 # `nik` is how nikctl is spelled in the house — the README, the docs and
 # everyone's muscle memory say it, and `nikctl chat` reads like infrastructure.
-sudo ln -sf "${INSTALL_DIR}/nikctl" "${INSTALL_DIR}/nik"
+$SUDO ln -sf "${INSTALL_DIR}/nikctl" "${INSTALL_DIR}/nik"
 
 # On macOS the sandbox cannot run the native client, so the linux build of
 # nikctl rides along for the container mount. nikd is never mounted there.
