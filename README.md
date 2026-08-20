@@ -94,7 +94,7 @@ Open a new terminal and run `nik`. A TUI walks you through:
 6. **Shell sandbox** — pick **Docker container** (recommended; requires Docker installed) so the shell tool runs in an isolated image, or **Run on host** to skip the container.
 7. **Timezone & location** — type your city and country (e.g. "Rome, Italy"); the TUI resolves the timezone.
 
-Keys are encrypted with NaCl secretbox and stored in `~/.nik/secrets/secrets.enc` (the per-install key sits next to it in `secrets.key`; keep both private and back them up if you care about the data). Inspect or rotate later with:
+Keys are encrypted with NaCl secretbox and stored in `~/.nik/secrets/secrets.enc` (the per-install key sits next to it in `secrets.key`; keep both private and back them up if you care about the data). The daemon holds them — `nik secrets` asks it rather than decrypting the files itself, which is what lets skills in the shell sandbox be told no. Inspect or rotate with:
 
 ```sh
 nik secrets list

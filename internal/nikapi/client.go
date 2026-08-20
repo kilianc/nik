@@ -16,6 +16,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -33,8 +34,17 @@ type Client struct {
 	http   *http.Client
 }
 
-// New dials the owner socket in the given home.
+// New dials nikd for the given home.
+//
+// NIK_SOCKET overrides the path, which is how nikctl works inside the shell
+// container: NIK_HOME points at the mounted workspace, but the socket it
+// should use is the narrowed one mounted separately — the owner socket is not
+// reachable from in there at all.
 func New(home string) *Client {
+	if socket := os.Getenv("NIK_SOCKET"); socket != "" {
+		return NewAtSocket(socket)
+	}
+
 	return NewAtSocket(api.OwnerSocketPath(home))
 }
 
@@ -150,21 +160,59 @@ func (c *Client) Connect(ctx context.Context, url, token string) error {
 	return err
 }
 
+// Secrets lists the names in the store. Values are never included: a list is
+// for knowing what is there, not for reading it.
+func (c *Client) Secrets(ctx context.Context) ([]string, error) {
+	var out struct {
+		Names []string `json:"names"`
+	}
+	err := c.get(ctx, "/v1/secrets", &out)
+
+	return out.Names, err
+}
+
+// Secret reads one value. A name this caller may not have and a name that
+// does not exist answer identically, on purpose.
+func (c *Client) Secret(ctx context.Context, name string) (string, error) {
+	var out struct {
+		Value string `json:"value"`
+	}
+	err := c.get(ctx, "/v1/secrets/"+url.PathEscape(name), &out)
+
+	return out.Value, err
+}
+
+func (c *Client) SetSecret(ctx context.Context, name, value string) error {
+	return c.request(ctx, http.MethodPut,
+		"/v1/secrets/"+url.PathEscape(name), api.SecretRequest{Value: value}, nil)
+}
+
+func (c *Client) DeleteSecret(ctx context.Context, name string) error {
+	return c.request(ctx, http.MethodDelete,
+		"/v1/secrets/"+url.PathEscape(name), nil, nil)
+}
+
 func (c *Client) post(ctx context.Context, path string, body any) error {
 	return c.request(ctx, http.MethodPost, path, body, nil)
 }
 
 func (c *Client) request(ctx context.Context, method, path string, body, out any) error {
-	encoded, err := json.Marshal(body)
-	if err != nil {
-		return fmt.Errorf("encode request: %w", err)
+	var reader io.Reader
+	if body != nil {
+		encoded, err := json.Marshal(body)
+		if err != nil {
+			return fmt.Errorf("encode request: %w", err)
+		}
+		reader = bytes.NewReader(encoded)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, "http://nikd"+path, bytes.NewReader(encoded))
+	req, err := http.NewRequestWithContext(ctx, method, "http://nikd"+path, reader)
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/json")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 
 	resp, err := c.http.Do(req)
 	if err != nil {

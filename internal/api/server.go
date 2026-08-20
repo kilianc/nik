@@ -45,6 +45,7 @@ type Server struct {
 	chat    Chat
 	config  Config
 	gateway Gateway
+	secrets Secrets
 }
 
 func New(state *State) *Server {
@@ -67,24 +68,46 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /v1/config", s.handleConfigGet)
 	s.mux.HandleFunc("PATCH /v1/config", s.handleConfigPatch)
 	s.mux.HandleFunc("POST /v1/gateway/connect", s.handleGatewayConnect)
+
+	s.mux.HandleFunc("GET /v1/secrets", s.handleSecretsList)
+	s.mux.HandleFunc("GET /v1/secrets/{name}", s.handleSecretGet)
+	s.mux.HandleFunc("PUT /v1/secrets/{name}", s.handleSecretSet)
+	s.mux.HandleFunc("DELETE /v1/secrets/{name}", s.handleSecretDelete)
 }
 
 // Broker is where nikd publishes what it wants clients to know about.
 func (s *Server) Broker() *Broker { return s.broker }
 
-// Handler is the whole API as an http.Handler, which is what lets the same
-// routes serve a unix socket now and a tunnelled request later without
-// either knowing about the other.
+// Handler is the whole API for the owner, which is what lets the same routes
+// serve a unix socket now and a tunnelled request later without either
+// knowing about the other.
 func (s *Server) Handler() http.Handler {
-	return logRequests(s.mux)
+	return withScope(ScopeOwner, logRequests(s.mux))
 }
 
-// Serve runs until ctx is cancelled, then stops accepting and gives in-flight
-// requests a moment to finish. It never returns http.ErrServerClosed as an
-// error: a clean shutdown is what cancelling ctx asked for.
+// SandboxHandler is the same routes, narrowed. Scope comes from which
+// listener accepted the connection, so there is nothing a caller can say
+// about itself that widens it.
+func (s *Server) SandboxHandler() http.Handler {
+	return withScope(ScopeSandbox, logRequests(s.mux))
+}
+
+// Serve runs the owner API until ctx is cancelled.
 func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
+	return s.serve(ctx, ln, s.Handler())
+}
+
+// ServeSandbox runs the narrowed API for the shell container.
+func (s *Server) ServeSandbox(ctx context.Context, ln net.Listener) error {
+	return s.serve(ctx, ln, s.SandboxHandler())
+}
+
+// serve stops accepting when ctx is cancelled and gives in-flight requests a
+// moment to finish. It never returns http.ErrServerClosed as an error: a
+// clean shutdown is what cancelling ctx asked for.
+func (s *Server) serve(ctx context.Context, ln net.Listener, handler http.Handler) error {
 	srv := &http.Server{
-		Handler: s.Handler(),
+		Handler: handler,
 		// A request that arrives over a unix socket is local, so these are
 		// not defence against a slow network — they are what stops one wedged
 		// client from holding a connection forever.

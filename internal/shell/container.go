@@ -146,6 +146,21 @@ func (s *Service) startContainer() error {
 		"--name", s.container,
 		"-v", s.cfg.Home + ":/workspace",
 		"-v", s.cfg.Home + "/nik.db:/workspace/nik.db:ro",
+		// An empty tmpfs over the socket directory. NIK_HOME is mounted
+		// read-write and this container runs as root, so without this the
+		// sandbox could reach nikd's owner socket — the one with no
+		// restrictions on it — straight through the workspace mount. What it
+		// gets instead is the narrow socket below, and nothing else.
+		"--tmpfs", "/workspace/" + apiSocketDir,
+	}
+
+	// The narrowed API: named secrets, and refusals for the ones that are
+	// nik's own identity rather than a credential nik holds for somebody.
+	if s.sandboxSocket != "" {
+		args = append(args,
+			"-v", s.sandboxSocket+":"+containerSocketPath,
+			"-e", "NIK_SOCKET="+containerSocketPath,
+		)
 	}
 	// Mounted at /usr/local/bin/nik so `nik secrets read` keeps working from
 	// workspace/secrets/cli and every skill that shells out to it — the name

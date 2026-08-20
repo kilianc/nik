@@ -184,3 +184,14 @@ func shortHome(t *testing.T) string {
 
 	return dir
 }
+
+// internal/shell mirrors these rather than importing this package, so that a
+// container mount and this listener cannot drift apart silently.
+func TestSocketConstantsMatchWhatTheShellMirrors(t *testing.T) {
+	if SocketDir != "run" {
+		t.Fatalf("SocketDir = %q; internal/shell hardcodes \"run\" for its tmpfs shadow", SocketDir)
+	}
+	if ContainerSocketPath != "/run/nik.sock" {
+		t.Fatalf("ContainerSocketPath = %q; internal/shell hardcodes \"/run/nik.sock\"", ContainerSocketPath)
+	}
+}

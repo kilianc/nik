@@ -166,6 +166,33 @@ func main() {
 		configureOnce.Do(func() { close(configured) })
 	}))
 
+	// Secrets need no config — the store is just a pair of files in
+	// NIK_HOME — and first-run setup writes model keys into a nik that has
+	// no config.yaml yet. So this goes live with the gateway, before the
+	// wait, rather than after it.
+	apiSrv.SetSecrets(apisvc.NewSecrets(secretStore))
+
+	// The sandbox's own door: named secrets and health, nothing else. It is
+	// bind-mounted into the shell container, whose view of NIK_HOME/run is an
+	// empty tmpfs — so this socket is the only way in from there.
+	sandboxPath := api.SandboxSocketPath(h)
+
+	sandboxLn, err := api.ListenSandbox(sandboxPath)
+	if err != nil {
+		fatal("listen on sandbox socket", err)
+	}
+	defer os.Remove(sandboxPath)
+
+	sandboxDone := make(chan struct{})
+	go func() {
+		defer close(sandboxDone)
+		err := apiSrv.ServeSandbox(ctx, sandboxLn)
+		if err != nil {
+			slog.Error("sandbox api server", "pkg", "main", "error", err)
+		}
+	}()
+	slog.Info("sandbox api listening", "pkg", "main", "socket", sandboxPath)
+
 	// What nikd needs before it can answer anybody: a config, and a gateway.
 	// Missing either used to be fatal — the daemon exited and a service
 	// manager restarted it into the same failure until somebody noticed. Now
@@ -440,6 +467,7 @@ func main() {
 		slog.Warn("nikctl not found, sandbox gets no nik binary", "pkg", "main", "error", err)
 	}
 	shellSvc := shell.NewService(cfg, conn, ctlBin)
+	shellSvc.SetSandboxSocket(sandboxPath)
 
 	err = shellSvc.EnsureReady()
 	if err != nil {
@@ -561,5 +589,6 @@ func main() {
 	taskRunner.Wait()
 	shellSvc.StopContainer()
 	<-apiDone
+	<-sandboxDone
 	slog.Info("shutdown complete")
 }

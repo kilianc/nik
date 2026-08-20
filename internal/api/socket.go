@@ -20,10 +20,26 @@ const SocketDir = "run"
 // OwnerSocketName is the socket only the user running nikd may reach.
 const OwnerSocketName = "nikd.sock"
 
+// SandboxSocketName is the narrowed socket bind-mounted into the shell
+// container. It lives in the same directory as the owner socket, which the
+// container no longer sees: the shell service shadows NIK_HOME/run with an
+// empty tmpfs and mounts this one file in by itself.
+const SandboxSocketName = "sandbox.sock"
+
 // OwnerSocketPath is where nikctl looks and nikd listens.
 func OwnerSocketPath(home string) string {
 	return filepath.Join(home, SocketDir, OwnerSocketName)
 }
+
+// SandboxSocketPath is where the narrowed socket lives on the host.
+func SandboxSocketPath(home string) string {
+	return filepath.Join(home, SocketDir, SandboxSocketName)
+}
+
+// ContainerSocketPath is where the sandbox socket is mounted inside the shell
+// container, and what NIK_SOCKET points at in there. Outside NIK_HOME on
+// purpose: the workspace mount is the thing being locked down.
+const ContainerSocketPath = "/run/nik.sock"
 
 // Listen creates a unix socket with the caller as its only reachable user.
 //
@@ -72,6 +88,27 @@ func Listen(path string) (net.Listener, error) {
 	if err != nil {
 		ln.Close()
 		return nil, fmt.Errorf("lock down socket: %w", err)
+	}
+
+	return ln, nil
+}
+
+// ListenSandbox creates the socket the shell container reaches nikd through.
+//
+// 0666 rather than 0600, and that is not a mistake: the container runs as
+// root and bind-mounts this one file, so the file's mode is not what limits
+// it — the scope attached to the listener is. Everything on the host is still
+// behind the 0700 directory.
+func ListenSandbox(path string) (net.Listener, error) {
+	ln, err := Listen(path)
+	if err != nil {
+		return nil, err
+	}
+
+	err = os.Chmod(path, 0o666)
+	if err != nil {
+		ln.Close()
+		return nil, fmt.Errorf("open up sandbox socket: %w", err)
 	}
 
 	return ln, nil
