@@ -1,0 +1,51 @@
+#!/bin/sh
+# nikd owns NIK_HOME; nikctl holds nothing.
+#
+# The split is enforced by the link step rather than by a rule anybody has to
+# remember — nikctl cannot open the database because none of that code is in
+# it. This checks that the link step still says so. A single import added to a
+# package nikctl already uses is all it takes to undo, and nothing else would
+# notice: the binary would simply get bigger and start carrying SQLite again.
+set -eu
+
+FORBIDDEN='
+github.com/mattn/go-sqlite3
+github.com/kciuffolo/nik/internal/db
+github.com/kciuffolo/nik/internal/secrets
+github.com/kciuffolo/nik/internal/shell
+github.com/kciuffolo/nik/internal/brain
+github.com/kciuffolo/nik/internal/gateway
+github.com/kciuffolo/nik/internal/messaging
+github.com/kciuffolo/nik/internal/llm
+'
+
+deps="$(go list -deps ./cmd/nikctl)"
+failed=0
+
+for pkg in $FORBIDDEN; do
+	if printf '%s\n' "$deps" | grep -qx "$pkg"; then
+		echo "check-layering: nikctl links $pkg" >&2
+		failed=1
+	fi
+done
+
+if [ "$failed" -ne 0 ]; then
+	cat >&2 <<'MSG'
+
+nikctl is a client. It reaches nikd over a socket and holds no state of its
+own, which is what makes the boundary a fact about the build rather than a
+convention.
+
+Find what pulled it in:
+
+  go list -deps ./cmd/nikctl | grep <package>
+
+and move that code to a package only nikd links — internal/apisvc for API
+implementations, or its own leaf package for a brain tool (see
+internal/configtool and internal/daemontool, both of which exist for exactly
+this reason).
+MSG
+	exit 1
+fi
+
+echo "check-layering: nikctl links none of the daemon's world"

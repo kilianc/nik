@@ -81,7 +81,10 @@ Entry points: `cmd/nikd/main.go`, `cmd/nikctl/main.go`, `cmd/workbench/main.go`
 | `internal/id/` | UUID generation — `V4()`, `V7()`, `Short(n)` |
 | `internal/llm/` | LLM API client — `Activation` (multi-round protocol state), `Transcribe`, `Describe`; supports OpenAI and Codex auth. No retries, no loop control — callers own the loop. |
 | `internal/messaging/` | canonical messaging service and tool handlers |
-| `internal/api/` | nikd's HTTP+JSON API and its unix socket — the one way anything that is not nikd reaches NIK_HOME |
+| `internal/api/` | nikd's HTTP+JSON API and its unix socket — the one way anything that is not nikd reaches NIK_HOME. Transport and types only; deliberately dependency-light so nikctl can link it |
+| `internal/apisvc/` | the API's implementations, against the database, the secret store and the messaging service — everything internal/api deliberately does not import |
+| `internal/configtool/` | the `config` brain tool. Separate from internal/config because a ToolDef needs internal/llm, and nikctl links internal/config for its struct |
+| `internal/daemontool/` | the `restart` brain tool, separate from internal/daemonctl for the same reason |
 | `internal/nikapi/` | typed client for the API; nikctl uses it, and it holds no fallback that opens NIK_HOME directly |
 | `internal/gateway/` | nik-saas gateway adapter — the only WhatsApp transport; wire protocol, sealing, agent key |
 | `internal/contacts/` | contact resolution/upsert orchestration + contact update tools |

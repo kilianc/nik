@@ -23,8 +23,10 @@ import (
 	"github.com/kciuffolo/nik/internal/brain"
 	"github.com/kciuffolo/nik/internal/codex"
 	"github.com/kciuffolo/nik/internal/config"
+	"github.com/kciuffolo/nik/internal/configtool"
 	"github.com/kciuffolo/nik/internal/contacts"
 	"github.com/kciuffolo/nik/internal/daemonctl"
+	"github.com/kciuffolo/nik/internal/daemontool"
 	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/fs"
 	"github.com/kciuffolo/nik/internal/gateway"
@@ -543,10 +545,10 @@ func main() {
 
 	b.RegisterTool(llm.Tool{Def: brain.DoneToolDef, Handler: brain.DoneHandler()})
 	b.RegisterTool(llm.Tool{
-		Def:     daemonctl.RestartToolDef,
-		Handler: daemonctl.RestartHandler(),
+		Def:     daemontool.RestartToolDef,
+		Handler: daemontool.RestartHandler(),
 	})
-	b.RegisterTools(config.BuildTools(cfg, conn)...)
+	b.RegisterTools(configtool.BuildTools(cfg, conn)...)
 	b.RegisterTools(contacts.BuildTools(conn)...)
 	b.RegisterTools(messaging.BuildTools(messagingSvc)...)
 	b.RegisterTools(llm.BuildTools(llmClient, cfg.Home, messagingSvc)...)

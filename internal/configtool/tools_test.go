@@ -1,14 +1,15 @@
-package config
+package configtool
 
 import (
 	"encoding/json"
+	"github.com/kciuffolo/nik/internal/config"
 	"strings"
 	"testing"
 	"time"
 )
 
 func TestConfigSetRejectsReadOnlyAndUnknownFields(t *testing.T) {
-	cfg := &Config{}
+	cfg := &config.Config{}
 
 	out, err := configSet(cfg, "privileged_conversation_ids", "secret")
 	if err != nil {
@@ -28,9 +29,9 @@ func TestConfigSetRejectsReadOnlyAndUnknownFields(t *testing.T) {
 }
 
 func TestAllowlistRemoveGuardsLastEntry(t *testing.T) {
-	cfg := &Config{
-		AllowConversationIDs:      ConversationList{{Label: "owner", ID: "owner-conv"}},
-		PrivilegedConversationIDs: ConversationList{{Label: "owner", ID: "owner-conv"}},
+	cfg := &config.Config{
+		AllowConversationIDs:      config.ConversationList{{Label: "owner", ID: "owner-conv"}},
+		PrivilegedConversationIDs: config.ConversationList{{Label: "owner", ID: "owner-conv"}},
 	}
 
 	out, err := allowlistRemove(cfg, "owner-conv")
@@ -43,22 +44,22 @@ func TestAllowlistRemoveGuardsLastEntry(t *testing.T) {
 }
 
 func TestConfigSetSupportsPurposeModelFields(t *testing.T) {
-	cfg := &Config{
+	cfg := &config.Config{
 		Home: t.TempDir(),
-		Models: ModelsConfig{
-			Main: ModelConfig{
+		Models: config.ModelsConfig{
+			Main: config.ModelConfig{
 				Model:           "gpt-5",
 				ReasoningEffort: "high",
 			},
-			Task: ModelConfig{
+			Task: config.ModelConfig{
 				ReasoningEffort: "xhigh",
 			},
-			Recall: ModelConfig{
+			Recall: config.ModelConfig{
 				Model:           "gpt-4.1-nano",
 				ReasoningEffort: "minimal",
 			},
 		},
-		PrivilegedConversationIDs: ConversationList{{Label: "owner", ID: "conv-1"}},
+		PrivilegedConversationIDs: config.ConversationList{{Label: "owner", ID: "conv-1"}},
 	}
 
 	out, err := configSet(cfg, "models.main.model", "gpt-5.4")
@@ -74,14 +75,14 @@ func TestConfigSetSupportsPurposeModelFields(t *testing.T) {
 }
 
 func TestConfigSetSupportsTaskModelFields(t *testing.T) {
-	cfg := &Config{
+	cfg := &config.Config{
 		Home: t.TempDir(),
-		Models: ModelsConfig{
-			Main:   ModelConfig{Model: "gpt-5", ReasoningEffort: "high"},
-			Task:   ModelConfig{ReasoningEffort: "xhigh"},
-			Recall: ModelConfig{ReasoningEffort: "minimal"},
+		Models: config.ModelsConfig{
+			Main:   config.ModelConfig{Model: "gpt-5", ReasoningEffort: "high"},
+			Task:   config.ModelConfig{ReasoningEffort: "xhigh"},
+			Recall: config.ModelConfig{ReasoningEffort: "minimal"},
 		},
-		PrivilegedConversationIDs: ConversationList{{Label: "owner", ID: "conv-1"}},
+		PrivilegedConversationIDs: config.ConversationList{{Label: "owner", ID: "conv-1"}},
 	}
 
 	out, err := configSet(cfg, "models.task.model", "gpt-4.1-mini")
@@ -127,10 +128,10 @@ func TestConfigSetSupportsTaskModelFields(t *testing.T) {
 }
 
 func TestConfigSetRejectsInvalidPurposeModelFields(t *testing.T) {
-	cfg := &Config{
+	cfg := &config.Config{
 		Home: t.TempDir(),
-		Models: ModelsConfig{
-			Main: ModelConfig{
+		Models: config.ModelsConfig{
+			Main: config.ModelConfig{
 				Model: "gpt-5",
 			},
 		},
@@ -147,9 +148,9 @@ func TestConfigSetRejectsInvalidPurposeModelFields(t *testing.T) {
 
 func TestConfigGetTask(t *testing.T) {
 	t.Run("includes task model", func(t *testing.T) {
-		cfg := &Config{
-			Models: ModelsConfig{
-				Task: ModelConfig{Model: "gpt-4.1-mini", ReasoningEffort: "low"},
+		cfg := &config.Config{
+			Models: config.ModelsConfig{
+				Task: config.ModelConfig{Model: "gpt-4.1-mini", ReasoningEffort: "low"},
 			},
 		}
 
@@ -180,8 +181,8 @@ func TestConfigGetTask(t *testing.T) {
 	})
 
 	t.Run("includes task settings", func(t *testing.T) {
-		cfg := &Config{
-			Task: TaskConfig{MaxRounds: 150, Timeout: 90 * time.Minute},
+		cfg := &config.Config{
+			Task: config.TaskConfig{MaxRounds: 150, Timeout: 90 * time.Minute},
 		}
 
 		out, err := configGet(cfg)
@@ -209,7 +210,7 @@ func TestConfigGetTask(t *testing.T) {
 	})
 
 	t.Run("defaults", func(t *testing.T) {
-		cfg := &Config{}
+		cfg := &config.Config{}
 
 		out, err := configGet(cfg)
 		if err != nil {
@@ -238,14 +239,14 @@ func TestConfigGetTask(t *testing.T) {
 
 func TestConfigSetTaskFields(t *testing.T) {
 	t.Run("max_rounds", func(t *testing.T) {
-		cfg := &Config{
+		cfg := &config.Config{
 			Home: t.TempDir(),
-			Models: ModelsConfig{
-				Main:   ModelConfig{Model: "gpt-5", ReasoningEffort: "high"},
-				Task:   ModelConfig{ReasoningEffort: "xhigh"},
-				Recall: ModelConfig{ReasoningEffort: "minimal"},
+			Models: config.ModelsConfig{
+				Main:   config.ModelConfig{Model: "gpt-5", ReasoningEffort: "high"},
+				Task:   config.ModelConfig{ReasoningEffort: "xhigh"},
+				Recall: config.ModelConfig{ReasoningEffort: "minimal"},
 			},
-			PrivilegedConversationIDs: ConversationList{{Label: "owner", ID: "conv-1"}},
+			PrivilegedConversationIDs: config.ConversationList{{Label: "owner", ID: "conv-1"}},
 		}
 
 		out, err := configSet(cfg, "task.max_rounds", "250")
@@ -271,14 +272,14 @@ func TestConfigSetTaskFields(t *testing.T) {
 	})
 
 	t.Run("timeout", func(t *testing.T) {
-		cfg := &Config{
+		cfg := &config.Config{
 			Home: t.TempDir(),
-			Models: ModelsConfig{
-				Main:   ModelConfig{Model: "gpt-5", ReasoningEffort: "high"},
-				Task:   ModelConfig{ReasoningEffort: "xhigh"},
-				Recall: ModelConfig{ReasoningEffort: "minimal"},
+			Models: config.ModelsConfig{
+				Main:   config.ModelConfig{Model: "gpt-5", ReasoningEffort: "high"},
+				Task:   config.ModelConfig{ReasoningEffort: "xhigh"},
+				Recall: config.ModelConfig{ReasoningEffort: "minimal"},
 			},
-			PrivilegedConversationIDs: ConversationList{{Label: "owner", ID: "conv-1"}},
+			PrivilegedConversationIDs: config.ConversationList{{Label: "owner", ID: "conv-1"}},
 		}
 
 		out, err := configSet(cfg, "task.timeout", "90m")
@@ -305,7 +306,7 @@ func TestConfigSetTaskFields(t *testing.T) {
 }
 
 func TestConfigGetOmitsLegacyExaAPIKey(t *testing.T) {
-	cfg := &Config{
+	cfg := &config.Config{
 		MaxHistory: 25,
 		Timezone:   "UTC",
 		Location:   "SF",
