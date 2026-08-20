@@ -41,8 +41,10 @@ type Server struct {
 
 	// Everything below is plugged in as nikd converges, so the guard is a
 	// nil check rather than a boot ordering rule. See SetChat.
-	mu   sync.RWMutex
-	chat Chat
+	mu      sync.RWMutex
+	chat    Chat
+	config  Config
+	gateway Gateway
 }
 
 func New(state *State) *Server {
@@ -61,6 +63,10 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /v1/conversations/{id}/messages", s.handleMessageSend)
 
 	s.mux.HandleFunc("GET /v1/events", s.handleEvents)
+
+	s.mux.HandleFunc("GET /v1/config", s.handleConfigGet)
+	s.mux.HandleFunc("PATCH /v1/config", s.handleConfigPatch)
+	s.mux.HandleFunc("POST /v1/gateway/connect", s.handleGatewayConnect)
 }
 
 // Broker is where nikd publishes what it wants clients to know about.

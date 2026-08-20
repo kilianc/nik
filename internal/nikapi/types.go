@@ -16,6 +16,9 @@ type (
 	Message      = api.Message
 )
 
+// ConfigField is one field to change; see Client.SetConfig.
+type ConfigField = api.ConfigField
+
 // LocalConversationID is the conversation the TUI and the console render.
 const LocalConversationID = api.LocalConversationID
 

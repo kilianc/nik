@@ -110,7 +110,7 @@ nik status
 
 It reports the release, uptime, and each subsystem separately — database, gateway, models, shell, brain — so a nik that is connected but cannot think says which half is broken rather than looking healthy. It exits non-zero when anything is degraded, which makes it usable from a script.
 
-The token lives in the secret store and `gateway.url` in `~/.nik/config.yaml`; both are required, and the daemon refuses to start without them — it has no other way to reach WhatsApp. The gateway rotates the token on every connect, so what's stored is never one a human saw. To relink from scratch (a new agent from the dashboard):
+The token lives in the secret store and `gateway.url` in `~/.nik/config.yaml`; both are required — nik has no other way to reach WhatsApp. A daemon missing either one starts anyway, says which it is waiting for, and picks up where it left off the moment it arrives. The gateway rotates the token on every connect, so what's stored is never one a human saw. To relink from scratch (a new agent from the dashboard):
 
 ```sh
 nik connect nik_...
