@@ -127,7 +127,7 @@ Entry points: `cmd/nikd/main.go`, `cmd/nikctl/main.go`, `cmd/workbench/main.go`
 
 **No tool-generated trailers.** Never add metadata lines like `Made-with: Cursor`, `Co-authored-by: AI`, or similar trailers to commit messages. Commit messages contain only the subject and body written by the author.
 
-**Allowed commit prefixes.** Use only `fix:`, `feat:`, `chore:`, or `docs:`. No other commit prefixes are allowed.
+**Allowed commit prefixes.** Use only `fix:`, `feat:`, `chore:`, or `docs:`. No other commit prefixes are allowed. Subjects are Conventional Commits — `type(scope)!: description`, scope optional and lowercase, `!` for a breaking change, no trailing period — and `bin/check-commits` enforces it in CI on every PR: the title (which becomes the squashed subject on main, and the release notes) and each commit on the branch. `make check-commits` runs the same rule locally against `origin/main..HEAD`.
 
 **Agent git command path.** In this workspace, `git` may resolve to `/opt/rbx/infosec/safe-git-push/git`, which can inject forbidden commit trailers. For any commit workflow, use `/usr/bin/git` explicitly.
 
