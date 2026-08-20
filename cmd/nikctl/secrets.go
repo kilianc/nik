@@ -1,16 +1,28 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/kciuffolo/nik/internal/home"
-	"github.com/kciuffolo/nik/internal/secrets"
+	"github.com/kciuffolo/nik/internal/nikapi"
 )
 
+// runSecrets reads and writes the encrypted store through nikd rather than
+// through the files.
+//
+// The contract is unchanged — read / list / write / delete, value on stdout,
+// value from stdin — because workspace/secrets/cli and every skill that shells
+// out to it depend on exactly that. What changed is who holds the key: inside
+// the shell container this now reaches a socket that answers for some names
+// and refuses for others, instead of decrypting a file the sandbox had mounted
+// all along.
 func runSecrets(args []string) {
 	flagSet := flag.NewFlagSet("secrets", flag.ExitOnError)
 	homeFlag := flagSet.String("home", "", "workspace directory")
@@ -18,8 +30,7 @@ func runSecrets(args []string) {
 
 	remaining := flagSet.Args()
 	if len(remaining) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: nik secrets {read|list|write|delete} [name]")
-		os.Exit(1)
+		usageSecrets()
 	}
 
 	action := remaining[0]
@@ -30,61 +41,69 @@ func runSecrets(args []string) {
 		os.Exit(1)
 	}
 
-	store := secrets.New(h)
+	client := nikapi.New(h)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
 	switch action {
 	case "read":
-		if len(remaining) < 2 {
-			fmt.Fprintln(os.Stderr, "usage: nik secrets read <name>")
-			os.Exit(1)
-		}
-		val, err := store.Get(remaining[1])
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Print(val)
+		name := secretName(remaining, "read")
+		value, err := client.Secret(ctx, name)
+		exitOnError(err, h)
+		fmt.Print(value)
 
 	case "list":
-		names, err := store.List()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			os.Exit(1)
-		}
+		names, err := client.Secrets(ctx)
+		exitOnError(err, h)
 		for _, n := range names {
 			fmt.Println(n)
 		}
 
 	case "write":
-		if len(remaining) < 2 {
-			fmt.Fprintln(os.Stderr, "usage: nik secrets write <name>")
-			os.Exit(1)
-		}
-		val, err := io.ReadAll(os.Stdin)
+		name := secretName(remaining, "write")
+		value, err := io.ReadAll(os.Stdin)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error reading stdin: %v\n", err)
 			os.Exit(1)
 		}
-		err = store.Set(remaining[1], strings.TrimRight(string(val), "\n"))
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			os.Exit(1)
-		}
+		err = client.SetSecret(ctx, name, strings.TrimRight(string(value), "\n"))
+		exitOnError(err, h)
 
 	case "delete":
-		if len(remaining) < 2 {
-			fmt.Fprintln(os.Stderr, "usage: nik secrets delete <name>")
-			os.Exit(1)
-		}
-		err := store.Delete(remaining[1])
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			os.Exit(1)
-		}
+		name := secretName(remaining, "delete")
+		err := client.DeleteSecret(ctx, name)
+		exitOnError(err, h)
 
 	default:
 		fmt.Fprintf(os.Stderr, "unknown secrets action %q\n", action)
-		fmt.Fprintln(os.Stderr, "usage: nik secrets {read|list|write|delete} [name]")
+		usageSecrets()
+	}
+}
+
+func secretName(args []string, action string) string {
+	if len(args) < 2 {
+		fmt.Fprintf(os.Stderr, "usage: nikctl secrets %s <name>\n", action)
 		os.Exit(1)
 	}
+
+	return args[1]
+}
+
+func usageSecrets() {
+	fmt.Fprintln(os.Stderr, "usage: nikctl secrets {read|list|write|delete} [name]")
+	os.Exit(1)
+}
+
+func exitOnError(err error, h string) {
+	if err == nil {
+		return
+	}
+
+	if errors.Is(err, nikapi.ErrNoDaemon) {
+		fmt.Fprintf(os.Stderr, "error: no nik running at %s — secrets live in the daemon now\n", h)
+		os.Exit(1)
+	}
+
+	fmt.Fprintf(os.Stderr, "error: %v\n", err)
+	os.Exit(1)
 }

@@ -17,15 +17,36 @@ const staleThreshold = 30 * time.Minute
 
 const containerNikBin = "/usr/local/bin/nik"
 
+// apiSocketDir mirrors api.SocketDir. Named here rather than imported: the
+// shell service has no other reason to know about the API, and a constant is
+// cheaper than the dependency. The api package's socket test asserts they
+// agree.
+const apiSocketDir = "run"
+
+// containerSocketPath mirrors api.ContainerSocketPath — where the narrowed
+// socket lands inside the container, and what NIK_SOCKET points at there.
+const containerSocketPath = "/run/nik.sock"
+
 type Service struct {
 	cfg       *config.Config
 	conn      *sql.DB
 	container string
 	nikBin    string
+
+	// sandboxSocket is nikd's narrowed API, mounted into the container so a
+	// skill can ask for a secret instead of reading one off the filesystem.
+	// Empty means no socket is offered, which is what the tests want.
+	sandboxSocket string
 }
 
 func NewService(cfg *config.Config, conn *sql.DB, nikBin string) *Service {
 	return &Service{cfg: cfg, conn: conn, nikBin: nikBin}
+}
+
+// SetSandboxSocket points the container at nikd's narrowed API. Must be
+// called before the container starts to have any effect.
+func (s *Service) SetSandboxSocket(path string) {
+	s.sandboxSocket = path
 }
 
 func (s *Service) nikBinDir() string {
