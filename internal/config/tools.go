@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log/slog"
 	"regexp"
 	"strconv"
@@ -75,7 +77,19 @@ func configHandler(cfg *Config, conn *sql.DB) llm.ToolExecutor {
 }
 
 func configGet(cfg *Config) (string, error) {
-	out := map[string]any{
+	data, err := json.Marshal(Snapshot(cfg))
+	if err != nil {
+		return llm.ToolError(err), nil
+	}
+
+	return string(data), nil
+}
+
+// Snapshot is the readable configuration, as data. The brain tool marshals it
+// and so does the API — one description of what "the config" means, rather
+// than two that drift.
+func Snapshot(cfg *Config) map[string]any {
+	return map[string]any{
 		"models": map[string]any{
 			"main": map[string]any{
 				"model":            cfg.Models.Main.Model,
@@ -103,13 +117,6 @@ func configGet(cfg *Config) (string, error) {
 		"allow_conversation_ids":      cfg.AllowConversationIDs.toMap(),
 		"privileged_conversation_ids": cfg.PrivilegedConversationIDs.toMap(),
 	}
-
-	data, err := json.Marshal(out)
-	if err != nil {
-		return llm.ToolError(err), nil
-	}
-
-	return string(data), nil
 }
 
 var readOnlyFields = map[string]bool{
@@ -117,12 +124,33 @@ var readOnlyFields = map[string]bool{
 }
 
 func configSet(cfg *Config, field, value string) (string, error) {
+	err := SetField(cfg, field, value)
+	if err != nil {
+		return llm.ToolError(err), nil
+	}
+
+	return `{"ok":true}`, nil
+}
+
+// Errors SetField returns for a caller's mistake rather than nik's. They are
+// separated so an API can answer 400 instead of 500, which the brain tool
+// never needed but a person typing into a console very much does.
+var (
+	ErrUnknownField  = errors.New("unknown field")
+	ErrReadOnlyField = errors.New("field is read-only")
+	ErrInvalidValue  = errors.New("invalid value")
+)
+
+// SetField changes one field and saves. The config is live-reloaded from
+// disk, so a successful return means the running daemon will pick it up
+// without anything being restarted.
+func SetField(cfg *Config, field, value string) error {
 	if field == "" {
-		return `{"error":"empty field"}`, nil
+		return fmt.Errorf("%w: empty", ErrUnknownField)
 	}
 
 	if readOnlyFields[field] {
-		return llm.ToolErrorf("field %q is read-only", field), nil
+		return fmt.Errorf("%w: %s", ErrReadOnlyField, field)
 	}
 
 	previous := *cfg
@@ -135,82 +163,82 @@ func configSet(cfg *Config, field, value string) (string, error) {
 	case "max_history":
 		n, err := strconv.Atoi(value)
 		if err != nil {
-			return llm.ToolErrorf("invalid max_history: %s", value), nil
+			return fmt.Errorf("%w: max_history %q is not a number", ErrInvalidValue, value)
 		}
 		cfg.MaxHistory = n
 	case "task.max_rounds":
 		n, err := strconv.Atoi(value)
 		if err != nil {
-			return llm.ToolErrorf("invalid task.max_rounds: %s", value), nil
+			return fmt.Errorf("%w: task.max_rounds %q is not a number", ErrInvalidValue, value)
 		}
 		if n < 1 {
-			return llm.ToolErrorf("task.max_rounds must be >= 1"), nil
+			return fmt.Errorf("%w: task.max_rounds must be >= 1", ErrInvalidValue)
 		}
 		cfg.Task.MaxRounds = n
 	case "task.timeout":
 		d, err := time.ParseDuration(value)
 		if err != nil {
-			return llm.ToolErrorf("invalid task.timeout: %s", value), nil
+			return fmt.Errorf("%w: task.timeout %q is not a duration", ErrInvalidValue, value)
 		}
 		if d < time.Minute {
-			return llm.ToolErrorf("task.timeout must be >= 1m"), nil
+			return fmt.Errorf("%w: task.timeout must be >= 1m", ErrInvalidValue)
 		}
 		cfg.Task.Timeout = d
 	case "models.main.model":
 		cfg.Models.Main.Model = value
 	case "models.main.reasoning_effort":
 		if !isValidReasoningEffort(value) {
-			return llm.ToolErrorf("invalid models.main.reasoning_effort %q (none, minimal, low, medium, high, xhigh, max)", value), nil
+			return fmt.Errorf("%w: models.main.reasoning_effort %q (none, minimal, low, medium, high, xhigh, max)", ErrInvalidValue, value)
 		}
 		cfg.Models.Main.ReasoningEffort = value
 	case "models.main.verbosity":
 		if !isValidVerbosity(value) {
-			return llm.ToolErrorf("invalid models.main.verbosity %q (low, medium, high, or empty)", value), nil
+			return fmt.Errorf("%w: models.main.verbosity %q (low, medium, high, or empty)", ErrInvalidValue, value)
 		}
 		cfg.Models.Main.Verbosity = value
 	case "models.task.model":
 		cfg.Models.Task.Model = value
 	case "models.task.reasoning_effort":
 		if !isValidReasoningEffort(value) {
-			return llm.ToolErrorf("invalid models.task.reasoning_effort %q (none, minimal, low, medium, high, xhigh, max)", value), nil
+			return fmt.Errorf("%w: models.task.reasoning_effort %q (none, minimal, low, medium, high, xhigh, max)", ErrInvalidValue, value)
 		}
 		cfg.Models.Task.ReasoningEffort = value
 	case "models.task.verbosity":
 		if !isValidVerbosity(value) {
-			return llm.ToolErrorf("invalid models.task.verbosity %q (low, medium, high, or empty)", value), nil
+			return fmt.Errorf("%w: models.task.verbosity %q (low, medium, high, or empty)", ErrInvalidValue, value)
 		}
 		cfg.Models.Task.Verbosity = value
 	case "models.recall.model":
 		cfg.Models.Recall.Model = value
 	case "models.recall.reasoning_effort":
 		if !isValidReasoningEffort(value) {
-			return llm.ToolErrorf("invalid models.recall.reasoning_effort %q (none, minimal, low, medium, high, xhigh, max)", value), nil
+			return fmt.Errorf("%w: models.recall.reasoning_effort %q (none, minimal, low, medium, high, xhigh, max)", ErrInvalidValue, value)
 		}
 		cfg.Models.Recall.ReasoningEffort = value
 	case "models.recall.verbosity":
 		if !isValidVerbosity(value) {
-			return llm.ToolErrorf("invalid models.recall.verbosity %q (low, medium, high, or empty)", value), nil
+			return fmt.Errorf("%w: models.recall.verbosity %q (low, medium, high, or empty)", ErrInvalidValue, value)
 		}
 		cfg.Models.Recall.Verbosity = value
 	default:
-		return llm.ToolErrorf("unknown field %q", field), nil
+		return fmt.Errorf("%w: %s", ErrUnknownField, field)
 	}
 
 	err := validateConfig(*cfg)
 	if err != nil {
 		*cfg = previous
-		return llm.ToolError(err), nil
+		return fmt.Errorf("%w: %s", ErrInvalidValue, err)
 	}
 
 	err = cfg.Save(cfg.ConfigPath())
 	if err != nil {
 		*cfg = previous
-		return llm.ToolError(err), nil
+		return err
 	}
 
 	slog.Info("config set", "pkg", "config", "field", field, "value", value)
 
-	return `{"ok":true}`, nil
+	return nil
 }
 
 func allowlistAdd(ctx context.Context, cfg *Config, conn *sql.DB, conversationID string) (string, error) {

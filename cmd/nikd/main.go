@@ -13,6 +13,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -154,20 +155,83 @@ func main() {
 	}()
 	slog.Info("api listening", "pkg", "main", "socket", socketPath)
 
-	// idle keeps serving instead of sleeping. A nik with no config is not
-	// broken, it is unconfigured — and the difference is that somebody can
-	// still ask it what it needs.
-	idle := func(reason string) {
+	// configured is closed when a client links this nik to an account over
+	// the API. It is what turns the pre-config wait from "idle until somebody
+	// restarts me" into "wait for the one thing I am missing".
+	configured := make(chan struct{})
+	var configureOnce sync.Once
+
+	secretStore := secrets.New(h)
+	apiSrv.SetGateway(apisvc.NewGateway(h, secretStore, nil, func() {
+		configureOnce.Do(func() { close(configured) })
+	}))
+
+	// What nikd needs before it can answer anybody: a config, and a gateway.
+	// Missing either used to be fatal — the daemon exited and a service
+	// manager restarted it into the same failure until somebody noticed. Now
+	// it says what it is missing and waits for it, because the API is how the
+	// missing thing arrives.
+	notReady := func() string {
+		cfg, err := config.Load(h)
+		if err != nil {
+			return err.Error()
+		}
+		if !gateway.Enabled(cfg, secretStore) {
+			return "no gateway — run `nikctl connect <token>` with a token from your dashboard"
+		}
+
+		return ""
+	}
+
+	if reason := notReady(); reason != "" {
 		state.Set("config", false, reason)
-		slog.Info("not configured, serving the api and waiting", "reason", reason)
-		<-ctx.Done()
-		<-apiDone
+		slog.Info("not ready, serving the api and waiting", "pkg", "main", "reason", reason)
+
+		// Two ways forward: somebody connects over the API, or the files
+		// appear underneath us. The second is the hand-edited case — rare,
+		// but a daemon that ignores a config sitting right next to it is a
+		// daemon somebody has to know to restart.
+		poll := time.NewTicker(2 * time.Second)
+
+		// Re-check on every wake and republish the reason: a nik that has
+		// grown a config but still has no gateway should say the second
+		// thing, not keep repeating the first.
+		recheck := func() bool {
+			next := notReady()
+			if next == "" {
+				return false
+			}
+			if next != reason {
+				reason = next
+				state.Set("config", false, reason)
+				slog.Info("still not ready", "pkg", "main", "reason", reason)
+			}
+
+			return true
+		}
+
+		waiting := true
+		for waiting {
+			select {
+			case <-configured:
+				waiting = recheck()
+			case <-poll.C:
+				waiting = recheck()
+			case <-ctx.Done():
+				poll.Stop()
+				<-apiDone
+
+				return
+			}
+		}
+		poll.Stop()
+
+		slog.Info("ready, continuing boot", "pkg", "main")
 	}
 
 	cfg, err := config.Load(h)
 	if err != nil {
-		idle(err.Error())
-		return
+		fatal("load config", err)
 	}
 	state.Set("config", true, cfg.ConfigPath())
 
@@ -234,7 +298,6 @@ func main() {
 	}
 
 	secrets.EnsureAdapter(cfg.Home, skills.BuiltinFS())
-	secretStore := secrets.New(h)
 
 	// adapters
 
@@ -246,6 +309,8 @@ func main() {
 	// conversation, and the brain picking it up is the next tick's problem.
 	chatSvc := apisvc.NewChat(conn, messagingSvc)
 	apiSrv.SetChat(chatSvc)
+	apiSrv.SetConfig(apisvc.NewConfig(cfg, conn))
+	apiSrv.SetGateway(apisvc.NewGateway(h, secretStore, cfg, nil))
 
 	// One poller, in the process that owns the data, instead of one per
 	// client. Clients fetch history on connect and stream from there.
@@ -256,12 +321,8 @@ func main() {
 	slog.Info("local adapter active")
 
 	// gateway adapter — nik as a nik-saas agent: no SIM, no QR, no session of
-	// its own. whatsapp reaches nik only through the gateway, so a daemon
-	// without one can never answer a message: say so and stop.
-	if !gateway.Enabled(cfg, secretStore) {
-		fatal("gateway not configured", errors.New(
-			"set gateway.url in config.yaml and write the gateway_token secret"))
-	}
+	// its own. whatsapp reaches nik only through the gateway. Boot waited
+	// above until one was configured, so by here there always is.
 
 	hostname, _ := os.Hostname()
 	gatewayAdapter, err := gateway.FromConfig(cfg, secretStore, hostname)
