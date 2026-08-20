@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -109,6 +110,119 @@ func pruneHandler(conn *sql.DB, retention func() time.Duration) llm.ToolExecutor
 	}
 }
 
+// ErrNotReadOnly is a query that would write. The rejection is the point of
+// db_query: nik and a console can look at everything and change nothing.
+var ErrNotReadOnly = errors.New("only single SELECT, WITH, SHOW, DESCRIBE, or read-only PRAGMA statements are allowed")
+
+// QueryResult is what a read-only query produced, already bounded and with
+// sensitive columns redacted.
+type QueryResult struct {
+	Rows  []map[string]any `json:"rows"`
+	Count int              `json:"count"`
+	// Truncated says the answer is partial and why. Never silently cut: a
+	// result that lost rows without saying so reads as a complete answer.
+	Truncated        bool   `json:"truncated,omitempty"`
+	TruncationReason string `json:"truncation_reason,omitempty"`
+	MaxBytes         int    `json:"max_bytes,omitempty"`
+}
+
+// Query runs one read-only statement and bounds the result.
+//
+// Shared by the db_query brain tool and the API, deliberately: the redaction
+// and the read-only check are the safety properties of this operation, and a
+// second implementation would eventually have only one of them.
+func Query(ctx context.Context, conn *sql.DB, query string) (QueryResult, error) {
+	if query == "" {
+		return QueryResult{}, fmt.Errorf("%w: empty query", ErrNotReadOnly)
+	}
+	if !isReadOnly(query) {
+		return QueryResult{}, ErrNotReadOnly
+	}
+
+	rows, err := conn.QueryContext(ctx, query)
+	if err != nil {
+		return QueryResult{}, err
+	}
+	defer rows.Close()
+
+	cols, err := rows.Columns()
+	if err != nil {
+		return QueryResult{}, err
+	}
+
+	var results []map[string]any
+	truncationReason := ""
+
+	for rows.Next() {
+		if len(results) >= maxQueryRows {
+			truncationReason = "rows"
+			break
+		}
+
+		vals := make([]any, len(cols))
+		ptrs := make([]any, len(cols))
+		for i := range vals {
+			ptrs[i] = &vals[i]
+		}
+
+		err = rows.Scan(ptrs...)
+		if err != nil {
+			return QueryResult{}, err
+		}
+
+		row := make(map[string]any, len(cols))
+		for i, col := range cols {
+			row[col] = normalizeValue(vals[i])
+		}
+		applyRedaction(row)
+
+		results = append(results, row)
+
+		data, err := marshalQueryResult(results, "")
+		if err != nil {
+			return QueryResult{}, err
+		}
+
+		if len(data) > maxQueryContextBytes {
+			results = results[:len(results)-1]
+			truncationReason = "context_bytes"
+
+			break
+		}
+	}
+
+	err = rows.Err()
+	if err != nil {
+		return QueryResult{}, err
+	}
+
+	data, err := marshalQueryResult(results, truncationReason)
+	if err != nil {
+		return QueryResult{}, err
+	}
+
+	for len(data) > maxQueryContextBytes && len(results) > 0 {
+		results = results[:len(results)-1]
+
+		data, err = marshalQueryResult(results, truncationReason)
+		if err != nil {
+			return QueryResult{}, err
+		}
+	}
+
+	out := QueryResult{Rows: results, Count: len(results)}
+	if out.Rows == nil {
+		out.Rows = []map[string]any{}
+	}
+	if truncationReason != "" {
+		out.Truncated = true
+		out.TruncationReason = truncationReason
+		out.MaxBytes = maxQueryContextBytes
+	}
+
+	return out, nil
+}
+
 func queryHandler(conn *sql.DB) llm.ToolExecutor {
 	return func(ctx context.Context, call llm.ToolCall) (string, error) {
 		var args struct {
@@ -119,82 +233,15 @@ func queryHandler(conn *sql.DB) llm.ToolExecutor {
 		if err != nil {
 			return llm.ToolError(err), nil
 		}
-		if args.Query == "" {
-			return `{"error":"empty query"}`, nil
-		}
 
-		if !isReadOnly(args.Query) {
-			return `{"error":"only single SELECT, WITH, SHOW, DESCRIBE, or read-only PRAGMA statements are allowed"}`, nil
-		}
-
-		rows, err := conn.QueryContext(ctx, args.Query)
-		if err != nil {
-			return llm.ToolError(err), nil
-		}
-		defer rows.Close()
-
-		cols, err := rows.Columns()
+		result, err := Query(ctx, conn, args.Query)
 		if err != nil {
 			return llm.ToolError(err), nil
 		}
 
-		var results []map[string]any
-		truncationReason := ""
-
-		for rows.Next() {
-			if len(results) >= maxQueryRows {
-				truncationReason = "rows"
-				break
-			}
-
-			vals := make([]any, len(cols))
-			ptrs := make([]any, len(cols))
-			for i := range vals {
-				ptrs[i] = &vals[i]
-			}
-
-			err = rows.Scan(ptrs...)
-			if err != nil {
-				return llm.ToolError(err), nil
-			}
-
-			row := make(map[string]any, len(cols))
-			for i, col := range cols {
-				row[col] = normalizeValue(vals[i])
-			}
-			applyRedaction(row)
-
-			results = append(results, row)
-
-			data, err := marshalQueryResult(results, "")
-			if err != nil {
-				return llm.ToolError(err), nil
-			}
-
-			if len(data) > maxQueryContextBytes {
-				results = results[:len(results)-1]
-				truncationReason = "context_bytes"
-				break
-			}
-		}
-
-		err = rows.Err()
+		data, err := json.Marshal(result)
 		if err != nil {
 			return llm.ToolError(err), nil
-		}
-
-		data, err := marshalQueryResult(results, truncationReason)
-		if err != nil {
-			return llm.ToolError(err), nil
-		}
-
-		for len(data) > maxQueryContextBytes && len(results) > 0 {
-			results = results[:len(results)-1]
-
-			data, err = marshalQueryResult(results, truncationReason)
-			if err != nil {
-				return llm.ToolError(err), nil
-			}
 		}
 
 		return string(data), nil

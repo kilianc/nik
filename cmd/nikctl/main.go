@@ -26,7 +26,7 @@ func main() {
 		subcmd = os.Args[1]
 	}
 
-	known := []string{"connect", "install", "secrets", "status", "tui", "version"}
+	known := []string{"connect", "install", "logs", "query", "restart", "secrets", "shell", "status", "tui", "version"}
 
 	switch subcmd {
 	case "version":
@@ -39,6 +39,14 @@ func main() {
 		runSecrets(os.Args[2:])
 	case "status":
 		runStatus(os.Args[2:])
+	case "query":
+		runQuery(os.Args[2:])
+	case "shell":
+		runShell(os.Args[2:])
+	case "logs":
+		runLogs(os.Args[2:])
+	case "restart":
+		runRestart(os.Args[2:])
 	case "tui":
 		runTUI(os.Args[2:])
 	case "":

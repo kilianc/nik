@@ -110,6 +110,17 @@ nik status
 
 It reports the release, uptime, and each subsystem separately — database, gateway, models, shell, brain — so a nik that is connected but cannot think says which half is broken rather than looking healthy. It exits non-zero when anything is degraded, which makes it usable from a script.
 
+When something is wrong, these ask the daemon rather than needing you to go find its files:
+
+```sh
+nik logs --errors --lines 50
+nik query "SELECT goal, status FROM task ORDER BY created_at DESC LIMIT 5"
+nik shell "df -h /workspace"
+nik restart
+```
+
+`query` is read-only and redacts the same columns nik's own `db_query` tool does. `shell` runs in nik's sandbox, not on your machine; a command that outlives its wait keeps running and says so. `restart` waits for nik to answer again rather than assuming it will.
+
 The token lives in the secret store and `gateway.url` in `~/.nik/config.yaml`; both are required — nik has no other way to reach WhatsApp. A daemon missing either one starts anyway, says which it is waiting for, and picks up where it left off the moment it arrives. The gateway rotates the token on every connect, so what's stored is never one a human saw. To relink from scratch (a new agent from the dashboard):
 
 ```sh

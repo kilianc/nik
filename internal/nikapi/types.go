@@ -27,6 +27,9 @@ const (
 	AuthorContact = api.AuthorContact
 )
 
+// ShellResult is what a sandbox command did.
+type ShellResult = api.ShellResult
+
 // ConfigField is one field to change; see Client.SetConfig.
 type ConfigField = api.ConfigField
 
