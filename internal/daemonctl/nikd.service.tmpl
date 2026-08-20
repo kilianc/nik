@@ -3,7 +3,8 @@ Description=nikd
 After=network-online.target
 Wants=network-online.target
 # Crash-loop guard: if the daemon dies 10 times in 2 minutes systemd gives
-# up. Recover with `systemctl --user reset-failed nikd.service && systemctl --user start nikd.service`.
+# up. Recover with `systemctl reset-failed nikd.service && systemctl start
+# nikd.service` — add --user when this was installed as a user service.
 StartLimitBurst=10
 StartLimitIntervalSec=120
 
@@ -18,4 +19,4 @@ RestartSec=5
 Environment=NIK_HOME={{ .NikHome }}
 
 [Install]
-WantedBy=default.target
+WantedBy={{ .WantedBy }}
