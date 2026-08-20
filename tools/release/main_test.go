@@ -123,3 +123,14 @@ func TestNoChecksYetIsTheOnlyRetriedFailure(t *testing.T) {
 		})
 	}
 }
+
+// The confirm prompt is the only thing in a release that reads stdin, and a
+// child that inherits it steals the answer. That is not hypothetical: piping
+// `y` into a release whose `make ci` held stdin ended with the tree clean, no
+// tag, and nothing said — a release that silently did not happen.
+func TestRunLeavesStdinForTheConfirmPrompt(t *testing.T) {
+	err := run("sh", "-c", "read line")
+	if err == nil {
+		t.Fatal("the child read a line from stdin; an answer piped for the confirm prompt would be eaten")
+	}
+}
