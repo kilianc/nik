@@ -28,7 +28,7 @@ func launchdPlistPath() (string, error) {
 	return filepath.Join(u.HomeDir, "Library", "LaunchAgents", launchdLabel+".plist"), nil
 }
 
-func installLaunchd(nikBinary, nikHome string) error {
+func installLaunchd(nikdBinary, nikHome string) error {
 	plistPath, err := launchdPlistPath()
 	if err != nil {
 		return err
@@ -41,13 +41,13 @@ func installLaunchd(nikBinary, nikHome string) error {
 
 	var buf bytes.Buffer
 	err = launchdPlistTmpl.Execute(&buf, struct {
-		Label     string
-		NikBinary string
-		NikHome   string
+		Label      string
+		NikdBinary string
+		NikHome    string
 	}{
-		Label:     launchdLabel,
-		NikBinary: nikBinary,
-		NikHome:   nikHome,
+		Label:      launchdLabel,
+		NikdBinary: nikdBinary,
+		NikHome:    nikHome,
 	})
 	if err != nil {
 		return fmt.Errorf("render plist template: %w", err)

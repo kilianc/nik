@@ -65,12 +65,13 @@ Canonical tables are the source of truth (`conversation`, `message`, `media`, `m
 
 ## Project Structure
 
-Entry points: `cmd/nik/main.go`, `cmd/workbench/main.go`
+Entry points: `cmd/nikd/main.go`, `cmd/nikctl/main.go`, `cmd/workbench/main.go`
 
 | Package | Purpose |
 |---------|---------|
 | `bin/` | local build outputs produced by `make`, git-ignored |
-| `cmd/nik/` | daemon entry point — config, DB, gateway adapter wiring, signal handling |
+| `cmd/nikd/` | daemon entry point — config, DB, gateway adapter wiring, signal handling. The only binary that opens `NIK_HOME` |
+| `cmd/nikctl/` | what a person types — TUI, `connect`, `secrets`, `install`. Installed as `nikctl` and linked as `nik` |
 | `cmd/workbench/` | workbench CLI entry point — config, DB, OpenAI client wiring, subcommand dispatch |
 | `internal/config/` | `Config` struct + `Load(home)` from `config.yaml` in home dir |
 | `internal/db/` | SQLite open/schema, models, one Go file per query function |
@@ -157,7 +158,7 @@ Every binary is stamped via ldflags with the release and the commit (`nik versio
 - avoid inline error assignment in if statements; assign first, then check
 - never chain multiple operations in a single if condition
 - use blank lines to separate logical blocks within a function (guard clauses, parse steps, main logic, return)
-- `cmd/nik/main.go` is wiring only — no types, no helper functions, no adapters. If you need a bridge between packages, put it in the domain package that owns the logic.
+- `cmd/nikd/main.go` is wiring only — no types, no helper functions, no adapters. If you need a bridge between packages, put it in the domain package that owns the logic.
 - types go at the top of the file, before functions
 - follows standard gofmt conventions
 - one Go file per query function, one test file per query function

@@ -7,12 +7,13 @@ import (
 	"os"
 	"strings"
 
+	"github.com/kciuffolo/nik/internal/home"
 	"github.com/kciuffolo/nik/internal/secrets"
 )
 
 func runSecrets(args []string) {
 	flagSet := flag.NewFlagSet("secrets", flag.ExitOnError)
-	home := flagSet.String("home", "", "workspace directory")
+	homeFlag := flagSet.String("home", "", "workspace directory")
 	flagSet.Parse(args)
 
 	remaining := flagSet.Args()
@@ -23,7 +24,7 @@ func runSecrets(args []string) {
 
 	action := remaining[0]
 
-	h, err := resolveHome(*home)
+	h, err := home.Resolve(*homeFlag)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)

@@ -77,9 +77,12 @@ jobs:
 
       # an unstamped binary reports "dev" forever, in every bug report it
       # ever appears in. cheaper to catch here than on someone's laptop.
+      # nikctl carries the version a person asks for; both are stamped from
+      # the same LDFLAGS, and a release that ships a mismatched pair is the
+      # one failure the split introduces. Check the one that can answer.
       - name: Stamp check
         run: |
-          got="$(bin/nik-${{ matrix.goos }}-${{ matrix.goarch }} version)"
+          got="$(bin/nikctl-${{ matrix.goos }}-${{ matrix.goarch }} version)"
           echo "$got"
           case "$got" in
             "$(cat VERSION) ("*")") ;;
@@ -90,7 +93,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nik-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: bin/nik-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            bin/nikd-${{ matrix.goos }}-${{ matrix.goarch }}
+            bin/nikctl-${{ matrix.goos }}-${{ matrix.goarch }}
           if-no-files-found: error
           retention-days: 1
 

@@ -44,7 +44,7 @@ Paste the one-liner from your dashboard. It looks like:
 curl -fsSL https://nik.ciuffolo.com/install.sh | NIK_TOKEN=nik_... sh
 ```
 
-This downloads the matching `nik` binary into `/usr/local/bin`, links it to your account (`nik connect`), registers a launchd (macOS) or systemd (Linux) service, and starts the daemon. The token in the command is an install code: it works once and expires in 15 minutes — nik swaps it for a fresh one the moment it connects, so it's harmless in your shell history.
+This downloads the matching `nikd` (the daemon) and `nikctl` (the command you type, also linked as `nik`) into `/usr/local/bin`, links it to your account (`nik connect`), registers a launchd (macOS) or systemd (Linux) service, and starts the daemon. The token in the command is an install code: it works once and expires in 15 minutes — nik swaps it for a fresh one the moment it connects, so it's harmless in your shell history.
 
 Without `NIK_TOKEN`, the installer still works and first-run setup asks for the token instead.
 
@@ -54,15 +54,17 @@ Override defaults via environment variables:
 |---|---|---|
 | `NIK_HOME` | `~/.nik` | Workspace directory (database, skills, dreams, journal, ...) |
 | `NIK_VERSION` | `latest` | A specific tag (e.g. `v0.1.0`) instead of the latest release |
-| `NIK_INSTALL_DIR` | `/usr/local/bin` | Where to put the `nik` binary |
+| `NIK_INSTALL_DIR` | `/usr/local/bin` | Where to put the `nikd` and `nikctl` binaries |
 
 ### Manual install
 
-1. Download the binary for your platform from the [releases page](https://github.com/kilianc/nik/releases/latest): `nik-darwin-arm64`, `nik-linux-arm64`, or `nik-linux-amd64`.
-2. Make it executable and move it onto your `$PATH`:
+1. Download **both** binaries for your platform from the [releases page](https://github.com/kilianc/nik/releases/latest) — `nikd-<os>-<arch>` and `nikctl-<os>-<arch>`. They install together: `nikctl` writes a service file pointing at its sibling, and `nikd` mounts its sibling into the shell sandbox.
+2. Make them executable and move them onto your `$PATH`, keeping them side by side:
    ```sh
-   chmod +x nik-*-*
-   sudo mv nik-*-* /usr/local/bin/nik
+   chmod +x nikd-*-* nikctl-*-*
+   sudo mv nikd-*-* /usr/local/bin/nikd
+   sudo mv nikctl-*-* /usr/local/bin/nikctl
+   sudo ln -sf /usr/local/bin/nikctl /usr/local/bin/nik
    ```
 3. Register and start the daemon:
    ```sh
@@ -76,8 +78,8 @@ Requires Go 1.25+ and a C toolchain (CGO is on for `mattn/go-sqlite3`).
 ```sh
 git clone https://github.com/kilianc/nik.git
 cd nik
-make build              # produces ./bin/nik
-./bin/nik install --home ~/.nik
+make build              # produces ./bin/nikd and ./bin/nikctl
+./bin/nikctl install --home ~/.nik
 ```
 
 ## Step 3: First-run setup
@@ -139,7 +141,7 @@ Config reloads on the next tick — no restart needed.
 
 ## Updating
 
-Re-run the install script. The binary is replaced in place; the daemon is restarted by `nik install`.
+Re-run the install script. Both binaries are replaced in place; the daemon is restarted by `nik install`.
 
 ```sh
 curl -fsSL https://github.com/kilianc/nik/releases/latest/download/install.sh | sh
@@ -156,7 +158,7 @@ Stop the service and remove the binary. The workspace at `~/.nik` (database, his
 ```sh
 launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.nik.daemon.plist
 rm ~/Library/LaunchAgents/com.nik.daemon.plist
-sudo rm /usr/local/bin/nik /usr/local/bin/nik-linux-arm64
+sudo rm /usr/local/bin/nikd /usr/local/bin/nikctl /usr/local/bin/nik /usr/local/bin/nikctl-linux-arm64
 # rm -rf ~/.nik          # only if you also want to delete the database and history
 ```
 
@@ -165,7 +167,7 @@ sudo rm /usr/local/bin/nik /usr/local/bin/nik-linux-arm64
 ```sh
 systemctl --user disable --now nikd.service
 rm ~/.config/systemd/user/nikd.service
-sudo rm /usr/local/bin/nik
+sudo rm /usr/local/bin/nikd /usr/local/bin/nikctl /usr/local/bin/nik
 # rm -rf ~/.nik          # only if you also want to delete the database and history
 ```
 

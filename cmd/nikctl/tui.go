@@ -14,18 +14,19 @@ import (
 	"github.com/kciuffolo/nik/internal/contacts"
 	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/genesis"
+	"github.com/kciuffolo/nik/internal/home"
 	"github.com/kciuffolo/nik/internal/messaging"
 	"github.com/kciuffolo/nik/internal/tui"
 )
 
 func runTUI(args []string) {
 	flagSet := flag.NewFlagSet("nik", flag.ExitOnError)
-	home := flagSet.String("home", "", "workspace directory")
+	homeFlag := flagSet.String("home", "", "workspace directory")
 	forceSetup := flagSet.Bool("force-setup", false, "run setup even if config exists")
 	showSystem := flagSet.Bool("show-system", false, "show system messages in chat")
 	flagSet.Parse(args)
 
-	h, err := resolveHome(*home)
+	h, err := home.Resolve(*homeFlag)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)

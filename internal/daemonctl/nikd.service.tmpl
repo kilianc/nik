@@ -9,7 +9,7 @@ StartLimitIntervalSec=120
 
 [Service]
 Type=simple
-ExecStart={{ .NikBinary }} daemon --home {{ .NikHome }}
+ExecStart={{ .NikdBinary }} --home {{ .NikHome }}
 # Always restart: the TUI signals SIGTERM to the daemon to apply config
 # changes, which is a clean exit (status=0). Restart=on-failure would skip
 # that case. See setup.go updateDone.
