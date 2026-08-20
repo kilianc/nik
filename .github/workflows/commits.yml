@@ -1,0 +1,41 @@
+name: commits
+
+# The convention, checked while it is still cheap to fix. main is
+# squash-merged, so the PR title is the subject that lands on main and shows
+# up in the generated release notes; the branch commits are what a reviewer
+# reads on the way there. Both go through the same rule, `bin/check-commits`,
+# which is also runnable locally as `make check-commits`.
+on:
+  pull_request:
+    # `edited` is what catches a retitle — without it a PR renamed after the
+    # first run keeps the green check from the title it no longer has.
+    types: [opened, edited, reopened, synchronize]
+
+concurrency:
+  group: commits-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  commits:
+    name: conventional commits
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # The range needs both of its ends. The default shallow clone has
+          # neither the base branch nor the branch's own history.
+          fetch-depth: 0
+
+      # Via the environment, never through ${{ }} inside the script: a PR
+      # title is text a stranger can write, and interpolation would paste it
+      # into the shell verbatim.
+      - name: PR title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: bin/check-commits --subject "$PR_TITLE"
+
+      - name: Commits
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bin/check-commits "$BASE_SHA..$HEAD_SHA"

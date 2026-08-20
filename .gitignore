@@ -35,6 +35,7 @@
 # Track scripts and service files
 !*.sh
 !bin/check-layering
+!bin/check-commits
 !*.service
 !*.timer
 

@@ -1,0 +1,109 @@
+#!/bin/sh
+# Commit subjects are Conventional Commits, and CI is what says so.
+#
+# main is squash-merged, so the PR title is the subject that lands: whatever
+# it says is what `git log` reads like forever, and the release notes are
+# generated from the PRs merged since the previous tag — a title that ignores
+# the convention ends up on the releases page. The branch's own commits are
+# checked too; they are what a reviewer reads before any of that happens.
+#
+# The type list is deliberately shorter than the spec's: feat, fix, chore,
+# docs, and nothing else (AGENTS.md). Subject length is not checked — subjects
+# here are sentences on purpose, and the longest one on main is 79 columns.
+#
+# Usage:
+#   bin/check-commits                     # origin/main..HEAD
+#   bin/check-commits <range>             # any git range
+#   bin/check-commits --subject "<line>"  # one subject, e.g. a PR title
+set -eu
+
+# type(scope)!: description. Scope is optional and lowercase; `!` marks a
+# breaking change; exactly one space after the colon.
+PATTERN='^(feat|fix|chore|docs)(\([a-z0-9][a-z0-9._/-]*\))?!?: [^ ].*$'
+
+failed=0
+
+check() {
+	where="$1"
+	subject="$2"
+
+	# ` (#123)` is appended by GitHub's squash merge, so it is part of a
+	# landed subject even though nobody typed it.
+	stripped="$(printf '%s' "$subject" | sed 's/ (#[0-9][0-9]*)$//')"
+
+	reason=''
+	if ! printf '%s\n' "$stripped" | grep -Eq "$PATTERN"; then
+		reason='not a conventional commit subject'
+	else
+		case "$stripped" in
+		*.) reason='subject ends with a period' ;;
+		*' ' | *"$(printf '\t')") reason='subject has trailing whitespace' ;;
+		esac
+	fi
+
+	if [ -n "$reason" ]; then
+		echo "check-commits: $where: $reason" >&2
+		echo "    $subject" >&2
+		failed=1
+	fi
+}
+
+explain() {
+	cat >&2 <<'MSG'
+
+Subjects look like:
+
+  feat(gateway): nikd's API, over the socket nik already dials out on
+  fix(shell): read a pane's exit code after it is dead, not before
+  chore: nikctl links none of the daemon's world, and CI says so
+  feat(api)!: the socket speaks a wire format the old nikctl cannot read
+
+type is one of feat, fix, chore, docs — the four AGENTS.md allows, not the
+full Conventional Commits set. Scope is optional, lowercase, and names the
+package or surface. `!` before the colon marks a breaking change. No period
+at the end. Say what the change does, not what you did.
+
+Fix a PR title by editing it on the PR. Fix branch commits by rewriting them:
+
+  git commit --amend                       # the last one
+  git rebase -i origin/main                # anything older
+MSG
+}
+
+if [ "${1-}" = '--subject' ]; then
+	if [ "$#" -ne 2 ]; then
+		echo "usage: check-commits --subject '<line>'" >&2
+		exit 2
+	fi
+	check 'PR title' "$2"
+	if [ "$failed" -ne 0 ]; then
+		explain
+		exit 1
+	fi
+	echo "check-commits: PR title is a conventional commit subject"
+	exit 0
+fi
+
+range="${1-origin/main..HEAD}"
+
+# A..B is already "reachable from B but not from A", so a base branch that
+# moved ahead since the PR opened cannot drag its own commits in here.
+shas="$(git rev-list --no-merges "$range")"
+
+if [ -z "$shas" ]; then
+	echo "check-commits: no commits in $range"
+	exit 0
+fi
+
+count=0
+for sha in $shas; do
+	count=$((count + 1))
+	check "$(git rev-parse --short=7 "$sha")" "$(git log -1 --format=%s "$sha")"
+done
+
+if [ "$failed" -ne 0 ]; then
+	explain
+	exit 1
+fi
+
+echo "check-commits: $count commit(s) in $range, all conventional"
