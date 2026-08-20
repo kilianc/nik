@@ -1,4 +1,10 @@
-package daemonctl
+// Package daemontool exposes a daemon restart to the brain as a tool.
+//
+// It is separate from internal/daemonctl for the same reason internal/configtool
+// is separate from internal/config: a tool definition needs internal/llm, and
+// daemonctl is linked by nikctl to install a service. One ToolDef would put an
+// LLM client library inside the client binary.
+package daemontool
 
 import (
 	"context"
