@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/kciuffolo/nik/internal/alarms"
+	"github.com/kciuffolo/nik/internal/api"
 	"github.com/kciuffolo/nik/internal/brain"
 	"github.com/kciuffolo/nik/internal/codex"
 	"github.com/kciuffolo/nik/internal/config"
@@ -107,11 +108,59 @@ func main() {
 		os.Exit(1)
 	}
 
-	idle := func(reason string) {
-		slog.Info("not ready, idling until restart", "reason", reason)
-		sig := make(chan os.Signal, 1)
-		signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Signals are wired before anything can block, so every wait below ends
+	// the same way — including the pre-config idle, which used to have its
+	// own handler and its own idea of what shutting down meant.
+	sig := make(chan os.Signal, 2)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+
+	go func() {
 		<-sig
+		slog.Info("shutting down, waiting for in-flight work (ctrl-c again to force)")
+		cancel()
+		go func() {
+			<-sig
+			slog.Warn("force exit")
+			os.Exit(1)
+		}()
+	}()
+
+	// The API comes up before the things it reports on, which is the point:
+	// a daemon that cannot answer a message can still answer questions about
+	// why. It is also what lets an unconfigured nik be configured in place
+	// rather than restarted — nothing below is reachable until config loads,
+	// but /v1/health and /v1/version are.
+	state := api.NewState()
+	apiSrv := api.New(state)
+	socketPath := api.OwnerSocketPath(h)
+
+	ln, err := api.Listen(socketPath)
+	if err != nil {
+		fatal("listen on api socket", err)
+	}
+	defer os.Remove(socketPath)
+
+	apiDone := make(chan struct{})
+	go func() {
+		defer close(apiDone)
+		err := apiSrv.Serve(ctx, ln)
+		if err != nil {
+			slog.Error("api server", "pkg", "main", "error", err)
+		}
+	}()
+	slog.Info("api listening", "pkg", "main", "socket", socketPath)
+
+	// idle keeps serving instead of sleeping. A nik with no config is not
+	// broken, it is unconfigured — and the difference is that somebody can
+	// still ask it what it needs.
+	idle := func(reason string) {
+		state.Set("config", false, reason)
+		slog.Info("not configured, serving the api and waiting", "reason", reason)
+		<-ctx.Done()
+		<-apiDone
 	}
 
 	cfg, err := config.Load(h)
@@ -119,11 +168,9 @@ func main() {
 		idle(err.Error())
 		return
 	}
+	state.Set("config", true, cfg.ConfigPath())
 
 	time.Local = cfg.TZ()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	// database
 
@@ -165,6 +212,7 @@ func main() {
 	}
 	defer roConn.Close()
 
+	state.Set("db", true, cfg.DBPath())
 	slog.Info("database ready", "path", cfg.DBPath())
 
 	// ensure dirs
@@ -225,6 +273,7 @@ func main() {
 	go func() { gwErr <- gatewayAdapter.Connect(ctx) }()
 	select {
 	case <-gatewayAdapter.Ready():
+		state.Set("gateway", true, cfg.Gateway.URL)
 		slog.Info("gateway connected", "pkg", "main", "url", cfg.Gateway.URL)
 	case err := <-gwErr:
 		fatal("gateway", err)
@@ -236,6 +285,7 @@ func main() {
 	go func() {
 		if err := <-gwErr; err != nil && ctx.Err() == nil {
 			// Terminal mid-run: the token was revoked out from under us.
+			state.Set("gateway", false, err.Error())
 			fatal("gateway", err)
 		}
 	}()
@@ -265,6 +315,8 @@ func main() {
 		}
 		slog.Info("codex auth ready", "account_id", codexAuth.AccountID)
 	}
+
+	state.Set("models", true, cfg.Models.Main.Model)
 
 	mainLLMOpts := append([]llm.ClientOption{}, sharedLLMOpts...)
 	if cfg.Models.Main.UsesCodexAuth() {
@@ -321,6 +373,7 @@ func main() {
 	if err != nil {
 		fatal("shell setup", err)
 	}
+	state.Set("shell", true, cfg.Shell.DockerImage)
 	slog.Info("shell ready", "pkg", "shell", "docker", cfg.Shell.DockerImage != "")
 
 	messagingSvc.SetSpeechFn(func(ctx context.Context, text string) (string, error) {
@@ -421,23 +474,11 @@ func main() {
 
 	// start
 
-	sig := make(chan os.Signal, 2)
-	signal.Notify(sig, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
-
-	go func() {
-		<-sig
-		slog.Info("shutting down, waiting for in-flight work (ctrl-c again to force)")
-		cancel()
-		go func() {
-			<-sig
-			slog.Warn("force exit")
-			os.Exit(1)
-		}()
-	}()
-
 	brainDone := make(chan struct{})
 	go func() {
+		state.Set("brain", true, "awake")
 		b.Awake(ctx, 2*time.Second)
+		state.Set("brain", false, "shutting down")
 		close(brainDone)
 	}()
 
@@ -447,5 +488,6 @@ func main() {
 	messagingSvc.StopPresence()
 	taskRunner.Wait()
 	shellSvc.StopContainer()
+	<-apiDone
 	slog.Info("shutdown complete")
 }
