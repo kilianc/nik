@@ -244,7 +244,12 @@ func main() {
 	// The chat endpoints go live here rather than at the end of boot: from
 	// this point a client can read history and send into the local
 	// conversation, and the brain picking it up is the next tick's problem.
-	apiSrv.SetChat(apisvc.NewChat(conn, messagingSvc))
+	chatSvc := apisvc.NewChat(conn, messagingSvc)
+	apiSrv.SetChat(chatSvc)
+
+	// One poller, in the process that owns the data, instead of one per
+	// client. Clients fetch history on connect and stream from there.
+	go apisvc.NewWatcher(conn, apiSrv.Broker(), chatSvc).Run(ctx)
 
 	// local adapter
 	messagingSvc.RegisterPlatform(messaging.NewLocalAdapter(conn))

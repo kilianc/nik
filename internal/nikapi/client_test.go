@@ -15,6 +15,14 @@ import (
 func serveOn(t *testing.T, state *api.State) *Client {
 	t.Helper()
 
+	return serveServer(t, api.New(state))
+}
+
+// serveServer runs a given server on a real socket and returns a client
+// pointed at it.
+func serveServer(t *testing.T, srv *api.Server) *Client {
+	t.Helper()
+
 	path := filepath.Join(shortHome(t), "run", "nikd.sock")
 	ln, err := api.Listen(path)
 	if err != nil {
@@ -25,7 +33,7 @@ func serveOn(t *testing.T, state *api.State) *Client {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		_ = api.New(state).Serve(ctx, ln)
+		_ = srv.Serve(ctx, ln)
 	}()
 
 	t.Cleanup(func() {
