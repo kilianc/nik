@@ -1,3 +1,6 @@
+// Command nikd is the nik daemon: the brain loop, the gateway session, the
+// shell sandbox, and the only process that opens NIK_HOME. It takes flags and
+// has no subcommands — everything a person types lives in nikctl.
 package main
 
 import (
@@ -8,7 +11,6 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"os/user"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -24,6 +26,7 @@ import (
 	"github.com/kciuffolo/nik/internal/fs"
 	"github.com/kciuffolo/nik/internal/gateway"
 	"github.com/kciuffolo/nik/internal/genesis"
+	"github.com/kciuffolo/nik/internal/home"
 	"github.com/kciuffolo/nik/internal/llm"
 	niklog "github.com/kciuffolo/nik/internal/log"
 	"github.com/kciuffolo/nik/internal/messaging"
@@ -39,40 +42,10 @@ import (
 )
 
 func main() {
-	subcmd := ""
-	if len(os.Args) > 1 && !strings.HasPrefix(os.Args[1], "-") {
-		subcmd = os.Args[1]
-	}
-
-	known := []string{"connect", "daemon", "install", "secrets", "tui", "version"}
-
-	switch subcmd {
-	case "version":
-		fmt.Println(version.String())
-	case "connect":
-		runConnect(os.Args[2:])
-	case "daemon":
-		runDaemon(os.Args[2:])
-	case "install":
-		runInstall(os.Args[2:])
-	case "secrets":
-		runSecrets(os.Args[2:])
-	case "tui":
-		runTUI(os.Args[2:])
-	case "":
-		runTUI(os.Args[1:])
-	default:
-		fmt.Fprintf(os.Stderr, "unknown command %q\n", subcmd)
-		fmt.Fprintf(os.Stderr, "available commands: %s\n", strings.Join(known, ", "))
-		os.Exit(1)
-	}
-}
-
-func runDaemon(args []string) {
-	flagSet := flag.NewFlagSet("daemon", flag.ExitOnError)
-	home := flagSet.String("home", "", "workspace directory")
+	flagSet := flag.NewFlagSet("nikd", flag.ExitOnError)
+	homeFlag := flagSet.String("home", "", "workspace directory")
 	readonly := flagSet.Bool("readonly", false, "receive messages but skip reflexes and activations")
-	flagSet.Parse(args)
+	flagSet.Parse(os.Args[1:])
 
 	ascii := []string{
 		"oooo   oooo ooooo oooo   oooo",
@@ -90,7 +63,7 @@ func runDaemon(args []string) {
 	fmt.Println(motd)
 	fmt.Println()
 
-	h, err := resolveHome(*home)
+	h, err := home.Resolve(*homeFlag)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
@@ -333,8 +306,16 @@ func runDaemon(args []string) {
 	alarmSvc := alarms.New(cfg, conn)
 	recallSvc := recall.NewService(cfg, recallClient)
 	taskSvc := task.NewService(conn)
-	nikBin, _ := os.Executable()
-	shellSvc := shell.NewService(cfg, conn, nikBin)
+	// The sandbox gets nikctl, never nikd. A skill in the container holding
+	// this binary would hold one that can open the database and the secret
+	// store on its own; holding nikctl leaves it a client of a socket that
+	// can refuse it. Missing is not fatal — the sandbox still runs, it just
+	// has no nik on its PATH.
+	ctlBin, err := daemonctl.SiblingBinary("nikctl")
+	if err != nil {
+		slog.Warn("nikctl not found, sandbox gets no nik binary", "pkg", "main", "error", err)
+	}
+	shellSvc := shell.NewService(cfg, conn, ctlBin)
 
 	err = shellSvc.EnsureReady()
 	if err != nil {
@@ -467,30 +448,4 @@ func runDaemon(args []string) {
 	taskRunner.Wait()
 	shellSvc.StopContainer()
 	slog.Info("shutdown complete")
-}
-
-func resolveHome(override string) (string, error) {
-	h := override
-	if h == "" {
-		h = os.Getenv("NIK_HOME")
-	}
-	if h == "" {
-		u, err := user.Current()
-		if err != nil {
-			return "", fmt.Errorf("get current user: %w", err)
-		}
-		h = filepath.Join(u.HomeDir, ".nik")
-	}
-
-	abs, err := filepath.Abs(h)
-	if err != nil {
-		return "", fmt.Errorf("resolve home path: %w", err)
-	}
-
-	err = os.MkdirAll(abs, 0o755)
-	if err != nil {
-		return "", fmt.Errorf("create home dir: %w", err)
-	}
-
-	return abs, nil
 }

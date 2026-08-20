@@ -10,40 +10,57 @@ GIT_SHA := $(shell git rev-parse --short=7 HEAD 2>/dev/null || echo unknown)
 PKG := github.com/kciuffolo/nik/internal/version
 LDFLAGS := -X $(PKG).Number=$(VERSION) -X $(PKG).SHA=$(GIT_SHA)
 
+# Two binaries since the split: nikd owns NIK_HOME, nikctl is what a person
+# types. They install together and are always built together — a host with one
+# and not the other has no working nik.
+BINS := nikd nikctl
+
+# `build` also cross-builds nikctl for linux: on a macOS host the shell
+# sandbox mounts that one, since a darwin binary cannot run in the container.
 .PHONY: build
 build: build-linux-$(shell go env GOARCH)
 	@mkdir -p $(BIN_DIR)
-	CGO_ENABLED=1 go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/nik ./cmd/nik/
+	@for b in $(BINS); do \
+	  CGO_ENABLED=1 go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$$b ./cmd/$$b/ || exit 1; \
+	done
 
 .PHONY: build-linux-amd64
 build-linux-amd64:
 	@mkdir -p $(BIN_DIR)
-	@docker run --rm --platform linux/amd64 -v $(CURDIR):/src -w /src \
-	  -v nik-gomod-cache:/go/pkg/mod \
-	  -v nik-build-cache-amd64:/root/.cache/go-build \
-	  -e CGO_ENABLED=1 -e CGO_CFLAGS=-w \
-	  golang:1.25 \
-	  go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/nik-linux-amd64 ./cmd/nik/
+	@for b in $(BINS); do \
+	  docker run --rm --platform linux/amd64 -v $(CURDIR):/src -w /src \
+	    -v nik-gomod-cache:/go/pkg/mod \
+	    -v nik-build-cache-amd64:/root/.cache/go-build \
+	    -e CGO_ENABLED=1 -e CGO_CFLAGS=-w \
+	    golang:1.25 \
+	    go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$$b-linux-amd64 ./cmd/$$b/ || exit 1; \
+	done
 
 .PHONY: build-linux-arm64
 build-linux-arm64:
 	@mkdir -p $(BIN_DIR)
-	@docker run --rm --platform linux/arm64 -v $(CURDIR):/src -w /src \
-	  -v nik-gomod-cache:/go/pkg/mod \
-	  -v nik-build-cache-arm64:/root/.cache/go-build \
-	  -e CGO_ENABLED=1 -e CGO_CFLAGS=-w \
-	  golang:1.25 \
-	  go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/nik-linux-arm64 ./cmd/nik/
+	@for b in $(BINS); do \
+	  docker run --rm --platform linux/arm64 -v $(CURDIR):/src -w /src \
+	    -v nik-gomod-cache:/go/pkg/mod \
+	    -v nik-build-cache-arm64:/root/.cache/go-build \
+	    -e CGO_ENABLED=1 -e CGO_CFLAGS=-w \
+	    golang:1.25 \
+	    go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$$b-linux-arm64 ./cmd/$$b/ || exit 1; \
+	done
 
 .PHONY: build-darwin-amd64
 build-darwin-amd64:
 	@mkdir -p $(BIN_DIR)
-	CGO_ENABLED=1 GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/nik-darwin-amd64 ./cmd/nik/
+	@for b in $(BINS); do \
+	  CGO_ENABLED=1 GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$$b-darwin-amd64 ./cmd/$$b/ || exit 1; \
+	done
 
 .PHONY: build-darwin-arm64
 build-darwin-arm64:
 	@mkdir -p $(BIN_DIR)
-	CGO_ENABLED=1 GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/nik-darwin-arm64 ./cmd/nik/
+	@for b in $(BINS); do \
+	  CGO_ENABLED=1 GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$$b-darwin-arm64 ./cmd/$$b/ || exit 1; \
+	done
 
 .PHONY: build-all
 build-all: build-linux-amd64 build-linux-arm64 build-darwin-amd64 build-darwin-arm64
@@ -53,8 +70,10 @@ build-all: build-linux-amd64 build-linux-arm64 build-darwin-amd64 build-darwin-a
 .PHONY: build-release
 build-release:
 	@mkdir -p $(BIN_DIR)
-	CGO_ENABLED=1 go build -ldflags "-s -w $(LDFLAGS)" \
-	  -o $(BIN_DIR)/nik-$(shell go env GOOS)-$(shell go env GOARCH) ./cmd/nik/
+	@for b in $(BINS); do \
+	  CGO_ENABLED=1 go build -ldflags "-s -w $(LDFLAGS)" \
+	    -o $(BIN_DIR)/$$b-$(shell go env GOOS)-$(shell go env GOARCH) ./cmd/$$b/ || exit 1; \
+	done
 
 .PHONY: lint
 lint:
@@ -85,19 +104,19 @@ run: run-daemon
 
 .PHONY: run-daemon
 run-daemon: build
-	./$(BIN_DIR)/nik daemon --home $(NIK_HOME)
+	./$(BIN_DIR)/nikd --home $(NIK_HOME)
 
 .PHONY: run-install
 run-install: build
-	./$(BIN_DIR)/nik install --home $(NIK_HOME)
+	./$(BIN_DIR)/nikctl install --home $(NIK_HOME)
 
 .PHONY: run-tui
 run-tui: build
-	./$(BIN_DIR)/nik tui --home $(NIK_HOME) $(ARGS)
+	./$(BIN_DIR)/nikctl tui --home $(NIK_HOME) $(ARGS)
 
 .PHONY: secrets
 secrets: build
-	./$(BIN_DIR)/nik secrets --home $(NIK_HOME) $(ARGS)
+	./$(BIN_DIR)/nikctl secrets --home $(NIK_HOME) $(ARGS)
 
 .PHONY: migrate
 migrate:

@@ -147,7 +147,12 @@ func (s *Service) startContainer() error {
 		"-v", s.cfg.Home + ":/workspace",
 		"-v", s.cfg.Home + "/nik.db:/workspace/nik.db:ro",
 	}
-	args = append(args, "-v", s.nikBinLinux()+":"+containerNikBin+":ro")
+	// Mounted at /usr/local/bin/nik so `nik secrets read` keeps working from
+	// workspace/secrets/cli and every skill that shells out to it — the name
+	// inside the container is the contract, not which binary backs it.
+	if bin := s.nikBinLinux(); bin != "" {
+		args = append(args, "-v", bin+":"+containerNikBin+":ro")
+	}
 	args = append(args, "-w", "/workspace", s.dockerImage()+":latest", "sleep", "infinity")
 
 	cmd := exec.Command("docker", args...)
