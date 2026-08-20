@@ -2,15 +2,16 @@ package tui
 
 import (
 	"context"
-	"database/sql"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/kciuffolo/nik/internal/api"
 	"github.com/kciuffolo/nik/internal/codex"
 	"github.com/kciuffolo/nik/internal/config"
-	"github.com/kciuffolo/nik/internal/db"
-	"github.com/kciuffolo/nik/internal/secrets"
+	"github.com/kciuffolo/nik/internal/nikapi"
 )
 
 // The gateway is the hard gate: welcome leads to it before anything else.
@@ -397,176 +398,48 @@ func TestSetupLocationResolvedSuccess(t *testing.T) {
 	}
 }
 
-func TestSetupWriteFansOutToContacts(t *testing.T) {
+// The wizard hands what it collected to nikd. Timezone reaching the contact
+// cards is nikd's business now — see apisvc.Config.propagate and its test.
+//
+// What stays this package's problem: the typed install token must never be
+// written back as a secret. The gateway step already stored the rotated one,
+// and writing the typed value over it would resurrect a dead install code.
+func TestSetupWriteSendsKeysButNeverTheTypedToken(t *testing.T) {
 	cfg := config.Default(t.TempDir())
 	cfg.Timezone = "Europe/Rome"
 	cfg.Location = "Rome, Italy"
-	conn := newTestDB(t)
 
-	msg := writeSetupCmd(cfg, conn, "", "", "nik_test-token")()
+	secrets := &recordingSecrets{values: map[string]string{}}
+	client := serveFakeAPI(t, secrets)
+
+	msg := writeSetupCmd(client, cfg, "sk-openai", "exa-key", "nik_test-token")()
 
 	written, ok := msg.(configWrittenMsg)
 	if !ok {
 		t.Fatalf("expected configWrittenMsg, got %T", msg)
 	}
-	// The typed token is NOT what gets stored: the validation probe already
-	// stored the rotated one, and writing the typed value back would
-	// resurrect a dead install code.
-	if got, _ := secrets.New(cfg.Home).Get("gateway_token"); got == "nik_test-token" {
-		t.Fatal("writeSetupCmd stored the typed install token over the rotated one")
-	}
 	if written.err != nil {
 		t.Fatalf("write failed: %v", written.err)
 	}
 
-	ctx := context.Background()
-	for _, cid := range []string{db.OwnerContactID, db.NikContactID} {
-		c, err := db.ContactGet(ctx, conn, cid)
-		if err != nil {
-			t.Fatalf("get contact %s: %v", cid, err)
-		}
-		if !c.Timezone.Valid || c.Timezone.String != "Europe/Rome" {
-			t.Errorf("%s timezone = %v, want Europe/Rome", cid, c.Timezone)
-		}
-		if !c.Location.Valid || c.Location.String != "Rome, Italy" {
-			t.Errorf("%s location = %v, want Rome, Italy", cid, c.Location)
-		}
+	if secrets.values["openai_key"] != "sk-openai" {
+		t.Errorf("openai_key = %q", secrets.values["openai_key"])
 	}
-}
-
-func TestSetupDaemonPoll(t *testing.T) {
-	cases := []struct {
-		name          string
-		msg           daemonPollMsg
-		wantCompleted bool
-		wantRetry     bool
-	}{
-		{"new pid completes", daemonPollMsg{pid: 200, alive: true}, true, false},
-		{"same pid retries", daemonPollMsg{pid: 100, alive: true}, false, true},
-		{"not alive retries", daemonPollMsg{alive: false}, false, true},
+	if secrets.values["exa_api_key"] != "exa-key" {
+		t.Errorf("exa_api_key = %q", secrets.values["exa_api_key"])
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			w := newTestSetup(t)
-			w.step = stepWaitDaemon
-			w.daemonOldPID = 100
-
-			w, cmd := w.Update(tc.msg)
-
-			if w.completed != tc.wantCompleted {
-				t.Errorf("completed = %v, want %v", w.completed, tc.wantCompleted)
-			}
-			if tc.wantRetry && cmd == nil {
-				t.Error("expected retry poll cmd")
-			}
-		})
-	}
-}
-
-func TestSetupIsDone(t *testing.T) {
-	w := newTestSetup(t)
-
-	if w.isDone() {
-		t.Error("setup should not be done initially")
-	}
-
-	w.completed = true
-	if !w.isDone() {
-		t.Error("setup should be done when completed")
-	}
-}
-
-func TestSetupView(t *testing.T) {
-	cases := []struct {
-		name  string
-		setup func(*setupModel)
-		wants []string
-	}{
-		{
-			name:  "welcome",
-			setup: func(w *setupModel) {},
-			wants: []string{"Welcome", "press enter to begin"},
-		},
-		{
-			name:  "auth choice",
-			setup: func(w *setupModel) { w.step = stepAuthChoice },
-			wants: []string{"OpenAI", "subscription", "API key"},
-		},
-		{
-			name:  "api key with subscription",
-			setup: func(w *setupModel) { w.step = stepAPIKey; w.hasSubscription = true },
-			wants: []string{"doesn't apply to you", "recall"},
-		},
-		{
-			name:  "api key without subscription",
-			setup: func(w *setupModel) { w.step = stepAPIKey; w.hasSubscription = false },
-			wants: []string{"this applies to you"},
-		},
-		{
-			name:  "exa key",
-			setup: func(w *setupModel) { w.step = stepExaKey },
-			wants: []string{"Exa API Key", "free tier", "dashboard.exa.ai"},
-		},
-		{
-			name: "model recommended",
-			setup: func(w *setupModel) {
-				w.models = apiModels
-				w.cfg.Models.Main.Model = apiModels[0]
-				w.step = stepModel
-			},
-			wants: []string{"(recommended)"},
-		},
-		{
-			name: "done summary",
-			setup: func(w *setupModel) {
-				w.step = stepDone
-				w.hasSubscription = true
-				w.cfg.Models.Main.Model = "gpt-5.4"
-				w.cfg.Timezone = "America/New_York"
-				w.cfg.Location = "New York, NY"
-			},
-			wants: []string{"all set", "connected", "gpt-5.4", "America/New_York", "New York, NY"},
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			w := newTestSetup(t)
-			tc.setup(&w)
-
-			view := w.View()
-
-			for _, want := range tc.wants {
-				if !strings.Contains(view, want) {
-					t.Errorf("view missing %q", want)
-				}
-			}
-		})
+	if _, wrote := secrets.values["gateway_token"]; wrote {
+		t.Fatal("the wizard wrote the typed install token over the rotated one")
 	}
 }
 
 func newTestSetup(t *testing.T) setupModel {
 	t.Helper()
-	cfg := config.Default(t.TempDir())
-	conn := newTestDB(t)
-	return newSetupModel(cfg, conn)
-}
 
-func newTestDB(t *testing.T) *sql.DB {
-	t.Helper()
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	t.Cleanup(func() { conn.Close() })
-
-	ctx := context.Background()
-	if err := db.NikContactEnsure(ctx, conn); err != nil {
-		t.Fatalf("ensure nik contact: %v", err)
-	}
-	if err := db.OwnerContactEnsure(ctx, conn); err != nil {
-		t.Fatalf("ensure owner contact: %v", err)
-	}
-	return conn
+	// A nil client: these tests drive the wizard's state machine, and every
+	// command it can issue guards on a nil client rather than reaching for a
+	// daemon that is not there.
+	return newSetupModel(config.Default(t.TempDir()), nil)
 }
 
 var errTest = &testError{"test error"}
@@ -574,3 +447,88 @@ var errTest = &testError{"test error"}
 type testError struct{ msg string }
 
 func (e *testError) Error() string { return e.msg }
+
+// recordingSecrets is a secret store that remembers what it was told, so a
+// test can assert on what the wizard sent rather than on what a real store
+// did with it.
+type recordingSecrets struct {
+	values map[string]string
+}
+
+func (r *recordingSecrets) List(context.Context) ([]string, error) {
+	names := make([]string, 0, len(r.values))
+	for name := range r.values {
+		names = append(names, name)
+	}
+
+	return names, nil
+}
+
+func (r *recordingSecrets) Get(_ context.Context, _ api.Scope, name string) (string, error) {
+	value, ok := r.values[name]
+	if !ok {
+		return "", api.ErrNotFound
+	}
+
+	return value, nil
+}
+
+func (r *recordingSecrets) Set(_ context.Context, _ api.Scope, name, value string) error {
+	r.values[name] = value
+
+	return nil
+}
+
+func (r *recordingSecrets) Delete(_ context.Context, name string) error {
+	delete(r.values, name)
+
+	return nil
+}
+
+type stubConfig struct{ fields map[string]string }
+
+func (s *stubConfig) Get(context.Context) (map[string]any, error) {
+	return map[string]any{}, nil
+}
+
+func (s *stubConfig) Set(_ context.Context, field, value string) error {
+	s.fields[field] = value
+
+	return nil
+}
+
+// serveFakeAPI runs a real nikd API over a real socket, backed by stubs. The
+// wizard's commands go over the wire the way they will in life; what is faked
+// is only what sits behind the handlers.
+func serveFakeAPI(t *testing.T, secrets api.Secrets) *nikapi.Client {
+	t.Helper()
+
+	dir, err := os.MkdirTemp("", "nik")
+	if err != nil {
+		t.Fatalf("temp dir: %v", err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+
+	path := filepath.Join(dir, "nikd.sock")
+	ln, err := api.Listen(path)
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+
+	srv := api.New(api.NewState())
+	srv.SetSecrets(secrets)
+	srv.SetConfig(&stubConfig{fields: map[string]string{}})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = srv.Serve(ctx, ln)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		<-done
+	})
+
+	return nikapi.NewAtSocket(path)
+}

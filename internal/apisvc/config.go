@@ -5,9 +5,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/kciuffolo/nik/internal/api"
 	"github.com/kciuffolo/nik/internal/config"
+	"github.com/kciuffolo/nik/internal/db"
 )
 
 // Config serves the same operations the `config` brain tool does, and
@@ -29,6 +31,9 @@ func (c *Config) Get(ctx context.Context) (map[string]any, error) {
 
 func (c *Config) Set(ctx context.Context, field, value string) error {
 	err := config.SetField(c.cfg, field, value)
+	if err == nil {
+		c.propagate(ctx, field, value)
+	}
 
 	// A typo'd field name is the client's mistake and gets a 400; a config
 	// file that will not write is nikd's and gets a 500. The config package
@@ -41,4 +46,32 @@ func (c *Config) Set(ctx context.Context, field, value string) error {
 	}
 
 	return err
+}
+
+// propagate keeps the things that shadow a config value in step with it.
+//
+// Timezone and location live on nik's and the owner's contact cards as well as
+// in config.yaml, because that is where the brain reads them from. The setup
+// wizard used to write both halves itself; doing it here means anything that
+// changes the config — the wizard, nik's own `config` tool, a console — gets
+// the second half for free rather than remembering to.
+func (c *Config) propagate(ctx context.Context, field, value string) {
+	if c.conn == nil {
+		return
+	}
+	if field != "timezone" && field != "location" {
+		return
+	}
+
+	for _, contactID := range []string{db.OwnerContactID, db.NikContactID} {
+		err := db.ContactUpdate(ctx, c.conn, db.ContactUpdateParams{
+			ID: contactID, Field: field, Value: value,
+		})
+		if err != nil {
+			// Not fatal: config.yaml is the source of truth and the contact
+			// card is a copy of it. Worth a line, not a failed request.
+			slog.Warn("propagate config to contact",
+				"pkg", "apisvc", "field", field, "contact", contactID, "error", err)
+		}
+	}
 }
