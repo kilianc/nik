@@ -178,6 +178,57 @@ func (c *Client) Workload(ctx context.Context) (api.WorkloadEvent, error) {
 	return out, err
 }
 
+// Query runs a read-only statement against nik's database. Writes are
+// refused, and sensitive columns come back redacted — the same rules nik's own
+// db_query tool follows, because it is the same code.
+func (c *Client) Query(ctx context.Context, query string) (map[string]any, error) {
+	var out map[string]any
+	err := c.request(ctx, http.MethodPost, "/v1/db/query", api.QueryRequest{Query: query}, &out)
+
+	return out, err
+}
+
+// Shell runs a command in nik's sandbox. A command that outlives the wait
+// keeps running; the result says so rather than killing it.
+func (c *Client) Shell(ctx context.Context, command string, timeoutSeconds int) (api.ShellResult, error) {
+	var out api.ShellResult
+	err := c.request(ctx, http.MethodPost, "/v1/shell",
+		api.ShellRequest{Command: command, TimeoutSeconds: timeoutSeconds}, &out)
+
+	return out, err
+}
+
+// Logs tails nikd's own log. errorsOnly reads the warnings-and-above file
+// instead, which is where a nik that is up and not answering says why.
+func (c *Client) Logs(ctx context.Context, errorsOnly bool, lines int) ([]string, error) {
+	q := url.Values{}
+	if errorsOnly {
+		q.Set("errors", "true")
+	}
+	if lines > 0 {
+		q.Set("lines", strconv.Itoa(lines))
+	}
+
+	path := "/v1/logs"
+	if len(q) > 0 {
+		path += "?" + q.Encode()
+	}
+
+	var out struct {
+		Lines []string `json:"lines"`
+	}
+	err := c.get(ctx, path, &out)
+
+	return out.Lines, err
+}
+
+// Restart asks nikd to stop and come back. It returns once the request was
+// accepted, which is not the same as it having returned — only a fresh
+// connection proves that.
+func (c *Client) Restart(ctx context.Context) error {
+	return c.post(ctx, "/v1/daemon/restart", struct{}{})
+}
+
 // Secrets lists the names in the store. Values are never included: a list is
 // for knowing what is there, not for reading it.
 func (c *Client) Secrets(ctx context.Context) ([]string, error) {

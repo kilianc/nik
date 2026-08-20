@@ -48,6 +48,10 @@ type Server struct {
 	secrets    Secrets
 	onboarding Onboarding
 	workload   Workload
+	inspector  Inspector
+	shell      Shell
+	logs       Logs
+	restarter  Restarter
 }
 
 func New(state *State) *Server {
@@ -73,6 +77,11 @@ func (s *Server) routes() {
 
 	s.mux.HandleFunc("GET /v1/onboarding", s.handleOnboarding)
 	s.mux.HandleFunc("GET /v1/workload", s.handleWorkload)
+
+	s.mux.HandleFunc("POST /v1/db/query", s.handleQuery)
+	s.mux.HandleFunc("POST /v1/shell", s.handleShell)
+	s.mux.HandleFunc("GET /v1/logs", s.handleLogs)
+	s.mux.HandleFunc("POST /v1/daemon/restart", s.handleRestart)
 
 	s.mux.HandleFunc("GET /v1/secrets", s.handleSecretsList)
 	s.mux.HandleFunc("GET /v1/secrets/{name}", s.handleSecretGet)

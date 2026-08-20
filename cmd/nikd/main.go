@@ -86,14 +86,17 @@ func main() {
 	}
 	defer daemonctl.RemovePID(h)
 
-	logFile, err := os.OpenFile(filepath.Join(h, "nik.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	logPath := filepath.Join(h, "nik.log")
+	errLogPath := filepath.Join(h, "nik.err.log")
+
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: open log file: %v\n", err)
 		os.Exit(1)
 	}
 	defer logFile.Close()
 
-	errLogFile, err := os.OpenFile(filepath.Join(h, "nik.err.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	errLogFile, err := os.OpenFile(errLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: open error log file: %v\n", err)
 		os.Exit(1)
@@ -173,6 +176,12 @@ func main() {
 	// no config.yaml yet. So this goes live with the gateway, before the
 	// wait, rather than after it.
 	apiSrv.SetSecrets(apisvc.NewSecrets(secretStore))
+
+	// Logs go live with the API, not after config: a nik stuck before config
+	// is exactly the one whose log somebody needs, and it has been writing
+	// one since the line above.
+	apiSrv.SetLogs(apisvc.NewLogs(logPath, errLogPath))
+	apiSrv.SetRestarter(apisvc.NewRestarter())
 
 	// The sandbox's own door: named secrets and health, nothing else. It is
 	// bind-mounted into the shell container, whose view of NIK_HOME/run is an
@@ -341,6 +350,7 @@ func main() {
 	apiSrv.SetConfig(apisvc.NewConfig(cfg, conn))
 	apiSrv.SetOnboarding(apisvc.NewOnboarding(conn))
 	apiSrv.SetWorkload(apisvc.NewWorkload(conn))
+	apiSrv.SetInspector(apisvc.NewInspector(roConn))
 	apiSrv.SetGateway(apisvc.NewGateway(h, secretStore, cfg, nil))
 
 	// One poller, in the process that owns the data, instead of one per
@@ -472,6 +482,11 @@ func main() {
 	}
 	shellSvc := shell.NewService(cfg, conn, ctlBin)
 	shellSvc.SetSandboxSocket(sandboxPath)
+
+	// The sandbox reaches the API through a function rather than the service
+	// itself, so internal/apisvc does not import internal/shell and drag
+	// docker and tmux into everything that touches the API.
+	apiSrv.SetShell(apisvc.NewShell(shellSvc.RunForAPI))
 
 	err = shellSvc.EnsureReady()
 	if err != nil {
