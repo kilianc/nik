@@ -354,6 +354,7 @@ Before applying any migration to the live DB:
 - rename `howto/` to `recipes/` — the old name implied tutorial content; the actual artifacts are operational procedures, diagnostic runbooks, and learned workflows. "Recipes" matches the skill's own language and doesn't carry DevOps connotations like "runbooks." Applied 2026-04-02.
 - when the plan marks something as out of scope, the agent must never perform that action during execution — stop and ask the user how to proceed instead of unilaterally resolving blockers. "Out of scope" means "not your call."
 - when changing repo layout or build artifact locations, update the canonical project structure table and any docs/examples that mention the old layout in the same change.
+- shell scripts must never call `sudo` unconditionally — set `SUDO=""` and override it with `SUDO=sudo` only when `id -u` is not 0. Already-root-with-no-sudo is a real environment (any container, and nik-saas installs into its cells exactly that way), and there the call fails as `sudo: not found` — exit 127 under `set -eu`, which reads as nothing at all rather than as a permission problem.
 
 ## Fin
 
