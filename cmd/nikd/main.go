@@ -18,6 +18,7 @@ import (
 
 	"github.com/kciuffolo/nik/internal/alarms"
 	"github.com/kciuffolo/nik/internal/api"
+	"github.com/kciuffolo/nik/internal/apisvc"
 	"github.com/kciuffolo/nik/internal/brain"
 	"github.com/kciuffolo/nik/internal/codex"
 	"github.com/kciuffolo/nik/internal/config"
@@ -239,6 +240,11 @@ func main() {
 
 	contactsSvc := contacts.NewService(conn)
 	messagingSvc := messaging.NewService(cfg, conn, contactsSvc)
+
+	// The chat endpoints go live here rather than at the end of boot: from
+	// this point a client can read history and send into the local
+	// conversation, and the brain picking it up is the next tick's problem.
+	apiSrv.SetChat(apisvc.NewChat(conn, messagingSvc))
 
 	// local adapter
 	messagingSvc.RegisterPlatform(messaging.NewLocalAdapter(conn))

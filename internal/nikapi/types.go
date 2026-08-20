@@ -9,10 +9,15 @@ import "github.com/kciuffolo/nik/internal/api"
 // to keep in step.
 
 type (
-	Version   = apiVersion
-	Health    = api.Health
-	Subsystem = api.Subsystem
+	Version      = apiVersion
+	Health       = api.Health
+	Subsystem    = api.Subsystem
+	Conversation = api.Conversation
+	Message      = api.Message
 )
+
+// LocalConversationID is the conversation the TUI and the console render.
+const LocalConversationID = api.LocalConversationID
 
 // apiVersion mirrors the server's unexported response shape. It is spelled
 // out here because the server's is deliberately private: /v1/version is the

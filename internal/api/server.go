@@ -17,9 +17,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/kciuffolo/nik/internal/version"
@@ -34,6 +37,11 @@ const APIVersion = 1
 type Server struct {
 	state *State
 	mux   *http.ServeMux
+
+	// Everything below is plugged in as nikd converges, so the guard is a
+	// nil check rather than a boot ordering rule. See SetChat.
+	mu   sync.RWMutex
+	chat Chat
 }
 
 func New(state *State) *Server {
@@ -46,6 +54,10 @@ func New(state *State) *Server {
 func (s *Server) routes() {
 	s.mux.HandleFunc("GET /v1/version", s.handleVersion)
 	s.mux.HandleFunc("GET /v1/health", s.handleHealth)
+
+	s.mux.HandleFunc("GET /v1/conversations/{id}", s.handleConversationGet)
+	s.mux.HandleFunc("GET /v1/conversations/{id}/messages", s.handleMessagesList)
+	s.mux.HandleFunc("POST /v1/conversations/{id}/messages", s.handleMessageSend)
 }
 
 // Handler is the whole API as an http.Handler, which is what lets the same
@@ -128,6 +140,26 @@ type Error struct {
 
 func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, Error{Error: msg})
+}
+
+// maxRequestBody is generous for a chat message and small enough that a
+// malformed or hostile client cannot make nikd allocate its way out of a
+// cell's memory budget. Bodies large enough to matter — media — are uploaded
+// as their own thing, not as JSON.
+const maxRequestBody = 1 << 20
+
+func readJSON[T any](r *http.Request) (T, error) {
+	var out T
+
+	dec := json.NewDecoder(io.LimitReader(r.Body, maxRequestBody))
+	dec.DisallowUnknownFields()
+
+	err := dec.Decode(&out)
+	if err != nil {
+		return out, fmt.Errorf("invalid request body: %w", err)
+	}
+
+	return out, nil
 }
 
 // logRequests records what was asked and how it went. On the owner socket
