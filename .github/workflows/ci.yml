@@ -54,11 +54,13 @@ jobs:
 
       # The release build, on the PR that could break it, rather than at 1am
       # when someone is cutting a release. Proves the ldflags stamp still
-      # lands: an unstamped binary reports "dev" forever.
+      # lands: an unstamped binary reports "dev" forever. Both binaries are
+      # built; nikctl is the one that can answer `version`.
       - name: Release build
         run: |
           make build-release
-          got="$(bin/nik-$(go env GOOS)-$(go env GOARCH) version)"
+          test -x "bin/nikd-$(go env GOOS)-$(go env GOARCH)"
+          got="$(bin/nikctl-$(go env GOOS)-$(go env GOARCH) version)"
           echo "$got"
           case "$got" in
             "$(cat VERSION) ("*")") ;;
