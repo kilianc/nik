@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"mime"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,6 +31,10 @@ type Adapter struct {
 	client *client
 
 	receiver messaging.MessageReceiver
+
+	// apiHandler is nikd's API, answered over this socket when the owner has
+	// turned the tunnel on.
+	apiHandler http.Handler
 }
 
 func NewAdapter(cfg *config.Config, url, token, name string, priv *[keySize]byte) *Adapter {
@@ -44,6 +49,19 @@ func (a *Adapter) Start(_ context.Context, receiver messaging.MessageReceiver) e
 	a.client.onMessage = a.handleMessage
 	a.client.onConversation = a.handleConversation
 	a.client.onReady = a.handleReady
+
+	// Two conditions, both required. Config says the owner agreed; a handler
+	// says there is something to answer with. Either alone leaves it off.
+	if a.cfg != nil && a.cfg.Gateway.API && a.apiHandler != nil {
+		a.client.tunnel = newTunnel(
+			a.apiHandler,
+			a.client.priv,
+			a.client.pub,
+			a.client.send,
+		)
+		slog.Info("api tunnel on — this nik answers its api over the gateway",
+			"pkg", "gateway")
+	}
 
 	return nil
 }
@@ -444,6 +462,13 @@ func Enabled(cfg *config.Config, store secretStore) bool {
 
 // FromConfig builds the adapter from config and the secret store, creating the
 // agent key on first run.
+// APIHandler is nikd's API, for the tunnel to answer through. Set before
+// Start; nil leaves the tunnel off however config feels about it, since a
+// tunnel with nothing behind it is worse than none.
+func (a *Adapter) SetAPIHandler(h http.Handler) {
+	a.apiHandler = h
+}
+
 func FromConfig(cfg *config.Config, store secretStore, name string) (*Adapter, error) {
 	token, err := store.Get(tokenSecretName)
 	if err != nil {

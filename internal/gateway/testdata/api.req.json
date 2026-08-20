@@ -1,0 +1,12 @@
+{
+  "id": "01932f8e-4a1c-7c3d-9f21-8b4e6a2d1c07",
+  "type": "api.req",
+  "ts": "2026-08-20T09:14:22.481Z",
+  "payload": {
+    "method": "GET",
+    "path": "/v1/conversations/local/messages",
+    "query": "limit=50",
+    "session_key": "3f7a1d90c4e85b26f0a3d71c8e594b2af6d038c17b9e42a5d6c8f01e3b7a95d4",
+    "sealed": ""
+  }
+}

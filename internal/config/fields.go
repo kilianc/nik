@@ -40,6 +40,10 @@ func Snapshot(cfg *Config) map[string]any {
 		"shell": map[string]any{
 			"docker_image": cfg.Shell.DockerImage,
 		},
+		"gateway": map[string]any{
+			"url": cfg.Gateway.URL,
+			"api": cfg.Gateway.API,
+		},
 		"max_history":                 cfg.MaxHistory,
 		"timezone":                    cfg.Timezone,
 		"location":                    cfg.Location,
@@ -143,6 +147,15 @@ func SetField(cfg *Config, field, value string) error {
 		cfg.Models.Recall.Backend = value
 	case "shell.docker_image":
 		cfg.Shell.DockerImage = value
+	case "gateway.api":
+		switch value {
+		case "true":
+			cfg.Gateway.API = true
+		case "false":
+			cfg.Gateway.API = false
+		default:
+			return fmt.Errorf("%w: gateway.api %q (true or false)", ErrInvalidValue, value)
+		}
 	case "models.recall.verbosity":
 		if !isValidVerbosity(value) {
 			return fmt.Errorf("%w: models.recall.verbosity %q (low, medium, high, or empty)", ErrInvalidValue, value)

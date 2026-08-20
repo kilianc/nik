@@ -371,6 +371,12 @@ func main() {
 		fatal("create gateway adapter", err)
 	}
 
+	// The API tunnel: nikd's own handler, answered over the socket the
+	// gateway already holds. Off unless gateway.api says otherwise — this is
+	// remote access to somebody's computer, and nobody should get it by
+	// upgrading.
+	gatewayAdapter.SetAPIHandler(apiSrv.Handler())
+
 	messagingSvc.RegisterPlatform(gatewayAdapter)
 	err = gatewayAdapter.Start(ctx, messagingSvc)
 	if err != nil {
