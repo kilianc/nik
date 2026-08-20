@@ -10,6 +10,7 @@ import (
 
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/gateway"
+	"github.com/kciuffolo/nik/internal/home"
 	"github.com/kciuffolo/nik/internal/secrets"
 )
 
@@ -24,7 +25,7 @@ import (
 //	echo -n TOKEN | nik connect
 func runConnect(args []string) {
 	flagSet := flag.NewFlagSet("connect", flag.ExitOnError)
-	home := flagSet.String("home", "", "workspace directory")
+	homeFlag := flagSet.String("home", "", "workspace directory")
 	url := flagSet.String("url", "", "gateway websocket URL (default: config, else production)")
 	flagSet.Parse(args)
 
@@ -41,7 +42,7 @@ func runConnect(args []string) {
 		os.Exit(1)
 	}
 
-	h, err := resolveHome(*home)
+	h, err := home.Resolve(*homeFlag)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)

@@ -5,12 +5,12 @@ import (
 	"runtime"
 )
 
-func Install(nikBinary, nikHome string) error {
+func Install(nikdBinary, nikHome string) error {
 	switch runtime.GOOS {
 	case "darwin":
-		return installLaunchd(nikBinary, nikHome)
+		return installLaunchd(nikdBinary, nikHome)
 	case "linux":
-		return installSystemd(nikBinary, nikHome)
+		return installSystemd(nikdBinary, nikHome)
 	default:
 		return fmt.Errorf("unsupported OS: %s", runtime.GOOS)
 	}

@@ -28,26 +28,32 @@ if [ "$OS" = "darwin" ] && [ "$ARCH" = "amd64" ]; then
 fi
 
 if [ "$VERSION" = "latest" ]; then
-  URL="https://github.com/kilianc/nik/releases/latest/download/nik-${OS}-${ARCH}"
+  BASE="https://github.com/kilianc/nik/releases/latest/download"
 else
-  URL="https://github.com/kilianc/nik/releases/download/${VERSION}/nik-${OS}-${ARCH}"
+  BASE="https://github.com/kilianc/nik/releases/download/${VERSION}"
 fi
 
-echo "Downloading nik (${OS}/${ARCH}) from ${URL}..."
-curl -fsSL "$URL" -o /tmp/nik
-chmod +x /tmp/nik
-sudo mv /tmp/nik "${INSTALL_DIR}/nik"
+# nikd and nikctl install together. A host with one and not the other has no
+# working nik: nikctl writes a service file pointing at its sibling, and nikd
+# mounts its sibling into the shell sandbox.
+fetch() {
+  echo "Downloading $1 from ${BASE}/$1..."
+  curl -fsSL "${BASE}/$1" -o "/tmp/$1"
+  chmod +x "/tmp/$1"
+  sudo mv "/tmp/$1" "${INSTALL_DIR}/$2"
+}
 
+fetch "nikd-${OS}-${ARCH}" nikd
+fetch "nikctl-${OS}-${ARCH}" nikctl
+
+# `nik` is how nikctl is spelled in the house — the README, the docs and
+# everyone's muscle memory say it, and `nikctl chat` reads like infrastructure.
+sudo ln -sf "${INSTALL_DIR}/nikctl" "${INSTALL_DIR}/nik"
+
+# On macOS the sandbox cannot run the native client, so the linux build of
+# nikctl rides along for the container mount. nikd is never mounted there.
 if [ "$OS" = "darwin" ]; then
-  if [ "$VERSION" = "latest" ]; then
-    LINUX_URL="https://github.com/kilianc/nik/releases/latest/download/nik-linux-${ARCH}"
-  else
-    LINUX_URL="https://github.com/kilianc/nik/releases/download/${VERSION}/nik-linux-${ARCH}"
-  fi
-  echo "Downloading nik (linux/${ARCH}) for shell container from ${LINUX_URL}..."
-  curl -fsSL "$LINUX_URL" -o /tmp/nik-linux-${ARCH}
-  chmod +x /tmp/nik-linux-${ARCH}
-  sudo mv /tmp/nik-linux-${ARCH} "${INSTALL_DIR}/nik-linux-${ARCH}"
+  fetch "nikctl-linux-${ARCH}" "nikctl-linux-${ARCH}"
 fi
 
 mkdir -p "$NIK_HOME"
@@ -58,14 +64,14 @@ mkdir -p "$NIK_HOME"
 if [ -n "$NIK_TOKEN" ]; then
   echo "Linking this nik to your account..."
   if [ -n "$NIK_GATEWAY_URL" ]; then
-    nik connect --home "$NIK_HOME" --url "$NIK_GATEWAY_URL" "$NIK_TOKEN"
+    nikctl connect --home "$NIK_HOME" --url "$NIK_GATEWAY_URL" "$NIK_TOKEN"
   else
-    nik connect --home "$NIK_HOME" "$NIK_TOKEN"
+    nikctl connect --home "$NIK_HOME" "$NIK_TOKEN"
   fi
 fi
 
 echo "Setting up daemon service..."
-nik install --home "$NIK_HOME"
+nikctl install --home "$NIK_HOME"
 
 echo ""
 if [ -n "$NIK_TOKEN" ]; then

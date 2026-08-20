@@ -69,7 +69,7 @@ every: "every 15 minutes"
 
 ## When does a reflex fire?
 
-`SkillCheckReflex` runs every 5 minutes (registered in `cmd/nik/main.go`). On each tick:
+`SkillCheckReflex` runs every 5 minutes (registered in `cmd/nikd/main.go`). On each tick:
 
 ```
 for each reflex in ListReflexes():

@@ -28,7 +28,7 @@ func systemdUnitPath() (string, error) {
 	return filepath.Join(u.HomeDir, ".config", "systemd", "user", systemdUserUnit), nil
 }
 
-func installSystemd(nikBinary, nikHome string) error {
+func installSystemd(nikdBinary, nikHome string) error {
 	unitPath, err := systemdUnitPath()
 	if err != nil {
 		return err
@@ -41,11 +41,11 @@ func installSystemd(nikBinary, nikHome string) error {
 
 	var buf bytes.Buffer
 	err = systemdUnitTmpl.Execute(&buf, struct {
-		NikBinary string
-		NikHome   string
+		NikdBinary string
+		NikHome    string
 	}{
-		NikBinary: nikBinary,
-		NikHome:   nikHome,
+		NikdBinary: nikdBinary,
+		NikHome:    nikHome,
 	})
 	if err != nil {
 		return fmt.Errorf("render unit template: %w", err)

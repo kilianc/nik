@@ -35,12 +35,19 @@ func (s *Service) nikBinDir() string {
 	return filepath.Dir(s.nikBin)
 }
 
+// nikBinLinux is the client binary as the container needs it: on a macOS host
+// the native nikctl cannot run inside a linux container, so the cross-built
+// sibling `make build-all` leaves in bin/ is mounted instead. Empty when there
+// is no nik binary to give the sandbox at all.
 func (s *Service) nikBinLinux() string {
+	if s.nikBin == "" {
+		return ""
+	}
 	if runtime.GOOS == "linux" {
 		return s.nikBin
 	}
 	return filepath.Join(filepath.Dir(s.nikBin),
-		fmt.Sprintf("nik-linux-%s", runtime.GOARCH))
+		fmt.Sprintf("nikctl-linux-%s", runtime.GOARCH))
 }
 
 func (s *Service) containerName() string { return s.cfg.Shell.DockerImage }
