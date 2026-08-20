@@ -184,17 +184,22 @@ func TestSetupCodexDoneToAPIKey(t *testing.T) {
 
 func TestSetupRequiredFieldsBlock(t *testing.T) {
 	cases := []struct {
-		name string
-		step setupStep
+		name  string
+		step  setupStep
+		empty func(*setupModel)
 	}{
-		{"api key", stepAPIKey},
-		{"exa key", stepExaKey},
-		{"timezone", stepTimezone},
+		{"api key", stepAPIKey, func(w *setupModel) { w.apiKeyIn.SetValue("") }},
+		{"exa key", stepExaKey, func(w *setupModel) { w.exaKeyIn.SetValue("") }},
+		// The timezone field is prefilled from the host zone when TZ names a
+		// real one, so empty it here: the state under test is the empty input,
+		// not whatever the environment happens to hand us.
+		{"timezone", stepTimezone, func(w *setupModel) { w.timezoneIn.SetValue("") }},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			w := newTestSetup(t)
 			w.step = tc.step
+			tc.empty(&w)
 
 			w, _ = w.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 
