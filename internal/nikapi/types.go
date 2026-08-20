@@ -14,6 +14,17 @@ type (
 	Subsystem    = api.Subsystem
 	Conversation = api.Conversation
 	Message      = api.Message
+	Author       = api.Author
+
+	OnboardingState = api.OnboardingState
+)
+
+// Message authors, re-exported so a renderer switches on a constant.
+const (
+	AuthorNik     = api.AuthorNik
+	AuthorSystem  = api.AuthorSystem
+	AuthorOwner   = api.AuthorOwner
+	AuthorContact = api.AuthorContact
 )
 
 // ConfigField is one field to change; see Client.SetConfig.

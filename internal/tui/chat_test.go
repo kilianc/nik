@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"regexp"
 	"strings"
@@ -10,13 +9,20 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/kciuffolo/nik/internal/config"
-	"github.com/kciuffolo/nik/internal/db"
+	"github.com/kciuffolo/nik/internal/nikapi"
 )
 
-func newTestChat(t *testing.T, conn *sql.DB, sender MessageSender, opts Options) chatModel {
+// A nil client is deliberate: these tests drive the model with messages
+// directly, so nothing here should reach for a daemon. Every command guards
+// on a nil client, which is what makes that safe.
+func newTestChat(t *testing.T, sender MessageSender, opts Options) chatModel {
 	t.Helper()
-	return newChatModel(&config.Config{Home: t.TempDir()}, conn, sender, opts)
+
+	if opts.Home == "" {
+		opts.Home = t.TempDir()
+	}
+
+	return newChatModel(nil, sender, opts)
 }
 
 type stubSender struct {
@@ -34,13 +40,8 @@ func stripAnsi(s string) string {
 }
 
 func TestChatModelRendersEmptyState(t *testing.T) {
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
 
-	c := newTestChat(t, conn, nil, Options{})
+	c := newTestChat(t, nil, Options{})
 
 	view := c.View()
 	if !strings.Contains(view, "❯") {
@@ -49,17 +50,12 @@ func TestChatModelRendersEmptyState(t *testing.T) {
 }
 
 func TestChatNewMessagesMsg(t *testing.T) {
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
 
-	c := newTestChat(t, conn, nil, Options{})
+	c := newTestChat(t, nil, Options{})
 
-	msgs := []db.Message{
-		{ID: "msg-1", Body: "hello", Kind: "text", ContactID: db.OwnerContactID, SentAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)},
-		{ID: "msg-2", Body: "hi there", Kind: "text", ContactID: db.SystemContactID, IsFromMe: true, SentAt: time.Date(2026, 1, 1, 0, 1, 0, 0, time.UTC)},
+	msgs := []nikapi.Message{
+		{ID: "msg-1", Body: "hello", Kind: "text", Author: nikapi.AuthorOwner, SentAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)},
+		{ID: "msg-2", Body: "hi there", Kind: "text", Author: nikapi.AuthorSystem, IsFromMe: true, SentAt: time.Date(2026, 1, 1, 0, 1, 0, 0, time.UTC)},
 	}
 
 	c, _ = c.Update(newMessagesMsg{messages: msgs})
@@ -73,13 +69,8 @@ func TestChatNewMessagesMsg(t *testing.T) {
 }
 
 func TestGhostBubblePrecedence(t *testing.T) {
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
 
-	c := newTestChat(t, conn, nil, Options{})
+	c := newTestChat(t, nil, Options{})
 	c, _ = c.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
 
 	// thinking only -> ghost shows "thinking"
@@ -108,13 +99,8 @@ func TestGhostBubblePrecedence(t *testing.T) {
 }
 
 func TestChatWindowResize(t *testing.T) {
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
 
-	c := newTestChat(t, conn, nil, Options{})
+	c := newTestChat(t, nil, Options{})
 	c, _ = c.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 
 	if c.width != 100 {
@@ -140,13 +126,8 @@ func TestChatSendMessage(t *testing.T) {
 }
 
 func TestChatEmptyPollSchedulesNext(t *testing.T) {
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
 
-	c := newTestChat(t, conn, nil, Options{})
+	c := newTestChat(t, nil, Options{})
 	c, cmd := c.Update(newMessagesMsg{})
 
 	if cmd == nil {
@@ -158,17 +139,12 @@ func TestChatEmptyPollSchedulesNext(t *testing.T) {
 }
 
 func TestChatViewIncludesMessages(t *testing.T) {
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
 
-	c := newTestChat(t, conn, nil, Options{})
+	c := newTestChat(t, nil, Options{})
 	c, _ = c.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
 	c, _ = c.Update(newMessagesMsg{
-		messages: []db.Message{
-			{ID: "1", Body: "hello world", Kind: "text", ContactID: db.OwnerContactID, SentAt: time.Date(2026, 1, 1, 12, 0, 0, 0, time.Local)},
+		messages: []nikapi.Message{
+			{ID: "1", Body: "hello world", Kind: "text", Author: nikapi.AuthorOwner, SentAt: time.Date(2026, 1, 1, 12, 0, 0, 0, time.Local)},
 		},
 	})
 
@@ -184,9 +160,9 @@ func TestChatViewIncludesMessages(t *testing.T) {
 func TestRenderConversation_ContainsMessages(t *testing.T) {
 	base := time.Date(2026, 1, 1, 12, 0, 0, 0, time.Local)
 
-	msgs := []db.Message{
-		{ID: "1", Body: "hello", Kind: "text", ContactID: db.OwnerContactID, SentAt: base},
-		{ID: "2", Body: "hi there", Kind: "text", ContactID: db.SystemContactID, IsFromMe: true, SentAt: base.Add(time.Minute)},
+	msgs := []nikapi.Message{
+		{ID: "1", Body: "hello", Kind: "text", Author: nikapi.AuthorOwner, SentAt: base},
+		{ID: "2", Body: "hi there", Kind: "text", Author: nikapi.AuthorSystem, IsFromMe: true, SentAt: base.Add(time.Minute)},
 	}
 
 	out := stripAnsi(renderConversation(msgs, 80, 0, -1, "", false))
@@ -208,10 +184,10 @@ func TestRenderConversation_ContainsMessages(t *testing.T) {
 func TestRenderConversation_GroupsSameSender(t *testing.T) {
 	base := time.Date(2026, 1, 1, 12, 0, 0, 0, time.Local)
 
-	msgs := []db.Message{
-		{ID: "1", Body: "first", Kind: "text", ContactID: db.OwnerContactID, SentAt: base},
-		{ID: "2", Body: "second", Kind: "text", ContactID: db.OwnerContactID, SentAt: base.Add(30 * time.Second)},
-		{ID: "3", Body: "third", Kind: "text", ContactID: db.OwnerContactID, SentAt: base.Add(time.Minute)},
+	msgs := []nikapi.Message{
+		{ID: "1", Body: "first", Kind: "text", Author: nikapi.AuthorOwner, SentAt: base},
+		{ID: "2", Body: "second", Kind: "text", Author: nikapi.AuthorOwner, SentAt: base.Add(30 * time.Second)},
+		{ID: "3", Body: "third", Kind: "text", Author: nikapi.AuthorOwner, SentAt: base.Add(time.Minute)},
 	}
 
 	out := stripAnsi(renderConversation(msgs, 80, 0, -1, "", false))
@@ -225,9 +201,9 @@ func TestRenderConversation_GroupsSameSender(t *testing.T) {
 func TestRenderConversation_SenderChange(t *testing.T) {
 	base := time.Date(2026, 1, 1, 12, 0, 0, 0, time.Local)
 
-	msgs := []db.Message{
-		{ID: "1", Body: "hey", Kind: "text", ContactID: db.OwnerContactID, SentAt: base},
-		{ID: "2", Body: "sup", Kind: "text", ContactID: db.SystemContactID, IsFromMe: true, SentAt: base.Add(time.Minute)},
+	msgs := []nikapi.Message{
+		{ID: "1", Body: "hey", Kind: "text", Author: nikapi.AuthorOwner, SentAt: base},
+		{ID: "2", Body: "sup", Kind: "text", Author: nikapi.AuthorSystem, IsFromMe: true, SentAt: base.Add(time.Minute)},
 	}
 
 	out := renderConversation(msgs, 80, 0, -1, "", false)
@@ -255,9 +231,9 @@ func TestRenderConversation_DateSeparator(t *testing.T) {
 	today := time.Now().Local()
 	today = time.Date(today.Year(), today.Month(), today.Day(), 1, 0, 0, 0, time.Local)
 
-	msgs := []db.Message{
-		{ID: "1", Body: "old", Kind: "text", ContactID: db.OwnerContactID, SentAt: yesterday},
-		{ID: "2", Body: "new", Kind: "text", ContactID: db.OwnerContactID, SentAt: today},
+	msgs := []nikapi.Message{
+		{ID: "1", Body: "old", Kind: "text", Author: nikapi.AuthorOwner, SentAt: yesterday},
+		{ID: "2", Body: "new", Kind: "text", Author: nikapi.AuthorOwner, SentAt: today},
 	}
 
 	out := stripAnsi(renderConversation(msgs, 80, 0, -1, "", false))
@@ -273,9 +249,9 @@ func TestRenderConversation_DateSeparator(t *testing.T) {
 func TestRenderConversation_BigGap(t *testing.T) {
 	base := time.Date(2026, 1, 1, 12, 0, 0, 0, time.Local)
 
-	msgs := []db.Message{
-		{ID: "1", Body: "before", Kind: "text", ContactID: db.OwnerContactID, SentAt: base},
-		{ID: "2", Body: "after gap", Kind: "text", ContactID: db.OwnerContactID, SentAt: base.Add(10 * time.Minute)},
+	msgs := []nikapi.Message{
+		{ID: "1", Body: "before", Kind: "text", Author: nikapi.AuthorOwner, SentAt: base},
+		{ID: "2", Body: "after gap", Kind: "text", Author: nikapi.AuthorOwner, SentAt: base.Add(10 * time.Minute)},
 	}
 
 	out := stripAnsi(renderConversation(msgs, 80, 0, -1, "", false))
@@ -414,12 +390,12 @@ func TestParseToolCallStart(t *testing.T) {
 func TestResolveToolCallState(t *testing.T) {
 	tests := []struct {
 		name   string
-		paired *db.Message
+		paired *nikapi.Message
 		want   toolState
 	}{
 		{"nil paired", nil, toolRunning},
-		{"done", &db.Message{Body: `{"output":"{\"sent\":true}"}`}, toolDone},
-		{"error", &db.Message{Body: `{"output":"{\"error\":\"table not found\"}"}`}, toolError},
+		{"done", &nikapi.Message{Body: `{"output":"{\"sent\":true}"}`}, toolDone},
+		{"error", &nikapi.Message{Body: `{"output":"{\"error\":\"table not found\"}"}`}, toolError},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -434,13 +410,13 @@ func TestResolveToolCallState(t *testing.T) {
 func TestRenderConversation_ToolCalls(t *testing.T) {
 	base := time.Date(2026, 1, 1, 12, 0, 0, 0, time.Local)
 
-	msgs := []db.Message{
-		{ID: "1", Body: "do something", Kind: "text", ContactID: db.OwnerContactID, SentAt: base},
-		{ID: "start-1", Body: `{"name":"db_query","input":"{\"reason\":\"check data\"}","round":1}`, Kind: "tool_call_start", ContactID: db.SystemContactID, IsFromMe: true, Platform: "system", SentAt: base.Add(time.Second)},
-		{ID: "call-1", Body: `{"name":"db_query","input":"{\"reason\":\"check data\"}","output":"1","round":1}`, Kind: "tool_call", ContactID: db.SystemContactID, IsFromMe: true, Platform: "system", SentAt: base.Add(time.Second), ContextStanzaID: sql.NullString{Valid: true, String: "start-1"}},
-		{ID: "start-2", Body: `{"name":"message_send","input":"{\"reason\":\"reply to user\"}","round":1}`, Kind: "tool_call_start", ContactID: db.SystemContactID, IsFromMe: true, Platform: "system", SentAt: base.Add(2 * time.Second)},
-		{ID: "call-2", Body: `{"name":"message_send","input":"{\"reason\":\"reply to user\"}","output":"ok","round":1}`, Kind: "tool_call", ContactID: db.SystemContactID, IsFromMe: true, Platform: "system", SentAt: base.Add(2 * time.Second), ContextStanzaID: sql.NullString{Valid: true, String: "start-2"}},
-		{ID: "4", Body: "here you go", Kind: "text", ContactID: db.SystemContactID, IsFromMe: true, SentAt: base.Add(3 * time.Second)},
+	msgs := []nikapi.Message{
+		{ID: "1", Body: "do something", Kind: "text", Author: nikapi.AuthorOwner, SentAt: base},
+		{ID: "start-1", Body: `{"name":"db_query","input":"{\"reason\":\"check data\"}","round":1}`, Kind: "tool_call_start", Author: nikapi.AuthorSystem, IsFromMe: true, Platform: "system", SentAt: base.Add(time.Second)},
+		{ID: "call-1", Body: `{"name":"db_query","input":"{\"reason\":\"check data\"}","output":"1","round":1}`, Kind: "tool_call", Author: nikapi.AuthorSystem, IsFromMe: true, Platform: "system", SentAt: base.Add(time.Second), ReplyTo: "start-1"},
+		{ID: "start-2", Body: `{"name":"message_send","input":"{\"reason\":\"reply to user\"}","round":1}`, Kind: "tool_call_start", Author: nikapi.AuthorSystem, IsFromMe: true, Platform: "system", SentAt: base.Add(2 * time.Second)},
+		{ID: "call-2", Body: `{"name":"message_send","input":"{\"reason\":\"reply to user\"}","output":"ok","round":1}`, Kind: "tool_call", Author: nikapi.AuthorSystem, IsFromMe: true, Platform: "system", SentAt: base.Add(2 * time.Second), ReplyTo: "start-2"},
+		{ID: "4", Body: "here you go", Kind: "text", Author: nikapi.AuthorSystem, IsFromMe: true, SentAt: base.Add(3 * time.Second)},
 	}
 
 	out := stripAnsi(renderConversation(msgs, 80, 0, -1, "", false))
@@ -471,8 +447,8 @@ func TestRenderConversation_ToolCalls(t *testing.T) {
 func TestRenderConversation_DoneToolCallFiltered(t *testing.T) {
 	base := time.Date(2026, 1, 1, 12, 0, 0, 0, time.Local)
 
-	msgs := []db.Message{
-		{ID: "start-done", Body: `{"name":"done","input":"{\"reason\":\"nothing to do\"}"}`, Kind: "tool_call_start", ContactID: db.SystemContactID, IsFromMe: true, Platform: "system", SentAt: base},
+	msgs := []nikapi.Message{
+		{ID: "start-done", Body: `{"name":"done","input":"{\"reason\":\"nothing to do\"}"}`, Kind: "tool_call_start", Author: nikapi.AuthorSystem, IsFromMe: true, Platform: "system", SentAt: base},
 	}
 
 	out := stripAnsi(renderConversation(msgs, 80, 0, -1, "", false))
@@ -485,8 +461,8 @@ func TestRenderConversation_DoneToolCallFiltered(t *testing.T) {
 func TestRenderConversation_InProgressToolCall(t *testing.T) {
 	base := time.Date(2026, 1, 1, 12, 0, 0, 0, time.Local)
 
-	msgs := []db.Message{
-		{ID: "start-1", Body: `{"name":"db_query","input":"{\"reason\":\"fetching rows\"}"}`, Kind: "tool_call_start", ContactID: db.SystemContactID, IsFromMe: true, Platform: "system", SentAt: base},
+	msgs := []nikapi.Message{
+		{ID: "start-1", Body: `{"name":"db_query","input":"{\"reason\":\"fetching rows\"}"}`, Kind: "tool_call_start", Author: nikapi.AuthorSystem, IsFromMe: true, Platform: "system", SentAt: base},
 	}
 
 	out := stripAnsi(renderConversation(msgs, 80, 5, -1, "", false))
@@ -554,11 +530,11 @@ func TestSameGroup(t *testing.T) {
 func TestRenderConversation_ToolCallsSplitByTimeGap(t *testing.T) {
 	base := time.Date(2026, 1, 1, 11, 14, 0, 0, time.Local)
 
-	msgs := []db.Message{
-		{ID: "start-1", Body: `{"name":"task_cancel","input":"{\"reason\":\"stop current task\"}","round":1}`, Kind: "tool_call_start", ContactID: db.SystemContactID, IsFromMe: true, Platform: "system", SentAt: base},
-		{ID: "call-1", Body: `{"name":"task_cancel","input":"{}","output":"{\"ok\":true}","round":1}`, Kind: "tool_call", ContactID: db.SystemContactID, IsFromMe: true, Platform: "system", SentAt: base, ContextStanzaID: sql.NullString{Valid: true, String: "start-1"}},
-		{ID: "start-2", Body: `{"name":"load_skill","input":"{\"reason\":\"skill reflex fired\"}","round":1}`, Kind: "tool_call_start", ContactID: db.SystemContactID, IsFromMe: true, Platform: "system", SentAt: base.Add(46 * time.Minute)},
-		{ID: "call-2", Body: `{"name":"load_skill","input":"{}","output":"{\"ok\":true}","round":1}`, Kind: "tool_call", ContactID: db.SystemContactID, IsFromMe: true, Platform: "system", SentAt: base.Add(46 * time.Minute), ContextStanzaID: sql.NullString{Valid: true, String: "start-2"}},
+	msgs := []nikapi.Message{
+		{ID: "start-1", Body: `{"name":"task_cancel","input":"{\"reason\":\"stop current task\"}","round":1}`, Kind: "tool_call_start", Author: nikapi.AuthorSystem, IsFromMe: true, Platform: "system", SentAt: base},
+		{ID: "call-1", Body: `{"name":"task_cancel","input":"{}","output":"{\"ok\":true}","round":1}`, Kind: "tool_call", Author: nikapi.AuthorSystem, IsFromMe: true, Platform: "system", SentAt: base, ReplyTo: "start-1"},
+		{ID: "start-2", Body: `{"name":"load_skill","input":"{\"reason\":\"skill reflex fired\"}","round":1}`, Kind: "tool_call_start", Author: nikapi.AuthorSystem, IsFromMe: true, Platform: "system", SentAt: base.Add(46 * time.Minute)},
+		{ID: "call-2", Body: `{"name":"load_skill","input":"{}","output":"{\"ok\":true}","round":1}`, Kind: "tool_call", Author: nikapi.AuthorSystem, IsFromMe: true, Platform: "system", SentAt: base.Add(46 * time.Minute), ReplyTo: "start-2"},
 	}
 
 	out := stripAnsi(renderConversation(msgs, 80, 0, -1, "", false))
@@ -581,13 +557,8 @@ func TestRenderConversation_ToolCallsSplitByTimeGap(t *testing.T) {
 }
 
 func TestChatPulseAdvancesOnActivity(t *testing.T) {
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
 
-	c := newTestChat(t, conn, nil, Options{})
+	c := newTestChat(t, nil, Options{})
 	c, _ = c.Update(newMessagesMsg{activity: []string{"thinking"}})
 	c, _ = c.Update(pulseTickMsg{tag: 0})
 
@@ -600,23 +571,18 @@ func TestChatPulseAdvancesOnActivity(t *testing.T) {
 }
 
 func TestChatMessagesCapped(t *testing.T) {
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
 
-	c := newTestChat(t, conn, nil, Options{})
+	c := newTestChat(t, nil, Options{})
 	c, _ = c.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
 
-	var msgs []db.Message
+	var msgs []nikapi.Message
 	for i := 0; i < 600; i++ {
-		msgs = append(msgs, db.Message{
-			ID:        fmt.Sprintf("msg-%d", i),
-			Body:      fmt.Sprintf("message %d", i),
-			Kind:      "text",
-			ContactID: db.OwnerContactID,
-			SentAt:    time.Date(2026, 1, 1, 0, 0, i, 0, time.UTC),
+		msgs = append(msgs, nikapi.Message{
+			ID:     fmt.Sprintf("msg-%d", i),
+			Body:   fmt.Sprintf("message %d", i),
+			Kind:   "text",
+			Author: nikapi.AuthorOwner,
+			SentAt: time.Date(2026, 1, 1, 0, 0, i, 0, time.UTC),
 		})
 	}
 
@@ -634,20 +600,15 @@ func TestChatMessagesCapped(t *testing.T) {
 }
 
 func TestChatConvCacheDirtyOnNewMessages(t *testing.T) {
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
 
-	c := newTestChat(t, conn, nil, Options{})
+	c := newTestChat(t, nil, Options{})
 	c, _ = c.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
 
 	initial := c.convCache
 
 	c, _ = c.Update(newMessagesMsg{
-		messages: []db.Message{
-			{ID: "1", Body: "hello", Kind: "text", ContactID: db.OwnerContactID, SentAt: time.Date(2026, 1, 1, 12, 0, 0, 0, time.Local)},
+		messages: []nikapi.Message{
+			{ID: "1", Body: "hello", Kind: "text", Author: nikapi.AuthorOwner, SentAt: time.Date(2026, 1, 1, 12, 0, 0, 0, time.Local)},
 		},
 	})
 
@@ -660,17 +621,12 @@ func TestChatConvCacheDirtyOnNewMessages(t *testing.T) {
 }
 
 func TestChatConvCacheStableOnPulseTick(t *testing.T) {
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
 
-	c := newTestChat(t, conn, nil, Options{})
+	c := newTestChat(t, nil, Options{})
 	c, _ = c.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
 	c, _ = c.Update(newMessagesMsg{
-		messages: []db.Message{
-			{ID: "1", Body: "hello", Kind: "text", ContactID: db.OwnerContactID, SentAt: time.Date(2026, 1, 1, 12, 0, 0, 0, time.Local)},
+		messages: []nikapi.Message{
+			{ID: "1", Body: "hello", Kind: "text", Author: nikapi.AuthorOwner, SentAt: time.Date(2026, 1, 1, 12, 0, 0, 0, time.Local)},
 		},
 		activity: []string{"thinking"},
 	})
@@ -734,11 +690,11 @@ func TestBubble_ShortTextWidensForReaction(t *testing.T) {
 func TestRenderConversation_Reactions(t *testing.T) {
 	base := time.Date(2026, 1, 1, 12, 0, 0, 0, time.Local)
 
-	msgs := []db.Message{
-		{ID: "1", ExternalMessageID: "ext-1", Body: "hello", Kind: "text", ContactID: db.OwnerContactID, SentAt: base},
-		{ID: "2", ExternalMessageID: "ext-2", Body: "hi there", Kind: "text", ContactID: db.SystemContactID, IsFromMe: true, SentAt: base.Add(time.Minute)},
-		{ID: "3", ExternalMessageID: "ext-3", Body: "👍", Kind: "reaction", ContactID: db.SystemContactID, IsFromMe: true, SentAt: base.Add(2 * time.Minute), ContextStanzaID: sql.NullString{Valid: true, String: "ext-1"}},
-		{ID: "4", ExternalMessageID: "ext-4", Body: "❤️", Kind: "reaction", ContactID: db.OwnerContactID, SentAt: base.Add(3 * time.Minute), ContextStanzaID: sql.NullString{Valid: true, String: "ext-2"}},
+	msgs := []nikapi.Message{
+		{ID: "1", ExternalID: "ext-1", Body: "hello", Kind: "text", Author: nikapi.AuthorOwner, SentAt: base},
+		{ID: "2", ExternalID: "ext-2", Body: "hi there", Kind: "text", Author: nikapi.AuthorSystem, IsFromMe: true, SentAt: base.Add(time.Minute)},
+		{ID: "3", ExternalID: "ext-3", Body: "👍", Kind: "reaction", Author: nikapi.AuthorSystem, IsFromMe: true, SentAt: base.Add(2 * time.Minute), ReplyTo: "ext-1"},
+		{ID: "4", ExternalID: "ext-4", Body: "❤️", Kind: "reaction", Author: nikapi.AuthorOwner, SentAt: base.Add(3 * time.Minute), ReplyTo: "ext-2"},
 	}
 
 	out := stripAnsi(renderConversation(msgs, 80, 0, -1, "", false))
@@ -757,10 +713,10 @@ func TestRenderConversation_Reactions(t *testing.T) {
 func TestRenderConversation_ReactionRemoval(t *testing.T) {
 	base := time.Date(2026, 1, 1, 12, 0, 0, 0, time.Local)
 
-	msgs := []db.Message{
-		{ID: "1", ExternalMessageID: "ext-1", Body: "hello", Kind: "text", ContactID: db.OwnerContactID, SentAt: base},
-		{ID: "2", ExternalMessageID: "ext-2", Body: "👍", Kind: "reaction", ContactID: db.SystemContactID, IsFromMe: true, SentAt: base.Add(time.Minute), ContextStanzaID: sql.NullString{Valid: true, String: "ext-1"}},
-		{ID: "3", ExternalMessageID: "ext-3", Body: "", Kind: "reaction", ContactID: db.SystemContactID, IsFromMe: true, SentAt: base.Add(2 * time.Minute), ContextStanzaID: sql.NullString{Valid: true, String: "ext-1"}},
+	msgs := []nikapi.Message{
+		{ID: "1", ExternalID: "ext-1", Body: "hello", Kind: "text", Author: nikapi.AuthorOwner, SentAt: base},
+		{ID: "2", ExternalID: "ext-2", Body: "👍", Kind: "reaction", Author: nikapi.AuthorSystem, IsFromMe: true, SentAt: base.Add(time.Minute), ReplyTo: "ext-1"},
+		{ID: "3", ExternalID: "ext-3", Body: "", Kind: "reaction", Author: nikapi.AuthorSystem, IsFromMe: true, SentAt: base.Add(2 * time.Minute), ReplyTo: "ext-1"},
 	}
 
 	out := stripAnsi(renderConversation(msgs, 80, 0, -1, "", false))
@@ -775,9 +731,9 @@ func TestRenderConversation_ReactionRemoval(t *testing.T) {
 
 func TestCollectReactions(t *testing.T) {
 	t.Run("basic", func(t *testing.T) {
-		msgs := []db.Message{
-			{ID: "1", ExternalMessageID: "ext-1", Kind: "text"},
-			{ID: "2", ExternalMessageID: "ext-2", Kind: "reaction", Body: "👍", ContactID: "c1", ContextStanzaID: sql.NullString{Valid: true, String: "ext-1"}},
+		msgs := []nikapi.Message{
+			{ID: "1", ExternalID: "ext-1", Kind: "text"},
+			{ID: "2", ExternalID: "ext-2", Kind: "reaction", Body: "👍", ContactID: "c1", ReplyTo: "ext-1"},
 		}
 
 		got := collectReactions(msgs)
@@ -788,10 +744,10 @@ func TestCollectReactions(t *testing.T) {
 	})
 
 	t.Run("removal", func(t *testing.T) {
-		msgs := []db.Message{
-			{ID: "1", ExternalMessageID: "ext-1", Kind: "text"},
-			{ID: "2", ExternalMessageID: "ext-2", Kind: "reaction", Body: "👍", ContactID: "c1", ContextStanzaID: sql.NullString{Valid: true, String: "ext-1"}},
-			{ID: "3", ExternalMessageID: "ext-3", Kind: "reaction", Body: "", ContactID: "c1", ContextStanzaID: sql.NullString{Valid: true, String: "ext-1"}},
+		msgs := []nikapi.Message{
+			{ID: "1", ExternalID: "ext-1", Kind: "text"},
+			{ID: "2", ExternalID: "ext-2", Kind: "reaction", Body: "👍", ContactID: "c1", ReplyTo: "ext-1"},
+			{ID: "3", ExternalID: "ext-3", Kind: "reaction", Body: "", ContactID: "c1", ReplyTo: "ext-1"},
 		}
 
 		got := collectReactions(msgs)
@@ -801,10 +757,10 @@ func TestCollectReactions(t *testing.T) {
 	})
 
 	t.Run("multiple senders", func(t *testing.T) {
-		msgs := []db.Message{
-			{ID: "1", ExternalMessageID: "ext-1", Kind: "text"},
-			{ID: "2", ExternalMessageID: "ext-2", Kind: "reaction", Body: "👍", ContactID: "c1", ContextStanzaID: sql.NullString{Valid: true, String: "ext-1"}},
-			{ID: "3", ExternalMessageID: "ext-3", Kind: "reaction", Body: "❤️", ContactID: "c2", ContextStanzaID: sql.NullString{Valid: true, String: "ext-1"}},
+		msgs := []nikapi.Message{
+			{ID: "1", ExternalID: "ext-1", Kind: "text"},
+			{ID: "2", ExternalID: "ext-2", Kind: "reaction", Body: "👍", ContactID: "c1", ReplyTo: "ext-1"},
+			{ID: "3", ExternalID: "ext-3", Kind: "reaction", Body: "❤️", ContactID: "c2", ReplyTo: "ext-1"},
 		}
 
 		got := collectReactions(msgs)
@@ -818,10 +774,10 @@ func TestCollectReactions(t *testing.T) {
 	})
 
 	t.Run("duplicate emoji gets count", func(t *testing.T) {
-		msgs := []db.Message{
-			{ID: "1", ExternalMessageID: "ext-1", Kind: "text"},
-			{ID: "2", ExternalMessageID: "ext-2", Kind: "reaction", Body: "👍", ContactID: "c1", ContextStanzaID: sql.NullString{Valid: true, String: "ext-1"}},
-			{ID: "3", ExternalMessageID: "ext-3", Kind: "reaction", Body: "👍", ContactID: "c2", ContextStanzaID: sql.NullString{Valid: true, String: "ext-1"}},
+		msgs := []nikapi.Message{
+			{ID: "1", ExternalID: "ext-1", Kind: "text"},
+			{ID: "2", ExternalID: "ext-2", Kind: "reaction", Body: "👍", ContactID: "c1", ReplyTo: "ext-1"},
+			{ID: "3", ExternalID: "ext-3", Kind: "reaction", Body: "👍", ContactID: "c2", ReplyTo: "ext-1"},
 		}
 
 		got := collectReactions(msgs)
@@ -832,9 +788,9 @@ func TestCollectReactions(t *testing.T) {
 	})
 
 	t.Run("orphan reaction ignored", func(t *testing.T) {
-		msgs := []db.Message{
-			{ID: "1", ExternalMessageID: "ext-1", Kind: "text"},
-			{ID: "2", ExternalMessageID: "ext-2", Kind: "reaction", Body: "👍", ContactID: "c1", ContextStanzaID: sql.NullString{Valid: true, String: "ext-unknown"}},
+		msgs := []nikapi.Message{
+			{ID: "1", ExternalID: "ext-1", Kind: "text"},
+			{ID: "2", ExternalID: "ext-2", Kind: "reaction", Body: "👍", ContactID: "c1", ReplyTo: "ext-unknown"},
 		}
 
 		got := collectReactions(msgs)
@@ -844,56 +800,14 @@ func TestCollectReactions(t *testing.T) {
 	})
 }
 
-func TestWorkloadCmdPullsRealCounts(t *testing.T) {
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
-
-	ctx := context.Background()
-	if err := db.OwnerContactEnsure(ctx, conn); err != nil {
-		t.Fatalf("ensure owner contact: %v", err)
-	}
-	if err := db.LocalConversationEnsure(ctx, conn); err != nil {
-		t.Fatalf("ensure local conversation: %v", err)
-	}
-
-	if _, err := db.AlarmCreate(ctx, conn, db.AlarmCreateParams{
-		OriginConversationID: db.LocalConversationID,
-		Goal:                 "ring me",
-		NextFireAt:           time.Now().Add(time.Hour),
-	}); err != nil {
-		t.Fatalf("seed alarm: %v", err)
-	}
-
-	if err := db.TaskInsert(ctx, conn, db.TaskInsertParams{
-		ID:             "task-1",
-		ConversationID: db.LocalConversationID,
-		Goal:           "do thing",
-		Plan:           "p",
-		Thinking:       "low",
-		Status:         "running",
-		CreatedAt:      time.Now(),
-	}); err != nil {
-		t.Fatalf("seed task: %v", err)
-	}
-
-	msg := workloadCmd(conn, 0)()
-	wl, ok := msg.(workloadMsg)
-	if !ok {
-		t.Fatalf("expected workloadMsg, got %T", msg)
-	}
-	if wl.alarms != 1 {
-		t.Errorf("expected 1 alarm, got %d", wl.alarms)
-	}
-	if wl.tasks != 1 {
-		t.Errorf("expected 1 task, got %d", wl.tasks)
-	}
-
-	c := newChatModel(&config.Config{Home: t.TempDir()}, conn, nil, Options{})
+// Counting alarms and tasks is nikd's job now — see apisvc.Workload. What is
+// left here is what the TUI is actually responsible for: rendering the counts
+// it was handed.
+func TestHeaderRendersWorkloadCounts(t *testing.T) {
+	c := newTestChat(t, nil, Options{})
 	c, _ = c.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
-	c, _ = c.Update(wl)
+	c, _ = c.Update(workloadMsg{alarms: 1, tasks: 1})
+
 	out := stripAnsi(c.renderHeader())
 	if !strings.Contains(out, "1 alarm") {
 		t.Errorf("expected '1 alarm' in header, got %q", out)
@@ -904,23 +818,18 @@ func TestWorkloadCmdPullsRealCounts(t *testing.T) {
 }
 
 func TestViewportScrollKeys(t *testing.T) {
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
 
-	c := newTestChat(t, conn, nil, Options{})
+	c := newTestChat(t, nil, Options{})
 	c, _ = c.Update(tea.WindowSizeMsg{Width: 80, Height: 15})
 
-	var msgs []db.Message
+	var msgs []nikapi.Message
 	for i := 0; i < 50; i++ {
-		msgs = append(msgs, db.Message{
-			ID:        fmt.Sprintf("m-%d", i),
-			Body:      fmt.Sprintf("line %d", i),
-			Kind:      "text",
-			ContactID: db.OwnerContactID,
-			SentAt:    time.Date(2026, 1, 1, 12, 0, i, 0, time.Local),
+		msgs = append(msgs, nikapi.Message{
+			ID:     fmt.Sprintf("m-%d", i),
+			Body:   fmt.Sprintf("line %d", i),
+			Kind:   "text",
+			Author: nikapi.AuthorOwner,
+			SentAt: time.Date(2026, 1, 1, 12, 0, i, 0, time.Local),
 		})
 	}
 	c, _ = c.Update(newMessagesMsg{messages: msgs})
@@ -935,23 +844,18 @@ func TestViewportScrollKeys(t *testing.T) {
 }
 
 func TestViewportMouseWheel(t *testing.T) {
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
 
-	c := newTestChat(t, conn, nil, Options{})
+	c := newTestChat(t, nil, Options{})
 	c, _ = c.Update(tea.WindowSizeMsg{Width: 80, Height: 15})
 
-	var msgs []db.Message
+	var msgs []nikapi.Message
 	for i := 0; i < 50; i++ {
-		msgs = append(msgs, db.Message{
-			ID:        fmt.Sprintf("m-%d", i),
-			Body:      fmt.Sprintf("line %d", i),
-			Kind:      "text",
-			ContactID: db.OwnerContactID,
-			SentAt:    time.Date(2026, 1, 1, 12, 0, i, 0, time.Local),
+		msgs = append(msgs, nikapi.Message{
+			ID:     fmt.Sprintf("m-%d", i),
+			Body:   fmt.Sprintf("line %d", i),
+			Kind:   "text",
+			Author: nikapi.AuthorOwner,
+			SentAt: time.Date(2026, 1, 1, 12, 0, i, 0, time.Local),
 		})
 	}
 	c, _ = c.Update(newMessagesMsg{messages: msgs})
@@ -972,32 +876,27 @@ func TestViewportMouseWheel(t *testing.T) {
 }
 
 func TestViewportStickyBottom(t *testing.T) {
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
 
-	c := newTestChat(t, conn, nil, Options{})
+	c := newTestChat(t, nil, Options{})
 	c, _ = c.Update(tea.WindowSizeMsg{Width: 80, Height: 15})
 
-	var msgs []db.Message
+	var msgs []nikapi.Message
 	for i := 0; i < 40; i++ {
-		msgs = append(msgs, db.Message{
-			ID:        fmt.Sprintf("m-%d", i),
-			Body:      fmt.Sprintf("line %d", i),
-			Kind:      "text",
-			ContactID: db.OwnerContactID,
-			SentAt:    time.Date(2026, 1, 1, 12, 0, i, 0, time.Local),
+		msgs = append(msgs, nikapi.Message{
+			ID:     fmt.Sprintf("m-%d", i),
+			Body:   fmt.Sprintf("line %d", i),
+			Kind:   "text",
+			Author: nikapi.AuthorOwner,
+			SentAt: time.Date(2026, 1, 1, 12, 0, i, 0, time.Local),
 		})
 	}
 	c, _ = c.Update(newMessagesMsg{messages: msgs})
 	c.viewport.GotoBottom()
 
-	more := []db.Message{{
+	more := []nikapi.Message{{
 		ID: "new", Body: "fresh message", Kind: "text",
-		ContactID: db.OwnerContactID,
-		SentAt:    time.Date(2026, 1, 1, 13, 0, 0, 0, time.Local),
+		Author: nikapi.AuthorOwner,
+		SentAt: time.Date(2026, 1, 1, 13, 0, 0, 0, time.Local),
 	}}
 	c, _ = c.Update(newMessagesMsg{messages: more})
 
@@ -1008,26 +907,26 @@ func TestViewportStickyBottom(t *testing.T) {
 
 func TestGhostReservationKeepsHeightStable(t *testing.T) {
 	now := time.Now()
-	nikMsg := db.Message{
-		ID: "1", ExternalMessageID: "e1", Platform: "local",
-		Kind: "text", Body: "hi", IsFromMe: true, SentAt: now, ContactID: db.NikContactID,
+	nikMsg := nikapi.Message{
+		ID: "1", ExternalID: "e1", Platform: "local",
+		Kind: "text", Body: "hi", IsFromMe: true, SentAt: now, Author: nikapi.AuthorNik,
 	}
-	userMsg := db.Message{
-		ID: "2", ExternalMessageID: "e2", Platform: "local",
-		Kind: "text", Body: "yo", IsFromMe: false, SentAt: now, ContactID: db.OwnerContactID,
+	userMsg := nikapi.Message{
+		ID: "2", ExternalID: "e2", Platform: "local",
+		Kind: "text", Body: "yo", IsFromMe: false, SentAt: now, Author: nikapi.AuthorOwner,
 	}
 
 	countLines := func(s string) int { return strings.Count(s, "\n") }
 
 	cases := []struct {
 		name string
-		msgs []db.Message
+		msgs []nikapi.Message
 	}{
 		{"empty", nil},
-		{"nik-last", []db.Message{nikMsg}},
-		{"user-last", []db.Message{userMsg}},
-		{"user-then-nik", []db.Message{userMsg, nikMsg}},
-		{"nik-then-user", []db.Message{nikMsg, userMsg}},
+		{"nik-last", []nikapi.Message{nikMsg}},
+		{"user-last", []nikapi.Message{userMsg}},
+		{"user-then-nik", []nikapi.Message{userMsg, nikMsg}},
+		{"nik-then-user", []nikapi.Message{nikMsg, userMsg}},
 	}
 
 	for _, tc := range cases {

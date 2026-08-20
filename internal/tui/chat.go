@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"slices"
 	"strconv"
@@ -13,45 +12,35 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/kciuffolo/nik/internal/config"
-	"github.com/kciuffolo/nik/internal/daemonctl"
-	"github.com/kciuffolo/nik/internal/db"
-	"github.com/kciuffolo/nik/internal/id"
-	"github.com/kciuffolo/nik/internal/messaging"
+	"github.com/kciuffolo/nik/internal/nikapi"
 )
 
 type MessageSender interface {
 	Send(ctx context.Context, body string) error
 }
 
-type localSender struct {
-	svc *messaging.Service
+// apiSender posts into the local conversation through nikd. It used to build
+// an inbound message and hand it to a messaging.Service the TUI constructed
+// for itself — a second writer on nikd's database, in a process that could be
+// killed mid-write.
+type apiSender struct {
+	client *nikapi.Client
 }
 
-func (s *localSender) Send(ctx context.Context, body string) error {
-	return s.svc.ReceiveMessage(ctx, messaging.InboundMessage{
-		Platform:               "local",
-		ExternalConversationID: db.LocalConversationID,
-		ExternalMessageID:      id.V7(),
-		ExternalSenderID:       db.OwnerContactID,
-		ExternalSenderIDs:      []string{db.OwnerContactID},
-		Kind:                   "text",
-		Body:                   body,
-		SentAt:                 time.Now(),
-	})
+func (s *apiSender) Send(ctx context.Context, body string) error {
+	return s.client.Send(ctx, nikapi.LocalConversationID, body)
 }
 
-func NewLocalSender(svc *messaging.Service) MessageSender {
-	return &localSender{svc: svc}
+func NewAPISender(client *nikapi.Client) MessageSender {
+	return &apiSender{client: client}
 }
 
 type chatModel struct {
 	input       textinput.Model
 	viewport    viewport.Model
-	cfg         *config.Config
-	conn        *sql.DB
+	client      *nikapi.Client
 	sender      MessageSender
-	messages    []db.Message
+	messages    []nikapi.Message
 	lastID      string
 	width       int
 	height      int
@@ -72,9 +61,53 @@ type chatModel struct {
 
 	pendingAlarms int
 	activeTasks   int
+
+	// What the header strip shows about this nik, read once from nikd.
+	// Reading config.yaml directly would work and would also be the TUI
+	// deciding it knows where nik's files live.
+	modelName string
+	timezone  string
+	home      string
 }
 
-func newChatModel(cfg *config.Config, conn *sql.DB, sender MessageSender, opts Options) chatModel {
+type metaMsg struct {
+	model    string
+	timezone string
+}
+
+// fetchMetaCmd reads the two config values the header renders. Once, at
+// startup: a model that changes mid-session is worth a restart to notice.
+func fetchMetaCmd(client *nikapi.Client) tea.Cmd {
+	return func() tea.Msg {
+		if client == nil {
+			return metaMsg{}
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		cfg, err := client.Config(ctx)
+		if err != nil {
+			return metaMsg{}
+		}
+
+		out := metaMsg{}
+		if tz, ok := cfg["timezone"].(string); ok {
+			out.timezone = tz
+		}
+		if models, ok := cfg["models"].(map[string]any); ok {
+			if main, ok := models["main"].(map[string]any); ok {
+				if model, ok := main["model"].(string); ok {
+					out.model = model
+				}
+			}
+		}
+
+		return out
+	}
+}
+
+func newChatModel(client *nikapi.Client, sender MessageSender, opts Options) chatModel {
 	ti := textinput.New()
 	ti.Placeholder = "message..."
 	ti.Prompt = "❯ "
@@ -88,8 +121,8 @@ func newChatModel(cfg *config.Config, conn *sql.DB, sender MessageSender, opts O
 	p := newPulse(30 * time.Millisecond)
 	return chatModel{
 		input:      ti,
-		cfg:        cfg,
-		conn:       conn,
+		client:     client,
+		home:       opts.Home,
 		sender:     sender,
 		pulse:      p,
 		anims:      animators{p},
@@ -107,36 +140,28 @@ type workloadMsg struct {
 }
 
 type newMessagesMsg struct {
-	messages []db.Message
+	messages []nikapi.Message
 	activity []string
 }
 type messageSentMsg struct{ err error }
 
-func fetchMessagesCmd(conn *sql.DB, afterID string) tea.Cmd {
+func fetchMessagesCmd(client *nikapi.Client, afterID string) tea.Cmd {
 	return func() tea.Msg {
-		if conn == nil {
+		if client == nil {
 			return newMessagesMsg{}
 		}
 
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
 
-		params := db.MessageListParams{
-			ConversationID: db.LocalConversationID,
-			Limit:          200,
-		}
-		if afterID != "" {
-			params.AfterID = afterID
-		}
-
-		msgs, err := db.MessageList(ctx, conn, params)
+		// nikd returns these oldest-first, so nothing here reverses them.
+		msgs, err := client.Messages(ctx, nikapi.LocalConversationID, afterID, chatPageSize)
 		if err != nil {
 			return newMessagesMsg{}
 		}
 
-		slices.Reverse(msgs)
-
 		var activity []string
-		conv, err := db.ConversationGet(ctx, conn, db.ConversationGetParams{ID: db.LocalConversationID})
+		conv, err := client.Conversation(ctx, nikapi.LocalConversationID)
 		if err == nil {
 			activity = conv.Activity
 		}
@@ -145,6 +170,9 @@ func fetchMessagesCmd(conn *sql.DB, afterID string) tea.Cmd {
 	}
 }
 
+// chatPageSize is how much history the TUI holds. The same 200 it always did.
+const chatPageSize = 200
+
 func sendMessageCmd(sender MessageSender, body string) tea.Cmd {
 	return func() tea.Msg {
 		err := sender.Send(context.Background(), body)
@@ -152,32 +180,48 @@ func sendMessageCmd(sender MessageSender, body string) tea.Cmd {
 	}
 }
 
-func daemonTickCmd(home string, delay time.Duration) tea.Cmd {
+// daemonTickCmd asks nikd whether it is there, rather than reading a pid file
+// and believing it. A pid file says a process exists; a reply says it can
+// answer, which is the thing the header is actually claiming.
+func daemonTickCmd(client *nikapi.Client, delay time.Duration) tea.Cmd {
 	return tea.Tick(delay, func(time.Time) tea.Msg {
-		_, alive := daemonctl.CheckPID(home)
-		return daemonTickMsg{alive: alive}
+		if client == nil {
+			return daemonTickMsg{}
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		_, err := client.Health(ctx)
+
+		return daemonTickMsg{alive: err == nil}
 	})
 }
 
-func workloadCmd(conn *sql.DB, delay time.Duration) tea.Cmd {
+func workloadCmd(client *nikapi.Client, delay time.Duration) tea.Cmd {
 	return tea.Tick(delay, func(time.Time) tea.Msg {
-		if conn == nil {
+		if client == nil {
 			return workloadMsg{}
 		}
-		ctx := context.Background()
-		alarms, _ := db.AlarmCountActive(ctx, conn)
-		tasks, _ := db.TaskCountActive(ctx, conn)
-		return workloadMsg{alarms: alarms, tasks: tasks}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		counts, err := client.Workload(ctx)
+		if err != nil {
+			return workloadMsg{}
+		}
+
+		return workloadMsg{alarms: counts.Alarms, tasks: counts.Tasks}
 	})
 }
 
 func (m chatModel) Init() tea.Cmd {
-	cmds := []tea.Cmd{textinput.Blink, fetchMessagesCmd(m.conn, "")}
-	if m.cfg != nil {
-		cmds = append(cmds, daemonTickCmd(m.cfg.Home, 0))
-	}
-	if m.conn != nil {
-		cmds = append(cmds, workloadCmd(m.conn, 0))
+	cmds := []tea.Cmd{textinput.Blink, fetchMessagesCmd(m.client, "")}
+	if m.client != nil {
+		cmds = append(cmds, daemonTickCmd(m.client, 0))
+		cmds = append(cmds, workloadCmd(m.client, 0))
+		cmds = append(cmds, fetchMetaCmd(m.client))
 	}
 	return tea.Batch(cmds...)
 }
@@ -245,21 +289,26 @@ func (m chatModel) Update(msg tea.Msg) (chatModel, tea.Cmd) {
 
 	case daemonTickMsg:
 		m.daemonAlive = msg.alive
-		if m.cfg != nil {
-			cmds = append(cmds, daemonTickCmd(m.cfg.Home, 3*time.Second))
+		if m.client != nil {
+			cmds = append(cmds, daemonTickCmd(m.client, 3*time.Second))
 		}
+		return m, tea.Batch(cmds...)
+
+	case metaMsg:
+		m.modelName = msg.model
+		m.timezone = msg.timezone
 		return m, tea.Batch(cmds...)
 
 	case workloadMsg:
 		m.pendingAlarms = msg.alarms
 		m.activeTasks = msg.tasks
-		if m.conn != nil {
-			cmds = append(cmds, workloadCmd(m.conn, 5*time.Second))
+		if m.client != nil {
+			cmds = append(cmds, workloadCmd(m.client, 5*time.Second))
 		}
 		return m, tea.Batch(cmds...)
 
 	case pollTickMsg:
-		cmds = append(cmds, fetchMessagesCmd(m.conn, m.lastID))
+		cmds = append(cmds, fetchMessagesCmd(m.client, m.lastID))
 		return m, tea.Batch(cmds...)
 
 	case newMessagesMsg:
@@ -555,18 +604,18 @@ func renderToolLine(tick int, toolName string, state toolState, reason string, w
 	return base + toolDimStyle.Render(sep+reason)
 }
 
-func renderConversation(msgs []db.Message, width int, tick int, ghostTick int, ghostLabel string, showSystem bool) string {
+func renderConversation(msgs []nikapi.Message, width int, tick int, ghostTick int, ghostLabel string, showSystem bool) string {
 	var b strings.Builder
 	var prevSender string
 	var prevDate string
 
 	reactionMap := collectReactions(msgs)
 
-	pairedToolCalls := make(map[string]*db.Message)
+	pairedToolCalls := make(map[string]*nikapi.Message)
 	for i := range msgs {
 		m := &msgs[i]
-		if m.Kind == "tool_call" && m.ContextStanzaID.Valid {
-			pairedToolCalls[m.ContextStanzaID.String] = m
+		if m.Kind == "tool_call" && m.ReplyTo != "" {
+			pairedToolCalls[m.ReplyTo] = m
 		}
 	}
 
@@ -615,15 +664,15 @@ func renderConversation(msgs []db.Message, width int, tick int, ghostTick int, g
 			continue
 		}
 
-		isNik := m.IsFromMe || m.ContactID == db.SystemContactID
+		isNik := m.Author == nikapi.AuthorNik || m.Author == nikapi.AuthorSystem
 
 		entries = append(entries, entry{
 			lt:            lt,
 			isNik:         isNik,
 			body:          m.Body,
 			platform:      m.Platform,
-			externalMsgID: m.ExternalMessageID,
-			reactions:     reactionMap[m.ExternalMessageID],
+			externalMsgID: m.ExternalID,
+			reactions:     reactionMap[m.ExternalID],
 		})
 	}
 
@@ -792,11 +841,11 @@ func parseToolCallStart(body string) (name, reason string) {
 	return tc.Name, inp.Reason
 }
 
-func collectReactions(msgs []db.Message) map[string][]string {
+func collectReactions(msgs []nikapi.Message) map[string][]string {
 	extIDs := make(map[string]bool)
 	for i := range msgs {
-		if msgs[i].Kind != "reaction" && msgs[i].ExternalMessageID != "" {
-			extIDs[msgs[i].ExternalMessageID] = true
+		if msgs[i].Kind != "reaction" && msgs[i].ExternalID != "" {
+			extIDs[msgs[i].ExternalID] = true
 		}
 	}
 
@@ -806,10 +855,10 @@ func collectReactions(msgs []db.Message) map[string][]string {
 
 	for i := range msgs {
 		m := &msgs[i]
-		if m.Kind != "reaction" || !m.ContextStanzaID.Valid {
+		if m.Kind != "reaction" || m.ReplyTo == "" {
 			continue
 		}
-		target := m.ContextStanzaID.String
+		target := m.ReplyTo
 		if !extIDs[target] {
 			continue
 		}
@@ -851,7 +900,7 @@ func collectReactions(msgs []db.Message) map[string][]string {
 	return byTarget
 }
 
-func resolveToolCallState(paired *db.Message) toolState {
+func resolveToolCallState(paired *nikapi.Message) toolState {
 	if paired == nil {
 		return toolRunning
 	}

@@ -9,13 +9,12 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/kciuffolo/nik/internal/config"
-	"github.com/kciuffolo/nik/internal/contacts"
 	"github.com/kciuffolo/nik/internal/db"
-	"github.com/kciuffolo/nik/internal/genesis"
 	"github.com/kciuffolo/nik/internal/home"
-	"github.com/kciuffolo/nik/internal/messaging"
+	"github.com/kciuffolo/nik/internal/nikapi"
 	"github.com/kciuffolo/nik/internal/tui"
 )
 
@@ -44,45 +43,74 @@ func runTUI(args []string) {
 		os.Exit(1)
 	}
 
-	conn, err := db.Open(cfg.DBPath(), cfg.TZ())
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: open database: %v\n", err)
-		os.Exit(1)
-	}
-	defer conn.Close()
+	// The chat half of the TUI is a client now: it opens no database, ensures
+	// no rows, and constructs no messaging service of its own. It used to do
+	// all three, which made it a second writer on a file nikd owns — in a
+	// process that gets closed by closing a terminal window.
+	client := nikapi.New(h)
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-	err = db.NikContactEnsure(ctx, conn)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: ensure nik contact: %v\n", err)
-		os.Exit(1)
-	}
-
-	err = db.OwnerContactEnsure(ctx, conn)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: ensure owner contact: %v\n", err)
-		os.Exit(1)
-	}
-
-	err = db.LocalConversationEnsure(ctx, conn)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: ensure local conversation: %v\n", err)
-		os.Exit(1)
-	}
-
-	contactsSvc := contacts.NewService(conn)
-	messagingSvc := messaging.NewService(cfg, conn, contactsSvc)
-
-	messagingSvc.RegisterPlatform(messaging.NewLocalAdapter(conn))
-
-	bornAt, _ := genesis.StartedAt(ctx, conn)
-
-	err = tui.Run(cfg, conn, tui.NewLocalSender(messagingSvc), setup, tui.Options{
+	opts := tui.Options{
 		ShowSystem: *showSystem,
-		BornAt:     bornAt,
-		InputGate:  onboardingInputGate(ctx, conn),
-	})
+		Home:       h,
+	}
+
+	if !setup {
+		state, err := client.Onboarding(ctx)
+
+		switch {
+		case errors.Is(err, nikapi.ErrNoDaemon):
+			fmt.Fprintf(os.Stderr, "no nik running at %s\n\n", h)
+			fmt.Fprintln(os.Stderr, "  start it:      nikd --home "+h)
+			fmt.Fprintln(os.Stderr, "  or install it: nikctl install --home "+h)
+			os.Exit(1)
+
+		case err != nil:
+			// nikd is there but not ready — no gateway yet, or still opening
+			// the database. Open the chat anyway: this is exactly when
+			// somebody needs to see what nik says about itself, and refusing
+			// to start would leave them with nothing but a log file.
+			opts.InputGate = nil
+
+		default:
+			opts.BornAt = state.BornAt
+			opts.InputGate = onboardingInputGate(client, state)
+		}
+	}
+
+	// Setup still writes config.yaml and the secret store directly, so it
+	// still opens the database for the rows it seeds. That is the next
+	// change, and the one that finally takes SQLite out of nikctl.
+	//
+	// On a fresh install this overlaps with nothing: nikd is running but has
+	// no config, so it has not opened the database either. `--force-setup`
+	// against a configured nik is the one case where both have it open, which
+	// is exactly as true today.
+	var conn *sql.DB
+	if setup {
+		conn, err = db.Open(cfg.DBPath(), cfg.TZ())
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: open database: %v\n", err)
+			os.Exit(1)
+		}
+		defer conn.Close()
+
+		for _, ensure := range []func(context.Context, *sql.DB) error{
+			db.NikContactEnsure,
+			db.OwnerContactEnsure,
+			db.LocalConversationEnsure,
+		} {
+			err = ensure(context.Background(), conn)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error: %v\n", err)
+				os.Exit(1)
+			}
+		}
+	}
+
+	err = tui.Run(cfg, client, conn, tui.NewAPISender(client), setup, opts)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
@@ -90,11 +118,12 @@ func runTUI(args []string) {
 }
 
 // onboardingInputGate gates the chat input while genesis is in progress.
-// Returns nil (= TUI default: always editable) when genesis is already done
-// at launch — the common case for returning users. The seed→input mapping
-// lives here because it's onboarding UX, not generic chat or pure genesis.
-func onboardingInputGate(ctx context.Context, conn *sql.DB) tui.InputGate {
-	if genesis.IsCompleted(ctx, conn) {
+// Returns nil (= TUI default: always editable) when genesis is already done,
+// the common case for returning users. The seed-to-input mapping lives here
+// because it is onboarding UX, not something nikd should have an opinion
+// about — a browser console will want to draw this differently.
+func onboardingInputGate(client *nikapi.Client, initial nikapi.OnboardingState) tui.InputGate {
+	if initial.Completed {
 		return nil
 	}
 
@@ -107,14 +136,24 @@ func onboardingInputGate(ctx context.Context, conn *sql.DB) tui.InputGate {
 		"first_contact": "introduce yourself to nik",
 	}
 
-	return func(messages []db.Message, activity []string) tui.InputState {
-		if genesis.IsCompleted(context.Background(), conn) {
+	return func(messages []nikapi.Message, activity []string) tui.InputState {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		state, err := client.Onboarding(ctx)
+		if err != nil {
+			// Can't tell where genesis is, so don't take the input away —
+			// a locked box a person cannot explain is worse than an early one.
 			return tui.InputState{}
 		}
-		seed := genesis.CurrentSeed(messages)
-		if seed == "" || !interactiveSeeds[seed] || len(activity) > 0 {
+		if state.Completed {
+			return tui.InputState{}
+		}
+
+		if state.Seed == "" || !interactiveSeeds[state.Seed] || len(activity) > 0 {
 			return tui.InputState{Locked: true, Placeholder: "waiting for nik to finish..."}
 		}
-		return tui.InputState{Placeholder: placeholders[seed]}
+
+		return tui.InputState{Placeholder: placeholders[state.Seed]}
 	}
 }

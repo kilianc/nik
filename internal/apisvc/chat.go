@@ -116,11 +116,29 @@ func toAPIMessage(m db.Message) api.Message {
 		Kind:        m.Kind,
 		Body:        m.Body,
 		SentAt:      m.SentAt,
+		Author:      authorOf(m),
 		IsFromMe:    m.IsFromMe,
 		Platform:    m.Platform,
 		ContactID:   m.ContactID,
+		ReplyTo:     m.ContextStanzaID.String,
+		ExternalID:  m.ExternalMessageID,
 		MediaID:     m.MediaID.String,
 		Transcript:  m.MediaTranscriptText.String,
 		Description: m.MediaDescribeText.String,
+	}
+}
+
+// authorOf turns the contact ids nik keys itself and the system by into
+// something a renderer can switch on without knowing any UUIDs.
+func authorOf(m db.Message) api.Author {
+	switch {
+	case m.ContactID == db.SystemContactID:
+		return api.AuthorSystem
+	case m.IsFromMe, m.ContactID == db.NikContactID:
+		return api.AuthorNik
+	case m.ContactID == db.OwnerContactID:
+		return api.AuthorOwner
+	default:
+		return api.AuthorContact
 	}
 }
