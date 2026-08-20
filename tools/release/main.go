@@ -1,12 +1,20 @@
-// release cuts a stable release: bumps VERSION, commits it, tags it, pushes
-// both. the release workflow refuses any tag that disagrees with the VERSION
-// committed alongside it, and that is two facts to keep in sync by hand —
-// one too many at 1am, which is when releases get cut.
+// release cuts a stable release: bumps VERSION, gets that through a pull
+// request, and tags the commit it lands as. the release workflow refuses any
+// tag that disagrees with the VERSION committed alongside it, and that is two
+// facts to keep in sync by hand — one too many at 1am, which is when releases
+// get cut.
+//
+// the pull request is not ceremony: main requires one, so a release that
+// pushes the bump straight to main is rejected by the branch rule with the
+// VERSION already written and nothing tagged. that happened once, at v0.4.0,
+// and cleaning it up by hand is exactly the 1am errand this tool exists to
+// remove.
 //
 //	make release                      # patch bump
 //	make release ARGS="-bump minor"   # minor bump
 //	make release ARGS="-dry-run"      # print what would happen, touch nothing
 //	make release ARGS="-no-ci"        # skip make ci, you already ran it
+//	make release ARGS="-tag-only"     # the bump already landed; just tag main
 package main
 
 import (
@@ -14,10 +22,12 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -109,6 +119,53 @@ func git(args ...string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
+// waitForChecks blocks until the pull request's checks pass.
+//
+// `gh pr checks --watch` fails outright with "no checks reported" when it is
+// asked before CI has registered a run, which is the normal state for the
+// first few seconds after opening a pull request. Treating that as a failed
+// release would abort on a race with GitHub rather than on anything about the
+// code, so it is retried; anything else is a real answer.
+func waitForChecks(branch string) error {
+	const (
+		attempts = 6
+		settle   = 10 * time.Second
+	)
+
+	for attempt := range attempts {
+		out, err := runCapture("gh", "pr", "checks", branch, "--watch", "--interval", "20")
+		if err == nil {
+			return nil
+		}
+		if !strings.Contains(out, "no checks reported") {
+			return err
+		}
+
+		fmt.Printf("release: no checks yet, waiting (%d/%d)\n", attempt+1, attempts)
+		time.Sleep(settle)
+	}
+
+	return fmt.Errorf("no checks ever reported on %s", branch)
+}
+
+// runCapture is run() with the output kept as well as shown. Watching a
+// release should look like watching a release, so it still streams.
+func runCapture(name string, args ...string) (string, error) {
+	var buf strings.Builder
+
+	cmd := exec.Command(name, args...)
+	cmd.Stdout = io.MultiWriter(os.Stdout, &buf)
+	cmd.Stderr = io.MultiWriter(os.Stderr, &buf)
+	cmd.Stdin = os.Stdin
+
+	err := cmd.Run()
+	if err != nil {
+		return buf.String(), fmt.Errorf("%s %s: %w", name, strings.Join(args, " "), err)
+	}
+
+	return buf.String(), nil
+}
+
 func run(name string, args ...string) error {
 	cmd := exec.Command(name, args...)
 	cmd.Stdout = os.Stdout
@@ -191,6 +248,7 @@ func main() {
 	explicit := flag.String("version", "", "cut this exact version instead of bumping")
 	dryRun := flag.Bool("dry-run", false, "print what would happen, touch nothing")
 	noCI := flag.Bool("no-ci", false, "skip make ci")
+	tagOnly := flag.Bool("tag-only", false, "the version bump is already on main; only tag and push")
 	flag.Parse()
 
 	root, err := git("rev-parse", "--show-toplevel")
@@ -221,6 +279,20 @@ func main() {
 	}
 	if !next.after(current) {
 		die("%s does not come after %s", next, current)
+	}
+
+	// -tag-only picks up after a bump that already landed: a run that opened
+	// the pull request and then lost the merge, or one somebody finished by
+	// hand. It skips straight to the half that was never the problem.
+	//
+	// It deliberately ignores the arithmetic above. Once the bump has landed,
+	// the version in the file *is* the release being tagged — bumping it
+	// again would name a version nothing carries.
+	if *tagOnly {
+		guard()
+		tagMain(version{}, false)
+
+		return
 	}
 
 	// after the arithmetic, so a typo fails before any of this touches the
@@ -256,27 +328,107 @@ func main() {
 		die("aborted")
 	}
 
-	// the commit goes first and on its own. if origin has moved since the
-	// fetch above, the push is rejected here — before a tag exists — and the
-	// worst case is a local VERSION bump to reset, rather than a published
-	// tag pointing at a commit the workflow will refuse.
-	if err := os.WriteFile(versionFile, []byte(next.String()+"\n"), 0o644); err != nil {
-		die("write %s: %v", versionFile, err)
-	}
+	branch := "release/" + next.String()
 
-	steps := [][]string{
-		{"add", versionFile},
-		{"commit", "-m", "chore: release " + next.String()},
-		{"push", "origin", "main"},
-		{"tag", "-a", next.String(), "-m", "Release " + next.String()},
-		{"push", "origin", "refs/tags/" + next.String()},
+	// Everything up to the merge happens on a branch, so main is never
+	// touched locally. A failure anywhere leaves a branch to delete and
+	// nothing else — no half-bumped VERSION on main to notice and undo.
+	stage := [][]string{
+		{"checkout", "-b", branch},
 	}
-	for _, step := range steps {
+	for _, step := range stage {
 		if err := run(gitBin(), step...); err != nil {
-			fmt.Fprintf(os.Stderr, "release: %s is bumped to %s locally; undo it before trying again\n", versionFile, next)
 			die("%v", err)
 		}
 	}
 
-	fmt.Printf("release: %s pushed. the release workflow is building:\n  %s\n", next, actionsURL)
+	abandon := func(format string, args ...any) {
+		_ = run(gitBin(), "checkout", "main")
+		_ = run(gitBin(), "branch", "-D", branch)
+		die(format, args...)
+	}
+
+	if err := os.WriteFile(versionFile, []byte(next.String()+"\n"), 0o644); err != nil {
+		abandon("write %s: %v", versionFile, err)
+	}
+
+	for _, step := range [][]string{
+		{"add", versionFile},
+		{"commit", "-m", "chore: release " + next.String()},
+		{"push", "-u", "origin", branch},
+	} {
+		if err := run(gitBin(), step...); err != nil {
+			abandon("%v", err)
+		}
+	}
+
+	prBody := "VERSION bump for " + next.String() + ". The tag goes on the merge commit once this lands.\n\n" +
+		"Cut by `make release`, which opens this rather than pushing to main: the branch rule requires a pull request."
+
+	if err := run("gh", "pr", "create",
+		"--base", "main", "--head", branch,
+		"--title", "chore: release "+next.String(),
+		"--body", prBody); err != nil {
+		// The branch is pushed, so this is recoverable by hand rather than
+		// wasted. Say how instead of deleting somebody's work.
+		die("open the pull request by hand for %s, then: make release ARGS=\"-tag-only\"\n%v", branch, err)
+	}
+
+	fmt.Println("release: waiting for checks")
+
+	if err := waitForChecks(branch); err != nil {
+		die("checks failed on %s; fix them, merge, then: make release ARGS=\"-tag-only\"\n%v", branch, err)
+	}
+
+	if err := run("gh", "pr", "merge", branch, "--squash", "--delete-branch"); err != nil {
+		die("merge %s by hand, then: make release ARGS=\"-tag-only\"\n%v", branch, err)
+	}
+
+	tagMain(next, true)
+}
+
+// tagMain tags whatever main now points at, using the version main carries.
+//
+// Squashing rewrites the commit, so the tag can only be placed after the
+// merge — and the thing worth reading is the file on main, not the SHA the
+// branch had before it landed. When expect is set, the run that opened the
+// pull request also checks that what landed is what it asked for; -tag-only
+// has no expectation to check, because the file is the only record of what
+// was cut.
+func tagMain(expect version, check bool) {
+	for _, step := range [][]string{
+		{"checkout", "main"},
+		{"fetch", "origin", "main"},
+		{"merge", "--ff-only", "origin/main"},
+	} {
+		if err := run(gitBin(), step...); err != nil {
+			die("%v", err)
+		}
+	}
+
+	data, err := os.ReadFile(versionFile)
+	if err != nil {
+		die("read %s: %v", versionFile, err)
+	}
+	landed, err := parseVersion(string(data))
+	if err != nil {
+		die("%v", err)
+	}
+	if check && landed != expect {
+		die("main carries %s, not %s — the bump has not landed yet", landed, expect)
+	}
+	if tagTaken(landed.String()) {
+		die("tag %s already exists — %s is already released", landed, landed)
+	}
+
+	for _, step := range [][]string{
+		{"tag", "-a", landed.String(), "-m", "Release " + landed.String()},
+		{"push", "origin", "refs/tags/" + landed.String()},
+	} {
+		if err := run(gitBin(), step...); err != nil {
+			die("%v", err)
+		}
+	}
+
+	fmt.Printf("release: %s pushed. the release workflow is building:\n  %s\n", landed, actionsURL)
 }
