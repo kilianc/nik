@@ -58,9 +58,16 @@ fi
 
 mkdir -p "$NIK_HOME"
 
-# The daemon refuses to boot without a gateway, so link the account BEFORE
-# the service starts — otherwise launchd/systemd would restart a nik that
-# dies on arrival until setup gets around to it.
+# The service starts FIRST, and the account is linked into the running daemon.
+#
+# This used to be the other way around, because a daemon with no gateway died
+# on arrival and the service manager would restart it forever. nikd now serves
+# its API before it has a config and waits for exactly this, so the token goes
+# to the process that will use it — and a token that arrives an hour later
+# works as well as one that arrives now.
+echo "Setting up daemon service..."
+nikctl install --home "$NIK_HOME"
+
 if [ -n "$NIK_TOKEN" ]; then
   echo "Linking this nik to your account..."
   if [ -n "$NIK_GATEWAY_URL" ]; then
@@ -69,9 +76,6 @@ if [ -n "$NIK_TOKEN" ]; then
     nikctl connect --home "$NIK_HOME" "$NIK_TOKEN"
   fi
 fi
-
-echo "Setting up daemon service..."
-nikctl install --home "$NIK_HOME"
 
 echo ""
 if [ -n "$NIK_TOKEN" ]; then

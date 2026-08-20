@@ -116,13 +116,51 @@ func (c *Client) Send(ctx context.Context, convID, body string) error {
 		api.SendRequest{Body: body})
 }
 
+// Config reads nikd's live configuration.
+func (c *Client) Config(ctx context.Context) (map[string]any, error) {
+	var out map[string]any
+	err := c.get(ctx, "/v1/config", &out)
+
+	return out, err
+}
+
+// SetConfig changes fields and returns the configuration as nikd now holds
+// it — including whatever normalization did to what was sent.
+func (c *Client) SetConfig(ctx context.Context, fields ...api.ConfigField) (map[string]any, error) {
+	var out map[string]any
+	err := c.request(ctx, http.MethodPatch, "/v1/config", api.ConfigPatch{Set: fields}, &out)
+
+	return out, err
+}
+
+// ErrAuthRejected is a token the gateway refused — expired or revoked. It is
+// separated from every other connect failure because it is the one with a
+// specific remedy rather than "try again".
+var ErrAuthRejected = errors.New("gateway rejected the token")
+
+// Connect links this nik to an account. It returns once the gateway has
+// accepted the token, which means a nil error is proof the pair works rather
+// than proof it was written down.
+func (c *Client) Connect(ctx context.Context, url, token string) error {
+	err := c.post(ctx, "/v1/gateway/connect", api.ConnectRequest{URL: url, Token: token})
+	if err != nil && strings.Contains(err.Error(), "rejected that token") {
+		return ErrAuthRejected
+	}
+
+	return err
+}
+
 func (c *Client) post(ctx context.Context, path string, body any) error {
+	return c.request(ctx, http.MethodPost, path, body, nil)
+}
+
+func (c *Client) request(ctx context.Context, method, path string, body, out any) error {
 	encoded, err := json.Marshal(body)
 	if err != nil {
 		return fmt.Errorf("encode request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://nikd"+path, bytes.NewReader(encoded))
+	req, err := http.NewRequestWithContext(ctx, method, "http://nikd"+path, bytes.NewReader(encoded))
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)
 	}
@@ -142,8 +180,17 @@ func (c *Client) post(ctx context.Context, path string, body any) error {
 		return apiError(path, resp)
 	}
 
-	// Drain so the connection can be reused rather than closed under us.
-	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4<<10))
+	if out == nil {
+		// Drain so the connection can be reused rather than closed under us.
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4<<10))
+
+		return nil
+	}
+
+	err = json.NewDecoder(resp.Body).Decode(out)
+	if err != nil {
+		return fmt.Errorf("%s: decode response: %w", path, err)
+	}
 
 	return nil
 }

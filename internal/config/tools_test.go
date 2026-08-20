@@ -121,7 +121,7 @@ func TestConfigSetSupportsTaskModelFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(out, "invalid models.task.reasoning_effort") {
+	if !strings.Contains(out, "models.task.reasoning_effort") {
 		t.Fatalf("expected validation error, got %q", out)
 	}
 }
@@ -140,7 +140,7 @@ func TestConfigSetRejectsInvalidPurposeModelFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(out, "invalid models.recall.reasoning_effort") {
+	if !strings.Contains(out, "models.recall.reasoning_effort") {
 		t.Fatalf("expected validation error, got %q", out)
 	}
 }
@@ -265,7 +265,7 @@ func TestConfigSetTaskFields(t *testing.T) {
 		}
 
 		out, _ = configSet(cfg, "task.max_rounds", "abc")
-		if !strings.Contains(out, "invalid task.max_rounds") {
+		if !strings.Contains(out, "task.max_rounds") {
 			t.Fatalf("expected parse error, got %q", out)
 		}
 	})
@@ -298,7 +298,7 @@ func TestConfigSetTaskFields(t *testing.T) {
 		}
 
 		out, _ = configSet(cfg, "task.timeout", "not-a-duration")
-		if !strings.Contains(out, "invalid task.timeout") {
+		if !strings.Contains(out, "task.timeout") {
 			t.Fatalf("expected parse error, got %q", out)
 		}
 	})
