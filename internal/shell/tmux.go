@@ -3,6 +3,7 @@ package shell
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"regexp"
@@ -159,6 +160,34 @@ func (s *Service) isAlive(id string) bool {
 	return strings.TrimSpace(out) == "0"
 }
 
+// deadPaneWait bounds how long stare waits for a pane to finish dying. The
+// gap is the microseconds between `tmux wait-for -S` returning and the shell
+// running `exit`; a whole second is there for a loaded CI runner, not because
+// anything should ever take it.
+const deadPaneWait = time.Second
+
+// awaitDeadPane polls until the pane is dead or the wait runs out. Returning
+// on timeout rather than erroring is deliberate: the caller has a
+// better-than-nothing answer either way, and a command whose exit code cannot
+// be read is not a reason to lose its output.
+func (s *Service) awaitDeadPane(id string) {
+	deadline := time.Now().Add(deadPaneWait)
+
+	for {
+		if !s.isAlive(id) {
+			return
+		}
+		if time.Now().After(deadline) {
+			slog.Warn("pane still alive after its command signalled done",
+				"pkg", "shell", "session", id)
+
+			return
+		}
+
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
 func (s *Service) getExitCode(id string) (int, error) {
 	out, err := s.tmux(
 		"display-message", "-t", sessionName(id),
@@ -236,8 +265,20 @@ func (s *Service) stare(ctx context.Context, id string, maxWait int) (output str
 	for {
 		select {
 		case <-doneCh:
+			// The command signals the wait-for channel and *then* exits:
+			//
+			//   (cmd); __ec=$?; tmux wait-for -S <chan>; exit $__ec
+			//
+			// so arriving here means the command finished, not that the pane
+			// is dead. tmux only publishes pane_dead_status once it is, and
+			// reading too early gets an empty string — which parsed as -1 and
+			// made this the flakiest thing in CI. Give the pane the moment it
+			// needs to actually die.
+			s.awaitDeadPane(id)
+
 			out, _ := s.capturePane(id)
 			c, _ := s.getExitCode(id)
+
 			return out, false, c
 
 		case <-deadline.C:
