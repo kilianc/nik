@@ -60,6 +60,14 @@ shell:
   docker_image: {{ .Shell.DockerImage }}                   # empty = run commands on host via tmux
 {{- end }}
 
+# gateway — nik's only route to whatsapp. the token and the agent key live in
+# the secret store, not here.
+gateway:
+{{- if .Gateway.URL }}
+  url: {{ .Gateway.URL }}
+{{- end }}
+  api: {{ .Gateway.API }}                                  # answer nikd's API over this socket (remote access — off by default)
+
 # data retention
 retention: {{ .Retention }}                                 # prune old activations, tasks, system messages
 

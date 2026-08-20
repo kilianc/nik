@@ -71,6 +71,7 @@ func TestFixturesCoverEveryVerb(t *testing.T) {
 		typeHello, typeHelloAck, typeMsgIn, typeConvIn,
 		typeMsgOut, typeMediaOut, typeReactOut, typeTypingOut, typeReadOut,
 		typeAck, typeError,
+		typeAPIReq, typeAPIRes, typeAPIEvt,
 	}
 	for _, w := range want {
 		if !seen[w] {
@@ -266,5 +267,77 @@ func TestSealedPayloadRoundTrip(t *testing.T) {
 
 	if gotConv.Title != conv.Title {
 		t.Errorf("title = %q, want %q", gotConv.Title, conv.Title)
+	}
+}
+
+// v3: the API tunnel. Three verbs rather than one per console feature, so this
+// is the last console-shaped bump — see the note in protocol.go. Their
+// fixtures live under the same rule as every other verb: byte-identical to the
+// platform's, and asserted field by field, since a struct tag typo that
+// silently drops session_key is a response nobody can open.
+
+func TestAPIReqFixture(t *testing.T) {
+	req := decodeFixture[apiReq](t, "api.req.json", typeAPIReq)
+
+	if req.Method != "GET" {
+		t.Errorf("method = %q, want GET", req.Method)
+	}
+	if req.Path != "/v1/conversations/local/messages" {
+		t.Errorf("path = %q", req.Path)
+	}
+	if req.Query != "limit=50" {
+		t.Errorf("query = %q", req.Query)
+	}
+	if req.SessionKey == "" {
+		t.Error("empty session_key — the response would have nowhere to be sealed to")
+	}
+
+	// The session key has to be a usable X25519 public key, not merely a
+	// non-empty string: this is what proves the fixture's shape is real.
+	if _, err := decodeSessionKey(req.SessionKey); err != nil {
+		t.Errorf("session_key does not decode: %v", err)
+	}
+}
+
+func TestAPIResFixture(t *testing.T) {
+	res := decodeFixture[apiRes](t, "api.res.json", typeAPIRes)
+
+	if res.Ref == "" {
+		t.Error("empty ref — nothing could match this to its request")
+	}
+	if res.Status != 200 {
+		t.Errorf("status = %d, want 200", res.Status)
+	}
+	if res.Sealed == "" {
+		t.Error("empty sealed body")
+	}
+}
+
+func TestAPIEvtFixture(t *testing.T) {
+	evt := decodeFixture[apiEvt](t, "api.evt.json", typeAPIEvt)
+
+	if evt.Ref == "" {
+		t.Error("empty ref — nothing could match this to the stream it belongs to")
+	}
+	if evt.Event != "message" {
+		t.Errorf("event = %q, want message", evt.Event)
+	}
+	if evt.Sealed == "" {
+		t.Error("empty sealed payload")
+	}
+}
+
+// The version nik announces is not the highest it can speak, and that gap is
+// deliberate: today's gateway accepts exactly 2 and refuses anything else, so
+// announcing 3 before the platform accepts a range would take every household
+// offline. This test is here so the two constants cannot drift apart by
+// accident — when the gateway accepts a range, this is what gets updated
+// alongside the bump.
+func TestAnnouncedVersionTrailsWhatWeCanSpeak(t *testing.T) {
+	if protocolVersion > maxProtocolVersion {
+		t.Fatalf("announcing v%d but can only speak v%d", protocolVersion, maxProtocolVersion)
+	}
+	if protocolVersion != 2 {
+		t.Fatalf("announced version is %d; bumping it requires the gateway to accept a range first (see protocol.go)", protocolVersion)
 	}
 }

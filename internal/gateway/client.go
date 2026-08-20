@@ -35,7 +35,10 @@ type client struct {
 	onMessage      func(context.Context, msgIn, msgContent) error
 	onConversation func(context.Context, convIn, convContent) error
 	onReady        func(ctx context.Context, ack helloAck)
-	onToken        func(token string)
+	// tunnel answers api.req envelopes. Nil means the API tunnel is off,
+	// which it is unless the owner turned it on — see api.remote in config.
+	tunnel  *Tunnel
+	onToken func(token string)
 	// reloadToken re-reads the token from wherever it is persisted. A 401
 	// mid-run may mean the token rotated under us (another process
 	// connected — nik connect, a second daemon) and the store already
@@ -179,6 +182,9 @@ func (c *client) dispatch(ctx context.Context, env envelope) error {
 	case typeConvIn:
 		return c.onConvIn(ctx, env)
 
+	case typeAPIReq:
+		return c.onAPIReq(ctx, env)
+
 	case typeAck:
 		return nil
 
@@ -261,6 +267,40 @@ func (c *client) onMsgIn(ctx context.Context, env envelope) error {
 	}
 
 	return c.onMessage(ctx, msg, content)
+}
+
+// onAPIReq answers a tunnelled request.
+//
+// A gateway that sends one to a nik with the tunnel off gets a 403 rather
+// than silence: "this household has not turned that on" is a fact the platform
+// should be able to see, and a dropped envelope looks like a broken agent.
+func (c *client) onAPIReq(ctx context.Context, env envelope) error {
+	req, err := decodePayload[apiReq](env)
+	if err != nil {
+		return err
+	}
+
+	// Ack first: the envelope id is the gateway's queue row, and the response
+	// rides its own envelope.
+	err = c.send(ctx, typeAck, ack{IDs: []string{env.ID}})
+	if err != nil {
+		return err
+	}
+
+	if c.tunnel == nil {
+		slog.Warn("tunnelled api request with the tunnel off", "pkg", "gateway",
+			"method", req.Method, "path", req.Path)
+
+		key, keyErr := decodeSessionKey(req.SessionKey)
+		if keyErr != nil {
+			return fmt.Errorf("api tunnel is off, and the session key is unreadable: %w", keyErr)
+		}
+
+		return (&Tunnel{send: c.send}).respond(ctx, env.ID, key, http.StatusForbidden,
+			[]byte(`{"error":"the api tunnel is off on this nik"}`))
+	}
+
+	return c.tunnel.handle(ctx, env.ID, req)
 }
 
 func (c *client) onConvIn(ctx context.Context, env envelope) error {
