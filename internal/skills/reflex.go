@@ -198,6 +198,12 @@ func ExtractInstallSection(content string) string {
 const maxCheckTimeout = 30 * time.Second
 
 func SkillCheckReflex(cfg *config.Config, conn *sql.DB, complete Completer, run CommandRunner, srcs []fs.FS) func(ctx context.Context) {
+	return skillCheckReflex(cfg, conn, complete, run, srcs, time.Now)
+}
+
+// skillCheckReflex is SkillCheckReflex with an injectable clock, so due-ness can
+// be exercised at a fixed instant instead of whenever the suite happens to run.
+func skillCheckReflex(cfg *config.Config, conn *sql.DB, complete Completer, run CommandRunner, srcs []fs.FS, clock func() time.Time) func(ctx context.Context) {
 	return func(ctx context.Context) {
 		reflexes, err := ListReflexes(srcs...)
 		if err != nil {
@@ -205,7 +211,7 @@ func SkillCheckReflex(cfg *config.Config, conn *sql.DB, complete Completer, run 
 			return
 		}
 
-		now := time.Now()
+		now := clock()
 
 		for key, def := range reflexes {
 			sched, err := resolveCron(ctx, conn, def.Every, complete)
@@ -234,18 +240,18 @@ func SkillCheckReflex(cfg *config.Config, conn *sql.DB, complete Completer, run 
 				continue
 			}
 
-			runSkillCheck(ctx, cfg, conn, key, def, lastMeta, run)
+			runSkillCheck(ctx, cfg, conn, key, def, lastMeta, run, now)
 		}
 	}
 }
 
-func runSkillCheck(ctx context.Context, cfg *config.Config, conn *sql.DB, key string, def SkillReflexDef, lastMeta string, run CommandRunner) {
+func runSkillCheck(ctx context.Context, cfg *config.Config, conn *sql.DB, key string, def SkillReflexDef, lastMeta string, run CommandRunner, now time.Time) {
 	slog.Info("skill check reflex: running", "key", key, "command", def.Command)
 
 	var newMeta string
 
 	if def.Command == "" {
-		newMeta = time.Now().UTC().Format(time.RFC3339)
+		newMeta = now.UTC().Format(time.RFC3339)
 	} else {
 		cmdCtx, cancel := context.WithTimeout(ctx, maxCheckTimeout)
 		defer cancel()
@@ -303,7 +309,7 @@ func runSkillCheck(ctx context.Context, cfg *config.Config, conn *sql.DB, key st
 		ConversationID: privIDs[0],
 		Kind:           "skill_reflex_fired",
 		Body:           body,
-		SentAt:         time.Now().UTC(),
+		SentAt:         now.UTC(),
 	})
 	if err != nil {
 		slog.Error("skill check reflex: insert system message", "key", key, "error", err)
