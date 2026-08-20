@@ -11,8 +11,14 @@ import (
 	"os"
 	"strings"
 
+	"github.com/kciuffolo/nik/internal/api"
 	"github.com/kciuffolo/nik/internal/version"
 )
+
+// apiVersionExpected is the API this nikctl was built against. nikd and nikctl
+// ship together, so a mismatch means a partial upgrade — worth a warning, not
+// a refusal: a status command that will not run is no help diagnosing why.
+const apiVersionExpected = api.APIVersion
 
 func main() {
 	subcmd := ""
@@ -20,7 +26,7 @@ func main() {
 		subcmd = os.Args[1]
 	}
 
-	known := []string{"connect", "install", "secrets", "tui", "version"}
+	known := []string{"connect", "install", "secrets", "status", "tui", "version"}
 
 	switch subcmd {
 	case "version":
@@ -31,6 +37,8 @@ func main() {
 		runInstall(os.Args[2:])
 	case "secrets":
 		runSecrets(os.Args[2:])
+	case "status":
+		runStatus(os.Args[2:])
 	case "tui":
 		runTUI(os.Args[2:])
 	case "":
