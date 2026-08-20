@@ -35,8 +35,9 @@ import (
 const APIVersion = 1
 
 type Server struct {
-	state *State
-	mux   *http.ServeMux
+	state  *State
+	broker *Broker
+	mux    *http.ServeMux
 
 	// Everything below is plugged in as nikd converges, so the guard is a
 	// nil check rather than a boot ordering rule. See SetChat.
@@ -45,7 +46,7 @@ type Server struct {
 }
 
 func New(state *State) *Server {
-	s := &Server{state: state, mux: http.NewServeMux()}
+	s := &Server{state: state, broker: NewBroker(), mux: http.NewServeMux()}
 	s.routes()
 
 	return s
@@ -58,7 +59,12 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /v1/conversations/{id}", s.handleConversationGet)
 	s.mux.HandleFunc("GET /v1/conversations/{id}/messages", s.handleMessagesList)
 	s.mux.HandleFunc("POST /v1/conversations/{id}/messages", s.handleMessageSend)
+
+	s.mux.HandleFunc("GET /v1/events", s.handleEvents)
 }
+
+// Broker is where nikd publishes what it wants clients to know about.
+func (s *Server) Broker() *Broker { return s.broker }
 
 // Handler is the whole API as an http.Handler, which is what lets the same
 // routes serve a unix socket now and a tunnelled request later without
@@ -191,4 +197,12 @@ type statusRecorder struct {
 func (r *statusRecorder) WriteHeader(status int) {
 	r.status = status
 	r.ResponseWriter.WriteHeader(status)
+}
+
+// Unwrap is what lets http.ResponseController reach the real writer through
+// this middleware. Without it, wrapping the writer silently strips
+// http.Flusher — and a stripped Flusher is an event stream that never
+// streams, which is exactly the bug this method exists to prevent.
+func (r *statusRecorder) Unwrap() http.ResponseWriter {
+	return r.ResponseWriter
 }
