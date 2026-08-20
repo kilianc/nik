@@ -160,6 +160,24 @@ func (c *Client) Connect(ctx context.Context, url, token string) error {
 	return err
 }
 
+// Onboarding reports how far along genesis is: when this nik was born,
+// whether it finished becoming itself, and which scene is playing.
+func (c *Client) Onboarding(ctx context.Context) (api.OnboardingState, error) {
+	var out api.OnboardingState
+	err := c.get(ctx, "/v1/onboarding", &out)
+
+	return out, err
+}
+
+// Workload is what nik is carrying right now: pending alarms and active
+// tasks. The event stream carries changes after this.
+func (c *Client) Workload(ctx context.Context) (api.WorkloadEvent, error) {
+	var out api.WorkloadEvent
+	err := c.get(ctx, "/v1/workload", &out)
+
+	return out, err
+}
+
 // Secrets lists the names in the store. Values are never included: a list is
 // for knowing what is there, not for reading it.
 func (c *Client) Secrets(ctx context.Context) ([]string, error) {

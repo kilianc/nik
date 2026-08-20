@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -47,6 +48,38 @@ type ActivityEvent struct {
 type WorkloadEvent struct {
 	Alarms int `json:"alarms"`
 	Tasks  int `json:"tasks"`
+}
+
+// Workload reports the same counts on demand. The stream only carries
+// changes, so a client that has just connected needs somewhere to start.
+type Workload interface {
+	Counts(ctx context.Context) (WorkloadEvent, error)
+}
+
+func (s *Server) SetWorkload(workload Workload) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.workload = workload
+}
+
+func (s *Server) handleWorkload(w http.ResponseWriter, r *http.Request) {
+	s.mu.RLock()
+	workload := s.workload
+	s.mu.RUnlock()
+
+	if workload == nil {
+		writeError(w, http.StatusServiceUnavailable, "nik is still starting")
+		return
+	}
+
+	counts, err := workload.Counts(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, counts)
 }
 
 // ResyncEvent says the stream dropped something.

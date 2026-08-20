@@ -9,14 +9,15 @@ import (
 )
 
 func TestNewAppSetup(t *testing.T) {
+
+	cfg := &config.Config{Home: t.TempDir()}
 	conn, err := db.OpenInMemory()
 	if err != nil {
 		t.Fatalf("open in-memory db: %v", err)
 	}
 	defer conn.Close()
 
-	cfg := &config.Config{Home: t.TempDir()}
-	app := NewApp(cfg, conn, nil, true, Options{})
+	app := NewApp(cfg, nil, conn, nil, true, Options{})
 
 	if app.view != viewSetup {
 		t.Errorf("expected setup view, got %d", app.view)
@@ -24,14 +25,9 @@ func TestNewAppSetup(t *testing.T) {
 }
 
 func TestNewAppChat(t *testing.T) {
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
 
 	cfg := &config.Config{Home: t.TempDir()}
-	app := NewApp(cfg, conn, nil, false, Options{})
+	app := NewApp(cfg, nil, nil, nil, false, Options{})
 
 	if app.view != viewChat {
 		t.Errorf("expected chat view, got %d", app.view)
@@ -39,14 +35,15 @@ func TestNewAppChat(t *testing.T) {
 }
 
 func TestAppViewRendersSetup(t *testing.T) {
+
+	cfg := &config.Config{Home: t.TempDir()}
 	conn, err := db.OpenInMemory()
 	if err != nil {
 		t.Fatalf("open in-memory db: %v", err)
 	}
 	defer conn.Close()
 
-	cfg := &config.Config{Home: t.TempDir()}
-	app := NewApp(cfg, conn, nil, true, Options{})
+	app := NewApp(cfg, nil, conn, nil, true, Options{})
 
 	output := app.View()
 	if output.Content == "" {
@@ -55,14 +52,15 @@ func TestAppViewRendersSetup(t *testing.T) {
 }
 
 func TestAppWindowSizeMsg(t *testing.T) {
+
+	cfg := &config.Config{Home: t.TempDir()}
 	conn, err := db.OpenInMemory()
 	if err != nil {
 		t.Fatalf("open in-memory db: %v", err)
 	}
 	defer conn.Close()
 
-	cfg := &config.Config{Home: t.TempDir()}
-	app := NewApp(cfg, conn, nil, true, Options{})
+	app := NewApp(cfg, nil, conn, nil, true, Options{})
 
 	model, _ := app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	updated := model.(App)

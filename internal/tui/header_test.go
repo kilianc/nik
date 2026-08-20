@@ -9,21 +9,11 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/kciuffolo/nik/internal/config"
-	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/version"
 )
 
 func TestHeaderShowsVersionModelStatus(t *testing.T) {
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
-
 	home := t.TempDir()
-	cfg := &config.Config{Home: home, Timezone: "America/Los_Angeles"}
-	cfg.Models.Main.Model = "claude-sonnet-4-20250514"
 
 	wantTail := home
 	if userHome, err := os.UserHomeDir(); err == nil && userHome != "" && strings.HasPrefix(home, userHome+string(os.PathSeparator)) {
@@ -37,7 +27,10 @@ func TestHeaderShowsVersionModelStatus(t *testing.T) {
 		pathLeaf = pathLeaf[i:]
 	}
 
-	c := newChatModel(cfg, conn, nil, Options{})
+	c := newChatModel(nil, nil, Options{Home: home})
+	// The model and timezone arrive from nikd rather than from a config file
+	// the TUI opened for itself.
+	c, _ = c.Update(metaMsg{model: "claude-sonnet-4-20250514", timezone: "America/Los_Angeles"})
 	c, _ = c.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
 	c.daemonAlive = true
 	c.bornAt = time.Now().Add(-23 * 24 * time.Hour)
@@ -109,13 +102,8 @@ func TestHeaderShowsVersionModelStatus(t *testing.T) {
 }
 
 func TestHeaderShowsThinkingWhenActive(t *testing.T) {
-	conn, err := db.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
-	}
-	defer conn.Close()
 
-	c := newTestChat(t, conn, nil, Options{})
+	c := newTestChat(t, nil, Options{})
 	c, _ = c.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
 	c.daemonAlive = true
 
