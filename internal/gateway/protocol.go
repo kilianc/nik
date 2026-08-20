@@ -17,8 +17,25 @@ import (
 // byte-identical to the platform's and decoded by a test on each side. change a
 // struct tag here and the twin test over there fails, which is the point.
 
-// protocolVersion is sent in hello; the gateway rejects anything else.
+// protocolVersion is what this nik sends in hello.
+//
+// Still 2, deliberately, even though everything v3 needs is implemented
+// below. Today's gateway accepts exactly 2 and rejects anything else, so a nik
+// that announced 3 would be refused at hello — every household offline until
+// the platform caught up. The ordering that avoids that:
+//
+//  1. nik learns to speak v3 and ships it (this change). A v2 gateway never
+//     sends an api.req, so the code is simply unreached.
+//  2. the gateway accepts a range, MinVersion 2 through Version 3, and
+//     records what it negotiated per connection.
+//  3. this constant becomes 3, and the tunnel is live.
+//
+// Step 3 is one line and belongs in the release after step 2, not before it.
 const protocolVersion = 2
+
+// maxProtocolVersion is what this nik can speak, as opposed to what it
+// announces. It is what step 3 above promotes.
+const maxProtocolVersion = 3
 
 type envelopeType string
 
@@ -34,7 +51,66 @@ const (
 	typeReadOut   envelopeType = "read.out"
 	typeAck       envelopeType = "ack"
 	typeError     envelopeType = "error"
+
+	// v3. The API tunnel: nikd's own HTTP API, carried over the socket it
+	// already holds.
+	typeAPIReq envelopeType = "api.req"
+	typeAPIRes envelopeType = "api.res"
+	typeAPIEvt envelopeType = "api.evt"
 )
+
+// The tunnel is three envelope types rather than one per console feature, and
+// that is the whole design decision.
+//
+// New envelope types have to be gated on a negotiated version, so enumerating
+// console verbs — console.in, console.out, history, activity — makes every
+// later console feature a protocol bump: two repos, two fixture sets, and a
+// compatibility window against households nobody can redeploy. Carrying
+// {method, path, body} instead means this is the last console-shaped bump
+// there ever needs to be, and nik-web becomes an HTTP client whose transport
+// happens to be a websocket.
+//
+// What the gateway keeps: method and path ride in the clear, so it can apply
+// route policy, rate-limit, meter and write an audit line that says what was
+// asked. What it does not get: the body, which is sealed. That is the same
+// bargain every other verb already makes.
+
+// apiReq is one request, tunnelled. G→A.
+type apiReq struct {
+	Method string `json:"method"`
+	Path   string `json:"path"`
+	// Query is the raw query string, without the leading "?".
+	Query string `json:"query,omitempty"`
+	// SessionKey is the hex X25519 public key the response is sealed to.
+	// Anonymous sealed boxes only run one way — the gateway seals to this
+	// agent — so a reply needs somewhere of its own to be sealed to.
+	SessionKey string `json:"session_key"`
+	// Sealed is the request body, sealed to this agent's key. Empty for
+	// requests without one.
+	Sealed string `json:"sealed,omitempty"`
+}
+
+// apiRes is one response, tunnelled. A→G. Ref names the request.
+type apiRes struct {
+	Ref    string `json:"ref"`
+	Status int    `json:"status"`
+	// Sealed is the response body, sealed to the request's session key.
+	Sealed string `json:"sealed,omitempty"`
+}
+
+// apiEvt is one server-sent event, tunnelled. A→G.
+//
+// Separate from apiRes because an event stream is not a reply: it has no
+// request to reference beyond the one that opened it, and it arrives whenever
+// nik has something to say.
+type apiEvt struct {
+	// Ref names the api.req that opened the stream.
+	Ref string `json:"ref"`
+	// Event is the SSE event name, in the clear — the same bargain as path.
+	Event string `json:"event"`
+	// Sealed is the event payload, sealed to the stream's session key.
+	Sealed string `json:"sealed"`
+}
 
 // message kinds, matching messaging.InboundMessage.Kind
 const (

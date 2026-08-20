@@ -175,6 +175,15 @@ type Config struct {
 // key live in the secret store, not here.
 type GatewayConfig struct {
 	URL string `yaml:"url"`
+	// API turns on the API tunnel: nikd's own HTTP API, answered over the
+	// websocket it already holds, so a browser can reach this nik without an
+	// inbound port.
+	//
+	// Off unless it is turned on, and that default is the decision rather than
+	// an accident. For a managed nik the provisioner writes it, which is a
+	// family agreeing to be hosted. For a self-hoster it is remote access to
+	// a computer in their house, and nobody should get that by upgrading.
+	API bool `yaml:"api"`
 }
 
 func Default(home string) *Config {
