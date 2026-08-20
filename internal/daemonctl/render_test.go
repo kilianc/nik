@@ -14,10 +14,11 @@ import (
 
 func TestSystemdUnitInvokesNikd(t *testing.T) {
 	var buf bytes.Buffer
-	err := systemdUnitTmpl.Execute(&buf, struct {
-		NikdBinary string
-		NikHome    string
-	}{NikdBinary: "/usr/local/bin/nikd", NikHome: "/home/fam/.nik"})
+	err := systemdUnitTmpl.Execute(&buf, systemdUnitData{
+		NikdBinary: "/usr/local/bin/nikd",
+		NikHome:    "/home/fam/.nik",
+		WantedBy:   systemdScopeFor(501, true).wantedBy(),
+	})
 	if err != nil {
 		t.Fatalf("render unit: %v", err)
 	}
@@ -29,6 +30,25 @@ func TestSystemdUnitInvokesNikd(t *testing.T) {
 	}
 	if strings.Contains(got, "nikd daemon") {
 		t.Fatalf("unit still passes the retired `daemon` subcommand:\n%s", got)
+	}
+
+	// A unit installed into the system manager under default.target is
+	// enabled and never started: default.target is the user manager's.
+	if !strings.Contains(got, "WantedBy=default.target") {
+		t.Fatalf("user unit does not want default.target:\n%s", got)
+	}
+
+	buf.Reset()
+	err = systemdUnitTmpl.Execute(&buf, systemdUnitData{
+		NikdBinary: "/usr/local/bin/nikd",
+		NikHome:    "/root/.nik",
+		WantedBy:   systemdScopeFor(0, false).wantedBy(),
+	})
+	if err != nil {
+		t.Fatalf("render system unit: %v", err)
+	}
+	if !strings.Contains(buf.String(), "WantedBy=multi-user.target") {
+		t.Fatalf("system unit does not want multi-user.target:\n%s", buf.String())
 	}
 }
 
