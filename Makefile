@@ -96,6 +96,13 @@ ci:
 	@bin/check-layering
 	go test ./...
 
+# the same rule CI applies to the PR title and to every commit on the branch.
+# not part of `make ci`: it needs a base to compare against, and `make ci`
+# also runs on main, where the range would be empty or already landed.
+.PHONY: check-commits
+check-commits:
+	@bin/check-commits $(ARGS)
+
 .PHONY: coverage
 coverage: lint
 	go test ./... -coverprofile=coverage.out
