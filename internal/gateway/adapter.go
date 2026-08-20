@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kciuffolo/nik/internal/api"
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/id"
@@ -372,7 +373,7 @@ func optional[T comparable](v T) *T {
 
 // DefaultURL is the production gateway. Setup writes it when config names
 // no other; a dev install overrides it in config.yaml before running setup.
-const DefaultURL = "wss://nik-gw.ciuffolo.com/v1/agent"
+const DefaultURL = api.DefaultGatewayURL
 
 // Probe checks a token the way boot does: dial, hello, wait for the first
 // ack, hang up — and returns the token to keep, which is the rotated one

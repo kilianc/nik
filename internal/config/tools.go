@@ -30,7 +30,7 @@ var configDef = llm.ToolDef{
 			},
 			"field": map[string]any{
 				"type":        "string",
-				"description": "Config field name for 'set'. Writable fields: timezone, location, max_history, task.max_rounds, task.timeout, models.main.*, models.task.*, models.recall.*.",
+				"description": "Config field name for 'set'. Writable fields: timezone, location, max_history, task.max_rounds, task.timeout, models.main.*, models.task.*, models.recall.*, shell.docker_image.",
 			},
 			"value": map[string]any{
 				"type":        "string",
@@ -93,16 +93,19 @@ func Snapshot(cfg *Config) map[string]any {
 		"models": map[string]any{
 			"main": map[string]any{
 				"model":            cfg.Models.Main.Model,
+				"backend":          cfg.Models.Main.Backend,
 				"reasoning_effort": cfg.Models.Main.ReasoningEffort,
 				"verbosity":        cfg.Models.Main.Verbosity,
 			},
 			"task": map[string]any{
 				"model":            cfg.Models.Task.Model,
+				"backend":          cfg.Models.Task.Backend,
 				"reasoning_effort": cfg.Models.Task.ReasoningEffort,
 				"verbosity":        cfg.Models.Task.Verbosity,
 			},
 			"recall": map[string]any{
 				"model":            cfg.Models.Recall.Model,
+				"backend":          cfg.Models.Recall.Backend,
 				"reasoning_effort": cfg.Models.Recall.ReasoningEffort,
 				"verbosity":        cfg.Models.Recall.Verbosity,
 			},
@@ -110,6 +113,9 @@ func Snapshot(cfg *Config) map[string]any {
 		"task": map[string]any{
 			"max_rounds": cfg.Task.MaxRoundsOrDefault(),
 			"timeout":    cfg.Task.TimeoutOrDefault().String(),
+		},
+		"shell": map[string]any{
+			"docker_image": cfg.Shell.DockerImage,
 		},
 		"max_history":                 cfg.MaxHistory,
 		"timezone":                    cfg.Timezone,
@@ -215,6 +221,14 @@ func SetField(cfg *Config, field, value string) error {
 			return fmt.Errorf("%w: models.recall.reasoning_effort %q (none, minimal, low, medium, high, xhigh, max)", ErrInvalidValue, value)
 		}
 		cfg.Models.Recall.ReasoningEffort = value
+	case "models.main.backend":
+		cfg.Models.Main.Backend = value
+	case "models.task.backend":
+		cfg.Models.Task.Backend = value
+	case "models.recall.backend":
+		cfg.Models.Recall.Backend = value
+	case "shell.docker_image":
+		cfg.Shell.DockerImage = value
 	case "models.recall.verbosity":
 		if !isValidVerbosity(value) {
 			return fmt.Errorf("%w: models.recall.verbosity %q (low, medium, high, or empty)", ErrInvalidValue, value)

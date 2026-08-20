@@ -130,6 +130,14 @@ func (s *Server) handleConfigPatch(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+// DefaultGatewayURL is the production gateway a fresh install connects to when
+// nothing says otherwise.
+//
+// It lives here rather than in internal/gateway — which is where it used to,
+// and which still spells it, aliased to this — so a client can show it without
+// linking the gateway adapter and, through it, the whole daemon.
+const DefaultGatewayURL = "wss://nik-gw.ciuffolo.com/v1/agent"
+
 // ConnectRequest links this nik to an account.
 type ConnectRequest struct {
 	Token string `json:"token"`

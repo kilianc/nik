@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"database/sql"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -54,10 +53,7 @@ type InputState struct {
 // activity flags.
 type InputGate func(messages []nikapi.Message, activity []string) InputState
 
-// conn is still here for the setup wizard, which writes config.yaml and the
-// secret store directly. Moving that onto the API is the next change, and it
-// is what finally takes SQLite out of nikctl.
-func NewApp(cfg *config.Config, client *nikapi.Client, conn *sql.DB, sender MessageSender, setup bool, opts Options) App {
+func NewApp(cfg *config.Config, client *nikapi.Client, sender MessageSender, setup bool, opts Options) App {
 	a := App{
 		cfg:    cfg,
 		client: client,
@@ -67,7 +63,7 @@ func NewApp(cfg *config.Config, client *nikapi.Client, conn *sql.DB, sender Mess
 
 	if setup {
 		a.view = viewSetup
-		a.setup = newSetupModel(cfg, conn)
+		a.setup = newSetupModel(cfg, client)
 	} else {
 		a.view = viewChat
 		a.chat = newChatModel(client, sender, opts)
@@ -135,8 +131,8 @@ func (a App) View() tea.View {
 	return v
 }
 
-func Run(cfg *config.Config, client *nikapi.Client, conn *sql.DB, sender MessageSender, setup bool, opts Options) error {
-	app := NewApp(cfg, client, conn, sender, setup, opts)
+func Run(cfg *config.Config, client *nikapi.Client, sender MessageSender, setup bool, opts Options) error {
+	app := NewApp(cfg, client, sender, setup, opts)
 	p := tea.NewProgram(app)
 	_, err := p.Run()
 	return err
