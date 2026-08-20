@@ -7,6 +7,7 @@
 package nikapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -14,6 +15,8 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -69,6 +72,80 @@ func (c *Client) Health(ctx context.Context) (Health, error) {
 	err := c.get(ctx, "/v1/health", &out)
 
 	return out, err
+}
+
+// Conversation reads one thread's metadata, including what nik is visibly
+// doing in it right now.
+func (c *Client) Conversation(ctx context.Context, convID string) (Conversation, error) {
+	var out Conversation
+	err := c.get(ctx, "/v1/conversations/"+url.PathEscape(convID), &out)
+
+	return out, err
+}
+
+// Messages pages a conversation, oldest first. after is the newest id the
+// caller already has; empty asks for the most recent page.
+func (c *Client) Messages(ctx context.Context, convID, after string, limit int) ([]Message, error) {
+	q := url.Values{}
+	if after != "" {
+		q.Set("after", after)
+	}
+	if limit > 0 {
+		q.Set("limit", strconv.Itoa(limit))
+	}
+
+	path := "/v1/conversations/" + url.PathEscape(convID) + "/messages"
+	if len(q) > 0 {
+		path += "?" + q.Encode()
+	}
+
+	var out struct {
+		Messages []Message `json:"messages"`
+	}
+	err := c.get(ctx, path, &out)
+
+	return out.Messages, err
+}
+
+// Send posts a message as the owner. It returns once nikd has recorded it,
+// which is before nik has read it — what happens next is watched on the
+// conversation.
+func (c *Client) Send(ctx context.Context, convID, body string) error {
+	return c.post(ctx,
+		"/v1/conversations/"+url.PathEscape(convID)+"/messages",
+		api.SendRequest{Body: body})
+}
+
+func (c *Client) post(ctx context.Context, path string, body any) error {
+	encoded, err := json.Marshal(body)
+	if err != nil {
+		return fmt.Errorf("encode request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://nikd"+path, bytes.NewReader(encoded))
+	if err != nil {
+		return fmt.Errorf("build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		if isNotListening(err) {
+			return ErrNoDaemon
+		}
+
+		return fmt.Errorf("%s: %w", path, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		return apiError(path, resp)
+	}
+
+	// Drain so the connection can be reused rather than closed under us.
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4<<10))
+
+	return nil
 }
 
 func (c *Client) get(ctx context.Context, path string, out any) error {
