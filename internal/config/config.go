@@ -11,7 +11,6 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/kciuffolo/nik/internal/db"
 	"gopkg.in/yaml.v3"
 )
 
@@ -487,9 +486,17 @@ func (c *Config) Normalize() {
 	normalizeConfig(c)
 }
 
+// localConversationID mirrors db.LocalConversationID.
+//
+// Copied rather than imported so this package — which nikctl links, for the
+// config struct alone — does not drag SQLite into the client binary through
+// one constant. A test imports db and asserts the two agree, which costs
+// nothing at build time and fails loudly if either moves.
+const localConversationID = "00000000-0000-0000-0000-000000000001"
+
 func normalizeConfig(cfg *Config) {
-	if !cfg.PrivilegedConversationIDs.ContainsID(db.LocalConversationID) {
-		cfg.PrivilegedConversationIDs.Append("local", db.LocalConversationID)
+	if !cfg.PrivilegedConversationIDs.ContainsID(localConversationID) {
+		cfg.PrivilegedConversationIDs.Append("local", localConversationID)
 	}
 
 	for _, e := range cfg.PrivilegedConversationIDs {

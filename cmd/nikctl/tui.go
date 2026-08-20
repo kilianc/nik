@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"flag"
 	"fmt"
@@ -12,7 +11,6 @@ import (
 	"time"
 
 	"github.com/kciuffolo/nik/internal/config"
-	"github.com/kciuffolo/nik/internal/db"
 	"github.com/kciuffolo/nik/internal/home"
 	"github.com/kciuffolo/nik/internal/nikapi"
 	"github.com/kciuffolo/nik/internal/tui"
@@ -80,37 +78,7 @@ func runTUI(args []string) {
 		}
 	}
 
-	// Setup still writes config.yaml and the secret store directly, so it
-	// still opens the database for the rows it seeds. That is the next
-	// change, and the one that finally takes SQLite out of nikctl.
-	//
-	// On a fresh install this overlaps with nothing: nikd is running but has
-	// no config, so it has not opened the database either. `--force-setup`
-	// against a configured nik is the one case where both have it open, which
-	// is exactly as true today.
-	var conn *sql.DB
-	if setup {
-		conn, err = db.Open(cfg.DBPath(), cfg.TZ())
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: open database: %v\n", err)
-			os.Exit(1)
-		}
-		defer conn.Close()
-
-		for _, ensure := range []func(context.Context, *sql.DB) error{
-			db.NikContactEnsure,
-			db.OwnerContactEnsure,
-			db.LocalConversationEnsure,
-		} {
-			err = ensure(context.Background(), conn)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "error: %v\n", err)
-				os.Exit(1)
-			}
-		}
-	}
-
-	err = tui.Run(cfg, client, conn, tui.NewAPISender(client), setup, opts)
+	err = tui.Run(cfg, client, tui.NewAPISender(client), setup, opts)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)

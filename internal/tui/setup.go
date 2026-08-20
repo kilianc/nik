@@ -3,7 +3,6 @@ package tui
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,10 +18,8 @@ import (
 	"github.com/kciuffolo/nik/internal/codex"
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/daemonctl"
-	"github.com/kciuffolo/nik/internal/db"
-	"github.com/kciuffolo/nik/internal/gateway"
 	"github.com/kciuffolo/nik/internal/id"
-	"github.com/kciuffolo/nik/internal/secrets"
+	"github.com/kciuffolo/nik/internal/nikapi"
 )
 
 type setupStep int
@@ -58,7 +55,7 @@ type setupModel struct {
 	anims        animators
 	err          error
 	cfg          *config.Config
-	conn         *sql.DB
+	client       *nikapi.Client
 	width        int
 
 	authCursor         int
@@ -105,12 +102,12 @@ func cursorFor(models []string, current string) int {
 	return 0
 }
 
-func newSetupModel(cfg *config.Config, conn *sql.DB) setupModel {
+func newSetupModel(cfg *config.Config, client *nikapi.Client) setupModel {
 	apiKey := textinput.New()
 	apiKey.Placeholder = "sk-..."
 	apiKey.EchoMode = textinput.EchoPassword
 	apiKey.SetWidth(60)
-	if existing, err := secrets.New(cfg.Home).Get("openai_key"); err == nil {
+	if existing := existingSecret(client, "openai_key"); existing != "" {
 		apiKey.SetValue(existing)
 	}
 
@@ -118,7 +115,7 @@ func newSetupModel(cfg *config.Config, conn *sql.DB) setupModel {
 	exaKey.Placeholder = "exa-..."
 	exaKey.EchoMode = textinput.EchoPassword
 	exaKey.SetWidth(60)
-	if existing, err := secrets.New(cfg.Home).Get("exa_api_key"); err == nil {
+	if existing := existingSecret(client, "exa_api_key"); existing != "" {
 		exaKey.SetValue(existing)
 	}
 
@@ -126,7 +123,7 @@ func newSetupModel(cfg *config.Config, conn *sql.DB) setupModel {
 	gatewayIn.Placeholder = "nik_..."
 	gatewayIn.EchoMode = textinput.EchoPassword
 	gatewayIn.SetWidth(60)
-	if existing, err := secrets.New(cfg.Home).Get("gateway_token"); err == nil {
+	if existing := existingSecret(client, "gateway_token"); existing != "" {
 		gatewayIn.SetValue(existing)
 	}
 
@@ -156,7 +153,7 @@ func newSetupModel(cfg *config.Config, conn *sql.DB) setupModel {
 		pulse:        p,
 		anims:        animators{p},
 		cfg:          cfg,
-		conn:         conn,
+		client:       client,
 	}
 }
 
@@ -238,14 +235,41 @@ type gatewayValidatedMsg struct{ err error }
 // validateGatewayCmd proves the token the way boot will: by connecting.
 // The gateway rotates on connect, so the store ends up holding the token
 // it handed back, not the one that was pasted.
-func validateGatewayCmd(home, url, token string) tea.Cmd {
+// validateGatewayCmd hands the token to nikd, which probes the gateway,
+// stores what it gets back, and — if it was waiting to be configured — carries
+// on booting. The wizard used to do the probe itself and write the secret
+// store from this process.
+func validateGatewayCmd(client *nikapi.Client, url, token string) tea.Cmd {
 	return func() tea.Msg {
-		err := gateway.ProbeWithStore(context.Background(), url, token, secrets.New(home))
-		if errors.Is(err, gateway.ErrAuthRejected) {
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		defer cancel()
+
+		err := client.Connect(ctx, url, token)
+		if errors.Is(err, nikapi.ErrAuthRejected) {
 			err = fmt.Errorf("the gateway rejected that token — it may have expired (they last 15 minutes); make a new agent on your dashboard")
 		}
+
 		return gatewayValidatedMsg{err: err}
 	}
+}
+
+// existingSecret prefills a field with what nik already holds, so re-running
+// setup does not mean retyping a key that is already right. Absent or
+// unreachable is simply an empty box.
+func existingSecret(client *nikapi.Client, name string) string {
+	if client == nil {
+		return ""
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	value, err := client.Secret(ctx, name)
+	if err != nil {
+		return ""
+	}
+
+	return value
 }
 
 func validateExaKeyCmd(key string) tea.Cmd {
@@ -382,56 +406,66 @@ func resolveLocationCmd(apiKey, input string) tea.Cmd {
 	}
 }
 
-func writeSetupCmd(cfg *config.Config, conn *sql.DB, apiKey, exaKey, gatewayToken string) tea.Cmd {
+// writeSetupCmd hands everything the wizard collected to nikd.
+//
+// It used to write config.yaml, the secret store and two contact rows itself,
+// from a process that was not the one that would use any of it — which is why
+// finishing setup used to end with "nik needs to restart to pick up the new
+// config". Now the daemon holds it, and the timezone reaching the contact
+// cards is nikd's business rather than something this wizard has to remember.
+func writeSetupCmd(client *nikapi.Client, cfg *config.Config, apiKey, exaKey, gatewayToken string) tea.Cmd {
 	return func() tea.Msg {
-		store := secrets.New(cfg.Home)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
 
-		// gateway_token was already stored — rotated — by the validation
-		// probe; writing the typed value here would resurrect a dead token.
+		// gateway_token was already stored — rotated — when the gateway step
+		// connected; writing the typed value here would resurrect a dead one.
 		_ = gatewayToken
 
-		if apiKey != "" {
-			err := store.Set("openai_key", apiKey)
+		for name, value := range map[string]string{
+			"openai_key":  apiKey,
+			"exa_api_key": exaKey,
+		} {
+			if value == "" {
+				continue
+			}
+
+			err := client.SetSecret(ctx, name, value)
 			if err != nil {
 				return configWrittenMsg{err: err}
 			}
 		}
 
-		if exaKey != "" {
-			err := store.Set("exa_api_key", exaKey)
-			if err != nil {
-				return configWrittenMsg{err: err}
-			}
+		fields := []nikapi.ConfigField{
+			{Field: "timezone", Value: cfg.Timezone},
+			{Field: "location", Value: cfg.Location},
+			{Field: "models.main.model", Value: cfg.Models.Main.Model},
+			{Field: "models.main.backend", Value: cfg.Models.Main.Backend},
+			{Field: "models.recall.backend", Value: cfg.Models.Recall.Backend},
+			{Field: "shell.docker_image", Value: cfg.Shell.DockerImage},
 		}
 
-		cfg.Normalize()
-		err := cfg.Save(cfg.ConfigPath())
+		_, err := client.SetConfig(ctx, fields...)
 		if err != nil {
 			return configWrittenMsg{err: err}
-		}
-
-		if conn != nil {
-			ctx := context.Background()
-			for _, cid := range []string{db.OwnerContactID, db.NikContactID} {
-				err = db.ContactUpdate(ctx, conn, db.ContactUpdateParams{ID: cid, Field: "timezone", Value: cfg.Timezone})
-				if err != nil {
-					return configWrittenMsg{err: fmt.Errorf("write timezone to %s: %w", cid, err)}
-				}
-				err = db.ContactUpdate(ctx, conn, db.ContactUpdateParams{ID: cid, Field: "location", Value: cfg.Location})
-				if err != nil {
-					return configWrittenMsg{err: fmt.Errorf("write location to %s: %w", cid, err)}
-				}
-			}
 		}
 
 		return configWrittenMsg{}
 	}
 }
 
-func daemonPollCmd(home string) tea.Cmd {
-	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
-		pid, alive := daemonctl.CheckPID(home)
-		return daemonPollMsg{pid: pid, alive: alive}
+func daemonPollCmd(client *nikapi.Client) tea.Cmd {
+	return tea.Tick(time.Second, func(time.Time) tea.Msg {
+		if client == nil {
+			return daemonPollMsg{}
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		_, err := client.Health(ctx)
+
+		return daemonPollMsg{alive: err == nil}
 	})
 }
 
@@ -540,7 +574,7 @@ func (m setupModel) Update(msg tea.Msg) (setupModel, tea.Cmd) {
 		m.cfg.Location = msg.location
 		m.step = stepWriting
 		m.cfg.Gateway.URL = m.gatewayURL()
-		cmds = append(cmds, writeSetupCmd(m.cfg, m.conn, m.apiKeyIn.Value(), m.exaKeyIn.Value(), strings.TrimSpace(m.gatewayIn.Value())))
+		cmds = append(cmds, writeSetupCmd(m.client, m.cfg, m.apiKeyIn.Value(), m.exaKeyIn.Value(), strings.TrimSpace(m.gatewayIn.Value())))
 		return m, tea.Batch(cmds...)
 
 	case configWrittenMsg:
@@ -555,7 +589,7 @@ func (m setupModel) Update(msg tea.Msg) (setupModel, tea.Cmd) {
 		m.daemonOldPID = pid
 		m.serviceInstalled = daemonctl.IsInstalled()
 		if !alive {
-			cmds = append(cmds, daemonPollCmd(m.cfg.Home))
+			cmds = append(cmds, daemonPollCmd(m.client))
 		}
 		return m, tea.Batch(cmds...)
 
@@ -564,7 +598,7 @@ func (m setupModel) Update(msg tea.Msg) (setupModel, tea.Cmd) {
 			m.completed = true
 			return m, tea.Batch(cmds...)
 		}
-		cmds = append(cmds, daemonPollCmd(m.cfg.Home))
+		cmds = append(cmds, daemonPollCmd(m.client))
 		return m, tea.Batch(cmds...)
 	}
 
@@ -604,7 +638,7 @@ func (m setupModel) updateWelcome(msg tea.Msg) (setupModel, tea.Cmd) {
 		// silently — the step only appears when there is something to type.
 		if tok := strings.TrimSpace(m.gatewayIn.Value()); tok != "" {
 			m.step = stepGatewayValidating
-			return m, validateGatewayCmd(m.cfg.Home, m.gatewayURL(), tok)
+			return m, validateGatewayCmd(m.client, m.gatewayURL(), tok)
 		}
 		m.step = stepGatewayToken
 		m.gatewayIn.Focus()
@@ -730,7 +764,7 @@ func (m setupModel) updateGatewayToken(msg tea.Msg) (setupModel, tea.Cmd) {
 		}
 		m.step = stepGatewayValidating
 		m.err = nil
-		return m, validateGatewayCmd(m.cfg.Home, m.gatewayURL(), val)
+		return m, validateGatewayCmd(m.client, m.gatewayURL(), val)
 	}
 
 	var cmd tea.Cmd
@@ -745,7 +779,7 @@ func (m setupModel) gatewayURL() string {
 	if m.cfg.Gateway.URL != "" {
 		return m.cfg.Gateway.URL
 	}
-	return gateway.DefaultURL
+	return nikapi.DefaultGatewayURL
 }
 
 func (m setupModel) updateModel(msg tea.Msg) (setupModel, tea.Cmd) {
@@ -818,7 +852,7 @@ func (m setupModel) updateDone(msg tea.Msg) (setupModel, tea.Cmd) {
 		if key, ok := msg.(tea.KeyMsg); ok && key.String() == "enter" {
 			_ = daemonctl.SignalDaemon(m.cfg.Home, syscall.SIGTERM)
 			m.step = stepWaitDaemon
-			return m, daemonPollCmd(m.cfg.Home)
+			return m, daemonPollCmd(m.client)
 		}
 	}
 	return m, nil

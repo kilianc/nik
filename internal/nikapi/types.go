@@ -30,6 +30,9 @@ const (
 // ConfigField is one field to change; see Client.SetConfig.
 type ConfigField = api.ConfigField
 
+// DefaultGatewayURL is where a fresh install connects.
+const DefaultGatewayURL = api.DefaultGatewayURL
+
 // LocalConversationID is the conversation the TUI and the console render.
 const LocalConversationID = api.LocalConversationID
 
