@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestParseVersion(t *testing.T) {
 	tests := []struct {
@@ -91,6 +94,31 @@ func TestAfter(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := tt.v.after(tt.o); got != tt.want {
 				t.Errorf("%s.after(%s) = %v, want %v", tt.v, tt.o, got, tt.want)
+			}
+		})
+	}
+}
+
+// waitForChecks retries past "no checks reported" — the state gh returns when
+// asked before CI has registered a run. Anything else is a real answer and
+// must not be retried, or a genuinely failing release waits a minute before
+// admitting it.
+func TestNoChecksYetIsTheOnlyRetriedFailure(t *testing.T) {
+	tests := []struct {
+		name  string
+		out   string
+		retry bool
+	}{
+		{"not registered yet", "no checks reported on the 'release/v0.4.1' branch", true},
+		{"a check failed", "ubuntu-latest\tfail\t1m30s", false},
+		{"no such pull request", "no pull requests found for branch", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := strings.Contains(tt.out, "no checks reported")
+			if got != tt.retry {
+				t.Fatalf("retry = %v, want %v for %q", got, tt.retry, tt.out)
 			}
 		})
 	}
