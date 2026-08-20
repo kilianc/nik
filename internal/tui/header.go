@@ -59,27 +59,24 @@ func (m chatModel) activitySuffix() string {
 
 func (m chatModel) chromeStrip() string {
 	parts := []string{version.Number}
-	if m.cfg != nil {
-		if model := modelAcronym(m.cfg.Models.Main.Model); model != "" {
-			parts = append(parts, model)
-		}
+	if model := modelAcronym(m.modelName); model != "" {
+		parts = append(parts, model)
 	}
 	if age := nikAgeLabel(m.bornAt, time.Now()); age != "" {
 		parts = append(parts, age)
 	}
-	if m.cfg != nil {
-		if tz := tzLabel(m.cfg.Timezone); tz != "" {
-			parts = append(parts, tz)
-		}
+	if tz := tzLabel(m.timezone); tz != "" {
+		parts = append(parts, tz)
 	}
 	return headerMetaStyle.Render(strings.Join(parts, " · "))
 }
 
 func (m chatModel) workspaceLabel() string {
-	if m.cfg == nil {
+	if m.home == "" {
 		return ""
 	}
-	return homeDisplay(m.cfg.Home)
+
+	return homeDisplay(m.home)
 }
 
 func renderCardTop(w int, left, right string, tick int, energy float64, active bool) string {

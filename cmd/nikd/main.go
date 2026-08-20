@@ -337,6 +337,8 @@ func main() {
 	chatSvc := apisvc.NewChat(conn, messagingSvc)
 	apiSrv.SetChat(chatSvc)
 	apiSrv.SetConfig(apisvc.NewConfig(cfg, conn))
+	apiSrv.SetOnboarding(apisvc.NewOnboarding(conn))
+	apiSrv.SetWorkload(apisvc.NewWorkload(conn))
 	apiSrv.SetGateway(apisvc.NewGateway(h, secretStore, cfg, nil))
 
 	// One poller, in the process that owns the data, instead of one per

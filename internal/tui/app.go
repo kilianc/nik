@@ -6,7 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/kciuffolo/nik/internal/config"
-	"github.com/kciuffolo/nik/internal/db"
+	"github.com/kciuffolo/nik/internal/nikapi"
 )
 
 type view int
@@ -21,7 +21,7 @@ type App struct {
 	setup  setupModel
 	chat   chatModel
 	cfg    *config.Config
-	conn   *sql.DB
+	client *nikapi.Client
 	sender MessageSender
 	opts   Options
 	width  int
@@ -30,6 +30,10 @@ type App struct {
 
 type Options struct {
 	ShowSystem bool
+	// Home is the workspace path, for the header strip. The TUI is told it
+	// rather than working it out, since which directory nik lives in is
+	// nikd's business.
+	Home string
 	// BornAt is when the chat agent first came online. Zero value hides the
 	// age chip from the header strip.
 	BornAt time.Time
@@ -48,12 +52,15 @@ type InputState struct {
 
 // InputGate returns the current input state given the chat's message tail and
 // activity flags.
-type InputGate func(messages []db.Message, activity []string) InputState
+type InputGate func(messages []nikapi.Message, activity []string) InputState
 
-func NewApp(cfg *config.Config, conn *sql.DB, sender MessageSender, setup bool, opts Options) App {
+// conn is still here for the setup wizard, which writes config.yaml and the
+// secret store directly. Moving that onto the API is the next change, and it
+// is what finally takes SQLite out of nikctl.
+func NewApp(cfg *config.Config, client *nikapi.Client, conn *sql.DB, sender MessageSender, setup bool, opts Options) App {
 	a := App{
 		cfg:    cfg,
-		conn:   conn,
+		client: client,
 		sender: sender,
 		opts:   opts,
 	}
@@ -63,7 +70,7 @@ func NewApp(cfg *config.Config, conn *sql.DB, sender MessageSender, setup bool, 
 		a.setup = newSetupModel(cfg, conn)
 	} else {
 		a.view = viewChat
-		a.chat = newChatModel(cfg, conn, sender, opts)
+		a.chat = newChatModel(client, sender, opts)
 	}
 
 	return a
@@ -92,7 +99,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if a.setup.isDone() {
 			a.view = viewChat
-			a.chat = newChatModel(a.cfg, a.conn, a.sender, a.opts)
+			a.chat = newChatModel(a.client, a.sender, a.opts)
 			a.chat, _ = a.chat.Update(tea.WindowSizeMsg{Width: a.width, Height: a.height})
 			return a, a.chat.Init()
 		}
@@ -128,8 +135,8 @@ func (a App) View() tea.View {
 	return v
 }
 
-func Run(cfg *config.Config, conn *sql.DB, sender MessageSender, setup bool, opts Options) error {
-	app := NewApp(cfg, conn, sender, setup, opts)
+func Run(cfg *config.Config, client *nikapi.Client, conn *sql.DB, sender MessageSender, setup bool, opts Options) error {
+	app := NewApp(cfg, client, conn, sender, setup, opts)
 	p := tea.NewProgram(app)
 	_, err := p.Run()
 	return err

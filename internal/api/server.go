@@ -41,11 +41,13 @@ type Server struct {
 
 	// Everything below is plugged in as nikd converges, so the guard is a
 	// nil check rather than a boot ordering rule. See SetChat.
-	mu      sync.RWMutex
-	chat    Chat
-	config  Config
-	gateway Gateway
-	secrets Secrets
+	mu         sync.RWMutex
+	chat       Chat
+	config     Config
+	gateway    Gateway
+	secrets    Secrets
+	onboarding Onboarding
+	workload   Workload
 }
 
 func New(state *State) *Server {
@@ -68,6 +70,9 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /v1/config", s.handleConfigGet)
 	s.mux.HandleFunc("PATCH /v1/config", s.handleConfigPatch)
 	s.mux.HandleFunc("POST /v1/gateway/connect", s.handleGatewayConnect)
+
+	s.mux.HandleFunc("GET /v1/onboarding", s.handleOnboarding)
+	s.mux.HandleFunc("GET /v1/workload", s.handleWorkload)
 
 	s.mux.HandleFunc("GET /v1/secrets", s.handleSecretsList)
 	s.mux.HandleFunc("GET /v1/secrets/{name}", s.handleSecretGet)

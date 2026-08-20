@@ -49,13 +49,26 @@ type Conversation struct {
 // sql.Null fields and platform routing ids that no client has any use for;
 // what survives here is what a reader needs to render a conversation.
 type Message struct {
-	ID        string    `json:"id"`
-	Kind      string    `json:"kind"`
-	Body      string    `json:"body"`
-	SentAt    time.Time `json:"sent_at"`
-	IsFromMe  bool      `json:"is_from_me"`
-	Platform  string    `json:"platform"`
-	ContactID string    `json:"contact_id,omitempty"`
+	ID     string    `json:"id"`
+	Kind   string    `json:"kind"`
+	Body   string    `json:"body"`
+	SentAt time.Time `json:"sent_at"`
+	// Author says who said it, in terms a renderer can use: the alternative
+	// is publishing the contact UUIDs nik keys itself and the system by, and
+	// making every client compare against them.
+	Author    Author `json:"author"`
+	IsFromMe  bool   `json:"is_from_me"`
+	Platform  string `json:"platform"`
+	ContactID string `json:"contact_id,omitempty"`
+	// ReplyTo is the message this one is about: the target of a reaction, or
+	// the call a tool result belongs to. Empty for most messages.
+	//
+	// It names an ExternalID rather than an ID, because that is what the
+	// platform a message came from uses to point at another message.
+	ReplyTo string `json:"reply_to,omitempty"`
+	// ExternalID is the id the originating platform knows this message by.
+	// A client needs it to match ReplyTo against; nothing else should use it.
+	ExternalID string `json:"external_id,omitempty"`
 	// MediaID, when set, is fetched separately rather than inlined: nik sends
 	// voice notes and images, and base64 down a socket that later becomes a
 	// tunnel is the wrong shape.
@@ -65,6 +78,21 @@ type Message struct {
 	Transcript  string `json:"transcript,omitempty"`
 	Description string `json:"description,omitempty"`
 }
+
+// Author is who a message came from.
+type Author string
+
+const (
+	// AuthorNik is nik speaking.
+	AuthorNik Author = "nik"
+	// AuthorSystem is nik's own machinery — an alarm firing, a task
+	// reporting. A person never sees these unless they ask.
+	AuthorSystem Author = "system"
+	// AuthorOwner is the person who owns this nik.
+	AuthorOwner Author = "owner"
+	// AuthorContact is anybody else in a conversation.
+	AuthorContact Author = "contact"
+)
 
 // MessagesQuery pages a conversation.
 //
