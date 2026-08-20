@@ -1,4 +1,4 @@
-package daemonctl
+package daemontool
 
 import (
 	"context"

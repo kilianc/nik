@@ -79,6 +79,7 @@ build-release:
 lint:
 	gofmt -w .
 	go vet ./...
+	@bin/check-layering
 	@test ! -f $(NIK_HOME)/nik.db || go run ./tools/schemadiff -db $(NIK_HOME)/nik.db
 
 .PHONY: test
@@ -92,6 +93,7 @@ ci:
 	@files="$$(gofmt -l .)"; if [ -n "$$files" ]; then \
 	  echo "gofmt needed:"; echo "$$files"; exit 1; fi
 	go vet ./...
+	@bin/check-layering
 	go test ./...
 
 .PHONY: coverage
