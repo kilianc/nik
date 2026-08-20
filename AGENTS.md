@@ -145,7 +145,7 @@ EOF
 
 ## Releases
 
-Semver tags, `vMAJOR.MINOR.PATCH`. `VERSION` at the repo root is the release of record and `make release` is the only thing that writes it — it refuses to run off main, on a dirty tree, behind origin, or onto a tag that already exists, runs `make ci`, then commits VERSION, tags it, and pushes both. `make release ARGS="-bump minor"` for a minor, `-dry-run` to see what it would do, `-no-ci` when you just ran it.
+Semver tags, `vMAJOR.MINOR.PATCH`. `VERSION` at the repo root is the release of record and `make release` is the only thing that writes it — it refuses to run off main, on a dirty tree, behind origin, or onto a tag that already exists, runs `make ci`, then commits VERSION, tags it, and pushes both. `make release ARGS="-bump minor"` for a minor, `-dry-run` to see what it would do. There is no way to skip `make ci` — it always runs, before anything is written or tagged.
 
 Every binary is stamped via ldflags with the release and the commit (`nik version` prints `v0.3.0 (a8e2c2f)`); a build that never went through the workflow says `dev`. The release workflow refuses any tag that disagrees with the VERSION committed alongside it, refuses a binary that came out unstamped, and publishes the GitHub release last — so a release on the releases page means the binaries are attached to it, not merely that someone pushed a tag. Notes are generated from the PRs merged since the previous release.
 
@@ -354,6 +354,7 @@ Before applying any migration to the live DB:
 - rename `howto/` to `recipes/` — the old name implied tutorial content; the actual artifacts are operational procedures, diagnostic runbooks, and learned workflows. "Recipes" matches the skill's own language and doesn't carry DevOps connotations like "runbooks." Applied 2026-04-02.
 - when the plan marks something as out of scope, the agent must never perform that action during execution — stop and ask the user how to proceed instead of unilaterally resolving blockers. "Out of scope" means "not your call."
 - when changing repo layout or build artifact locations, update the canonical project structure table and any docs/examples that mention the old layout in the same change.
+- `make release` must never offer a lever that skips `make ci`. "I already ran it" is a claim about a tree that may have moved since, and the release where that is wrong is the one where skipping cost something. If running it unattended is awkward, fix the awkwardness — the subprocess eating a piped answer was the real problem — not the check. Applied 2026-08-20.
 - shell scripts must never call `sudo` unconditionally — set `SUDO=""` and override it with `SUDO=sudo` only when `id -u` is not 0. Already-root-with-no-sudo is a real environment (any container, and nik-saas installs into its cells exactly that way), and there the call fails as `sudo: not found` — exit 127 under `set -eu`, which reads as nothing at all rather than as a permission problem.
 
 ## Fin

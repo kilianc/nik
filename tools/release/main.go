@@ -13,7 +13,6 @@
 //	make release                      # patch bump
 //	make release ARGS="-bump minor"   # minor bump
 //	make release ARGS="-dry-run"      # print what would happen, touch nothing
-//	make release ARGS="-no-ci"        # skip make ci, you already ran it
 //	make release ARGS="-tag-only"     # the bump already landed; just tag main
 package main
 
@@ -166,11 +165,14 @@ func runCapture(name string, args ...string) (string, error) {
 	return buf.String(), nil
 }
 
+// run deliberately gives the child no stdin. nothing it runs reads any --
+// make ci, git, and gh all take everything they need as arguments -- and
+// leaving os.Stdin attached means `make ci` swallows an answer piped ahead of
+// the confirm prompt, so an unattended release ends having changed nothing.
 func run(name string, args ...string) error {
 	cmd := exec.Command(name, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("%s %s: %w", name, strings.Join(args, " "), err)
 	}
@@ -247,7 +249,6 @@ func main() {
 	level := flag.String("bump", "patch", "component to bump: major, minor or patch")
 	explicit := flag.String("version", "", "cut this exact version instead of bumping")
 	dryRun := flag.Bool("dry-run", false, "print what would happen, touch nothing")
-	noCI := flag.Bool("no-ci", false, "skip make ci")
 	tagOnly := flag.Bool("tag-only", false, "the version bump is already on main; only tag and push")
 	flag.Parse()
 
@@ -317,11 +318,13 @@ func main() {
 	// the workflow runs make ci too, but it runs it after the tag exists. a
 	// tag is awkward to retract and a failed release is a confusing artifact,
 	// so the cheap thing is to find out here.
-	if !*noCI {
-		fmt.Println("release: running make ci (skip with -no-ci)")
-		if err := run("make", "ci"); err != nil {
-			die("%v", err)
-		}
+	//
+	// there is no flag to skip it. "i just ran it" is a claim about a tree
+	// that may have moved since, and the one release where it is wrong is the
+	// one where skipping cost something.
+	fmt.Println("release: running make ci")
+	if err := run("make", "ci"); err != nil {
+		die("%v", err)
 	}
 
 	if !confirm(next.String()) {
