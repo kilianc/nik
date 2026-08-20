@@ -14,6 +14,7 @@ import (
 
 	"github.com/kciuffolo/nik/internal/config"
 	"github.com/kciuffolo/nik/internal/db"
+	"github.com/kciuffolo/nik/internal/id"
 )
 
 func localRunner(_ context.Context, command, stdin string) (string, string, error) {
@@ -362,6 +363,28 @@ func TestSkillChangeReflexOnlyFirstPrivilegedConv(t *testing.T) {
 	}
 }
 
+// refTime is the instant the reflex tests run at. Due-ness is a function of the
+// clock, so tests pin it rather than inheriting whatever hour the suite runs in.
+var refTime = time.Date(2026, 3, 26, 10, 0, 0, 0, time.UTC)
+
+func fixedClock(t time.Time) func() time.Time {
+	return func() time.Time { return t }
+}
+
+// seedReflexFire records a past fire at an explicit time, which db.SkillReflexInsert
+// cannot do because it always stamps the row with the wall clock.
+func seedReflexFire(t *testing.T, h *reflexHarness, key, meta string, firedAt time.Time) {
+	t.Helper()
+
+	_, err := h.conn.ExecContext(h.ctx,
+		"INSERT INTO skill_reflex (id, skill_name, meta, created_at) VALUES (?, ?, ?, ?)",
+		id.V7(), key, meta, db.ISO8601MS(firedAt),
+	)
+	if err != nil {
+		t.Fatalf("seed reflex fire: %v", err)
+	}
+}
+
 func mockCompleter(cronExpr string) Completer {
 	return func(_ context.Context, _, _ string) (string, error) {
 		return cronExpr, nil
@@ -378,7 +401,7 @@ func TestSkillCheckReflex(t *testing.T) {
 			Every:   "every minute",
 		}
 
-		runSkillCheck(h.ctx, h.cfg, h.conn, "test_skill/check", def, "", localRunner)
+		runSkillCheck(h.ctx, h.cfg, h.conn, "test_skill/check", def, "", localRunner, refTime)
 
 		meta, _, err := db.SkillReflexLatest(h.ctx, h.conn, "test_skill/check")
 		if err != nil {
@@ -398,7 +421,7 @@ func TestSkillCheckReflex(t *testing.T) {
 			Every:   "every minute",
 		}
 
-		runSkillCheck(h.ctx, h.cfg, h.conn, "silent_skill/check", def, "", localRunner)
+		runSkillCheck(h.ctx, h.cfg, h.conn, "silent_skill/check", def, "", localRunner, refTime)
 
 		meta, _, err := db.SkillReflexLatest(h.ctx, h.conn, "silent_skill/check")
 		if err != nil {
@@ -423,7 +446,7 @@ func TestSkillCheckReflex(t *testing.T) {
 			Every:   "every minute",
 		}
 
-		runSkillCheck(h.ctx, h.cfg, h.conn, "stable_skill/check", def, "same-meta", localRunner)
+		runSkillCheck(h.ctx, h.cfg, h.conn, "stable_skill/check", def, "same-meta", localRunner, refTime)
 
 		var count int
 		err = h.conn.QueryRowContext(h.ctx, "SELECT count(*) FROM skill_reflex WHERE skill_name = 'stable_skill/check'").Scan(&count)
@@ -443,7 +466,7 @@ func TestSkillCheckReflex(t *testing.T) {
 			Every: "every day at 6am",
 		}
 
-		runSkillCheck(h.ctx, h.cfg, h.conn, "journal/journal", def, "", localRunner)
+		runSkillCheck(h.ctx, h.cfg, h.conn, "journal/journal", def, "", localRunner, refTime)
 
 		meta, _, err := db.SkillReflexLatest(h.ctx, h.conn, "journal/journal")
 		if err != nil {
@@ -463,16 +486,15 @@ func TestSkillCheckReflex(t *testing.T) {
 
 		writeSkillFile(t, h.skillsDir, "journal", "---\nname: journal\nsummary: daily journal\nreflex:\n  - name: journal\n    every: \"every day at 11pm\"\n---\n# Journal\n")
 
-		err := db.SkillReflexInsert(h.ctx, h.conn, "journal/journal", "2026-03-25T23:00:00Z")
-		if err != nil {
-			t.Fatalf("seed reflex: %v", err)
-		}
+		// Already fired at today's 11pm; it is now half an hour later.
+		now := time.Date(2026, 3, 26, 23, 30, 0, 0, time.UTC)
+		seedReflexFire(t, h, "journal/journal", "2026-03-26T23:00:00Z", now.Add(-30*time.Minute))
 
-		checkReflex := SkillCheckReflex(h.cfg, h.conn, mockCompleter("0 23 * * *"), localRunner, []fs.FS{os.DirFS(h.skillsDir)})
+		checkReflex := skillCheckReflex(h.cfg, h.conn, mockCompleter("0 23 * * *"), localRunner, []fs.FS{os.DirFS(h.skillsDir)}, fixedClock(now))
 		checkReflex(h.ctx)
 
 		var count int
-		err = h.conn.QueryRowContext(h.ctx,
+		err := h.conn.QueryRowContext(h.ctx,
 			"SELECT count(*) FROM skill_reflex WHERE skill_name = 'journal/journal'",
 		).Scan(&count)
 		if err != nil {
@@ -492,7 +514,10 @@ func TestSkillCheckReflex(t *testing.T) {
 
 		writeSkillFile(t, h.skillsDir, "journal", "---\nname: journal\nsummary: daily journal\nreflex:\n  - name: journal\n    every: \"every day at 11pm\"\n---\n# Journal\n")
 
-		checkReflex := SkillCheckReflex(h.cfg, h.conn, mockCompleter("0 23 * * *"), localRunner, []fs.FS{os.DirFS(h.skillsDir)})
+		// Never fired, and today's 11pm has not come round yet.
+		now := time.Date(2026, 3, 26, 10, 0, 0, 0, time.UTC)
+
+		checkReflex := skillCheckReflex(h.cfg, h.conn, mockCompleter("0 23 * * *"), localRunner, []fs.FS{os.DirFS(h.skillsDir)}, fixedClock(now))
 		checkReflex(h.ctx)
 
 		var count int
@@ -508,6 +533,30 @@ func TestSkillCheckReflex(t *testing.T) {
 
 		if msgCount := countSystemMessages(t, h.ctx, h.conn, "skill_reflex_fired"); msgCount != 0 {
 			t.Fatalf("expected 0 skill_reflex_fired messages, got %d", msgCount)
+		}
+	})
+
+	t.Run("fires new reflex already due today", func(t *testing.T) {
+		h, _ := setupReflexTest(t)
+
+		writeSkillFile(t, h.skillsDir, "journal", "---\nname: journal\nsummary: daily journal\nreflex:\n  - name: journal\n    every: \"every day at 11pm\"\n---\n# Journal\n")
+
+		// Never fired, and today's 11pm is already past.
+		now := time.Date(2026, 3, 26, 23, 30, 0, 0, time.UTC)
+
+		checkReflex := skillCheckReflex(h.cfg, h.conn, mockCompleter("0 23 * * *"), localRunner, []fs.FS{os.DirFS(h.skillsDir)}, fixedClock(now))
+		checkReflex(h.ctx)
+
+		meta, _, err := db.SkillReflexLatest(h.ctx, h.conn, "journal/journal")
+		if err != nil {
+			t.Fatalf("get latest: %v", err)
+		}
+		if meta != now.Format(time.RFC3339) {
+			t.Fatalf("expected meta stamped with the injected clock, got %q", meta)
+		}
+
+		if msgCount := countSystemMessages(t, h.ctx, h.conn, "skill_reflex_fired"); msgCount != 1 {
+			t.Fatalf("expected 1 skill_reflex_fired message, got %d", msgCount)
 		}
 	})
 }
@@ -528,7 +577,7 @@ func TestRunSkillCheckUsesCommandRunner(t *testing.T) {
 		Every:   "every minute",
 	}
 
-	runSkillCheck(h.ctx, h.cfg, h.conn, "test_skill/check", def, "prev-meta", runner)
+	runSkillCheck(h.ctx, h.cfg, h.conn, "test_skill/check", def, "prev-meta", runner, refTime)
 
 	if gotCommand != "sh skills/test/check.sh" {
 		t.Fatalf("expected runner to receive command, got %q", gotCommand)
