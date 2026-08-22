@@ -95,3 +95,69 @@ func TestSystemdScopeFor(t *testing.T) {
 		})
 	}
 }
+
+// The install sequence is the whole fix: `enable --now` starts a stopped unit
+// and leaves a running one alone, which is why upgrades put new binaries on
+// disk and left the old daemon serving from the inode behind them.
+func TestSystemdInstallSteps(t *testing.T) {
+	tests := []struct {
+		name  string
+		start bool
+		want  [][]string
+	}{
+		{
+			// reset-failed earns its place here: without it an install over a
+			// daemon that has spent its start limit is refused with "Start
+			// request repeated too quickly", and the fix just installed never
+			// runs.
+			name:  "install and start",
+			start: true,
+			want: [][]string{
+				{"daemon-reload"},
+				{"enable", systemdUnitName},
+				{"reset-failed", systemdUnitName},
+				{"restart", systemdUnitName},
+			},
+		},
+		{
+			// --no-start: the definition lands and nothing about what is
+			// running changes, including a daemon that is already failed.
+			name:  "install only",
+			start: false,
+			want: [][]string{
+				{"daemon-reload"},
+				{"enable", systemdUnitName},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got [][]string
+			for _, step := range systemdInstallSteps(tt.start) {
+				got = append(got, step.args)
+			}
+
+			if len(got) != len(tt.want) {
+				t.Fatalf("steps = %v, want %v", got, tt.want)
+			}
+
+			for i := range got {
+				if strings.Join(got[i], " ") != strings.Join(tt.want[i], " ") {
+					t.Errorf("step %d = %v, want %v", i, got[i], tt.want[i])
+				}
+			}
+		})
+	}
+}
+
+// reset-failed is the only step allowed to fail — it is a no-op on a unit that
+// never failed. Everything else is load-bearing and must surface.
+func TestSystemdInstallStepsBestEffort(t *testing.T) {
+	for _, step := range systemdInstallSteps(true) {
+		wantBestEffort := step.args[0] == "reset-failed"
+		if step.bestEffort != wantBestEffort {
+			t.Errorf("%v bestEffort = %v, want %v", step.args, step.bestEffort, wantBestEffort)
+		}
+	}
+}

@@ -12,6 +12,11 @@ import (
 func runInstall(args []string) {
 	flagSet := flag.NewFlagSet("install", flag.ExitOnError)
 	homeFlag := flagSet.String("home", "", "workspace directory")
+	// Installing normally restarts the daemon, because an install that leaves
+	// the old process serving is the bug this flag's absence used to be.
+	// --no-start is for callers that stage a version now and choose the moment
+	// to run it themselves.
+	noStart := flagSet.Bool("no-start", false, "write the service definition without starting or restarting the daemon")
 	flagSet.Parse(args)
 
 	h, err := home.Resolve(*homeFlag)
@@ -30,10 +35,15 @@ func runInstall(args []string) {
 		os.Exit(1)
 	}
 
-	err = daemonctl.Install(nikd, h)
+	err = daemonctl.Install(nikd, h, !*noStart)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: install service: %v\n", err)
 		os.Exit(1)
+	}
+
+	if *noStart {
+		fmt.Println("service installed, not started")
+		return
 	}
 
 	fmt.Println("service installed and started")
