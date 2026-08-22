@@ -174,11 +174,20 @@ func (s *Service) awaitDeadPane(id string) {
 	deadline := time.Now().Add(deadPaneWait)
 
 	for {
-		if !s.isAlive(id) {
+		// Poll the value stare is about to read, rather than the pane_dead
+		// flag sitting next to it.
+		//
+		// They are two properties and they do not arrive together: a pane
+		// reports itself dead a moment before tmux publishes the status it
+		// died with. So a wait on the flag can finish while the status is
+		// still empty, and the read that follows returns the -1 this function
+		// exists to prevent. Waiting on the flag is why it kept happening
+		// after somebody had already fixed it once.
+		if _, err := s.getExitCode(id); err == nil {
 			return
 		}
 		if time.Now().After(deadline) {
-			slog.Warn("pane still alive after its command signalled done",
+			slog.Warn("pane published no exit status after its command signalled done",
 				"pkg", "shell", "session", id)
 
 			return
@@ -200,7 +209,12 @@ func (s *Service) getExitCode(id string) (int, error) {
 	var code int
 	_, err = fmt.Sscanf(strings.TrimSpace(out), "%d", &code)
 	if err != nil {
-		return -1, nil
+		// No status published yet, which is not the same thing as a command
+		// that exited -1. Returning a nil error here told every caller the
+		// read had worked and handed them a sentinel as though it were an
+		// answer — so nothing could wait for a value that had not arrived,
+		// because nothing could tell that it had not.
+		return -1, fmt.Errorf("exit code %s: no status published yet", id)
 	}
 
 	return code, nil
