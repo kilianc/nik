@@ -91,7 +91,12 @@ func TestStareExitedCommand(t *testing.T) {
 	}{
 		{"echo", "echo hello-nik", 5, 0, "hello-nik", 0},
 		{"exit code", "exit 42", 5, 42, "", 0},
-		{"instant return", "echo done", 30, 0, "done", 3 * time.Second},
+		// Under the 2s tick on purpose. stare has a fast path off the done
+		// signal and a 2s poll behind it, and the slow one reaches the same
+		// answer — so a budget of 3s let a command whose done signal was
+		// never delivered keep passing this test. The session id has a space
+		// in it, which is exactly how that signal used to go missing.
+		{"instant return", "echo done", 30, 0, "done", 1500 * time.Millisecond},
 	}
 
 	for _, tt := range tests {
