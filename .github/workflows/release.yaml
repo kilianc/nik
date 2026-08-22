@@ -239,9 +239,14 @@ jobs:
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
 
+      # Named rather than "everything this run produced": the shell image jobs
+      # also leave artifacts behind, and the next step uploads whatever lands
+      # in dist/ to the release. Without the pattern a release carries two
+      # empty files named after image digests.
       - name: Collect the binaries
         uses: actions/download-artifact@v4
         with:
+          pattern: nik-*
           path: dist
           merge-multiple: true
 
