@@ -197,6 +197,22 @@ func (s *Service) awaitDeadPane(id string) {
 	}
 }
 
+// deadExitCode is the status a pane died with, waited for.
+//
+// Every path in stare that concludes a pane is dead needs this, and all but
+// one of them used to read the status the instant they decided. isAlive going
+// false means `pane_dead` is 1; it does not mean `pane_dead_status` has been
+// published, and those are separate moments — so three call sites carried the
+// same race awaitDeadPane exists to close, and the ticker path is the one that
+// kept failing releases.
+func (s *Service) deadExitCode(id string) int {
+	s.awaitDeadPane(id)
+
+	code, _ := s.getExitCode(id)
+
+	return code
+}
+
 func (s *Service) getExitCode(id string) (int, error) {
 	out, err := s.tmux(
 		"display-message", "-t", sessionName(id),
@@ -288,34 +304,29 @@ func (s *Service) stare(ctx context.Context, id string, maxWait int) (output str
 			// reading too early gets an empty string — which parsed as -1 and
 			// made this the flakiest thing in CI. Give the pane the moment it
 			// needs to actually die.
-			s.awaitDeadPane(id)
-
+			c := s.deadExitCode(id)
 			out, _ := s.capturePane(id)
-			c, _ := s.getExitCode(id)
 
 			return out, false, c
 
 		case <-deadline.C:
 			out, _ := s.capturePane(id)
 			if !s.isAlive(id) {
-				c, _ := s.getExitCode(id)
-				return out, false, c
+				return out, false, s.deadExitCode(id)
 			}
 			return out, true, 0
 
 		case <-ctx.Done():
 			out, _ := s.capturePane(id)
 			if !s.isAlive(id) {
-				c, _ := s.getExitCode(id)
-				return out, false, c
+				return out, false, s.deadExitCode(id)
 			}
 			return out, true, 0
 
 		case <-ticker.C:
 			if !s.isAlive(id) {
 				out, _ := s.capturePane(id)
-				c, _ := s.getExitCode(id)
-				return out, false, c
+				return out, false, s.deadExitCode(id)
 			}
 		}
 	}
