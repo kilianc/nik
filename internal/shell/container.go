@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -182,7 +184,13 @@ func (s *Service) buildImage(image string) (string, error) {
 	return buildLog, nil
 }
 
-func (s *Service) startContainer(image string) error {
+// runArgs is the docker command a sandbox container is started with.
+//
+// Split out from startContainer so it can be read in a test. What goes into
+// this list is the whole of the sandbox's boundary — what it can see, what it
+// is told, and what is deliberately masked — and every one of those is a
+// decision somebody should be able to assert on without running docker.
+func (s *Service) runArgs(image string) []string {
 	args := []string{"run", "-d",
 		"--name", s.container,
 		"-v", s.cfg.Home + ":/workspace",
@@ -203,6 +211,16 @@ func (s *Service) startContainer(image string) error {
 			"-e", "NIK_SOCKET="+containerSocketPath,
 		)
 	}
+	// Configuration the estate hands down, for skills to read: base URLs for
+	// services a managed nik reaches through its estate rather than directly.
+	//
+	// Sorted, so the same configuration produces the same command and a
+	// container is not recreated because a map iterated differently. Never
+	// credentials — see ShellConfig.Env.
+	for _, k := range slices.Sorted(maps.Keys(s.cfg.Shell.Env)) {
+		args = append(args, "-e", k+"="+s.cfg.Shell.Env[k])
+	}
+
 	// Mounted at /usr/local/bin/nik so `nik secrets read` keeps working from
 	// workspace/secrets/cli and every skill that shells out to it — the name
 	// inside the container is the contract, not which binary backs it.
@@ -210,8 +228,11 @@ func (s *Service) startContainer(image string) error {
 		args = append(args, "-v", bin+":"+containerNikBin+":ro")
 	}
 	args = append(args, "-w", "/workspace", image, "sleep", "infinity")
+	return args
+}
 
-	cmd := exec.Command("docker", args...)
+func (s *Service) startContainer(image string) error {
+	cmd := exec.Command("docker", s.runArgs(image)...)
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
