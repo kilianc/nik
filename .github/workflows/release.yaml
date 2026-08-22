@@ -15,6 +15,12 @@ on:
 permissions:
   contents: write
 
+# The stock shell sandbox, published alongside the binaries so a household
+# pulls it instead of building it. internal/shell pins the same name — the
+# package is public, since a self-hosting family has no credentials to offer.
+env:
+  SHELL_IMAGE: ghcr.io/kilianc/nik-shell
+
 # two releases must never race for the same tag's assets.
 concurrency:
   group: release-${{ github.event.inputs.tag || github.ref_name }}
@@ -99,9 +105,133 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+
+  # The stock sandbox, published so a household does not spend ten minutes
+  # building a byte-identical copy of it before nik can run its first command.
+  # One tag per release, cut from the same commit as the binaries: the sandbox
+  # a family runs is then the one that nik was tested against, and rolling back
+  # a nik rolls back its sandbox with it.
+  #
+  # This is also what lets a capsule image stop carrying nik's Dockerfile
+  # around. Nothing downstream needs to rebuild when this file changes.
+  shell-image:
+    name: Shell image linux/${{ matrix.arch }}
+    needs: verify
+    # The default token can write packages; the job-level block replaces the
+    # workflow's `contents: write`, which nothing here needs.
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      # Native runners rather than QEMU: the emulated half of a cross build
+      # takes tens of minutes to run apt-get, and the digests are stitched into
+      # one multi-arch tag by the job below.
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      # push-by-digest: neither half is a tag on its own, so there is no window
+      # in which nik-shell:vX exists and resolves on one architecture only.
+      # provenance is off because an attestation manifest cannot be merged by
+      # imagetools; it would land in the index as an unknown/unknown platform.
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: internal/shell
+          file: internal/shell/Dockerfile
+          platforms: linux/${{ matrix.arch }}
+          provenance: false
+          outputs: type=image,name=${{ env.SHELL_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+
+      - name: Export the digest
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - name: Upload the digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: shell-digest-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # The tag, created once over both architectures. nik pulls the versioned one;
+  # latest is for a person looking at the package page.
+  shell-manifest:
+    name: Shell image manifest
+    needs: shell-image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Collect the digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: shell-digest-*
+          merge-multiple: true
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Create the multi-arch tag
+        working-directory: /tmp/digests
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          set --
+          for digest in *; do
+            set -- "$@" "$SHELL_IMAGE@sha256:$digest"
+          done
+          docker buildx imagetools create \
+            -t "$SHELL_IMAGE:$TAG" \
+            -t "$SHELL_IMAGE:latest" \
+            "$@"
+
+      # A tag that resolves on one architecture is the failure this job exists
+      # to prevent, so it is checked rather than assumed.
+      - name: Check both architectures resolve
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          docker buildx imagetools inspect "$SHELL_IMAGE:$TAG" --format '{{json .Manifest}}' \
+            | jq -e '[.manifests[].platform | "\(.os)/\(.architecture)"] | inside(["linux/amd64", "linux/arm64"]) and length == 2' \
+            > /dev/null
+          docker buildx imagetools inspect "$SHELL_IMAGE:$TAG"
   publish:
     name: Publish
-    needs: build
+    needs: [build, shell-manifest]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

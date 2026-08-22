@@ -51,7 +51,7 @@ var shellToolDef = llm.ToolDef{
 
 var shellRebuildDef = llm.ToolDef{
 	Name:        "shell-rebuild",
-	Description: "Build a new container from workspace/shell/Dockerfile. The next shell command runs in it.",
+	Description: "Build a new container from the Dockerfile in nik's home. The next shell command runs in it.",
 	Parameters: map[string]any{
 		"type":                 "object",
 		"properties":           map[string]any{},
@@ -62,7 +62,7 @@ var shellRebuildDef = llm.ToolDef{
 
 var shellFactoryResetDef = llm.ToolDef{
 	Name:        "shell-factory-reset",
-	Description: "Override workspace/shell/Dockerfile with the minimal vendored Dockerfile and rebuild.",
+	Description: "Restore the Dockerfile nik ships and put the sandbox back on the image it describes.",
 	Parameters: map[string]any{
 		"type":                 "object",
 		"properties":           map[string]any{},
