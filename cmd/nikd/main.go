@@ -204,11 +204,11 @@ func main() {
 	}()
 	slog.Info("sandbox api listening", "pkg", "main", "socket", sandboxPath)
 
-	// What nikd needs before it can answer anybody: a config, and a gateway.
-	// Missing either used to be fatal — the daemon exited and a service
-	// manager restarted it into the same failure until somebody noticed. Now
-	// it says what it is missing and waits for it, because the API is how the
-	// missing thing arrives.
+	// What nikd needs before it can answer anybody: a config, a gateway, and
+	// a way to reach a model. Missing any used to be fatal — the daemon
+	// exited and a service manager restarted it into the same failure until
+	// somebody noticed. Now it says what it is missing and waits for it,
+	// because the API is how the missing thing arrives.
 	notReady := func() string {
 		cfg, err := config.Load(h)
 		if err != nil {
@@ -216,6 +216,28 @@ func main() {
 		}
 		if !gateway.Enabled(cfg, secretStore) {
 			return "no gateway — run `nikctl connect <token>` with a token from your dashboard"
+		}
+
+		// A credential belongs on this list for the same reason the other two
+		// do, and leaving it off made a deadlock rather than an inconvenience:
+		// secrets arrive over the API, the API is served by this daemon, and
+		// this daemon was exiting before anybody could hand it one. A fresh
+		// install that chose an API key had no way in at all — the setup
+		// wizard writes the key it just collected to a daemon that is not
+		// there, and the daemon it is waiting for is waiting for that key.
+		//
+		// Existence, not validity. A sign-in that is present and unusable is
+		// still fatal further down, because a nik somebody is sitting in front
+		// of should be told rather than left waiting on something that will
+		// never resolve.
+		if cfg.Models.NeedsCodexAuth() {
+			if !codex.SignedIn() {
+				return "no codex sign-in — run `nik` to sign in, or set a model backend to `api` and give it a key"
+			}
+		} else if openai, _ := secretStore.Get("openai_key"); openai == "" {
+			if anthropic, _ := secretStore.Get("anthropic_key"); anthropic == "" {
+				return "no model credential — run `nik` to set one, or `nik secrets write openai_key`"
+			}
 		}
 
 		return ""
