@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+	"regexp"
+	"sort"
 )
 
 type ModelConfig struct {
@@ -566,7 +568,46 @@ func validateConfig(cfg Config) error {
 		return err
 	}
 
+	if err := validateShellEnv(cfg.Shell.Env); err != nil {
+		return err
+	}
+
 	return nil
+}
+
+// shellEnvName is the shape of an environment variable: upper snake case,
+// starting with a letter.
+var shellEnvName = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
+
+// validateShellEnv refuses anything under shell.env that is not an environment
+// variable name.
+//
+// The names here become the environment of the sandbox container verbatim, so
+// a lowercase key is either a typo or something that was never meant to be an
+// environment variable at all — and the second is the interesting case. A
+// configuration step editing this file by line match once inserted
+// `docker_image` under `shell.env` instead of beside it. The file stayed valid
+// YAML and simply meant something else: no shell.docker_image, so the shell
+// tool ran locally instead of in a container, so nikd wanted tmux on a host
+// that had no reason to carry one, and refused to start. The reported error
+// was three steps from the cause.
+//
+// Every real key here is upper snake case, so requiring it costs nothing and
+// turns that class of mistake into a message naming the key and the section.
+func validateShellEnv(env map[string]string) error {
+	names := make([]string, 0, len(env))
+	for name := range env {
+		if !shellEnvName.MatchString(name) {
+			names = append(names, name)
+		}
+	}
+	if len(names) == 0 {
+		return nil
+	}
+	sort.Strings(names)
+	return fmt.Errorf("shell.env keys must be upper snake case environment variable names: %s "+
+		"(a lowercase key here is usually a setting that belongs beside shell.env, not inside it)",
+		strings.Join(names, ", "))
 }
 
 func validatePurposeModel(purpose string, modelCfg ModelConfig) error {
