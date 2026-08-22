@@ -430,6 +430,11 @@ func TestClientHTTPURL(t *testing.T) {
 	}{
 		{"wss", "wss://nik-gw.example.com/v1/agent", "https://nik-gw.example.com/v1/media"},
 		{"ws", "ws://127.0.0.1:8080/v1/agent", "http://127.0.0.1:8080/v1/media"},
+		// The platform is renaming this path and serves both, so a config
+		// written either side of the rename has to work here. Media is the
+		// only thing that reads the path, and it fails long after connect.
+		{"wss, renamed path", "wss://nik-gw.example.com/v1/nik", "https://nik-gw.example.com/v1/media"},
+		{"ws, renamed path", "ws://127.0.0.1:8080/v1/nik", "http://127.0.0.1:8080/v1/media"},
 	}
 
 	for _, tt := range tests {
@@ -450,7 +455,7 @@ func TestClientHTTPURL(t *testing.T) {
 
 	_, err := c.httpURL("/v1/media")
 	if err == nil {
-		t.Error("derived an http url from a non-agent websocket url")
+		t.Error("derived an http url from a websocket url with neither path")
 	}
 }
 
