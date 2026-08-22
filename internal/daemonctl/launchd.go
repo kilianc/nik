@@ -28,7 +28,7 @@ func launchdPlistPath() (string, error) {
 	return filepath.Join(u.HomeDir, "Library", "LaunchAgents", launchdLabel+".plist"), nil
 }
 
-func installLaunchd(nikdBinary, nikHome string) error {
+func installLaunchd(nikdBinary, nikHome string, start bool) error {
 	plistPath, err := launchdPlistPath()
 	if err != nil {
 		return err
@@ -58,8 +58,19 @@ func installLaunchd(nikdBinary, nikHome string) error {
 		return fmt.Errorf("write plist: %w", err)
 	}
 
+	// Install-only stops here: the plist on disk is what the next load reads,
+	// and whatever is running now keeps running until somebody says otherwise.
+	if !start {
+		return nil
+	}
+
 	uid := fmt.Sprintf("gui/%d", os.Getuid())
 
+	// bootout then bootstrap, rather than bootstrap alone: launchd keeps the
+	// job it already has, so a bare bootstrap over a running nik is a no-op
+	// that leaves the old daemon serving the old binary. Booting it out first
+	// is what makes an upgrade take. It fails when nothing is loaded yet,
+	// which is the first install and not an error.
 	_ = exec.Command("launchctl", "bootout", uid, plistPath).Run()
 
 	out, err := exec.Command("launchctl", "bootstrap", uid, plistPath).CombinedOutput()
