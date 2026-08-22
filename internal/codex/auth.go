@@ -61,6 +61,27 @@ func Load(path string) (*Auth, error) {
 	return auth, nil
 }
 
+// SignedIn reports whether a codex sign-in exists to be loaded.
+//
+// Existence, not validity, and the difference is the point. It answers the one
+// question the not-ready gate asks — is there anything here yet — and
+// deliberately does not refresh, because that gate re-runs every couple of
+// seconds and validating inside it would be a token refresh against the
+// provider on a timer, forever.
+//
+// A file that exists and cannot be used is still fatal at Load. That is the
+// right answer for a nik somebody is sitting in front of: "not signed in yet"
+// is a state that resolves on its own, and "signed in with something broken"
+// is one that needs a person told rather than a daemon waiting quietly.
+func SignedIn() bool {
+	path, err := resolvePath("")
+	if err != nil {
+		return false
+	}
+	_, err = os.Stat(path)
+	return err == nil
+}
+
 func LoadOrLogin(path string) (*Auth, error) {
 	path, err := resolvePath(path)
 	if err != nil {

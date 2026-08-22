@@ -170,3 +170,34 @@ func TestSave(t *testing.T) {
 		}
 	})
 }
+
+// SignedIn asks whether there is anything to load, and nothing more.
+//
+// It is called from the daemon's not-ready gate, which re-runs every couple of
+// seconds — so it must never reach the provider. A version that validated
+// would be a token refresh on a timer for as long as a nik waits to be set up.
+func TestSignedInIsExistenceAndNotValidity(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+
+	if SignedIn() {
+		t.Error("reports a sign-in with nothing on disk")
+	}
+
+	// Garbage, deliberately: existence is the question, and a file that
+	// cannot be parsed is Load's problem rather than this one's.
+	if err := os.MkdirAll(filepath.Join(dir, ".codex"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".codex", "auth.json"), []byte("not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if !SignedIn() {
+		t.Error("does not see a sign-in that is sitting right there")
+	}
+	// And the broken one is still refused where refusing it means something.
+	if _, err := Load(""); err == nil {
+		t.Error("Load accepted a file that is not a sign-in")
+	}
+}
