@@ -19,6 +19,21 @@ type ModelConfig struct {
 	ReasoningEffort string `yaml:"reasoning_effort"`
 	Verbosity       string `yaml:"verbosity"`
 	Backend         string `yaml:"backend"`
+
+	// BaseURL sends this model's calls somewhere other than the vendor.
+	//
+	// For a nik whose estate runs an egress proxy: the estate holds the vendor
+	// key, the nik holds a token that is worth nothing anywhere else, and
+	// openai_key carries that token instead of a real one. The proxy speaks the
+	// vendor's API unchanged, so nothing else here moves.
+	//
+	// Per model rather than global, because the estate may broker one tier and
+	// not another — and because a global would have to be reconciled against
+	// the codex backend, which owns its own URL.
+	//
+	// Empty means the vendor, which is what a self-hosting family gets by
+	// setting nothing.
+	BaseURL string `yaml:"base_url,omitempty"`
 }
 
 func (m ModelConfig) UsesCodexAuth() bool {
