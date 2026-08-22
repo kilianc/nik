@@ -239,10 +239,18 @@ jobs:
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
 
+      # `pattern` is load-bearing: without it this downloads EVERY artifact
+      # the run produced, which since the shell image jobs landed includes the
+      # `*.dockerbuild` metadata blobs buildx uploads on its own. Those are not
+      # release assets, and one of them fails to download reliably — enough to
+      # fail the whole job after the binaries had already arrived, leaving a
+      # pushed tag with no release on it. Take the three binary artifacts and
+      # nothing else; shell-digest-* belong to the manifest job.
       - name: Collect the binaries
         uses: actions/download-artifact@v4
         with:
           path: dist
+          pattern: nik-*
           merge-multiple: true
 
       # install.sh ships with the release so a pinned installer and the
