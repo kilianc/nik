@@ -85,7 +85,7 @@ func systemdUserManagerReachable() bool {
 
 // systemdScopeFor is the branch, split out from the environment it reads so a
 // test can state the case instead of arranging a container. Root with no user
-// manager is the nik-saas cell: the installer runs through `docker exec`,
+// manager is a container: the installer runs through `docker exec`,
 // which is not a login session. A non-root user goes to the user manager
 // either way — /etc/systemd/system is not theirs to write.
 func systemdScopeFor(euid int, userManagerReachable bool) systemdScope {
@@ -142,7 +142,7 @@ func systemdInstallSteps(start bool) []systemctlStep {
 // removeStaleScopeUnit clears the unit out of the scope we are *not*
 // installing into. Every install before v0.4.2 wrote a user unit, so a box
 // that has since been re-installed somewhere without a user manager — a
-// nik-saas cell, reached by `docker exec` — keeps the old file forever. The
+// container, reached by `docker exec` — keeps the old file forever. The
 // other direction is the one that bites: a box that gains a session between
 // installs moves to a user unit while the system daemon goes on running, and
 // two daemons share one home, one SQLite file and one socket.

@@ -8,7 +8,7 @@ import (
 )
 
 // The whole point of the auto-detection is that one installer works on a
-// laptop and inside a nik-saas cell without the caller knowing which. Getting
+// laptop and inside a container without the caller knowing which. Getting
 // the branch wrong is not a subtle bug in either direction: a user unit in a
 // container fails at `daemon-reload` with "Failed to connect to bus: No medium
 // found", and a system unit on a laptop is a root service nobody asked for.

@@ -19,7 +19,7 @@ import (
 	"github.com/kciuffolo/nik/internal/messaging"
 )
 
-// Adapter runs nik against the nik-saas gateway instead of a local whatsapp
+// Adapter runs nik against a remote gateway instead of a local whatsapp
 // session: no SIM, no QR, no phone. it reports platform "whatsapp" on purpose —
 // conversations, contacts and skills are all keyed on that, and the messages
 // really are whatsapp messages, just routed through a number we don't own.
@@ -444,7 +444,7 @@ func ProbeWithStore(ctx context.Context, url, token string, store secretStore) e
 // ErrAuthRejected is what Probe returns for a token the gateway refused.
 var ErrAuthRejected = errAuthRejected
 
-// tokenSecretName holds the install token from the nik-saas dashboard
+// tokenSecretName holds the install token from the operator's dashboard
 const tokenSecretName = "gateway_token"
 
 // Enabled reports whether the gateway is configured: a url in config and an
