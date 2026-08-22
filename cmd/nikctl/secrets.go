@@ -28,12 +28,11 @@ func runSecrets(args []string) {
 	homeFlag := flagSet.String("home", "", "workspace directory")
 	parseFlags(flagSet, args)
 
-	remaining := flagSet.Args()
-	if len(remaining) == 0 {
-		usageSecrets()
+	action, name, err := secretArgs(flagSet.Args())
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
-
-	action := remaining[0]
 
 	h, err := home.Resolve(*homeFlag)
 	if err != nil {
@@ -47,7 +46,6 @@ func runSecrets(args []string) {
 
 	switch action {
 	case "read":
-		name := secretName(remaining, "read")
 		value, err := client.Secret(ctx, name)
 		exitOnError(err, h)
 		fmt.Print(value)
@@ -60,7 +58,6 @@ func runSecrets(args []string) {
 		}
 
 	case "write":
-		name := secretName(remaining, "write")
 		value, err := io.ReadAll(os.Stdin)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error reading stdin: %v\n", err)
@@ -70,28 +67,43 @@ func runSecrets(args []string) {
 		exitOnError(err, h)
 
 	case "delete":
-		name := secretName(remaining, "delete")
 		err := client.DeleteSecret(ctx, name)
 		exitOnError(err, h)
-
-	default:
-		fmt.Fprintf(os.Stderr, "unknown secrets action %q\n", action)
-		usageSecrets()
 	}
 }
 
-func secretName(args []string, action string) string {
-	if len(args) < 2 {
-		fmt.Fprintf(os.Stderr, "usage: nikctl secrets %s <name>\n", action)
-		os.Exit(1)
+// secretArgs is the action and the name it acts on, or the reason the line is
+// not a command.
+//
+// Exactly the arguments the action takes, no spares. An argument nikctl does
+// not want is not punctuation to step over: `secrets write openai_key --hom
+// /nik` is a flag misspelled past the point flag.Parse could object to it, and
+// counting it and moving on writes the secret into a different home without a
+// word about it.
+func secretArgs(args []string) (string, string, error) {
+	usage := errors.New("usage: nikctl secrets {read|list|write|delete} [name] [--home dir]")
+	if len(args) == 0 {
+		return "", "", usage
 	}
 
-	return args[1]
-}
+	action, rest := args[0], args[1:]
 
-func usageSecrets() {
-	fmt.Fprintln(os.Stderr, "usage: nikctl secrets {read|list|write|delete} [name]")
-	os.Exit(1)
+	if action == "list" {
+		if len(rest) != 0 {
+			return "", "", errors.New("usage: nikctl secrets list [--home dir]")
+		}
+		return action, "", nil
+	}
+
+	if action != "read" && action != "write" && action != "delete" {
+		return "", "", fmt.Errorf("unknown secrets action %q\n%w", action, usage)
+	}
+
+	if len(rest) != 1 {
+		return "", "", fmt.Errorf("usage: nikctl secrets %s <name> [--home dir]", action)
+	}
+
+	return action, rest[0], nil
 }
 
 func exitOnError(err error, h string) {
