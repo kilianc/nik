@@ -30,7 +30,7 @@ func TestSealRoundTrip(t *testing.T) {
 	}
 }
 
-// a reinstalled agent generates a new key; the gateway's backlog is still
+// a reinstalled nik generates a new key; the gateway's backlog is still
 // sealed to the old one and must fail closed rather than yield garbage
 func TestOpenWithWrongKey(t *testing.T) {
 	pub, _, err := generateKey()

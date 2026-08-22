@@ -427,7 +427,7 @@ func Probe(ctx context.Context, url, token string, priv *[keySize]byte) (keep st
 }
 
 // ProbeWithStore is Probe for callers holding a secret store: it uses (or
-// creates) the store's agent key and persists whatever token the gateway
+// creates) the store's nik key and persists whatever token the gateway
 // hands back, so the daemon that boots next dials with the right pair.
 func ProbeWithStore(ctx context.Context, url, token string, store secretStore) error {
 	priv, err := loadOrCreateKey(store)
@@ -461,7 +461,7 @@ func Enabled(cfg *config.Config, store secretStore) bool {
 }
 
 // FromConfig builds the adapter from config and the secret store, creating the
-// agent key on first run.
+// nik key on first run.
 // APIHandler is nikd's API, for the tunnel to answer through. Set before
 // Start; nil leaves the tunnel off however config feels about it, since a
 // tunnel with nothing behind it is worse than none.

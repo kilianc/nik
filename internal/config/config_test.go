@@ -558,7 +558,7 @@ models:
 privileged_conversation_ids:
   owner: conv-1
 gateway:
-  url: wss://nik-gw.example.com/v1/agent
+  url: wss://nik-gw.example.com/v1/nik
 `)
 
 		cfg, err := Load(dir)
@@ -566,7 +566,7 @@ gateway:
 			t.Fatalf("load: %v", err)
 		}
 
-		if cfg.Gateway.URL != "wss://nik-gw.example.com/v1/agent" {
+		if cfg.Gateway.URL != "wss://nik-gw.example.com/v1/nik" {
 			t.Fatalf("expected gateway.url, got %q", cfg.Gateway.URL)
 		}
 	})

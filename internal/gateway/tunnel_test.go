@@ -21,9 +21,9 @@ type sentEnvelope struct {
 func newTestTunnel(t *testing.T, handler http.Handler) (*Tunnel, *[]sentEnvelope, *[keySize]byte, *[keySize]byte) {
 	t.Helper()
 
-	agentPub, agentPriv, err := generateKey()
+	nikPub, nikPriv, err := generateKey()
 	if err != nil {
-		t.Fatalf("generate agent key: %v", err)
+		t.Fatalf("generate nik key: %v", err)
 	}
 
 	var sent []sentEnvelope
@@ -33,7 +33,7 @@ func newTestTunnel(t *testing.T, handler http.Handler) (*Tunnel, *[]sentEnvelope
 		return nil
 	}
 
-	return newTunnel(handler, agentPriv, agentPub, send), &sent, agentPub, agentPriv
+	return newTunnel(handler, nikPriv, nikPub, send), &sent, nikPub, nikPriv
 }
 
 // sessionKeys is what the far side would hold: a keypair whose public half
@@ -131,12 +131,12 @@ func TestTunnelCarriesASealedRequestBody(t *testing.T) {
 		w.WriteHeader(http.StatusAccepted)
 	})
 
-	tunnel, sent, agentPub, _ := newTestTunnel(t, handler)
+	tunnel, sent, nikPub, _ := newTestTunnel(t, handler)
 	hexPub, pub, priv := sessionKeys(t)
 
-	// The gateway seals to the agent's public key — the same anonymous sealed
+	// The gateway seals to the nik's public key — the same anonymous sealed
 	// box every other inbound verb uses.
-	sealed, err := sealTo([]byte(`{"body":"dinner's ready"}`), agentPub)
+	sealed, err := sealTo([]byte(`{"body":"dinner's ready"}`), nikPub)
 	if err != nil {
 		t.Fatalf("seal: %v", err)
 	}
@@ -165,12 +165,12 @@ func TestTunnelCarriesASealedRequestBody(t *testing.T) {
 // The gateway cannot open what nik seals, and nik-web's session key is not
 // nik's. A response sealed to the wrong recipient is one nobody can read, so
 // this is worth asserting rather than assuming.
-func TestTunnelResponseIsNotReadableByTheAgentKey(t *testing.T) {
+func TestTunnelResponseIsNotReadableByTheNikKey(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"secret":"for the session only"}`))
 	})
 
-	tunnel, sent, agentPub, agentPriv := newTestTunnel(t, handler)
+	tunnel, sent, nikPub, nikPriv := newTestTunnel(t, handler)
 	hexPub, _, _ := sessionKeys(t)
 
 	err := tunnel.handle(context.Background(), "env-3", apiReq{
@@ -187,9 +187,9 @@ func TestTunnelResponseIsNotReadableByTheAgentKey(t *testing.T) {
 		t.Fatalf("decode: %v", err)
 	}
 
-	_, err = openSealed(sealed, agentPub, agentPriv)
+	_, err = openSealed(sealed, nikPub, nikPriv)
 	if err == nil {
-		t.Fatal("the agent's own key opened a response sealed to the session")
+		t.Fatal("the nik's own key opened a response sealed to the session")
 	}
 }
 

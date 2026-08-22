@@ -22,7 +22,7 @@ shell:
 
 # gateway
 gateway:
-  url: wss://gateway.example.com/v1/agent
+  url: wss://gateway.example.com/v1/nik
 `
 
 func write(t *testing.T, body string) string {

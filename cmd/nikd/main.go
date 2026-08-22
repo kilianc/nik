@@ -383,7 +383,7 @@ func main() {
 	messagingSvc.RegisterPlatform(messaging.NewLocalAdapter(conn))
 	slog.Info("local adapter active")
 
-	// gateway adapter — nik as a gateway agent: no SIM, no QR, no session of
+	// gateway adapter — nik as a gateway nik: no SIM, no QR, no session of
 	// its own. whatsapp reaches nik only through the gateway. Boot waited
 	// above until one was configured, so by here there always is.
 

@@ -30,7 +30,7 @@ var ErrInvalidField = errors.New("invalid field")
 
 // ErrAuthRejected is a token the gateway refused. It is separated from every
 // other connect failure because it is the one with a specific remedy — make a
-// new agent on the dashboard — rather than "try again".
+// new nik on the dashboard — rather than "try again".
 var ErrAuthRejected = errors.New("gateway rejected the token")
 
 func (s *Server) SetConfig(cfg Config) {
@@ -136,7 +136,7 @@ func (s *Server) handleConfigPatch(w http.ResponseWriter, r *http.Request) {
 // It lives here rather than in internal/gateway — which is where it used to,
 // and which still spells it, aliased to this — so a client can show it without
 // linking the gateway adapter and, through it, the whole daemon.
-const DefaultGatewayURL = "wss://nik-gw.ciuffolo.com/v1/agent"
+const DefaultGatewayURL = "wss://nik-gw.ciuffolo.com/v1/nik"
 
 // ConnectRequest links this nik to an account.
 type ConnectRequest struct {
@@ -171,7 +171,7 @@ func (s *Server) handleGatewayConnect(w http.ResponseWriter, r *http.Request) {
 		// 401 rather than 400: the request was well formed and the credential
 		// was not, and a client can tell a person exactly what to do about it.
 		writeError(w, http.StatusUnauthorized,
-			"the gateway rejected that token — it may have expired (they last 15 minutes); make a new agent on your dashboard")
+			"the gateway rejected that token — it may have expired (they last 15 minutes); make a new nik on your dashboard")
 		return
 	}
 	if err != nil {

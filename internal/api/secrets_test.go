@@ -17,13 +17,13 @@ type fakeSecrets struct {
 
 func newFakeSecrets() *fakeSecrets {
 	return &fakeSecrets{
-		values: map[string]string{"openai_key": "sk-test", "gateway_agent_key": "deadbeef"},
-		denied: map[string]bool{"gateway_agent_key": true},
+		values: map[string]string{"openai_key": "sk-test", "gateway_nik_key": "deadbeef"},
+		denied: map[string]bool{"gateway_nik_key": true},
 	}
 }
 
 func (f *fakeSecrets) List(context.Context) ([]string, error) {
-	return []string{"openai_key", "gateway_agent_key"}, nil
+	return []string{"openai_key", "gateway_nik_key"}, nil
 }
 
 func (f *fakeSecrets) Get(_ context.Context, scope Scope, name string) (string, error) {
@@ -111,11 +111,11 @@ func TestSandboxCanReadAnAllowedSecret(t *testing.T) {
 
 // The whole point of the sandbox socket: nik's own identity is not something
 // a skill may read, however it asks.
-func TestSandboxCannotReadTheAgentKey(t *testing.T) {
+func TestSandboxCannotReadTheNikKey(t *testing.T) {
 	srv := New(NewState())
 	srv.SetSecrets(newFakeSecrets())
 
-	rec := sandboxDo(t, srv, http.MethodGet, "/v1/secrets/gateway_agent_key", "")
+	rec := sandboxDo(t, srv, http.MethodGet, "/v1/secrets/gateway_nik_key", "")
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
@@ -131,7 +131,7 @@ func TestDeniedAndMissingSecretsAreIndistinguishable(t *testing.T) {
 	srv := New(NewState())
 	srv.SetSecrets(newFakeSecrets())
 
-	denied := sandboxDo(t, srv, http.MethodGet, "/v1/secrets/gateway_agent_key", "")
+	denied := sandboxDo(t, srv, http.MethodGet, "/v1/secrets/gateway_nik_key", "")
 	missing := sandboxDo(t, srv, http.MethodGet, "/v1/secrets/no_such_thing", "")
 
 	if denied.Code != missing.Code {
@@ -237,17 +237,17 @@ func TestSandboxCanWriteAnAllowedSecret(t *testing.T) {
 	}
 }
 
-func TestSandboxCannotOverwriteTheAgentKey(t *testing.T) {
+func TestSandboxCannotOverwriteTheNikKey(t *testing.T) {
 	store := newFakeSecrets()
 	srv := New(NewState())
 	srv.SetSecrets(store)
 
-	rec := sandboxDo(t, srv, http.MethodPut, "/v1/secrets/gateway_agent_key", `{"value":"mine now"}`)
+	rec := sandboxDo(t, srv, http.MethodPut, "/v1/secrets/gateway_nik_key", `{"value":"mine now"}`)
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}
-	if store.values["gateway_agent_key"] != "deadbeef" {
-		t.Fatal("the sandbox overwrote nik's agent key")
+	if store.values["gateway_nik_key"] != "deadbeef" {
+		t.Fatal("the sandbox overwrote nik's nik key")
 	}
 }

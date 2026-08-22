@@ -21,7 +21,7 @@ import (
 // fakeGateway is the platform side of the protocol: accepts the websocket,
 // answers hello, and lets a test push envelopes down and observe what comes up
 type fakeGateway struct {
-	// conns is every agent socket ever accepted, so a "gateway restart" can
+	// conns is every nik socket ever accepted, so a "gateway restart" can
 	// drop all of them at once.
 	conns []*websocket.Conn
 	// token is the one bearer the gateway currently accepts; it rotates on
@@ -35,7 +35,7 @@ type fakeGateway struct {
 	mu       sync.Mutex
 	conn     *websocket.Conn
 	received []envelope
-	agentPub *[keySize]byte
+	nikPub   *[keySize]byte
 
 	selfJID string
 	uploads map[string][]byte
@@ -54,7 +54,7 @@ func newFakeGateway(t *testing.T) *fakeGateway {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /v1/agent", g.handleAgent)
+	mux.HandleFunc("GET /v1/nik", g.handleNik)
 	mux.HandleFunc("POST /v1/media", g.handleUpload)
 	mux.HandleFunc("GET /v1/media/{id}", g.handleDownload)
 
@@ -64,7 +64,7 @@ func newFakeGateway(t *testing.T) *fakeGateway {
 	return g
 }
 
-// dropAll closes every agent socket server-side, the way a gateway restart
+// dropAll closes every nik socket server-side, the way a gateway restart
 // does; each client's session ends and its run loop reconnects.
 func (g *fakeGateway) dropAll() {
 	g.mu.Lock()
@@ -77,10 +77,10 @@ func (g *fakeGateway) dropAll() {
 }
 
 func (g *fakeGateway) url() string {
-	return "ws" + strings.TrimPrefix(g.srv.URL, "http") + "/v1/agent"
+	return "ws" + strings.TrimPrefix(g.srv.URL, "http") + "/v1/nik"
 }
 
-func (g *fakeGateway) handleAgent(w http.ResponseWriter, r *http.Request) {
+func (g *fakeGateway) handleNik(w http.ResponseWriter, r *http.Request) {
 	g.mu.Lock()
 	want := g.token
 	g.mu.Unlock()
@@ -127,7 +127,7 @@ func (g *fakeGateway) handleAgent(w http.ResponseWriter, r *http.Request) {
 			copy(pub[:], raw)
 
 			g.mu.Lock()
-			g.agentPub = &pub
+			g.nikPub = &pub
 			g.rotations++
 			g.token = fmt.Sprintf("nik_rotated-%d", g.rotations)
 			fresh := g.token
@@ -189,12 +189,12 @@ func (g *fakeGateway) push(t *testing.T, msg msgIn, content msgContent) {
 	t.Helper()
 
 	g.mu.Lock()
-	pub := g.agentPub
+	pub := g.nikPub
 	conn := g.conn
 	g.mu.Unlock()
 
 	if pub == nil || conn == nil {
-		t.Fatal("push before the agent said hello")
+		t.Fatal("push before the nik said hello")
 	}
 
 	raw, err := json.Marshal(content)
@@ -336,7 +336,7 @@ func TestClientAcksUndecryptableRows(t *testing.T) {
 	go func() { _ = c.run(ctx) }()
 	waitUntil(t, "handshake", func() bool { return c.SelfJID() != "" })
 
-	// seal to a key the client does not hold: a reinstalled agent's backlog
+	// seal to a key the client does not hold: a reinstalled nik's backlog
 	strangerPub, _, err := generateKey()
 	if err != nil {
 		t.Fatalf("generate stranger key: %v", err)
@@ -428,13 +428,8 @@ func TestClientHTTPURL(t *testing.T) {
 		in   string
 		want string
 	}{
-		{"wss", "wss://nik-gw.example.com/v1/agent", "https://nik-gw.example.com/v1/media"},
-		{"ws", "ws://127.0.0.1:8080/v1/agent", "http://127.0.0.1:8080/v1/media"},
-		// The platform is renaming this path and serves both, so a config
-		// written either side of the rename has to work here. Media is the
-		// only thing that reads the path, and it fails long after connect.
-		{"wss, renamed path", "wss://nik-gw.example.com/v1/nik", "https://nik-gw.example.com/v1/media"},
-		{"ws, renamed path", "ws://127.0.0.1:8080/v1/nik", "http://127.0.0.1:8080/v1/media"},
+		{"wss", "wss://nik-gw.example.com/v1/nik", "https://nik-gw.example.com/v1/media"},
+		{"ws", "ws://127.0.0.1:8080/v1/nik", "http://127.0.0.1:8080/v1/media"},
 	}
 
 	for _, tt := range tests {

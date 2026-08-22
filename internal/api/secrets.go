@@ -123,7 +123,7 @@ func (s *Server) handleSecretDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 // writeSecretError answers a denied secret and a missing one identically, and
-// that is the point. A 403 on `gateway_agent_key` and a 404 on `gateway_agnet_key`
+// that is the point. A 403 on `gateway_nik_key` and a 404 on `gateway_nki_key`
 // tells a caller which names are real, which is most of what it wanted to know
 // before it started guessing. The daemon logs the difference; the caller does
 // not learn it.

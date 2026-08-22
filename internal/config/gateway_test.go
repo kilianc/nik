@@ -5,7 +5,7 @@ import "testing"
 func TestGatewayURLSurvivesSave(t *testing.T) {
 	dir := t.TempDir()
 	cfg := Default(dir)
-	cfg.Gateway.URL = "wss://gw.example/v1/agent"
+	cfg.Gateway.URL = "wss://gw.example/v1/nik"
 	cfg.Normalize()
 
 	if err := cfg.Save(cfg.ConfigPath()); err != nil {
@@ -16,7 +16,7 @@ func TestGatewayURLSurvivesSave(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
-	if back.Gateway.URL != "wss://gw.example/v1/agent" {
+	if back.Gateway.URL != "wss://gw.example/v1/nik" {
 		t.Fatalf("gateway.url after save+read = %q, want it preserved", back.Gateway.URL)
 	}
 }
@@ -28,7 +28,7 @@ func TestGatewayURLSurvivesSave(t *testing.T) {
 func TestGatewayAPIFlagSurvivesSave(t *testing.T) {
 	dir := t.TempDir()
 	cfg := Default(dir)
-	cfg.Gateway.URL = "wss://gw.example/v1/agent"
+	cfg.Gateway.URL = "wss://gw.example/v1/nik"
 	cfg.Gateway.API = true
 	cfg.Normalize()
 

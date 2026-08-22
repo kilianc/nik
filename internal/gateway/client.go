@@ -148,7 +148,7 @@ func (c *client) session(ctx context.Context) error {
 
 	err = c.send(ctx, typeHello, hello{
 		Version:       protocolVersion,
-		AgentName:     c.name,
+		NikName:       c.name,
 		PublicKey:     base64.RawURLEncoding.EncodeToString(c.pub[:]),
 		ClientVersion: version.Number,
 	})
@@ -273,7 +273,7 @@ func (c *client) onMsgIn(ctx context.Context, env envelope) error {
 //
 // A gateway that sends one to a nik with the tunnel off gets a 403 rather
 // than silence: "this household has not turned that on" is a fact the platform
-// should be able to see, and a dropped envelope looks like a broken agent.
+// should be able to see, and a dropped envelope looks like a broken nik.
 func (c *client) onAPIReq(ctx context.Context, env envelope) error {
 	req, err := decodePayload[apiReq](env)
 	if err != nil {
@@ -397,7 +397,7 @@ func (c *client) uploadMedia(ctx context.Context, data []byte, mimeType, filenam
 }
 
 // fetchAttachment collects an inbound attachment. what crosses the network is
-// sealed to this agent, and the gateway drops its copy once collected, so from
+// sealed to this nik, and the gateway drops its copy once collected, so from
 // here the only readable copy is local.
 func (c *client) fetchAttachment(ctx context.Context, downloadID string) ([]byte, error) {
 	if downloadID == "" {
@@ -437,20 +437,12 @@ func (c *client) fetchAttachment(ctx context.Context, downloadID string) ([]byte
 
 // httpURL turns the gateway websocket url into a sibling http endpoint.
 //
-// Two suffixes, because the platform is renaming that path from `/v1/agent`
-// to `/v1/nik` and this nik may be handed either. The gateway serves both, so
-// a config written before the rename and one written after are equally valid
-// — and this is the only place the path is load-bearing rather than opaque.
-//
-// Getting it wrong here fails in the worst way available: the socket connects,
-// everything looks healthy, and media alone stops working, whenever somebody
-// next sends a photo. That is why this ships and rolls out before any
-// installer starts writing the new path, rather than alongside it.
+// The only place the socket path is load-bearing rather than opaque, which is
+// why it is worth a comment: get it wrong and the socket still connects, hello
+// is still acked, the daemon still reports healthy, and media alone stops
+// working — whenever somebody next sends a photo.
 func (c *client) httpURL(path string) (string, error) {
 	base, ok := strings.CutSuffix(c.url, "/v1/nik")
-	if !ok {
-		base, ok = strings.CutSuffix(c.url, "/v1/agent")
-	}
 	if !ok {
 		return "", fmt.Errorf("derive http url from %s", c.url)
 	}

@@ -33,7 +33,7 @@ type Options struct {
 	// rather than working it out, since which directory nik lives in is
 	// nikd's business.
 	Home string
-	// BornAt is when the chat agent first came online. Zero value hides the
+	// BornAt is when the chat nik first came online. Zero value hides the
 	// age chip from the header strip.
 	BornAt time.Time
 	// InputGate decides whether the chat input is locked and what placeholder

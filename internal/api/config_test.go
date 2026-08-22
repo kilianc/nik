@@ -109,12 +109,12 @@ func TestConnectPassesTokenAndURL(t *testing.T) {
 	srv.SetGateway(gw)
 
 	rec := do(t, srv, http.MethodPost, "/v1/gateway/connect",
-		`{"token":"nik_abc","url":"wss://gw.example/v1/agent"}`)
+		`{"token":"nik_abc","url":"wss://gw.example/v1/nik"}`)
 
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want 204", rec.Code)
 	}
-	if gw.token != "nik_abc" || gw.url != "wss://gw.example/v1/agent" {
+	if gw.token != "nik_abc" || gw.url != "wss://gw.example/v1/nik" {
 		t.Fatalf("gateway got token=%q url=%q", gw.token, gw.url)
 	}
 }
