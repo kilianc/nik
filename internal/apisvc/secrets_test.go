@@ -40,14 +40,14 @@ func TestOwnerRoundTrip(t *testing.T) {
 	}
 }
 
-// The agent key signs and opens everything the platform holds for this nik.
+// The nik key signs and opens everything the platform holds for this nik.
 // A skill holding it can impersonate this nik to the gateway, which is a
 // different thing entirely from a skill holding an API key for a light bulb.
 func TestSandboxIsDeniedNikOwnIdentity(t *testing.T) {
 	store := newTestSecrets(t)
 	ctx := context.Background()
 
-	for _, name := range []string{"gateway_agent_key", "gateway_token"} {
+	for _, name := range []string{"gateway_nik_key", "gateway_token"} {
 		err := store.Set(ctx, api.ScopeOwner, name, "secret-value")
 		if err != nil {
 			t.Fatalf("seed %s: %v", name, err)
@@ -75,7 +75,7 @@ func TestSandboxIsDeniedNikOwnIdentity(t *testing.T) {
 func TestDenyListIgnoresCase(t *testing.T) {
 	store := newTestSecrets(t)
 
-	_, err := store.Get(context.Background(), api.ScopeSandbox, "Gateway_Agent_Key")
+	_, err := store.Get(context.Background(), api.ScopeSandbox, "Gateway_Nik_Key")
 	if !errors.Is(err, api.ErrSecretDenied) {
 		t.Fatalf("err = %v, want ErrSecretDenied for a differently-cased name", err)
 	}

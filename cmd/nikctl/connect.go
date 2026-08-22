@@ -67,7 +67,7 @@ func runConnect(args []string) {
 		os.Exit(1)
 
 	case errors.Is(err, nikapi.ErrAuthRejected):
-		fmt.Fprintln(os.Stderr, "error: the gateway rejected that token — it may have expired (they last 15 minutes); make a new agent on your dashboard")
+		fmt.Fprintln(os.Stderr, "error: the gateway rejected that token — it may have expired (they last 15 minutes); make a new nik on your dashboard")
 		os.Exit(1)
 
 	case err != nil:

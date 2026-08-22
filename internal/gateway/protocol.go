@@ -83,9 +83,9 @@ type apiReq struct {
 	Query string `json:"query,omitempty"`
 	// SessionKey is the hex X25519 public key the response is sealed to.
 	// Anonymous sealed boxes only run one way — the gateway seals to this
-	// agent — so a reply needs somewhere of its own to be sealed to.
+	// nik — so a reply needs somewhere of its own to be sealed to.
 	SessionKey string `json:"session_key"`
-	// Sealed is the request body, sealed to this agent's key. Empty for
+	// Sealed is the request body, sealed to this nik's key. Empty for
 	// requests without one.
 	Sealed string `json:"sealed,omitempty"`
 }
@@ -142,7 +142,7 @@ type envelope struct {
 
 type hello struct {
 	Version   int    `json:"version"`
-	AgentName string `json:"agent_name,omitempty"`
+	NikName   string `json:"nik_name,omitempty"`
 	PublicKey string `json:"public_key"`
 	// ClientVersion is nik's own release, stamped at build time. optional:
 	// every nik released before this field existed omits it, and the
@@ -152,9 +152,9 @@ type hello struct {
 }
 
 // helloAck carries the central number's identity. There is no claim state:
-// the account was born from a DM, so its JID is bound before any agent runs.
+// the account was born from a DM, so its JID is bound before any nik runs.
 type helloAck struct {
-	// Token is a fresh long-lived agent token, rotated on every connect. nik
+	// Token is a fresh long-lived nik token, rotated on every connect. nik
 	// stores it and dials with it next time; the one it connected with — on
 	// first run, the short-lived install code from the dashboard — is dead.
 	Token  string `json:"token,omitempty"`
@@ -165,7 +165,7 @@ type helloAck struct {
 }
 
 // msgIn carries routing metadata in the clear; Sealed holds a msgContent only
-// this agent's key can open
+// this nik's key can open
 type msgIn struct {
 	Chat    string    `json:"chat"`
 	Sender  string    `json:"sender"`

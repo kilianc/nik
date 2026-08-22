@@ -246,7 +246,7 @@ func validateGatewayCmd(client *nikapi.Client, url, token string) tea.Cmd {
 
 		err := client.Connect(ctx, url, token)
 		if errors.Is(err, nikapi.ErrAuthRejected) {
-			err = fmt.Errorf("the gateway rejected that token — it may have expired (they last 15 minutes); make a new agent on your dashboard")
+			err = fmt.Errorf("the gateway rejected that token — it may have expired (they last 15 minutes); make a new nik on your dashboard")
 		}
 
 		return gatewayValidatedMsg{err: err}
@@ -1019,7 +1019,7 @@ func (m setupModel) viewGatewayToken() string {
 	s += hintStyle.Render("nik reaches WhatsApp through the nik gateway — no SIM, no QR code.") + "\n"
 	s += hintStyle.Render("It connects with a token from your account:") + "\n\n"
 	s += hintStyle.Render("  1. sign in at https://nik.ciuffolo.com") + "\n"
-	s += hintStyle.Render("  2. create an agent — one per machine you run nik on") + "\n"
+	s += hintStyle.Render("  2. create a nik — one per machine you run nik on") + "\n"
 	s += hintStyle.Render("  3. copy the token it shows you (it is shown once)") + "\n\n"
 	s += m.gatewayIn.View() + "\n"
 	if m.err != nil {

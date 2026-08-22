@@ -28,13 +28,13 @@ func NewSecrets(store *secrets.Store) *Secrets {
 // or write, whatever it claims to need them for.
 //
 // They are nik's own identity rather than a credential nik uses on somebody's
-// behalf. gateway_agent_key signs and opens everything the platform holds for
-// this agent; gateway_token is the account link. A skill holding either can
+// behalf. gateway_nik_key signs and opens everything the platform holds for
+// this nik; gateway_token is the account link. A skill holding either can
 // impersonate this nik to the gateway, which is a different thing entirely
 // from a skill holding an API key for a light bulb.
 var sandboxDenied = map[string]bool{
-	"gateway_agent_key": true,
-	"gateway_token":     true,
+	"gateway_nik_key": true,
+	"gateway_token":   true,
 }
 
 func (s *Secrets) List(ctx context.Context) ([]string, error) {
@@ -87,7 +87,7 @@ func (s *Secrets) Delete(ctx context.Context, name string) error {
 
 // permit logs what it refuses. The caller is told only "no such secret", so
 // the daemon's log is the only place the attempt is visible — and a skill
-// reaching for the agent key is worth seeing.
+// reaching for the nik key is worth seeing.
 func (s *Secrets) permit(scope api.Scope, name, action string) error {
 	if scope != api.ScopeSandbox {
 		return nil

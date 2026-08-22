@@ -391,7 +391,7 @@ func TestEnabled(t *testing.T) {
 		t.Error("enabled with no url and no token")
 	}
 
-	cfg.Gateway.URL = "wss://nik-gw.example.com/v1/agent"
+	cfg.Gateway.URL = "wss://nik-gw.example.com/v1/nik"
 	if Enabled(cfg, store) {
 		t.Error("enabled with no token")
 	}
@@ -423,7 +423,7 @@ func TestProbe(t *testing.T) {
 	if _, err := Probe(ctx, gw.url(), "nik_wrong", testKey(t)); !errors.Is(err, ErrAuthRejected) {
 		t.Fatalf("wrong token = %v, want ErrAuthRejected", err)
 	}
-	_, err := Probe(ctx, "ws://127.0.0.1:1/v1/agent", "test-token", testKey(t))
+	_, err := Probe(ctx, "ws://127.0.0.1:1/v1/nik", "test-token", testKey(t))
 	if err == nil || errors.Is(err, ErrAuthRejected) {
 		t.Fatalf("unreachable = %v, want a dial error", err)
 	}

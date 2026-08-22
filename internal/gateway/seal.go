@@ -9,7 +9,7 @@ import (
 )
 
 // NaCl anonymous sealed boxes (X25519 + XSalsa20-Poly1305). the gateway seals
-// everything it stores to this agent's public key, so nothing it keeps can be
+// everything it stores to this nik's public key, so nothing it keeps can be
 // read without the private key that never leaves this machine.
 //
 // the platform side has the same three functions; only Seal is unused here,

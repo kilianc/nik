@@ -6,11 +6,11 @@ import (
 	"strings"
 )
 
-// the agent key lives in nik's secret store next to the api keys, hex-encoded.
+// the nik key lives in nik's secret store next to the api keys, hex-encoded.
 // losing it only loses queued undelivered messages sealed to the old key: the
 // gateway replaces the registered public key on the next hello.
 
-const keySecretName = "gateway_agent_key"
+const keySecretName = "gateway_nik_key"
 
 type secretStore interface {
 	Get(name string) (string, error)
@@ -33,12 +33,12 @@ func loadOrCreateKey(store secretStore) (*[keySize]byte, error) {
 
 	_, priv, err := generateKey()
 	if err != nil {
-		return nil, fmt.Errorf("generate agent key: %w", err)
+		return nil, fmt.Errorf("generate nik key: %w", err)
 	}
 
 	err = store.Set(keySecretName, hex.EncodeToString(priv[:]))
 	if err != nil {
-		return nil, fmt.Errorf("store agent key: %w", err)
+		return nil, fmt.Errorf("store nik key: %w", err)
 	}
 
 	return priv, nil

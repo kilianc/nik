@@ -128,8 +128,8 @@ func (t *Tunnel) respond(ctx context.Context, envID string, sessionKey *[keySize
 
 // decodeSessionKey reads the hex X25519 public key a response is sealed to.
 //
-// Anonymous sealed boxes only run one way: the gateway seals to this agent,
-// and nothing on the platform can open what this agent seals. A reply
+// Anonymous sealed boxes only run one way: the gateway seals to this nik,
+// and nothing on the platform can open what this nik seals. A reply
 // therefore needs a recipient of its own, which the request carries.
 func decodeSessionKey(raw string) (*[keySize]byte, error) {
 	decoded, err := hex.DecodeString(strings.TrimSpace(raw))

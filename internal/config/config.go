@@ -204,7 +204,7 @@ type Config struct {
 }
 
 // GatewayConfig points nik at its gateway — nik's only route to
-// whatsapp. URL is the agent websocket endpoint; the install token and agent
+// whatsapp. URL is the nik websocket endpoint; the install token and nik
 // key live in the secret store, not here.
 type GatewayConfig struct {
 	URL string `yaml:"url"`

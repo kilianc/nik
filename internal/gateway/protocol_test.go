@@ -86,8 +86,8 @@ func TestDecodeHello(t *testing.T) {
 	if p.Version != protocolVersion {
 		t.Errorf("version = %d, want %d", p.Version, protocolVersion)
 	}
-	if p.AgentName != "kitchen-mac" {
-		t.Errorf("agent_name = %q", p.AgentName)
+	if p.NikName != "kitchen-mac" {
+		t.Errorf("nik_name = %q", p.NikName)
 	}
 	if p.PublicKey == "" {
 		t.Error("public_key is required")
@@ -219,7 +219,7 @@ func TestSealedPayloadRoundTrip(t *testing.T) {
 		MimeType: "image/jpeg",
 		Mentions: []string{"14155551234@s.whatsapp.net"},
 		Quote:    &quoteRef{StanzaID: "3EB0", Body: "what's for dinner?"},
-		Media:    &mediaRef{DownloadID: "agent.9f8e", MMSType: "image", SizeBytes: 84213},
+		Media:    &mediaRef{DownloadID: "nik.9f8e", MMSType: "image", SizeBytes: 84213},
 	}
 
 	raw, err := json.Marshal(msg)
@@ -233,7 +233,7 @@ func TestSealedPayloadRoundTrip(t *testing.T) {
 		t.Fatalf("unmarshal content: %v", err)
 	}
 
-	if got.Media == nil || got.Media.DownloadID != "agent.9f8e" {
+	if got.Media == nil || got.Media.DownloadID != "nik.9f8e" {
 		t.Error("attachment reference lost in round trip")
 	}
 	if got.Quote == nil || got.Quote.Body != "what's for dinner?" {
