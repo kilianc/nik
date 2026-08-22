@@ -36,6 +36,7 @@
 !*.sh
 !bin/check-layering
 !bin/check-commits
+!bin/check-public
 !*.service
 !*.timer
 

@@ -1,0 +1,69 @@
+#!/bin/sh
+# check-public — refuses anything in this repository that belongs to a
+# deployment rather than to nik.
+#
+# This repository is public. Everything committed here is readable by anyone,
+# forever, and a force-push does not take it back: the old objects stay
+# reachable by SHA on the forge until somebody asks its support team to purge
+# them, so the only reliable moment to stop a leak is before the commit.
+#
+# The two things that have actually leaked, both in test fixtures:
+#
+#   1. Live hostnames of a private deployment. A test asserting on a URL does
+#      not care which URL — the fixture could always have been example.com —
+#      so naming a real host buys nothing and publishes the shape of somebody's
+#      estate. Removing it afterwards cost a rewrite of 477 commits that would
+#      have destroyed 55 commit signatures, and was abandoned for that reason.
+#
+#   2. The name of the operator that deploys nik, in comments describing why a
+#      feature exists. nik is an independent program. Where a deployment forced
+#      a design, say what the design is — "a nik installed by an operator is
+#      configured from outside" — not who did the forcing.
+#
+# Deliberately dumb: literal strings, no heuristics, no allowances. A gate that
+# tries to be clever about which mention is acceptable is one somebody argues
+# with at the exact moment they should not be arguing.
+set -eu
+
+cd "$(dirname "$0")/.."
+
+status=0
+
+# Hostnames belonging to the private deployment. Add a domain here the day it
+# exists rather than the day it leaks.
+domains='hellonik\.com|nik-gw-dev|nik-dev\.'
+
+# Tracked files only, via git ls-files. What is public is what is committed:
+# a local nik workspace under this checkout holds real logs full of real
+# hostnames, and it is gitignored precisely so it stays private. A gate that
+# walked the filesystem would fail on those forever and teach everybody to
+# ignore it.
+hits=$(git ls-files -z | xargs -0 grep -InE "$domains" 2>/dev/null | grep -v '^bin/check-public:' || true)
+
+if [ -n "$hits" ]; then
+  echo "a deployment hostname is in the tree, and this repository is public:"
+  echo "$hits" | sed 's/^/  /'
+  echo
+  echo "  use example.com in fixtures. a test asserting on a URL does not care which URL."
+  status=1
+fi
+
+# The operator's name. Allowed in the handful of places that genuinely describe
+# the gateway protocol nik speaks; refused in new code and in fixtures.
+#
+# The allowance is a file list rather than a pattern, so adding one is a diff
+# somebody reviews.
+allowed='^(AGENTS\.md|docs/ARCHITECTURE\.md|\.gitignore|install\.sh|internal/api/config\.go|internal/config/config\.go|internal/gateway/|internal/daemonctl/|cmd/nikd/main\.go)'
+
+operator=$(git ls-files -z | xargs -0 grep -lIn 'nik-saas' 2>/dev/null | grep -v '^bin/check-public$' || true)
+
+for f in $operator; do
+  if ! echo "$f" | grep -qE "$allowed"; then
+    echo "$f names the operator that deploys nik, and this repository is public."
+    echo "  say what the design is, not who asked for it."
+    status=1
+  fi
+done
+
+[ "$status" -eq 0 ] && echo "check-public: ok"
+exit "$status"
