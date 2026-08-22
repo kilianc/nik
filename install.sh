@@ -34,7 +34,7 @@ else
 fi
 
 # Root is reached with sudo only when we are not already root. A container is
-# root with no sudo installed at all — nik-saas installs into its cells exactly
+# root with no sudo installed at all — an operator installing nik into a container does exactly
 # that way — and there `sudo mv` is not a permission error but `sudo: not
 # found`, exit 127, which under `set -eu` ends the install on the first binary.
 SUDO=""

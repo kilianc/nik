@@ -114,7 +114,7 @@ Messaging is split into two layers:
 
 **Canonical layer** -- platform-agnostic tables (`conversation`, `message`, `media`, `contact`) are the source of truth. Every message nik sends or receives lives here with a UUIDv7 primary key, regardless of where it came from.
 
-**Adapter layer** -- each platform implements `MessagingPlatform`: normalize inbound events into canonical models, execute outbound actions (reply, react, send media, typing indicators, read receipts). Currently there's one adapter: `internal/gateway`, which reaches WhatsApp through the nik-saas gateway over a websocket. It reports `Platform() == "whatsapp"` because the messages really are WhatsApp messages, just routed through a number nik doesn't own — so conversations, contacts and skills are keyed the same either way. Nik holds no WhatsApp session itself; the gateway does.
+**Adapter layer** -- each platform implements `MessagingPlatform`: normalize inbound events into canonical models, execute outbound actions (reply, react, send media, typing indicators, read receipts). Currently there's one adapter: `internal/gateway`, which reaches WhatsApp through a gateway over a websocket. It reports `Platform() == "whatsapp"` because the messages really are WhatsApp messages, just routed through a number nik doesn't own — so conversations, contacts and skills are keyed the same either way. Nik holds no WhatsApp session itself; the gateway does.
 
 The two interfaces that connect them:
 

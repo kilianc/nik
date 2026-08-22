@@ -57,7 +57,7 @@ Nik's outbound actions (replies, reactions, tool reaction emojis) are stored via
 
 ### Nik's identity
 
-Nik is an independent entity. It reaches WhatsApp through the nik-saas gateway, which owns the number and routes each family's conversations to their own daemon — nik has no session of its own. `is_from_me` means "sent by nik" (not "sent by nik's owner"). Nik communicates directly on WhatsApp.
+Nik is an independent entity. It reaches WhatsApp through a gateway, which owns the number and routes each family's conversations to their own daemon — nik has no session of its own. `is_from_me` means "sent by nik" (not "sent by nik's owner"). Nik communicates directly on WhatsApp.
 
 ### Messaging
 
@@ -86,7 +86,7 @@ Entry points: `cmd/nikd/main.go`, `cmd/nikctl/main.go`, `cmd/workbench/main.go`
 | `internal/configtool/` | the `config` brain tool. Separate from internal/config because a ToolDef needs internal/llm, and nikctl links internal/config for its struct |
 | `internal/daemontool/` | the `restart` brain tool, separate from internal/daemonctl for the same reason |
 | `internal/nikapi/` | typed client for the API; nikctl uses it, and it holds no fallback that opens NIK_HOME directly |
-| `internal/gateway/` | nik-saas gateway adapter — the only WhatsApp transport; wire protocol, sealing, agent key |
+| `internal/gateway/` | gateway adapter — the only WhatsApp transport; wire protocol, sealing, agent key |
 | `internal/contacts/` | contact resolution/upsert orchestration + contact update tools |
 | `internal/shell/` | tmux-backed persistent shell tool |
 | `internal/alarms/` | alarm/reminder scheduling service, tools, and reflex |
@@ -355,10 +355,10 @@ Before applying any migration to the live DB:
 - when the plan marks something as out of scope, the agent must never perform that action during execution — stop and ask the user how to proceed instead of unilaterally resolving blockers. "Out of scope" means "not your call."
 - when changing repo layout or build artifact locations, update the canonical project structure table and any docs/examples that mention the old layout in the same change.
 - `make release` must never offer a lever that skips `make ci`. "I already ran it" is a claim about a tree that may have moved since, and the release where that is wrong is the one where skipping cost something. If running it unattended is awkward, fix the awkwardness — the subprocess eating a piped answer was the real problem — not the check. Applied 2026-08-20.
-- **this repository is public — never commit a private deployment's hostnames.** Test fixtures use `example.com`; a test asserting on a URL does not care which URL, so naming a live host buys nothing and publishes the shape of somebody's estate. Enforced by `bin/check-public` in `make ci`. There is no undo: a force-push leaves the old objects reachable by SHA on the forge until its support team purges them, and rewriting this repo's history to remove four hostnames was measured at destroying all 55 commit signatures, so it was abandoned. The only reliable moment is before the commit. Applied 2026-08-22.
+- **this repository is public — never commit a private deployment's hostnames.** Test fixtures use `example.com`; a test asserting on a URL does not care which URL, so naming a live host buys nothing and publishes the shape of somebody's estate. Enforced from the private repository that deploys nik, which checks this tree out in its own CI — the pattern is a list of private hostnames, so it cannot live here. There is no undo: a force-push leaves the old objects reachable by SHA on the forge until its support team purges them, and rewriting this repo's history to remove four hostnames was measured at destroying all 55 commit signatures, so it was abandoned. The only reliable moment is before the commit. Applied 2026-08-22.
 - **never edit structured configuration with line-based tools.** `sed -i` on YAML is how `docker_image` ended up nested under the `shell.env` map an earlier line of the same script had just created — valid YAML that meant something else, so nik ran its shell tool locally instead of in a container, wanted tmux on a host with no reason to carry one, and refused to start. The reported error was three steps from the cause. Use `nikctl config set <key.path> <value>`, which parses, sets one key, and writes atomically. Applied 2026-08-22.
 - **everything under `shell.env` is an environment variable name**: upper snake case, starting with a letter. These names become the sandbox container's environment verbatim, so a lowercase key is either a typo or — the interesting case — a setting that belongs *beside* `shell.env` rather than inside it. Enforced by `validateShellEnv`. Applied 2026-08-22.
-- shell scripts must never call `sudo` unconditionally — set `SUDO=""` and override it with `SUDO=sudo` only when `id -u` is not 0. Already-root-with-no-sudo is a real environment (any container, and nik-saas installs into its cells exactly that way), and there the call fails as `sudo: not found` — exit 127 under `set -eu`, which reads as nothing at all rather than as a permission problem.
+- shell scripts must never call `sudo` unconditionally — set `SUDO=""` and override it with `SUDO=sudo` only when `id -u` is not 0. Already-root-with-no-sudo is a real environment (any container, and an operator installing nik into one does exactly that), and there the call fails as `sudo: not found` — exit 127 under `set -eu`, which reads as nothing at all rather than as a permission problem.
 
 ## Fin
 

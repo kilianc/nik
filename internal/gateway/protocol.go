@@ -8,8 +8,8 @@ import (
 	"github.com/kciuffolo/nik/internal/id"
 )
 
-// wire format for the nik-saas gateway (its docs/PROTOCOL.md). these types are
-// a hand-maintained copy of the platform's: nik-saas keeps its packages
+// wire format for the gateway (its own PROTOCOL doc). these types are
+// a hand-maintained copy of the platform's: the gateway keeps its packages
 // internal and builds without cgo, so importing across the two was never an
 // option.
 //

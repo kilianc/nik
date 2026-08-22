@@ -10,7 +10,7 @@ import (
 )
 
 // the fixtures in testdata/ are byte-identical copies of the platform's. this
-// test and its twin in nik-saas are the only thing keeping two hand-maintained
+// test and its twin on the gateway side are the only thing keeping two hand-maintained
 // copies of the wire format in agreement, so it asserts field values rather
 // than just decoding without error — a struct tag typo that silently drops a
 // field would sail past an err == nil check.

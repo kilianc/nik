@@ -20,7 +20,7 @@ import (
 	"github.com/kciuffolo/nik/internal/version"
 )
 
-// client speaks the nik-saas gateway protocol. it always dials out — nik sits
+// client speaks the gateway protocol. it always dials out — nik sits
 // behind NAT and the gateway never connects in — and reconnects with backoff,
 // replaying whatever backlog accumulated while it was gone.
 
