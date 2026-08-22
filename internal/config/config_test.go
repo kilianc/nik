@@ -635,3 +635,53 @@ privileged_conversation_ids:
 		t.Errorf("task inherited a base_url it never set: %q", cfg.Models.Task.BaseURL)
 	}
 }
+
+// shell.env becomes the sandbox container's environment verbatim, so every key
+// in it has to be an environment variable name.
+//
+// The case worth catching is not a typo. A configuration step editing this file
+// by line match once inserted `docker_image` under `shell.env` rather than
+// beside it — valid YAML that quietly meant something else, and the failure
+// surfaced as a missing tmux three steps away. A lowercase key here is the
+// signature of exactly that.
+func TestShellEnvKeysMustBeEnvironmentVariableNames(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		env  map[string]string
+		ok   bool
+	}{
+		{"upper snake", map[string]string{"EXA_BASE_URL": "https://exa.example.com"}, true},
+		{"digits", map[string]string{"S3_BUCKET2": "b"}, true},
+		{"empty", nil, true},
+		{"a setting that slipped in", map[string]string{"docker_image": "nik-shell"}, false},
+		{"lower snake", map[string]string{"exa_base_url": "x"}, false},
+		{"mixed case", map[string]string{"ExaBaseURL": "x"}, false},
+		{"leading underscore", map[string]string{"_HIDDEN": "x"}, false},
+		{"a dash", map[string]string{"EXA-BASE-URL": "x"}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateShellEnv(tc.env)
+			if tc.ok && err != nil {
+				t.Fatalf("rejected a valid env: %v", err)
+			}
+			if !tc.ok && err == nil {
+				t.Fatal("accepted a key that is not an environment variable name")
+			}
+		})
+	}
+}
+
+// And the message has to name the key, because the person reading it is
+// looking at a file where nothing appears to be wrong.
+func TestTheShellEnvErrorNamesTheOffendingKey(t *testing.T) {
+	err := validateShellEnv(map[string]string{"docker_image": "nik-shell", "EXA_BASE_URL": "ok"})
+	if err == nil {
+		t.Fatal("no error")
+	}
+	if !strings.Contains(err.Error(), "docker_image") {
+		t.Errorf("error does not name the key: %v", err)
+	}
+	if strings.Contains(err.Error(), "EXA_BASE_URL") {
+		t.Errorf("error blames a key that is fine: %v", err)
+	}
+}

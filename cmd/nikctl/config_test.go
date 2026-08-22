@@ -9,8 +9,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// The shape of a real capsule's config, trimmed to the parts that matter.
-const capsuleConfig = `# models
+// The shape of a deployed config, trimmed to the parts that matter.
+const deployedConfig = `# models
 models:
   main:
     model: gpt-5.6-sol
@@ -50,16 +50,16 @@ func read(t *testing.T, path string) map[string]any {
 	return out
 }
 
-// This is the bug that took a capsule down on 2026-08-22, written as a test.
+// The bug that took a container-hosted nik down, written as a test.
 //
-// nik-saas set the sandbox's endpoints with `sed -i '/^shell:/a\  env:'` and
-// then inserted under `^  env:`. The insert landed above shell.docker_image
-// and the second insert pushed it inside the new map, so the file stayed valid
-// YAML while meaning something else: no shell.docker_image, so the shell tool
-// ran locally instead of in a container, so nikd looked for tmux in a capsule
-// that has no reason to carry one, and exited.
+// An installer set the sandbox's endpoints with `sed -i '/^shell:/a\  env:'`
+// and then inserted under `^  env:`. The first insert landed above
+// shell.docker_image and the second pushed it inside the new map, so the file
+// stayed valid YAML while meaning something else: no shell.docker_image, so
+// the shell tool ran locally instead of in a container, so nikd looked for
+// tmux on a host that has no reason to carry one, and exited.
 func TestSettingShellEnvLeavesDockerImageWhereItWas(t *testing.T) {
-	path := write(t, capsuleConfig)
+	path := write(t, deployedConfig)
 
 	for _, kv := range [][2]string{
 		{"shell.env.EXA_BASE_URL", "https://exa.example.com"},
@@ -95,7 +95,7 @@ func TestSettingShellEnvLeavesDockerImageWhereItWas(t *testing.T) {
 
 // Setting a key that is already there replaces the value and nothing else.
 func TestSettingAnExistingKeyReplacesOnlyIt(t *testing.T) {
-	path := write(t, capsuleConfig)
+	path := write(t, deployedConfig)
 
 	if err := configSet(path, "models.main.base_url", "https://models.example.com/v1"); err != nil {
 		t.Fatal(err)
@@ -119,7 +119,7 @@ func TestSettingAnExistingKeyReplacesOnlyIt(t *testing.T) {
 
 // The file is read by people, so it comes back looking like itself.
 func TestSettingAKeyKeepsCommentsAndOrder(t *testing.T) {
-	path := write(t, capsuleConfig)
+	path := write(t, deployedConfig)
 	if err := configSet(path, "models.main.base_url", "https://models.example.com/v1"); err != nil {
 		t.Fatal(err)
 	}
@@ -184,7 +184,7 @@ func TestReplacingAQuotedEmptyValue(t *testing.T) {
 
 // Setting the same key twice leaves one key, because an installer runs again.
 func TestSettingIsIdempotent(t *testing.T) {
-	path := write(t, capsuleConfig)
+	path := write(t, deployedConfig)
 	for i := 0; i < 3; i++ {
 		if err := configSet(path, "shell.env.EXA_BASE_URL", "https://exa.example"); err != nil {
 			t.Fatal(err)
@@ -197,7 +197,7 @@ func TestSettingIsIdempotent(t *testing.T) {
 }
 
 func TestGetReadsBackWhatSetWrote(t *testing.T) {
-	path := write(t, capsuleConfig)
+	path := write(t, deployedConfig)
 	if err := configSet(path, "models.main.base_url", "https://models.example.com/v1"); err != nil {
 		t.Fatal(err)
 	}
