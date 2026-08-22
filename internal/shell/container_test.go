@@ -207,15 +207,15 @@ func TestSandboxEnvReachesTheContainer(t *testing.T) {
 	s := &Service{cfg: &config.Config{
 		Home: t.TempDir(),
 		Shell: config.ShellConfig{Env: map[string]string{
-			"EXA_BASE_URL": "https://exa-dev.hellonik.com",
-			"X_BASE_URL":   "https://x-dev.hellonik.com",
+			"EXA_BASE_URL": "https://exa.example.com",
+			"X_BASE_URL":   "https://x.example.com",
 		}},
 	}}
 
 	args := strings.Join(s.runArgs("nik-shell:test"), " ")
 	for _, want := range []string{
-		"-e EXA_BASE_URL=https://exa-dev.hellonik.com",
-		"-e X_BASE_URL=https://x-dev.hellonik.com",
+		"-e EXA_BASE_URL=https://exa.example.com",
+		"-e X_BASE_URL=https://x.example.com",
 	} {
 		if !strings.Contains(args, want) {
 			t.Errorf("docker run is missing %q\ngot: %s", want, args)

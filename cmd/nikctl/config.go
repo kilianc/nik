@@ -16,11 +16,11 @@ import (
 // runConfig edits config.yaml by key path, which exists because the
 // alternative is editing YAML with sed.
 //
-// nik-saas configures a managed nik by writing values into this file from
-// outside — a model base URL, the sandbox's endpoints — and until now it did
-// that with `sed -i` and an anchored line match. That works exactly until it
-// does not. On 2026-08-22 an insert after `^shell:` put `docker_image` one
-// level too deep, under the `env:` map that the same script had just created:
+// A nik installed by an operator is configured from outside: a model base
+// URL, the sandbox's endpoints, written into this file by whatever put the nik
+// there. Done with `sed -i` and an anchored line match, that works exactly
+// until it does not. An insert after `^shell:` put `docker_image` one level
+// too deep, under the `env:` map that the same script had just created:
 //
 //	shell:
 //	  env:
@@ -29,14 +29,15 @@ import (
 //
 // Still valid YAML, so nothing complained. nikd read no shell.docker_image,
 // fell back to running the shell tool locally instead of in a container,
-// discovered the capsule has no tmux — correctly, it does not need one — and
+// discovered the host has no tmux — correctly, a container-hosted shell does
+// not need one — and
 // exited. Every install after that failed against a daemon that was not there.
 //
 // A key path and a YAML parser cannot make that mistake. Setting
 // `shell.env.EXA_BASE_URL` sets that and only that, whatever the file looks
 // like around it.
 //
-// Scalars only, and deliberately: everything nik-saas needs to write is a
+// Scalars only, and deliberately: everything an installer needs to write is a
 // string, and a command that could write a map is one that can replace a
 // subtree by accident.
 func runConfig(args []string) {
@@ -133,7 +134,7 @@ func configSet(path, keyPath, value string) error {
 
 	// Written beside the original and renamed over it, so a full disk or a
 	// power cut leaves the old config rather than half of a new one. A
-	// capsule that loses its config is a capsule that cannot start at all.
+	// nik that loses its config is one that cannot start at all.
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, out, 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", tmp, err)
