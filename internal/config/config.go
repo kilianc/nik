@@ -44,6 +44,22 @@ type TTSConfig struct {
 
 type ShellConfig struct {
 	DockerImage string `yaml:"docker_image"`
+
+	// Env is passed into the sandbox container, for skills to read.
+	//
+	// A map rather than a field per setting, because what it carries is
+	// somebody else's list: a managed nik is pointed at an estate's own
+	// endpoints, and adding one should not need a nik release. Today that is
+	// EXA_BASE_URL and X_BASE_URL, both of which skills read with a default of
+	// the vendor's own host — see internal/skills/builtin/web.
+	//
+	// **Not for credentials.** Everything here lands in the environment of a
+	// container running model-written code, which is the same place a skill's
+	// own `curl` runs. Secrets go in the secrets store, where the sandbox has
+	// to ask for them by name and can be refused. This is for configuration
+	// that would be harmless printed into a message, because one day it will
+	// be.
+	Env map[string]string `yaml:"env,omitempty"`
 }
 
 type TaskConfig struct {

@@ -3,6 +3,7 @@ package shell
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/kciuffolo/nik/internal/config"
@@ -197,5 +198,77 @@ func TestWriteDefaultDockerfileRecordsMarker(t *testing.T) {
 	}
 	if !svc.matchesStockMarker([]byte(defaultDockerfile)) {
 		t.Fatalf("marker does not match the file it was written for: %s", marker)
+	}
+}
+
+// The estate's configuration reaches the sandbox, so a managed nik's skills
+// call the estate's endpoints instead of the vendors' directly.
+func TestSandboxEnvReachesTheContainer(t *testing.T) {
+	s := &Service{cfg: &config.Config{
+		Home: t.TempDir(),
+		Shell: config.ShellConfig{Env: map[string]string{
+			"EXA_BASE_URL": "https://exa.example.com",
+			"X_BASE_URL":   "https://x.example.com",
+		}},
+	}}
+
+	args := strings.Join(s.runArgs("nik-shell:test"), " ")
+	for _, want := range []string{
+		"-e EXA_BASE_URL=https://exa.example.com",
+		"-e X_BASE_URL=https://x.example.com",
+	} {
+		if !strings.Contains(args, want) {
+			t.Errorf("docker run is missing %q\ngot: %s", want, args)
+		}
+	}
+}
+
+// Same configuration, same command. A map that iterated differently every time
+// would recreate a container on every check for no reason at all.
+func TestSandboxEnvIsOrdered(t *testing.T) {
+	cfg := config.Config{
+		Home: t.TempDir(),
+		Shell: config.ShellConfig{Env: map[string]string{
+			"D_URL": "4", "A_URL": "1", "C_URL": "3", "B_URL": "2",
+		}},
+	}
+	s := &Service{cfg: &cfg}
+
+	first := strings.Join(s.runArgs("img"), " ")
+	for range 20 {
+		if got := strings.Join(s.runArgs("img"), " "); got != first {
+			t.Fatalf("the command changed between builds:\n%s\n%s", first, got)
+		}
+	}
+	// And in the order somebody reading it would expect.
+	if !strings.Contains(first, "-e A_URL=1 -e B_URL=2 -e C_URL=3 -e D_URL=4") {
+		t.Errorf("environment is not sorted: %s", first)
+	}
+}
+
+// No configuration adds no flags. A self-hosting family's container is exactly
+// what it was.
+func TestNoSandboxEnvAddsNothing(t *testing.T) {
+	s := &Service{cfg: &config.Config{Home: t.TempDir()}}
+	if got := strings.Join(s.runArgs("img"), " "); strings.Contains(got, "-e EXA") {
+		t.Errorf("unexpected environment: %s", got)
+	}
+}
+
+// The masks and mounts that make the sandbox a sandbox, asserted here because
+// runArgs is where they live and a regression in any of them is silent.
+func TestTheSandboxBoundaryHolds(t *testing.T) {
+	home := t.TempDir()
+	s := &Service{cfg: &config.Config{Home: home}}
+	args := strings.Join(s.runArgs("img"), " ")
+
+	// The owner socket's directory is masked. NIK_HOME is mounted read-write
+	// and this container runs as root, so without the tmpfs the sandbox
+	// reaches the unrestricted socket straight through the workspace mount.
+	if !strings.Contains(args, "--tmpfs /workspace/"+apiSocketDir) {
+		t.Errorf("the socket directory is not masked: %s", args)
+	}
+	if !strings.Contains(args, "-v "+home+":/workspace") {
+		t.Errorf("the workspace is not mounted: %s", args)
 	}
 }
