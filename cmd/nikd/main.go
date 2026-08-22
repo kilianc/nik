@@ -465,6 +465,9 @@ func main() {
 	}
 	mainLLMOpts = append(mainLLMOpts, llm.WithReasoningEffort(&cfg.Models.Main.ReasoningEffort))
 	mainLLMOpts = append(mainLLMOpts, llm.WithVerbosity(&cfg.Models.Main.Verbosity))
+	if cfg.Models.Main.BaseURL != "" {
+		mainLLMOpts = append(mainLLMOpts, llm.WithBaseURL(cfg.Models.Main.BaseURL))
+	}
 	llmClient := llm.NewClient(&cfg.Models.Main.Model, mainLLMOpts...)
 
 	var recallClient *llm.Client
@@ -475,6 +478,9 @@ func main() {
 		}
 		recallLLMOpts = append(recallLLMOpts, llm.WithReasoningEffort(&cfg.Models.Recall.ReasoningEffort))
 		recallLLMOpts = append(recallLLMOpts, llm.WithVerbosity(&cfg.Models.Recall.Verbosity))
+		if cfg.Models.Recall.BaseURL != "" {
+			recallLLMOpts = append(recallLLMOpts, llm.WithBaseURL(cfg.Models.Recall.BaseURL))
+		}
 		recallClient = llm.NewClient(&cfg.Models.Recall.Model, recallLLMOpts...)
 		slog.Info("recall client ready", "model", cfg.Models.Recall.Model)
 	}
@@ -487,6 +493,9 @@ func main() {
 		}
 		taskLLMOpts = append(taskLLMOpts, llm.WithReasoningEffort(&cfg.Models.Task.ReasoningEffort))
 		taskLLMOpts = append(taskLLMOpts, llm.WithVerbosity(&cfg.Models.Task.Verbosity))
+		if cfg.Models.Task.BaseURL != "" {
+			taskLLMOpts = append(taskLLMOpts, llm.WithBaseURL(cfg.Models.Task.BaseURL))
+		}
 		taskLLMClient = llm.NewClient(&cfg.Models.Task.Model, taskLLMOpts...)
 		slog.Info("task client ready", "model", cfg.Models.Task.Model)
 	}

@@ -596,3 +596,42 @@ privileged_conversation_ids:
 		}
 	})
 }
+
+// A model can be pointed somewhere other than the vendor, which is how a nik
+// whose estate runs an egress proxy reaches it: the estate holds the vendor
+// key, the nik holds a token worth nothing anywhere else, and openai_key
+// carries that token.
+func TestModelBaseURLIsReadPerTier(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(path, []byte(`
+models:
+  main:
+    model: gpt-5.6-sol
+    reasoning_effort: high
+    verbosity: low
+    base_url: https://openai-dev.hellonik.com/v1
+  task:
+    model: gpt-5.6-luna
+    reasoning_effort: xhigh
+  recall:
+    reasoning_effort: minimal
+privileged_conversation_ids:
+  owner: conv-1
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Models.Main.BaseURL != "https://openai-dev.hellonik.com/v1" {
+		t.Errorf("main base_url is %q", cfg.Models.Main.BaseURL)
+	}
+	// Per model, not global: an estate may broker one tier and not another.
+	// Empty is the vendor, which is what setting nothing has always meant.
+	if cfg.Models.Task.BaseURL != "" {
+		t.Errorf("task inherited a base_url it never set: %q", cfg.Models.Task.BaseURL)
+	}
+}
