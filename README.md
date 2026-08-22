@@ -91,7 +91,7 @@ Open a new terminal and run `nik`. A TUI walks you through:
 3. **OpenAI API key** — paste your `sk-...` key. The TUI hits `api.openai.com/v1/models` to validate it before continuing.
 4. **Exa API key** — paste your Exa key. Validated against `api.exa.ai/search`.
 5. **Model** — pick the brain model (default: `gpt-5.6-sol`, the frontier tier; `gpt-5.6-terra` and `gpt-5.6-luna` are the cheaper siblings).
-6. **Shell sandbox** — pick **Docker container** (recommended; requires Docker installed) so the shell tool runs in an isolated image, or **Run on host** to skip the container.
+6. **Shell sandbox** — pick **Docker container** (recommended; requires Docker installed) so the shell tool runs in an isolated image, or **Run on host** to skip the container. The image is pulled from [`ghcr.io/kilianc/nik-shell`](https://github.com/kilianc/nik/pkgs/container/nik-shell), one tag per nik release, so first boot is a download rather than a ten-minute build. It is built from `Dockerfile` in your nik home — edit that file and nik builds yours instead, and keeps building it — ask nik to rebuild the shell and your changes are what runs.
 7. **Timezone & location** — type your city and country (e.g. "Rome, Italy"); the TUI resolves the timezone.
 
 Keys are encrypted with NaCl secretbox and stored in `~/.nik/secrets/secrets.enc` (the per-install key sits next to it in `secrets.key`; keep both private and back them up if you care about the data). The daemon holds them — `nik secrets` asks it rather than decrypting the files itself, which is what lets skills in the shell sandbox be told no. Inspect or rotate with:
