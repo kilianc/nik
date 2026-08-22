@@ -17,7 +17,7 @@ func runInstall(args []string) {
 	// --no-start is for callers that stage a version now and choose the moment
 	// to run it themselves.
 	noStart := flagSet.Bool("no-start", false, "write the service definition without starting or restarting the daemon")
-	flagSet.Parse(args)
+	parseFlags(flagSet, args)
 
 	h, err := home.Resolve(*homeFlag)
 	if err != nil {
