@@ -26,7 +26,7 @@ import (
 func runSecrets(args []string) {
 	flagSet := flag.NewFlagSet("secrets", flag.ExitOnError)
 	homeFlag := flagSet.String("home", "", "workspace directory")
-	flagSet.Parse(args)
+	parseFlags(flagSet, args)
 
 	remaining := flagSet.Args()
 	if len(remaining) == 0 {

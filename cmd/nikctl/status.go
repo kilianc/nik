@@ -23,7 +23,7 @@ import (
 func runStatus(args []string) {
 	flagSet := flag.NewFlagSet("status", flag.ExitOnError)
 	homeFlag := flagSet.String("home", "", "workspace directory")
-	flagSet.Parse(args)
+	parseFlags(flagSet, args)
 
 	h, err := home.Resolve(*homeFlag)
 	if err != nil {

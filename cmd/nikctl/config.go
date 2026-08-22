@@ -44,16 +44,14 @@ func runConfig(args []string) {
 	flagSet := flag.NewFlagSet("config", flag.ExitOnError)
 	homeFlag := flagSet.String("home", "", "workspace directory")
 
-	// Parsed twice on purpose. Go's flag package stops at the first
-	// non-flag argument, so `config set a.b c --home /nik` would leave
-	// --home unread and silently edit the wrong file. Pull the action out
-	// first, then parse what follows it.
-	if len(args) == 0 {
+	parseFlags(flagSet, args)
+
+	rest := flagSet.Args()
+	if len(rest) == 0 {
 		usageConfig()
 	}
-	action := args[0]
-	flagSet.Parse(args[1:])
-	rest := flagSet.Args()
+	action := rest[0]
+	rest = rest[1:]
 
 	h, err := home.Resolve(*homeFlag)
 	if err != nil {

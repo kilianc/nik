@@ -21,7 +21,7 @@ func runTUI(args []string) {
 	homeFlag := flagSet.String("home", "", "workspace directory")
 	forceSetup := flagSet.Bool("force-setup", false, "run setup even if config exists")
 	showSystem := flagSet.Bool("show-system", false, "show system messages in chat")
-	flagSet.Parse(args)
+	parseFlags(flagSet, args)
 
 	h, err := home.Resolve(*homeFlag)
 	if err != nil {

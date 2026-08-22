@@ -21,7 +21,7 @@ import (
 func runQuery(args []string) {
 	flagSet := flag.NewFlagSet("query", flag.ExitOnError)
 	homeFlag := flagSet.String("home", "", "workspace directory")
-	flagSet.Parse(args)
+	parseFlags(flagSet, args)
 
 	query := strings.TrimSpace(strings.Join(flagSet.Args(), " "))
 	if query == "" {
@@ -49,7 +49,7 @@ func runShell(args []string) {
 	flagSet := flag.NewFlagSet("shell", flag.ExitOnError)
 	homeFlag := flagSet.String("home", "", "workspace directory")
 	wait := flagSet.Int("wait", 0, "seconds to wait for output before returning")
-	flagSet.Parse(args)
+	parseFlags(flagSet, args)
 
 	command := strings.TrimSpace(strings.Join(flagSet.Args(), " "))
 	if command == "" {
@@ -80,7 +80,7 @@ func runLogs(args []string) {
 	homeFlag := flagSet.String("home", "", "workspace directory")
 	errorsOnly := flagSet.Bool("errors", false, "read the warnings-and-above log instead")
 	lines := flagSet.Int("lines", 0, "how many lines to show")
-	flagSet.Parse(args)
+	parseFlags(flagSet, args)
 
 	client, ctx, cancel := clientFor(*homeFlag, 30*time.Second)
 	defer cancel()
@@ -97,7 +97,7 @@ func runLogs(args []string) {
 func runRestart(args []string) {
 	flagSet := flag.NewFlagSet("restart", flag.ExitOnError)
 	homeFlag := flagSet.String("home", "", "workspace directory")
-	flagSet.Parse(args)
+	parseFlags(flagSet, args)
 
 	client, ctx, cancel := clientFor(*homeFlag, 30*time.Second)
 	defer cancel()

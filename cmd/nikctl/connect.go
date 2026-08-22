@@ -29,7 +29,7 @@ func runConnect(args []string) {
 	flagSet := flag.NewFlagSet("connect", flag.ExitOnError)
 	homeFlag := flagSet.String("home", "", "workspace directory")
 	url := flagSet.String("url", "", "gateway websocket URL (default: config, else production)")
-	flagSet.Parse(args)
+	parseFlags(flagSet, args)
 
 	token := strings.TrimSpace(strings.Join(flagSet.Args(), ""))
 	if token == "" {
