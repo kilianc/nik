@@ -435,9 +435,22 @@ func (c *client) fetchAttachment(ctx context.Context, downloadID string) ([]byte
 	return openSealed(sealed, c.pub, c.priv)
 }
 
-// httpURL turns the agent websocket url into a sibling http endpoint
+// httpURL turns the gateway websocket url into a sibling http endpoint.
+//
+// Two suffixes, because the platform is renaming that path from `/v1/agent`
+// to `/v1/nik` and this nik may be handed either. The gateway serves both, so
+// a config written before the rename and one written after are equally valid
+// — and this is the only place the path is load-bearing rather than opaque.
+//
+// Getting it wrong here fails in the worst way available: the socket connects,
+// everything looks healthy, and media alone stops working, whenever somebody
+// next sends a photo. That is why this ships and rolls out before any
+// installer starts writing the new path, rather than alongside it.
 func (c *client) httpURL(path string) (string, error) {
-	base, ok := strings.CutSuffix(c.url, "/v1/agent")
+	base, ok := strings.CutSuffix(c.url, "/v1/nik")
+	if !ok {
+		base, ok = strings.CutSuffix(c.url, "/v1/agent")
+	}
 	if !ok {
 		return "", fmt.Errorf("derive http url from %s", c.url)
 	}
