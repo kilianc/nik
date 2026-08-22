@@ -77,7 +77,7 @@ Fetch tweet data via X API v2.
 Get the X/Twitter bearer token from the secrets adapter and pass it as the Authorization header:
 
 ```
-curl -s "${X_BASE_URL:-https://api.twitter.com}/2/tweets?ids=<ID>&tweet.fields=created_at,author_id,public_metrics&expansions=author_id,attachments.media_keys&user.fields=username,name&media.fields=type,url,preview_image_url" \
+curl -s "${X_BASE_URL:-https://api.x.com}/2/tweets?ids=<ID>&tweet.fields=created_at,author_id,public_metrics&expansions=author_id,attachments.media_keys&user.fields=username,name&media.fields=type,url,preview_image_url" \
   -H "Authorization: Bearer $X_TOKEN" \
   | jq '{data: .data[0], author: .includes.users[0]}'
 ```
