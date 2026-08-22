@@ -94,6 +94,7 @@ ci:
 	  echo "gofmt needed:"; echo "$$files"; exit 1; fi
 	go vet ./...
 	@bin/check-layering
+	@bin/check-public
 	go test ./...
 
 # the same rule CI applies to the PR title and to every commit on the branch.
