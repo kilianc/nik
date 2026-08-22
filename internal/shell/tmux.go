@@ -87,7 +87,22 @@ func (s *Service) newSession(id, command, cwd string) error {
 
 	if command != "" {
 		ch := name + "-done"
-		wrapped := fmt.Sprintf("(%s); __ec=$?; tmux wait-for -S %s; exit $__ec", command, ch)
+
+		// The command records its own exit code before announcing it is
+		// done, so the code is already there when stare wakes up. See
+		// getExitCode for why tmux's own answer cannot be relied on.
+		//
+		// Both interpolated names are quoted. Session ids come from callers
+		// and contain spaces often enough that this package's own tests have
+		// two: unquoted, `tmux wait-for -S nik-exit code-done` reaches tmux as
+		// two arguments, tmux rejects it as a usage error, and the done signal
+		// is never sent at all — leaving stare to discover the exit the slow
+		// way, on its two-second tick.
+		wrapped := fmt.Sprintf(
+			"(%s); __ec=$?; tmux set-option -t %s %s \"$__ec\"; tmux wait-for -S %s; exit $__ec",
+			command, shellQuote(name), exitOption, shellQuote(ch),
+		)
+
 		_, err = s.tmux("respawn-pane", "-k", "-t", name, "sh", "-c", wrapped)
 		if err != nil {
 			return fmt.Errorf("respawn pane %s: %w", id, err)
@@ -95,6 +110,11 @@ func (s *Service) newSession(id, command, cwd string) error {
 	}
 
 	return nil
+}
+
+// shellQuote wraps s so that sh sees exactly one word, whatever is inside it.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 func (s *Service) setEnv(id, key, value string) error {
@@ -160,14 +180,17 @@ func (s *Service) isAlive(id string) bool {
 	return strings.TrimSpace(out) == "0"
 }
 
-// deadPaneWait bounds how long stare waits for a pane to finish dying. The
-// gap is the microseconds between `tmux wait-for -S` returning and the shell
-// running `exit`; a whole second is there for a loaded CI runner, not because
-// anything should ever take it.
+// deadPaneWait bounds how long stare waits for an exit code to appear.
+//
+// A command that ran nik's wrapper has already recorded its code by the time
+// it signals done, so that path does not wait at all. This budget is for the
+// panes that never got to run it — killed from outside, or gone before the
+// wrapper's first line — where tmux's own pane_dead_status is the only answer
+// available and is worth a moment.
 const deadPaneWait = time.Second
 
-// awaitDeadPane polls until the pane is dead or the wait runs out. Returning
-// on timeout rather than erroring is deliberate: the caller has a
+// awaitDeadPane polls until an exit code is readable or the wait runs out.
+// Returning on timeout rather than erroring is deliberate: the caller has a
 // better-than-nothing answer either way, and a command whose exit code cannot
 // be read is not a reason to lose its output.
 func (s *Service) awaitDeadPane(id string) {
@@ -175,14 +198,9 @@ func (s *Service) awaitDeadPane(id string) {
 
 	for {
 		// Poll the value stare is about to read, rather than the pane_dead
-		// flag sitting next to it.
-		//
-		// They are two properties and they do not arrive together: a pane
-		// reports itself dead a moment before tmux publishes the status it
-		// died with. So a wait on the flag can finish while the status is
-		// still empty, and the read that follows returns the -1 this function
-		// exists to prevent. Waiting on the flag is why it kept happening
-		// after somebody had already fixed it once.
+		// flag sitting next to it: pane_dead says the pty closed, which is
+		// not the same event as an exit code becoming available, and on some
+		// tmux versions never implies it. See getExitCode.
 		if _, err := s.getExitCode(id); err == nil {
 			return
 		}
@@ -197,27 +215,46 @@ func (s *Service) awaitDeadPane(id string) {
 	}
 }
 
+// exitOption is the session option the wrapped command writes its exit code
+// into, and the answer getExitCode prefers over anything tmux reports.
+const exitOption = "@nik_exit"
+
+// getExitCode returns the code the pane's command exited with, asking for our
+// own record and tmux's in a single round trip and trusting ours first.
+//
+// tmux's own answer cannot carry this on its own. On tmux 3.4 — what Ubuntu
+// 24.04 ships, and so every ubuntu-latest runner — a pane whose command has
+// itself run a tmux client is frequently never reaped by the server, and
+// neither pane_dead_status nor pane_dead_signal is ever published for it.
+// nik's wrapper always runs one, so this lands on roughly half of all
+// commands. The pane still reports pane_dead=1, because that comes from the
+// pty reaching EOF rather than from a reaped child, which is what made this
+// look like two properties arriving a moment apart. It is not a race: the
+// status does not arrive late, it never arrives, and waiting longer for it —
+// twice attempted — cannot work. tmux 3.5a fixes it, which is why the same
+// code has always passed on macOS's 3.6a.
 func (s *Service) getExitCode(id string) (int, error) {
 	out, err := s.tmux(
 		"display-message", "-t", sessionName(id),
-		"-p", "#{pane_dead_status}",
+		"-p", "#{"+exitOption+"}|#{pane_dead_status}",
 	)
 	if err != nil {
 		return -1, fmt.Errorf("exit code %s: %w", id, err)
 	}
 
-	var code int
-	_, err = fmt.Sscanf(strings.TrimSpace(out), "%d", &code)
-	if err != nil {
-		// No status published yet, which is not the same thing as a command
-		// that exited -1. Returning a nil error here told every caller the
-		// read had worked and handed them a sentinel as though it were an
-		// answer — so nothing could wait for a value that had not arrived,
-		// because nothing could tell that it had not.
-		return -1, fmt.Errorf("exit code %s: no status published yet", id)
+	for _, field := range strings.SplitN(strings.TrimSpace(out), "|", 2) {
+		var code int
+		if _, err := fmt.Sscanf(strings.TrimSpace(field), "%d", &code); err == nil {
+			return code, nil
+		}
 	}
 
-	return code, nil
+	// No code from either source, which is not the same thing as a command
+	// that exited -1. Returning a nil error here told every caller the read
+	// had worked and handed them a sentinel as though it were an answer — so
+	// nothing could wait for a value that had not arrived, because nothing
+	// could tell that it had not.
+	return -1, fmt.Errorf("exit code %s: no exit code recorded", id)
 }
 
 func (s *Service) killSession(id string) error {
@@ -279,15 +316,14 @@ func (s *Service) stare(ctx context.Context, id string, maxWait int) (output str
 	for {
 		select {
 		case <-doneCh:
-			// The command signals the wait-for channel and *then* exits:
+			// The command records its exit code and *then* signals:
 			//
-			//   (cmd); __ec=$?; tmux wait-for -S <chan>; exit $__ec
+			//   (cmd); __ec=$?; tmux set-option @nik_exit "$__ec"; \
+			//     tmux wait-for -S <chan>; exit $__ec
 			//
-			// so arriving here means the command finished, not that the pane
-			// is dead. tmux only publishes pane_dead_status once it is, and
-			// reading too early gets an empty string — which parsed as -1 and
-			// made this the flakiest thing in CI. Give the pane the moment it
-			// needs to actually die.
+			// so arriving here means the code is already recorded, and this
+			// returns on its first read. The wait is left in place for the
+			// panes that reach here without having run that line at all.
 			s.awaitDeadPane(id)
 
 			out, _ := s.capturePane(id)
